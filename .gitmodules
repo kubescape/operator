@@ -1,0 +1,3 @@
+[submodule "signingservice"]
+	path = signingservice
+	url = git@asterix.cyberarmor.io:cyberarmor/signingservice.git
