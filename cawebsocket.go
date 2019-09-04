@@ -111,6 +111,8 @@ func main() {
 	testEnvironmentVaribles()
 	flag.Parse()
 
+	glog.Infof("Image version: %s", os.Getenv("CA_WEBSOCKET_IMAGE_VERSION"))
+
 	// Websocket
 	websocketHandler := CreateWebSocketHandler()
 	websocketHandler.WebSokcet()
@@ -137,6 +139,7 @@ func testEnvironmentVaribles() {
 	testEnvironmentVarible("CA_CLUSTER_NAME")
 	testEnvironmentVarible("CA_POSTMAN")
 	testEnvironmentVarible("CA_CUSTOMER_GUID")
+
 }
 func testEnvironmentVarible(key string) {
 	if _, ok := os.LookupEnv(key); !ok {

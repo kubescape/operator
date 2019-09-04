@@ -93,7 +93,7 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 	case DELETE:
 		deleteWorkload(res, &unstruct)
 	case SIGN:
-		if err := signImage(c, &unstruct); err == nil {
+		if err := signImage(c, &unstruct, wsh.kubeconfig); err == nil {
 			glog.Infof("Done signig, updating workload. Kind: %s, Name: %s", unstruct.GetKind(), unstruct.GetName())
 			updateWorkload(res, &unstruct)
 		}
@@ -184,7 +184,7 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 	if err != nil {
 		glog.Errorf("Error receiving annotations: %s", err)
 	}
-	if found == false {
+	if !found {
 		annotations = make(map[string]string)
 	}
 

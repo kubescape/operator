@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -58,7 +59,7 @@ type Envelope struct {
 	StatusResponse StatusResponse `json:"statusResponse"`
 }
 
-func signImage(command Command, unstructuredObj *unstructured.Unstructured) error {
+func signImage(command Command, unstructuredObj *unstructured.Unstructured, kubeconfig *rest.Config) error {
 	// Get containers info
 	containersArgs, ok := command.Args["signingProfiles"]
 	if !ok {
@@ -66,7 +67,9 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured) erro
 		return errors.New("containers not found in args")
 	}
 	successfullySigned := false
-	for _, container := range containersArgs.(map[string]interface{}) {
+	for containerName, container := range containersArgs.(map[string]interface{}) {
+		kubernetesData := kubernetesData{kubeconfig: kubeconfig, unstructuredObj: unstructuredObj}
+		SetDockerClient(kubernetesData, containerName)
 		for _, process := range container.(map[string]interface{}) {
 			glog.Infof("Signig container %s, process %s", container, process)
 			envelope := process.(map[string]interface{})
@@ -105,7 +108,7 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured) erro
 		return nil
 	}
 
-	return errors.New("did not sign any image")
+	return errors.New("did not sign any images")
 }
 
 func saveSigningProfileFile(contetnt json.RawMessage) (string, error) {
