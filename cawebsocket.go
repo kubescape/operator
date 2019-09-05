@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -111,7 +112,7 @@ func main() {
 	testEnvironmentVaribles()
 	flag.Parse()
 
-	glog.Infof("Image version: %s", os.Getenv("CA_WEBSOCKET_IMAGE_VERSION"))
+	displayBuildTag()
 
 	// Websocket
 	websocketHandler := CreateWebSocketHandler()
@@ -149,4 +150,13 @@ func testEnvironmentVarible(key string) {
 
 func createSignignProfilesDir() error {
 	return os.MkdirAll(SIGNINGPROFILEPATH, 777)
+}
+
+func displayBuildTag() {
+	imageVersion := "UNKNOWN"
+	dat, err := ioutil.ReadFile("./build_tag.txt")
+	if err == nil {
+		imageVersion = string(dat)
+	}
+	glog.Infof("Image version: %s", imageVersion)
 }
