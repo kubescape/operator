@@ -52,16 +52,15 @@ func CreateWebSocketHandler() *WebSocketHandler {
 }
 
 // WebSokcet CAWebSokcet
-func (wsh *WebSocketHandler) WebSokcet() {
+func (wsh *WebSocketHandler) WebSokcet() error {
 
 	if err := createSignignProfilesDir(); err != nil {
-		glog.Errorf("Error creating signing profile dir\nMessage %#v", err)
-		return
+		return fmt.Errorf("Error creating signing profile dir\nMessage %#v", err)
 	}
 
 	conn, err := wsh.dialWebSocket()
 	if err != nil {
-		return
+		return err
 	}
 
 	defer conn.Close()
@@ -80,15 +79,14 @@ func (wsh *WebSocketHandler) WebSokcet() {
 	for {
 		messageType, bytes, err := conn.ReadMessage()
 		if err != nil {
-			glog.Errorf("WebSocket closed.")
-			return
+			return fmt.Errorf("webSocket closed")
 		}
 
 		switch messageType {
 		case websocket.TextMessage:
-			go wsh.HandlePostmanRequest(bytes)
+			wsh.HandlePostmanRequest(bytes)
 		case websocket.CloseMessage:
-			return
+			return fmt.Errorf("webSocket closed")
 		default:
 			log.Println("Unrecognized message received.")
 		}
@@ -116,7 +114,7 @@ func main() {
 
 	// Websocket
 	websocketHandler := CreateWebSocketHandler()
-	websocketHandler.WebSokcet()
+	glog.Fatal(websocketHandler.WebSokcet())
 
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -56,47 +57,53 @@ type patchUpdate struct {
 }
 
 // HandlePostmanRequest Parse received commands and run the command
-func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) error {
-	glog.Infof("\n ================== Starting CyberArmor websocket!! ================== \n")
+func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
+	glog.Infoln(" ================== Starting CyberArmor websocket ================== ")
 	// log.Printf("Recveived: %v", string(receivedCommands))
 	commands := Commands{}
+	errorList := []error{}
 
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
 		glog.Error(err)
-		glog.Infof("\n ================== Failed CyberArmor websocket!! ================== \n")
-		return err
+		glog.Infoln(" ================== Failed CyberArmor websocket ================== ")
+		return []error{err}
 	}
 	for _, c := range commands.Commands {
-		return wsh.runCommand(c)
+		go func(c Command) {
+			if err := wsh.runCommand(c); err != nil {
+				glog.Errorf("%v", err)
+				glog.Infoln("----------------- Failed CyberArmor websocket -----------------")
+				errorList = append(errorList, err)
+			}
+		}(c)
 	}
-	glog.Infof("\n ================== Done CyberArmor websocket!! ================== \n")
-	return nil
-
+	glog.Infoln(" ================== Done CyberArmor websocket ================== ")
+	return errorList
 }
 func (wsh *WebSocketHandler) runCommand(c Command) error {
 	resJSON, ok := c.Args["json"]
 	if !ok {
-		glog.Error("Json not found in args")
-		return nil
+		return fmt.Errorf("Json not found in args")
 	}
 	res, unstruct, err := wsh.getWorkloadResource(resJSON.(string))
 	if err != nil {
-		glog.Error(err)
 		return err
 	}
 	glog.Infof("Received %s command", c.CommandName)
 	switch c.CommandName {
 	case CREATE:
-		createWorkload(res, &unstruct)
+		return createWorkload(res, &unstruct)
 	case UPDATE:
-		updateWorkload(res, &unstruct)
+		return updateWorkload(res, &unstruct)
 	case DELETE:
-		deleteWorkload(res, &unstruct)
+		return deleteWorkload(res, &unstruct)
 	case SIGN:
-		if err := signImage(c, &unstruct, wsh.kubeconfig); err == nil {
-			glog.Infof("Done signig, updating workload. Kind: %s, Name: %s", unstruct.GetKind(), unstruct.GetName())
-			updateWorkload(res, &unstruct)
+		if err := signImage(c, &unstruct, wsh.kubeconfig); err != nil {
+			return err
 		}
+		glog.Infof("Done signig, updating workload. Kind: %s, Name: %s", unstruct.GetKind(), unstruct.GetName())
+		return updateWorkload(res, &unstruct)
+
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
@@ -143,8 +150,10 @@ func (wsh *WebSocketHandler) getWorkloadResource(resJSON string) (resource dynam
 func updateWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured) error {
 
 	if unstructuredObj.GetKind() == "Pod" {
+		// DELETE and CREATE pod
 		return updatePod(resource, unstructuredObj)
 	}
+	// Edit annotations and UPDATE
 	return updateAbstract(resource, unstructuredObj)
 }
 
@@ -179,6 +188,16 @@ func updatePod(resource dynamic.ResourceInterface, unstructuredObj *unstructured
 }
 
 func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured) error {
+	/*
+		-- IMPORTANT --
+		When running update, websocket IGNORES all fields (execp annotations) in the recieved workload.
+	*/
+	ob, err := resource.Get(unstructuredObj.GetName(), metav1.GetOptions{})
+	if err != nil {
+		glog.Error(err)
+		return err
+	}
+
 	// Get current annotations
 	annotations, found, err := unstructured.NestedStringMap(unstructuredObj.Object, "spec", "template", "metadata", "annotations")
 	if err != nil {
@@ -189,17 +208,12 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 	}
 
 	tm := time.Now().UTC()
-	annotations["last-update"] = string(tm.Format("02-01-2006 15:04:05"))
-	unstructured.SetNestedStringMap(unstructuredObj.Object, annotations, "spec", "template", "metadata", "annotations")
-	ob, err := resource.Get(unstructuredObj.GetName(), metav1.GetOptions{})
-	if err != nil {
-		glog.Error(err)
-		return err
-	}
+	annotations["last-cawesocket-update"] = string(tm.Format("02-01-2006 15:04:05"))
 
-	unstructuredObj.SetResourceVersion(ob.GetResourceVersion())
+	// Change a
+	unstructured.SetNestedStringMap(ob.Object, annotations, "spec", "template", "metadata", "annotations")
 
-	_, err = resource.Update(unstructuredObj, metav1.UpdateOptions{})
+	_, err = resource.Update(ob, metav1.UpdateOptions{})
 	if err != nil {
 		glog.Error(err)
 		return err
