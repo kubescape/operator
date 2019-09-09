@@ -1,7 +1,7 @@
 FROM alpine:latest
 
 COPY ./dist /. 
-COPY ./build_tag.txt / 
+COPY ./build_number.txt / 
 COPY ./signingservice/signer_client /signer_client/
 
 RUN apk update && apk add ca-certificates && apk add python3 
