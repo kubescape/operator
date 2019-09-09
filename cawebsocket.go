@@ -69,10 +69,7 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 		for {
 			time.Sleep(5 * time.Second)
 			if err = conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
-				conn, err = wsh.dialWebSocket()
-				if err != nil {
-					return
-				}
+				return
 			}
 		}
 	}()
@@ -120,7 +117,7 @@ func main() {
 
 func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
-	log.Printf("Connecting to %s", u.String())
+	glog.Infof("Connecting to %s", u.String())
 
 	conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -152,7 +149,7 @@ func createSignignProfilesDir() error {
 
 func displayBuildTag() {
 	imageVersion := "UNKNOWN"
-	dat, err := ioutil.ReadFile("./build_tag.txt")
+	dat, err := ioutil.ReadFile("./build_number.txt")
 	if err == nil {
 		imageVersion = string(dat)
 	}
