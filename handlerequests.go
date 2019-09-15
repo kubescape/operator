@@ -58,26 +58,27 @@ type patchUpdate struct {
 
 // HandlePostmanRequest Parse received commands and run the command
 func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
-	glog.Infoln(" ================== Starting CyberArmor websocket ================== ")
 	// log.Printf("Recveived: %v", string(receivedCommands))
 	commands := Commands{}
 	errorList := []error{}
 
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
 		glog.Error(err)
-		glog.Infoln(" ================== Failed CyberArmor websocket ================== ")
+		glog.Infoln("Failed CyberArmor websocket")
 		return []error{err}
 	}
 	for _, c := range commands.Commands {
 		go func(c Command) {
+			glog.Infof(" ================== Starting CyberArmor websocket, command: %s ================== ", c.CommandName)
+			glog.Infof("Running %s command", c.CommandName)
 			if err := wsh.runCommand(c); err != nil {
 				glog.Errorf("%v", err)
-				glog.Infoln("----------------- Failed CyberArmor websocket -----------------")
+				glog.Infof("----------------- Failed CyberArmor websocket, command: %s  -----------------", c.CommandName)
 				errorList = append(errorList, err)
 			}
+			glog.Infof(" ================== Done CyberArmor websocket, command: %s ================== ", c.CommandName)
 		}(c)
 	}
-	glog.Infoln(" ================== Done CyberArmor websocket ================== ")
 	return errorList
 }
 func (wsh *WebSocketHandler) runCommand(c Command) error {
@@ -89,7 +90,11 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 	if err != nil {
 		return err
 	}
-	glog.Infof("Received %s command", c.CommandName)
+
+	ann, _ := json.Marshal(unstruct.GetAnnotations())
+	fmt.Println(string(ann))
+	glog.Infof("\nKind: %s,\nNamespace: %s,\nName: %s,\nAnnotations: %s", unstruct.GetKind(), unstruct.GetNamespace(), unstruct.GetName(), string(ann))
+
 	switch c.CommandName {
 	case CREATE:
 		return createWorkload(res, &unstruct)
