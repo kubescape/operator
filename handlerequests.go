@@ -92,7 +92,6 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 	}
 
 	ann, _ := json.Marshal(unstruct.GetAnnotations())
-	fmt.Println(string(ann))
 	glog.Infof("\nKind: %s,\nNamespace: %s,\nName: %s,\nAnnotations: %s", unstruct.GetKind(), unstruct.GetNamespace(), unstruct.GetName(), string(ann))
 
 	switch c.CommandName {
