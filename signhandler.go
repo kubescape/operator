@@ -71,7 +71,6 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured, kube
 		kubernetesData := kubernetesData{kubeconfig: kubeconfig, unstructuredObj: unstructuredObj}
 		SetDockerClient(kubernetesData, containerName)
 		for _, process := range container.(map[string]interface{}) {
-			glog.Infof("Signig container %s, process %s", container, process)
 			envelope := process.(map[string]interface{})
 
 			finalProfile, err := json.Marshal(process)
@@ -81,6 +80,8 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured, kube
 				envelope["statusResponse"] = sr
 				continue
 			}
+			glog.Infof("Signig container: %s\nsignig profile: %s", containerName, string(finalProfile))
+
 			fileName, err := saveSigningProfileFile(finalProfile)
 			if err != nil {
 				glog.Error(err)
