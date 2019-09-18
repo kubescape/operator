@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"k8s-ca-websocket/cautils"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -130,7 +131,7 @@ func (kd *kubernetesData) getImagePullSecret() (map[string]types.AuthConfig, err
 		}
 
 		// Read secret
-		secret, err := getSecretContent(res)
+		secret, err := cautils.GetSecretContent(res)
 		if err != nil {
 			glog.Error(err)
 			continue
@@ -140,7 +141,11 @@ func (kd *kubernetesData) getImagePullSecret() (map[string]types.AuthConfig, err
 			glog.Errorf("Secret %s not found", i.Name)
 			continue
 		}
-		saveSecret(&secrets, secret, i.Name)
+		ts, err := cautils.ReadSecret(secret, i.Name)
+		if err != nil {
+			return secrets, err
+		}
+		secrets[i.Name] = ts
 	}
 	return secrets, nil
 }
@@ -168,22 +173,6 @@ func getSecretContent(secret *corev1.Secret) (interface{}, error) {
 		encPSW := base64.URLEncoding.EncodeToString(psw)
 
 		return &types.AuthConfig{Username: encUser, Password: encPSW}, nil
-	}
-}
-
-func saveSecret(secrets *map[string]types.AuthConfig, secret interface{}, secretName string) {
-	// Store secret based on it's structure
-	if sec, ok := secret.(DockerConfigJsonstructure); ok {
-		if _, k := sec["auths"]; !k {
-			glog.Errorf("cant find auths")
-			return
-		}
-		for serverAddress, authConfig := range sec["auths"] {
-			if authConfig.ServerAddress == "" {
-				authConfig.ServerAddress = serverAddress
-			}
-			(*secrets)[secretName] = authConfig
-		}
 	}
 }
 

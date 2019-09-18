@@ -6,14 +6,11 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
-	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
-	clientcmd "k8s.io/client-go/tools/clientcmd"
 )
 
 type ReqType int
@@ -45,7 +42,7 @@ func CreateWebSocketHandler() *WebSocketHandler {
 	websocketURL.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
 	websocketURL.ForceQuery = false
 
-	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL, kubeconfig: loadConfig()}
+	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL, kubeconfig: cautils.LoadConfig()}
 }
 
 // WebSokcet CAWebSokcet
@@ -85,18 +82,6 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 			log.Println("Unrecognized message received.")
 		}
 	}
-}
-
-func loadConfig() *restclient.Config {
-	kubeconfigpath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
-	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigpath)
-	if err != nil {
-		kubeconfig, err = rest.InClusterConfig()
-		if err != nil {
-			panic("Cant load config kubernetes (check config path)")
-		}
-	}
-	return kubeconfig
 }
 
 func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {

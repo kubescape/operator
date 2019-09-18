@@ -172,7 +172,7 @@ func deleteSignigProfile(f string) {
 
 // get login credentials from kubernetes secret
 func getCALoginCred() CredStruct {
-	clientset, err := kubernetes.NewForConfig(loadConfig())
+	clientset, err := kubernetes.NewForConfig(cautils.LoadConfig())
 	if err != nil {
 		glog.Errorf("failed creating clientset. Error: %+v", err)
 		panic("")
