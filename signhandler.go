@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"k8s-ca-webhook/cautils"
+	"k8s-ca-websocket/cautils"
 	"math/rand"
 	"os"
 	"os/exec"
