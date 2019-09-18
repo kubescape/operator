@@ -1,9 +1,8 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"io/ioutil"
+	"k8s-ca-websocket/cautils"
 	"log"
 	"net/url"
 	"os"
@@ -39,13 +38,11 @@ type WebSocketHandler struct {
 
 // CreateWebSocketHandler Create ws-handler obj
 func CreateWebSocketHandler() *WebSocketHandler {
-	customerGUID := os.Getenv("CA_CUSTOMER_GUID")
-	clusterName := os.Getenv("CA_CLUSTER_NAME")
 	var websocketURL WebSocketURL
 
 	websocketURL.Scheme = "wss"
-	websocketURL.Host = os.Getenv("CA_POSTMAN")
-	websocketURL.Path = fmt.Sprintf("waitfornotification/%s-%s", customerGUID, clusterName)
+	websocketURL.Host = cautils.CA_POSTMAN
+	websocketURL.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
 	websocketURL.ForceQuery = false
 
 	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL, kubeconfig: loadConfig()}
@@ -102,19 +99,6 @@ func loadConfig() *restclient.Config {
 	return kubeconfig
 }
 
-// main function
-func main() {
-	testEnvironmentVaribles()
-	flag.Parse()
-
-	displayBuildTag()
-
-	// Websocket
-	websocketHandler := CreateWebSocketHandler()
-	glog.Fatal(websocketHandler.WebSokcet())
-
-}
-
 func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
 	glog.Infof("Connecting to %s", u.String())
@@ -127,31 +111,6 @@ func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	return conn, err
 }
 
-func testEnvironmentVaribles() {
-	testEnvironmentVarible("CA_NAMESPACE")
-	testEnvironmentVarible("CA_SERVICE_NAME")
-	testEnvironmentVarible("CA_SERVICE_PORT")
-	testEnvironmentVarible("CA_PORATL_BACKEND")
-	testEnvironmentVarible("CA_CLUSTER_NAME")
-	testEnvironmentVarible("CA_POSTMAN")
-	testEnvironmentVarible("CA_CUSTOMER_GUID")
-
-}
-func testEnvironmentVarible(key string) {
-	if _, ok := os.LookupEnv(key); !ok {
-		panic(fmt.Sprintf("Missing environment variable %s", key))
-	}
-}
-
 func createSignignProfilesDir() error {
 	return os.MkdirAll(SIGNINGPROFILEPATH, 777)
-}
-
-func displayBuildTag() {
-	imageVersion := "UNKNOWN"
-	dat, err := ioutil.ReadFile("./build_number.txt")
-	if err == nil {
-		imageVersion = string(dat)
-	}
-	glog.Infof("Image version: %s", imageVersion)
 }

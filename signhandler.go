@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"k8s-ca-webhook/cautils"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -13,13 +14,19 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
 const (
 	// SIGNINGPROFILEPATH dir storing signing profiles
 	SIGNINGPROFILEPATH = "/signing_profile"
+)
+
+var (
+	globalLoginCredentials = getCALoginCred()
 )
 
 type StatusResponse struct {
@@ -57,6 +64,13 @@ type Envelope struct {
 	DockerImageSHA256       string            `json:"dockerImageSHA256"`
 	// TODO - Add to API
 	StatusResponse StatusResponse `json:"statusResponse"`
+}
+
+// CredStruct holds the various credentials needed to do login into CA BE
+type CredStruct struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Customer string `json:"customer"`
 }
 
 func signImage(command Command, unstructuredObj *unstructured.Unstructured, kubeconfig *rest.Config) error {
@@ -129,11 +143,10 @@ func runSigner(signigProfile, dockerImage string) error {
 	args = append(args, "--configuration_file")
 	args = append(args, signigProfile)
 
-	// TODO use login cookie
 	args = append(args, "--user_name")
-	args = append(args, "system_tests@cyberarmor.io")
+	args = append(args, globalLoginCredentials.User)
 	args = append(args, "--password")
-	args = append(args, "6hdGjPeHqgmzpjRmqXIA")
+	args = append(args, globalLoginCredentials.Password)
 
 	glog.Infof(fmt.Sprintf("Executing casigner command: %s %v", "casigner", args))
 	cmd := exec.Command("casigner", args...)
@@ -155,4 +168,26 @@ func deleteSignigProfile(f string) {
 	if err := os.Remove(f); err != nil {
 		glog.Error(err)
 	}
+}
+
+// get login credentials from kubernetes secret
+func getCALoginCred() CredStruct {
+	clientset, err := kubernetes.NewForConfig(loadConfig())
+	if err != nil {
+		glog.Errorf("failed creating clientset. Error: %+v", err)
+		panic("")
+	}
+
+	sec, err := clientset.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
+	if err != nil {
+		return CredStruct{Customer: "CyberArmor", User: "system_tests@cyberarmor.io", Password: "6hdGjPeHqgmzpjRmqXIA"}
+		// panic(err)
+	}
+
+	// Read secrets
+	user := sec.StringData["username"]
+	psw := sec.StringData["password"]
+	customer := sec.StringData["customer"]
+
+	return CredStruct{Customer: customer, User: user, Password: psw}
 }
