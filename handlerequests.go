@@ -91,8 +91,8 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 		return err
 	}
 
-	ann, _ := json.Marshal(unstruct.GetAnnotations())
-	glog.Infof("\nKind: %s,\nNamespace: %s,\nName: %s,\nAnnotations: %s", unstruct.GetKind(), unstruct.GetNamespace(), unstruct.GetName(), string(ann))
+	// ann, _ := json.Marshal(unstruct.GetAnnotations())
+	glog.Infof("\nKind: %s,\nNamespace: %s,\nName: %s,", unstruct.GetKind(), unstruct.GetNamespace(), unstruct.GetName())
 
 	switch c.CommandName {
 	case CREATE:
@@ -162,6 +162,20 @@ func updateWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 }
 
 func createWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured) error {
+	glog.Infof("Running create")
+
+	// Get current annotations
+	annotations, found, errr := unstructured.NestedStringMap(unstructuredObj.Object, "metadata", "annotations")
+	if errr != nil {
+		glog.Errorf("Error receiving annotations: %s", errr)
+	}
+	if !found {
+		annotations = make(map[string]string)
+	}
+
+	ann, _ := json.Marshal(annotations)
+	glog.Infof("Annotations:\n%s", string(ann))
+
 	_, err := resource.Create(unstructuredObj, metav1.CreateOptions{})
 	if err != nil {
 		glog.Error(err)
@@ -172,6 +186,7 @@ func createWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 }
 
 func updatePod(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured) error {
+	glog.Infof("Running update pod")
 	if err := deleteWorkload(resource, unstructuredObj); err != nil {
 		glog.Error(err)
 		return err
@@ -196,6 +211,7 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 		-- IMPORTANT --
 		When running update, websocket IGNORES all fields (execp annotations) in the recieved workload.
 	*/
+	glog.Infof("Running create")
 	ob, err := resource.Get(unstructuredObj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		glog.Error(err)
@@ -211,10 +227,13 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 		annotations = make(map[string]string)
 	}
 
+	ann, _ := json.Marshal(annotations)
+	glog.Infof("Annotations:\n%s", string(ann))
+
 	tm := time.Now().UTC()
 	annotations["last-cawesocket-update"] = string(tm.Format("02-01-2006 15:04:05"))
 
-	// Change a
+	// Change annotations
 	unstructured.SetNestedStringMap(ob.Object, annotations, "spec", "template", "metadata", "annotations")
 
 	_, err = resource.Update(ob, metav1.UpdateOptions{})
@@ -226,6 +245,7 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 	return nil
 }
 func deleteWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured) error {
+	glog.Infof("Running delete")
 	d := metav1.DeletePropagationBackground
 	err := resource.Delete(unstructuredObj.GetName(), &metav1.DeleteOptions{PropagationPolicy: &d})
 	if err != nil {
