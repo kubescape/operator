@@ -145,7 +145,7 @@ func runSigner(signigProfile, dockerImage string) error {
 
 	args = append(args, "--user_name")
 	args = append(args, globalLoginCredentials.User)
-	args = append(args, "--passsword")
+	args = append(args, "--password")
 	glog.Infof(fmt.Sprintf("Executing casigner command: %s %v", "casigner", args))
 
 	// Adding password after print that way the password will not be displayed
