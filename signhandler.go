@@ -26,7 +26,7 @@ const (
 )
 
 var (
-	globalLoginCredentials = getCALoginCred()
+// globalLoginCredentials = getCALoginCred()
 )
 
 type StatusResponse struct {
@@ -137,6 +137,8 @@ func runSigner(signigProfile, dockerImage string) error {
 	/*
 		casigner --docker_image_id <docker_image:tag>  --configuration_file <file.cfg>
 	*/
+	globalLoginCredentials := getCALoginCred()
+
 	args := []string{}
 	args = append(args, "--docker_image_id")
 	args = append(args, dockerImage)
@@ -181,6 +183,7 @@ func getCALoginCred() CredStruct {
 
 	sec, err := clientset.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
+		glog.Errorf("Error reading secret.\nnamespace: %s,secret name: %s", cautils.CA_NAMESPACE, cautils.CA_LOGIN_SECRET_NAME)
 		panic(err)
 	}
 

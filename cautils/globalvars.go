@@ -24,10 +24,7 @@ func ReadEnvironmentVaribles() {
 	CA_CLUSTER_NAME = testEnvironmentVarible("CA_CLUSTER_NAME")
 	CA_POSTMAN = testEnvironmentVarible("CA_POSTMAN")
 	CA_CUSTOMER_GUID = testEnvironmentVarible("CA_CUSTOMER_GUID")
-	// CA_LOGIN_SECRET_NAME = testEnvironmentVarible("CA_LOGIN_SECRET_NAME")
-
-	//TODO
-	CA_LOGIN_SECRET_NAME, _ = os.LookupEnv("CA_LOGIN_SECRET_NAME")
+	CA_LOGIN_SECRET_NAME = testEnvironmentVarible("CA_LOGIN_SECRET_NAME")
 }
 func testEnvironmentVarible(key string) string {
 	v, ok := os.LookupEnv(key)
