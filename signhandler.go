@@ -176,20 +176,19 @@ func deleteSignigProfile(f string) {
 func getCALoginCred() CredStruct {
 	clientset, err := kubernetes.NewForConfig(cautils.LoadConfig())
 	if err != nil {
-		glog.Errorf("failed creating clientset. Error: %+v", err)
-		panic("")
+		panic(err)
 	}
 
 	sec, err := clientset.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
-		return CredStruct{Customer: "CyberArmor", User: "system_tests@cyberarmor.io", Password: "6hdGjPeHqgmzpjRmqXIA"}
-		// panic(err)
+		panic(err)
 	}
 
 	// Read secrets
-	user := sec.StringData["username"]
-	psw := sec.StringData["password"]
-	customer := sec.StringData["customer"]
+	user := string(sec.Data["username"])
+	psw := string(sec.Data["password"])
+	customer := string(sec.Data["customer"])
 
+	glog.Infof("Customer: %s, User: %s", customer, user)
 	return CredStruct{Customer: customer, User: user, Password: psw}
 }
