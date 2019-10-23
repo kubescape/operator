@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"k8s-ca-websocket/cautils"
-	"math/rand"
 	"os"
 	"os/exec"
 	"strconv"
@@ -127,7 +126,7 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured, kube
 }
 
 func saveSigningProfileFile(contetnt json.RawMessage) (string, error) {
-	fileName := fmt.Sprintf("%s/%s%s.cfg", SIGNINGPROFILEPATH, string(rand.Intn(100)), strconv.FormatInt(time.Now().Unix(), 10))
+	fileName := fmt.Sprintf("%s/%s.cfg", SIGNINGPROFILEPATH, strconv.FormatInt(time.Now().Unix(), 10))
 	sp := []byte(contetnt)
 	err := ioutil.WriteFile(fileName, sp, 0644)
 	return fileName, err
