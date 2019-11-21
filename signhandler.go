@@ -88,39 +88,31 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured, kube
 		return errors.New("containers not found in args")
 	}
 	successfullySigned := false
+
 	for containerName, container := range containersArgs.(map[string]interface{}) {
 		kubernetesData := kubernetesData{kubeconfig: kubeconfig, unstructuredObj: unstructuredObj}
 		SetDockerClient(kubernetesData, containerName)
-		for _, process := range container.(map[string]interface{}) {
-			envelope := process.(map[string]interface{})
+		for _, process := range container.(map[string]Envelope) {
+			// signingProfile := Envelope{}
+			// json.Unmarshal([]byte(process), &signingProfile)
+			// envelope := process.(interface{})
 
 			finalProfile, err := json.Marshal(process)
 			if err != nil {
-				glog.Error(err)
-				sr := StatusResponse{Status: false, Message: fmt.Sprintf("%v", err)}
-				envelope["statusResponse"] = sr
-				continue
+				return err
 			}
 			glog.Infof("Signig container: %s\nsignig profile: %s", containerName, string(finalProfile))
 
 			fileName, err := saveSigningProfileFile(finalProfile)
 			if err != nil {
-				glog.Error(err)
-				sr := StatusResponse{Status: false, Message: fmt.Sprintf("%v", err)}
-				envelope["statusResponse"] = sr
-				continue
+				return err
 			}
+			// if err := runSigner(fileName, fmt.Sprintf("%v", envelope["dockerImageTag"])); err != nil {
 
-			if err := runSigner(fileName, fmt.Sprintf("%v", envelope["dockerImageTag"])); err != nil {
-				glog.Error(err)
-				sr := StatusResponse{Status: false, Message: fmt.Sprintf("%v", err)}
-				envelope["statusResponse"] = sr
-
-			} else {
-				sr := StatusResponse{Status: true}
-				envelope["statusResponse"] = sr
-				successfullySigned = true
+			if err := runSigner(fileName, fmt.Sprintf("%v", process.DockerImageTag)); err != nil {
+				return err
 			}
+			successfullySigned = true
 
 			deleteSignigProfile(fileName)
 		}
