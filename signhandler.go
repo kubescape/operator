@@ -32,37 +32,45 @@ type StatusResponse struct {
 	Status  bool
 	Message string
 }
+
+// Filter holds the filter section of  ExecutablesList
 type Filter struct {
 	IncludePaths      []string `json:"includePaths"`
 	IncludeExtensions []string `json:"includeExtensions"`
 }
 
+// ModulesInfo holds data of specific module in signing profile
 type ModulesInfo struct {
+	FullPath                string `json:"fullPath"`
 	Name                    string `json:"name"`
 	Mandatory               int    `json:"mandatory"`
 	Version                 string `json:"version"`
 	SignatureMismatchAction int    `json:"signatureMismatchAction"`
 	Type                    int    `json:"type"`
 }
+
+// ExecutablesList holds the list of executables in this signing profile
 type ExecutablesList struct {
-	Filter      Filter        `json:"filter"`
-	MainProcess string        `json:"mainProcess"`
-	ModulesInfo []ModulesInfo `json:"modulesInfo"`
+	MainProcess                     string            `json:"mainProcess"`
+	FullProcessCommandLine          string            `json:"fullProcessCommandLine"`
+	FullProcessEnvironmentVariables map[string]string `json:"fullProcessEnvironmentVariables"`
+	ModulesInfo                     []ModulesInfo     `json:"modulesInfo"`
+	Filter                          Filter            `json:"filter"`
 }
 
+// Envelope is the external envelope of single signing profile
 type Envelope struct {
 	Component               string            `json:"component"`
 	URL                     string            `json:"url"`
-	Platform                int               `json:"platform"`
-	Architecture            int               `json:"architecture"`
-	ComponentType           int               `json:"componentType"`
-	SignatureMismatchAction int               `json:"signatureMismatchAction"`
+	Platform                int64             `json:"platform"`
+	Architecture            int64             `json:"architecture"`
+	ComponentType           int64             `json:"componentType"`
+	SignatureMismatchAction int64             `json:"signatureMismatchAction"`
 	ExecutablesList         []ExecutablesList `json:"executablesList"`
 	ContainerName           string            `json:"containerName"`
 	DockerImageTag          string            `json:"dockerImageTag"`
 	DockerImageSHA256       string            `json:"dockerImageSHA256"`
-	// TODO - Add to API
-	StatusResponse StatusResponse `json:"statusResponse"`
+	FullPathMap             map[string]bool   `json:"-"`
 }
 
 // CredStruct holds the various credentials needed to do login into CA BE
