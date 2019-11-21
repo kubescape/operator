@@ -86,6 +86,10 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 	if !ok {
 		return fmt.Errorf("Json not found in args")
 	}
+
+	message, _ := json.Marshal(resJSON)
+	glog.Infof("received:\n%v", string(message))
+
 	res, unstruct, err := wsh.getWorkloadResource(resJSON.(string))
 	if err != nil {
 		return err
