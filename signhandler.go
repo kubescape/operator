@@ -87,36 +87,40 @@ func signImage(command Command, unstructuredObj *unstructured.Unstructured, kube
 		glog.Error("Containers not found in args")
 		return errors.New("containers not found in args")
 	}
+
+	message, _ := json.Marshal(containersArgs)
+	glog.Infof("Signing profile:\n%v", string(message))
+
 	successfullySigned := false
 
-	for containerName, container := range containersArgs.(map[string]interface{}) {
+	for containerName, process := range containersArgs.(map[string]interface{}) {
 		kubernetesData := kubernetesData{kubeconfig: kubeconfig, unstructuredObj: unstructuredObj}
 		SetDockerClient(kubernetesData, containerName)
-		for _, process := range container.(map[string]Envelope) {
-			// signingProfile := Envelope{}
-			// json.Unmarshal([]byte(process), &signingProfile)
-			// envelope := process.(interface{})
+		// for _, process := range container.(map[string]Envelope) {
+		// signingProfile := Envelope{}
+		// json.Unmarshal([]byte(process), &signingProfile)
+		envelope := process.(map[string]interface{})
 
-			finalProfile, err := json.Marshal(process)
-			if err != nil {
-				return err
-			}
-			glog.Infof("Signig container: %s\nsignig profile: %s", containerName, string(finalProfile))
-
-			fileName, err := saveSigningProfileFile(finalProfile)
-			if err != nil {
-				return err
-			}
-			// if err := runSigner(fileName, fmt.Sprintf("%v", envelope["dockerImageTag"])); err != nil {
-
-			if err := runSigner(fileName, fmt.Sprintf("%v", process.DockerImageTag)); err != nil {
-				return err
-			}
-			successfullySigned = true
-
-			deleteSignigProfile(fileName)
+		finalProfile, err := json.Marshal(process)
+		if err != nil {
+			return err
 		}
+		glog.Infof("Signig container: %s\nsignig profile: %s", containerName, string(finalProfile))
+
+		fileName, err := saveSigningProfileFile(finalProfile)
+		if err != nil {
+			return err
+		}
+		// if err := runSigner(fileName, fmt.Sprintf("%v", envelope["dockerImageTag"])); err != nil {
+
+		if err := runSigner(fileName, fmt.Sprintf("%v", envelope["dockerImageTag"])); err != nil {
+			return err
+		}
+		successfullySigned = true
+
+		deleteSignigProfile(fileName)
 	}
+	// }
 
 	if successfullySigned {
 		return nil
