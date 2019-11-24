@@ -147,6 +147,8 @@ func runSigner(signigProfile, dockerImage string) error {
 	args = append(args, dockerImage)
 	args = append(args, "--configuration_file")
 	args = append(args, signigProfile)
+	args = append(args, "-df")
+	args = append(args, ".")
 
 	args = append(args, "--user_name")
 	args = append(args, globalLoginCredentials.User)
