@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"k8s-ca-websocket/cacli"
+	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/sign"
 	"time"
 
 	"github.com/golang/glog"
@@ -16,29 +19,6 @@ import (
 	"k8s.io/client-go/restmapper"
 )
 
-// Commands list of commands received from websocket
-type Commands struct {
-	Commands []Command `json:"commands"`
-}
-
-// Command structure of command received from websocket
-type Command struct {
-	CommandName string                 `json:"commandName"`
-	ResponseID  string                 `json:"responseID"`
-	Args        map[string]interface{} `json:"args"`
-}
-
-// Containers to sign
-type Containers struct {
-	Containers []SignigProfile `json:"containers"`
-}
-
-// SignigProfile container name and profile
-type SignigProfile struct {
-	Name           string `json:"name"`
-	SigningProfile string `json:"signingProfile"`
-}
-
 var (
 	// CREATE workload
 	CREATE = "create"
@@ -50,16 +30,10 @@ var (
 	SIGN = "sign"
 )
 
-type patchUpdate struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
-
 // HandlePostmanRequest Parse received commands and run the command
 func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
 	// log.Printf("Recveived: %v", string(receivedCommands))
-	commands := Commands{}
+	commands := cautils.Commands{}
 	errorList := []error{}
 
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
@@ -68,7 +42,7 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 		return []error{err}
 	}
 	for _, c := range commands.Commands {
-		go func(c Command) {
+		go func(c cautils.Command) {
 			glog.Infof(" ================== Starting CyberArmor websocket, command: %s ================== ", c.CommandName)
 			glog.Infof("Running %s command", c.CommandName)
 			if err := wsh.runCommand(c); err != nil {
@@ -81,22 +55,14 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	}
 	return errorList
 }
-func (wsh *WebSocketHandler) runCommand(c Command) error {
-	resJSON, ok := c.Args["json"]
-	if !ok {
-		return fmt.Errorf("Json not found in args")
-	}
-
-	message, _ := json.Marshal(resJSON)
-	glog.Infof("received:\n%v", string(message))
-
-	res, unstruct, err := wsh.getWorkloadResource(resJSON.(string))
+func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
+	
+	res, unstruct, err := wsh.getWorkloadResource(c)
 	if err != nil {
 		return err
 	}
 
-	// ann, _ := json.Marshal(unstruct.GetAnnotations())
-	glog.Infof("\nKind: %s,\nNamespace: %s,\nName: %s,", unstruct.GetKind(), unstruct.GetNamespace(), unstruct.GetName())
+	glog.Infof("Wlid: %s", c.Wlid)
 
 	switch c.CommandName {
 	case CREATE:
@@ -106,11 +72,7 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 	case DELETE:
 		return deleteWorkload(res, &unstruct)
 	case SIGN:
-		if err := signImage(c, &unstruct, wsh.kubeconfig); err != nil {
-			return err
-		}
-		glog.Infof("Done signig, updating workload. Kind: %s, Name: %s", unstruct.GetKind(), unstruct.GetName())
-		return updateWorkload(res, &unstruct)
+		return signWorkload(res, &unstruct, c.Wlid,)
 
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
@@ -118,34 +80,34 @@ func (wsh *WebSocketHandler) runCommand(c Command) error {
 	return nil
 }
 
-func (wsh *WebSocketHandler) getWorkloadResource(resJSON string) (resource dynamic.ResourceInterface, unstructuredObj unstructured.Unstructured, err error) {
+func (wsh *WebSocketHandler) getWorkloadResource(command cautils.Command) (resource dynamic.ResourceInterface, unstructuredObj unstructured.Unstructured, err error) {
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 
-	obj, gvk, err := decode([]byte(resJSON), nil, nil)
+	// obj, gvk, err := decode([]byte(resJSON), nil, nil)
+	// if err != nil {
+	// 	return resource, unstructuredObj, err
+	// }
+	dynClient, err := dynamic.NewForConfig(k8sworkloads.GetK8sConfig())
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
-	dynClient, err := dynamic.NewForConfig(wsh.kubeconfig)
+	clientset, err := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
-	clientset, err := kubernetes.NewForConfig(wsh.kubeconfig)
-	if err != nil {
-		return resource, unstructuredObj, err
-	}
-	gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
+	gk := schema.GroupKind{Group: command.Group, Kind: Kind}
 	groupResources, err := restmapper.GetAPIGroupResources(clientset.Discovery())
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
 	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
-	mapping, err := rm.RESTMapping(gk, gvk.Version)
+	mapping, err := rm.RESTMapping(gk, command.Version)
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
 
-	unstructur, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	unstructuredObj = unstructured.Unstructured{Object: unstructur}
+	unstructure, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	unstructuredObj = unstructured.Unstructured{Object: unstructure}
 	namespace := unstructuredObj.GetNamespace()
 	if namespace == "" {
 		namespace = "default"
@@ -153,6 +115,51 @@ func (wsh *WebSocketHandler) getWorkloadResource(resJSON string) (resource dynam
 	resource = dynClient.Resource(mapping.Resource).Namespace(namespace)
 
 	return resource, unstructuredObj, nil
+}
+
+// func (wsh *WebSocketHandler) getWorkloadResource(resJSON string) (resource dynamic.ResourceInterface, unstructuredObj unstructured.Unstructured, err error) {
+// 	decode := scheme.Codecs.UniversalDeserializer().Decode
+
+// 	obj, gvk, err := decode([]byte(resJSON), nil, nil)
+// 	if err != nil {
+// 		return resource, unstructuredObj, err
+// 	}
+// 	dynClient, err := dynamic.NewForConfig(wsh.kubeconfig)
+// 	if err != nil {
+// 		return resource, unstructuredObj, err
+// 	}
+// 	clientset, err := kubernetes.NewForConfig(wsh.kubeconfig)
+// 	if err != nil {
+// 		return resource, unstructuredObj, err
+// 	}
+// 	gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
+// 	groupResources, err := restmapper.GetAPIGroupResources(clientset.Discovery())
+// 	if err != nil {
+// 		return resource, unstructuredObj, err
+// 	}
+// 	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
+// 	mapping, err := rm.RESTMapping(gk, gvk.Version)
+// 	if err != nil {
+// 		return resource, unstructuredObj, err
+// 	}
+
+// 	unstructur, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+// 	unstructuredObj = unstructured.Unstructured{Object: unstructur}
+// 	namespace := unstructuredObj.GetNamespace()
+// 	if namespace == "" {
+// 		namespace = "default"
+// 	}
+// 	resource = dynClient.Resource(mapping.Resource).Namespace(namespace)
+
+// 	return resource, unstructuredObj, nil
+// }
+func signWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured, wlid string) error {
+	s := sign.NewSigner(wlid)
+	if err := s.SignImage(unstructuredObj); err != nil {
+		return err
+	}
+	glog.Infof("Done signing, updating workload. Kind: %s, Name: %s", unstructuredObj.GetKind(), unstructuredObj.GetName())
+	return updateWorkload(resource, unstructuredObj)
 }
 
 func updateWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured) error {

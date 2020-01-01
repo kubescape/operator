@@ -5,7 +5,6 @@ import (
 	"k8s-ca-websocket/cautils"
 	"log"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/golang/glog"
@@ -22,15 +21,16 @@ type WebSocketURL struct {
 	ForceQuery bool   `json:"ForceQuery"`
 }
 
+// DataSocket- 
 type DataSocket struct {
 	message string
 	RType   ReqType
 }
 
+// WebSocketHandler - 
 type WebSocketHandler struct {
 	data         chan DataSocket
 	webSocketURL WebSocketURL
-	kubeconfig   *restclient.Config
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -42,16 +42,11 @@ func CreateWebSocketHandler() *WebSocketHandler {
 	websocketURL.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
 	websocketURL.ForceQuery = false
 
-	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL, kubeconfig: cautils.LoadConfig()}
+	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL}
 }
 
 // WebSokcet CAWebSokcet
 func (wsh *WebSocketHandler) WebSokcet() error {
-
-	if err := createSignignProfilesDir(); err != nil {
-		return fmt.Errorf("Error creating signing profile dir\nMessage %#v", err)
-	}
-
 	conn, err := wsh.dialWebSocket()
 	if err != nil {
 		return err
@@ -94,8 +89,4 @@ func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 		return conn, err
 	}
 	return conn, err
-}
-
-func createSignignProfilesDir() error {
-	return os.MkdirAll(SIGNINGPROFILEPATH, 777)
 }
