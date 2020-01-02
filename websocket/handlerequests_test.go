@@ -66,9 +66,9 @@ func TestCreatePod(t *testing.T) {
 }
 
 func TestCreateDeployment(t *testing.T) {
-	// if d := os.Getenv("WEBSOCKETDEBUG"); d == "" {
-	// 	return
-	// }
+	if d := os.Getenv("WEBSOCKETDEBUG"); d == "" {
+		return
+	}
 	wsh := WebSocketHandler{}
 	c := EmulateCommand("create", demoDeployment)
 
@@ -101,9 +101,9 @@ func TestUpdatePod(t *testing.T) {
 }
 
 func TestUpdateDeployment(t *testing.T) {
-	// if d := os.Getenv("WEBSOCKETDEBUG"); d == "" {
-	// 	return
-	// }
+	if d := os.Getenv("WEBSOCKETDEBUG"); d == "" {
+		return
+	}
 	wsh := WebSocketHandler{}
 	c := EmulateCommand("update", demoDeployment)
 
