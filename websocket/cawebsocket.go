@@ -1,4 +1,4 @@
-package main
+package websocket
 
 import (
 	"fmt"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
-	restclient "k8s.io/client-go/rest"
 )
 
 type ReqType int
@@ -21,13 +20,13 @@ type WebSocketURL struct {
 	ForceQuery bool   `json:"ForceQuery"`
 }
 
-// DataSocket- 
+// DataSocket-
 type DataSocket struct {
 	message string
 	RType   ReqType
 }
 
-// WebSocketHandler - 
+// WebSocketHandler -
 type WebSocketHandler struct {
 	data         chan DataSocket
 	webSocketURL WebSocketURL

@@ -3,27 +3,31 @@ package main
 import (
 	"flag"
 	"io/ioutil"
+	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
-	"k8s-ca-websocket/seal"
+	"k8s-ca-websocket/websocket"
 
 	"github.com/golang/glog"
 )
 
 // main function
 func main() {
-	cautils.LoadEnvironmentVaribles()
 	flag.Parse()
 
 	displayBuildTag()
 
-	// login cacli
-	if err := seal.CacliLogin(); err != nil {
-		glog.Errorf("Fail to login to cyberArmor backend")
+	if err := cautils.LoadEnvironmentVaribles(); err != nil {
+		glog.Error(err)
+		return
+	}
+
+	if err := cacli.LoginCacli(); err != nil {
+		glog.Error(err)
 		return
 	}
 
 	// Websocket
-	websocketHandler := CreateWebSocketHandler()
+	websocketHandler := websocket.CreateWebSocketHandler()
 	glog.Fatal(websocketHandler.WebSokcet())
 
 }

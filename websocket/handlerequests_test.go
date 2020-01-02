@@ -1,4 +1,4 @@
-package main
+package websocket
 
 import (
 	"encoding/json"
@@ -55,7 +55,7 @@ func TestCreatePod(t *testing.T) {
 	wsh := WebSocketHandler{}
 	c := EmulateCommand("create", sleepYamPlod)
 
-	res, unstruct, err := wsh.getWorkloadResource(c)
+	res, unstruct, err := wsh.getWorkloadResource(c.Args["json"].(string))
 	if err != nil {
 		t.Errorf("%#v", err)
 	}
@@ -72,7 +72,7 @@ func TestCreateDeployment(t *testing.T) {
 	wsh := WebSocketHandler{}
 	c := EmulateCommand("create", demoDeployment)
 
-	res, unstruct, err := wsh.getWorkloadResource(c)
+	res, unstruct, err := wsh.getWorkloadResource(c.Args["json"].(string))
 	if err != nil {
 		t.Errorf("%#v", err)
 	}
@@ -89,7 +89,7 @@ func TestUpdatePod(t *testing.T) {
 	wsh := WebSocketHandler{}
 	c := EmulateCommand("update", sleepYamPlod)
 
-	res, unstruct, err := wsh.getWorkloadResource(c)
+	res, unstruct, err := wsh.getWorkloadResource(c.Args["json"].(string))
 	if err != nil {
 		t.Errorf("%#v", err)
 	}
@@ -107,7 +107,7 @@ func TestUpdateDeployment(t *testing.T) {
 	wsh := WebSocketHandler{}
 	c := EmulateCommand("update", demoDeployment)
 
-	res, unstruct, err := wsh.getWorkloadResource(c)
+	res, unstruct, err := wsh.getWorkloadResource(c.Args["json"].(string))
 	if err != nil {
 		t.Errorf("%#v", err)
 	}

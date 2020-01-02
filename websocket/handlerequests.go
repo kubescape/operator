@@ -1,10 +1,10 @@
-package main
+package websocket
 
 import (
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/sign"
 	"time"
 
@@ -56,13 +56,20 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	return errorList
 }
 func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
-	
-	res, unstruct, err := wsh.getWorkloadResource(c)
+	glog.Infof("Wlid: %s", c.Wlid)
+
+	resJSON, ok := c.Args["json"]
+	if !ok {
+		return fmt.Errorf("Json not found in args")
+	}
+
+	message, _ := json.Marshal(resJSON)
+	glog.Infof("received:\n%s", string(message))
+
+	res, unstruct, err := wsh.getWorkloadResource(resJSON.(string))
 	if err != nil {
 		return err
 	}
-
-	glog.Infof("Wlid: %s", c.Wlid)
 
 	switch c.CommandName {
 	case CREATE:
@@ -72,7 +79,7 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 	case DELETE:
 		return deleteWorkload(res, &unstruct)
 	case SIGN:
-		return signWorkload(res, &unstruct, c.Wlid,)
+		return signWorkload(res, &unstruct, c.Wlid)
 
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
@@ -80,13 +87,13 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 	return nil
 }
 
-func (wsh *WebSocketHandler) getWorkloadResource(command cautils.Command) (resource dynamic.ResourceInterface, unstructuredObj unstructured.Unstructured, err error) {
+func (wsh *WebSocketHandler) getWorkloadResource(resJSON string) (resource dynamic.ResourceInterface, unstructuredObj unstructured.Unstructured, err error) {
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 
-	// obj, gvk, err := decode([]byte(resJSON), nil, nil)
-	// if err != nil {
-	// 	return resource, unstructuredObj, err
-	// }
+	obj, gvk, err := decode([]byte(resJSON), nil, nil)
+	if err != nil {
+		return resource, unstructuredObj, err
+	}
 	dynClient, err := dynamic.NewForConfig(k8sworkloads.GetK8sConfig())
 	if err != nil {
 		return resource, unstructuredObj, err
@@ -95,19 +102,19 @@ func (wsh *WebSocketHandler) getWorkloadResource(command cautils.Command) (resou
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
-	gk := schema.GroupKind{Group: command.Group, Kind: Kind}
+	gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
 	groupResources, err := restmapper.GetAPIGroupResources(clientset.Discovery())
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
 	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
-	mapping, err := rm.RESTMapping(gk, command.Version)
+	mapping, err := rm.RESTMapping(gk, gvk.Version)
 	if err != nil {
 		return resource, unstructuredObj, err
 	}
 
-	unstructure, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	unstructuredObj = unstructured.Unstructured{Object: unstructure}
+	unstructur, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	unstructuredObj = unstructured.Unstructured{Object: unstructur}
 	namespace := unstructuredObj.GetNamespace()
 	if namespace == "" {
 		namespace = "default"
@@ -116,43 +123,6 @@ func (wsh *WebSocketHandler) getWorkloadResource(command cautils.Command) (resou
 
 	return resource, unstructuredObj, nil
 }
-
-// func (wsh *WebSocketHandler) getWorkloadResource(resJSON string) (resource dynamic.ResourceInterface, unstructuredObj unstructured.Unstructured, err error) {
-// 	decode := scheme.Codecs.UniversalDeserializer().Decode
-
-// 	obj, gvk, err := decode([]byte(resJSON), nil, nil)
-// 	if err != nil {
-// 		return resource, unstructuredObj, err
-// 	}
-// 	dynClient, err := dynamic.NewForConfig(wsh.kubeconfig)
-// 	if err != nil {
-// 		return resource, unstructuredObj, err
-// 	}
-// 	clientset, err := kubernetes.NewForConfig(wsh.kubeconfig)
-// 	if err != nil {
-// 		return resource, unstructuredObj, err
-// 	}
-// 	gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
-// 	groupResources, err := restmapper.GetAPIGroupResources(clientset.Discovery())
-// 	if err != nil {
-// 		return resource, unstructuredObj, err
-// 	}
-// 	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
-// 	mapping, err := rm.RESTMapping(gk, gvk.Version)
-// 	if err != nil {
-// 		return resource, unstructuredObj, err
-// 	}
-
-// 	unstructur, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-// 	unstructuredObj = unstructured.Unstructured{Object: unstructur}
-// 	namespace := unstructuredObj.GetNamespace()
-// 	if namespace == "" {
-// 		namespace = "default"
-// 	}
-// 	resource = dynClient.Resource(mapping.Resource).Namespace(namespace)
-
-// 	return resource, unstructuredObj, nil
-// }
 func signWorkload(resource dynamic.ResourceInterface, unstructuredObj *unstructured.Unstructured, wlid string) error {
 	s := sign.NewSigner(wlid)
 	if err := s.SignImage(unstructuredObj); err != nil {
@@ -222,7 +192,6 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 		-- IMPORTANT --
 		When running update, websocket IGNORES all fields (execp annotations) in the recieved workload.
 	*/
-	glog.Infof("Running create")
 	ob, err := resource.Get(unstructuredObj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		glog.Error(err)
@@ -237,9 +206,6 @@ func updateAbstract(resource dynamic.ResourceInterface, unstructuredObj *unstruc
 	if !found {
 		annotations = make(map[string]string)
 	}
-
-	ann, _ := json.Marshal(annotations)
-	glog.Infof("Annotations:\n%s", string(ann))
 
 	tm := time.Now().UTC()
 	annotations["last-cawesocket-update"] = string(tm.Format("02-01-2006 15:04:05"))

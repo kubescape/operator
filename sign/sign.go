@@ -34,7 +34,7 @@ func (s *Sign) SignImage(unstructuredObj *unstructured.Unstructured) error {
 		return err
 	}
 
-	glog.Infoln("%s signed", s.wlid)
+	glog.Infof("signed %s", s.wlid)
 	return nil
 }
 
