@@ -16,7 +16,8 @@ var (
 	// SIGN image
 	SIGN = "sign"
 
-	CALabel  = "cyberarmor"
+	CALabel = "cyberarmor"
+
 	CAInject = "injectCyberArmor"
 )
 
@@ -33,20 +34,17 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	}
 	for _, c := range commands.Commands {
 		go func(c cautils.Command) {
-			glog.Infof(" ================== Starting CyberArmor websocket, command: %s ================== ", c.CommandName)
-			glog.Infof("Running %s command", c.CommandName)
+			glog.Infof("Running %s command, wlid: %s", c.CommandName, c.Wlid)
 			if err := wsh.runCommand(c); err != nil {
 				glog.Errorf("%v", err)
-				glog.Infof("----------------- Failed CyberArmor websocket, command: %s  -----------------", c.CommandName)
 				errorList = append(errorList, err)
 			}
-			glog.Infof(" ================== Done CyberArmor websocket, command: %s ================== ", c.CommandName)
+			glog.Infof("Done %s command, wlid: %s", c.CommandName, c.Wlid)
 		}(c)
 	}
 	return errorList
 }
 func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
-	glog.Infof("Wlid: %s", c.Wlid)
 
 	workload, err := getWorkload(c.Wlid)
 	if err != nil {

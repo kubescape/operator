@@ -23,7 +23,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 		return nil, err
 	}
 	switch kind {
-	case "deployment":
+	case "Deployment":
 		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
@@ -32,7 +32,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 		}
 		return nil, fmt.Errorf("workload not found")
 
-	case "replicaSet":
+	case "ReplicaSet":
 		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
@@ -40,7 +40,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("workload not found")
-	case "daemonSet":
+	case "DaemonSet":
 		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
@@ -48,7 +48,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("workload not found")
-	case "statefulSets":
+	case "StatefulSet":
 		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
@@ -56,7 +56,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("workload not found")
-	case "podTemplates":
+	case "PodTemplate":
 		w, _ := clientset.CoreV1().PodTemplates(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
@@ -64,7 +64,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("workload not found")
-	case "pod":
+	case "Pod":
 		w, _ := clientset.CoreV1().Pods(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {

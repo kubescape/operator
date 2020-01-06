@@ -17,39 +17,39 @@ func removeWorkload(workload interface{}, wlid string) error {
 		return err
 	}
 	switch kind {
-	case "deployment":
-		w := workload.(appsv1.Deployment)
+	case "Deployment":
+		w := workload.(*appsv1.Deployment)
 		removeCA(&w.ObjectMeta)
 		removeCA(&w.Spec.Template.ObjectMeta)
-		go clientset.AppsV1().Deployments(namespace).Update(&w)
+		go clientset.AppsV1().Deployments(namespace).Update(w)
 
-	case "replicaSet":
-		w := workload.(appsv1.ReplicaSet)
+	case "ReplicaSet":
+		w := workload.(*appsv1.ReplicaSet)
 		removeCA(&w.ObjectMeta)
 		removeCA(&w.Spec.Template.ObjectMeta)
-		go clientset.AppsV1().ReplicaSets(namespace).Update(&w)
+		go clientset.AppsV1().ReplicaSets(namespace).Update(w)
 
-	case "daemonSet":
-		w := workload.(appsv1.DaemonSet)
+	case "DaemonSet":
+		w := workload.(*appsv1.DaemonSet)
 		removeCA(&w.ObjectMeta)
 		removeCA(&w.Spec.Template.ObjectMeta)
-		go clientset.AppsV1().DaemonSets(namespace).Update(&w)
+		go clientset.AppsV1().DaemonSets(namespace).Update(w)
 
-	case "statefulSet":
-		w := workload.(appsv1.StatefulSet)
+	case "StatefulSet":
+		w := workload.(*appsv1.StatefulSet)
 		removeCA(&w.ObjectMeta)
 		removeCA(&w.Spec.Template.ObjectMeta)
-		go clientset.AppsV1().StatefulSets(namespace).Update(&w)
+		go clientset.AppsV1().StatefulSets(namespace).Update(w)
 
-	case "podTemplate":
-		w := workload.(corev1.PodTemplate)
+	case "PodTemplate":
+		w := workload.(*corev1.PodTemplate)
 		removeCA(&w.ObjectMeta)
-		go clientset.CoreV1().PodTemplates(namespace).Update(&w)
+		go clientset.CoreV1().PodTemplates(namespace).Update(w)
 
-	case "pod":
-		w := workload.(corev1.Pod)
+	case "Pod":
+		w := workload.(*corev1.Pod)
 		removeCA(&w.ObjectMeta)
-		go clientset.CoreV1().Pods(namespace).Update(&w)
+		go clientset.CoreV1().Pods(namespace).Update(w)
 	}
 	return nil
 
