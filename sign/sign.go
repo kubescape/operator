@@ -4,7 +4,6 @@ import (
 	"k8s-ca-websocket/cacli"
 
 	"github.com/golang/glog"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Sign -
@@ -23,9 +22,9 @@ func NewSigner(wlid string) *Sign {
 }
 
 // SignImage sign image usin cacli
-func (s *Sign) SignImage(unstructuredObj *unstructured.Unstructured) error {
+func (s *Sign) SignImage(workload interface{}) error {
 	// pull images
-	if err := s.prepareForSign(unstructuredObj); err != nil {
+	if err := s.prepareForSign(workload); err != nil {
 		return err
 	}
 
@@ -38,7 +37,7 @@ func (s *Sign) SignImage(unstructuredObj *unstructured.Unstructured) error {
 	return nil
 }
 
-func (s *Sign) prepareForSign(unstructuredObj *unstructured.Unstructured) error {
+func (s *Sign) prepareForSign(workload interface{}) error {
 	// get wt
 	wt, err := s.cacli.Get(s.wlid)
 	if err != nil {
@@ -47,7 +46,7 @@ func (s *Sign) prepareForSign(unstructuredObj *unstructured.Unstructured) error 
 
 	// docker pull images
 	for _, i := range wt.Containers {
-		if err := setDockerClient(unstructuredObj, i.ImageTag); err != nil {
+		if err := setDockerClient(workload, i.ImageTag); err != nil {
 			return err
 		}
 

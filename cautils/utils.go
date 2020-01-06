@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -34,4 +36,28 @@ func RunCommand(command string, arg []string, display bool) (*exec.Cmd, error) {
 	cmd.Stderr = &errb
 	err := cmd.Run()
 	return cmd, err
+}
+
+// GetNamespaceFromWorkload extrac namespace from workload
+func GetNamespaceFromWorkload(workload interface{}) string {
+	if w, k := workload.(*appsv1.Deployment); k {
+		return w.ObjectMeta.Namespace
+	}
+	if w, k := workload.(*appsv1.DaemonSet); k {
+		return w.ObjectMeta.Namespace
+	}
+	if w, k := workload.(*appsv1.ReplicaSet); k {
+		return w.ObjectMeta.Namespace
+	}
+	if w, k := workload.(*appsv1.StatefulSet); k {
+		return w.ObjectMeta.Namespace
+	}
+	if w, k := workload.(*corev1.PodTemplate); k {
+		return w.ObjectMeta.Namespace
+	}
+	if w, k := workload.(*corev1.Pod); k {
+		return w.ObjectMeta.Namespace
+	}
+
+	return "default"
 }

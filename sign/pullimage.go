@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 	"strings"
 
@@ -13,9 +14,9 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -29,7 +30,7 @@ type DockerClient struct {
 type DockerConfigJsonstructure map[string]map[string]types.AuthConfig
 
 // setDockerClient -
-func setDockerClient(unstructuredObj *unstructured.Unstructured, imageName string) error {
+func setDockerClient(workload interface{}, imageName string) error {
 	dc := DockerClient{ctx: context.Background()}
 	cli, err := client.NewClientWithOpts(client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -49,7 +50,7 @@ func setDockerClient(unstructuredObj *unstructured.Unstructured, imageName strin
 
 		// Pulling image using docker client.
 		// If the image is from private registry, we will use the kubernetes "pullImageSecret"
-		out, err := dc.pullImage(unstructuredObj, imageName)
+		out, err := dc.pullImage(workload, imageName)
 		if err != nil {
 			return err
 		}
@@ -61,7 +62,7 @@ func setDockerClient(unstructuredObj *unstructured.Unstructured, imageName strin
 	return nil
 }
 
-func (dc *DockerClient) pullImage(unstructuredObj *unstructured.Unstructured, imageName string) (out io.ReadCloser, err error) {
+func (dc *DockerClient) pullImage(workload interface{}, imageName string) (out io.ReadCloser, err error) {
 
 	// image pull without docker registry credentials
 	out, clearErr := dc.cli.ImagePull(dc.ctx, imageName, types.ImagePullOptions{})
@@ -72,7 +73,7 @@ func (dc *DockerClient) pullImage(unstructuredObj *unstructured.Unstructured, im
 	// If image pull returnd error, try pulling using credentials
 	// Get kubernetes secrets from podSpec
 	glog.Infof("pulling image using secret")
-	secrets, err := getImagePullSecret(unstructuredObj)
+	secrets, err := getImagePullSecret(workload)
 	if err != nil {
 		return out, err
 	}
@@ -104,7 +105,17 @@ func (dc *DockerClient) pullImage(unstructuredObj *unstructured.Unstructured, im
 	return out, fmt.Errorf("Failed to pull image %s", imageName)
 }
 
-func getImagePullSecret(unstructuredObj *unstructured.Unstructured) (map[string]types.AuthConfig, error) {
+func getImagePullSecret(workload interface{}) (map[string]types.AuthConfig, error) {
+
+	podImagePullSecrets, err := getSecretList(workload)
+	if err != nil {
+		return nil, err
+	}
+
+	return readSecrets(podImagePullSecrets, cautils.GetNamespaceFromWorkload(workload))
+}
+
+func readSecrets(sec []corev1.LocalObjectReference, namespace string) (map[string]types.AuthConfig, error) {
 
 	secrets := make(map[string]types.AuthConfig)
 	clientset, err := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
@@ -112,16 +123,11 @@ func getImagePullSecret(unstructuredObj *unstructured.Unstructured) (map[string]
 		err = fmt.Errorf("failed creating clientset. Error: %+v", err)
 		return secrets, err
 	}
-
-	podImagePullSecrets, err := getPodImagePullSecrets(unstructuredObj)
-	if err != nil {
-		return secrets, err
-	}
-	// Loop over imagePullSecrets configured in pod
-	for _, i := range *podImagePullSecrets {
-		res, err := clientset.CoreV1().Secrets(unstructuredObj.GetNamespace()).Get(i.Name, metav1.GetOptions{})
+	for _, i := range sec {
+		res, err := clientset.CoreV1().Secrets(namespace).Get(i.Name, metav1.GetOptions{})
 		if err != nil {
 			glog.Errorf("%v", err)
+			continue
 		}
 
 		// Read secret
@@ -143,7 +149,6 @@ func getImagePullSecret(unstructuredObj *unstructured.Unstructured) (map[string]
 	}
 	return secrets, nil
 }
-
 func getSecretContent(secret *corev1.Secret) (interface{}, error) {
 
 	// Secret types- https://github.com/kubernetes/kubernetes/blob/7693a1d5fe2a35b6e2e205f03ae9b3eddcdabc6b/pkg/apis/core/types.go#L4394-L4478
@@ -171,9 +176,7 @@ func getSecretContent(secret *corev1.Secret) (interface{}, error) {
 }
 
 func imageFoundInLoaclRegistry(imageList []types.ImageSummary, imageName string) bool {
-	// if isLatestTag(imageName) {
-	// 	return false
-	// }
+
 	for _, il := range imageList {
 		for _, i := range il.RepoTags {
 			if i == imageName {
@@ -183,43 +186,25 @@ func imageFoundInLoaclRegistry(imageList []types.ImageSummary, imageName string)
 	}
 	return false
 }
-
-func getPodImagePullSecrets(unstructuredObj *unstructured.Unstructured) (*[]corev1.LocalObjectReference, error) {
-	upperFields := []string{"spec", "template"}
-	podFields := []string{"spec", "imagePullSecrets"}
-	fields := []string{}
-	secrets := []corev1.LocalObjectReference{}
-
-	if unstructuredObj.GetKind() != "Pod" {
-		fields = append(fields, upperFields...)
+func getSecretList(workload interface{}) ([]corev1.LocalObjectReference, error) {
+	if w, k := workload.(*appsv1.Deployment); k {
+		return w.Spec.Template.Spec.ImagePullSecrets, nil
 	}
-	fields = append(fields, podFields...)
-
-	sec, found, err := unstructured.NestedSlice(unstructuredObj.Object, fields...)
-	if err != nil {
-		return &secrets, fmt.Errorf("Error receiving imagePullSecrets: %s", err)
+	if w, k := workload.(*appsv1.DaemonSet); k {
+		return w.Spec.Template.Spec.ImagePullSecrets, nil
 	}
-	if !found {
-		return &secrets, fmt.Errorf("No secret found")
+	if w, k := workload.(*appsv1.ReplicaSet); k {
+		return w.Spec.Template.Spec.ImagePullSecrets, nil
 	}
-
-	for _, s := range sec {
-		secret := corev1.LocalObjectReference{}
-
-		secMap, ok := s.(map[string]interface{})
-		if !ok {
-			glog.Errorf("Cant convert imagePullSecrets interface{} to map[string]interface{}")
-			continue
-		}
-		secName, ok := secMap["name"].(string)
-		if !ok {
-			glog.Errorf("Cant convert imagePullSecrets interface{} to string")
-			continue
-		}
-		secret.Name = secName
-		secrets = append(secrets, secret)
-
+	if w, k := workload.(*appsv1.StatefulSet); k {
+		return w.Spec.Template.Spec.ImagePullSecrets, nil
+	}
+	if w, k := workload.(*corev1.PodTemplate); k {
+		return w.Template.Spec.ImagePullSecrets, nil
+	}
+	if w, k := workload.(*corev1.Pod); k {
+		return w.Spec.ImagePullSecrets, nil
 	}
 
-	return &secrets, nil
+	return nil, nil
 }
