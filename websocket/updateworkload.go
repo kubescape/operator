@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"k8s-ca-webhook/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
@@ -87,7 +86,7 @@ func updateLabel(labels *map[string]string) {
 	if *labels == nil {
 		(*labels) = make(map[string]string)
 	}
-	(*labels)[cautils.CALabel] = "signed"
+	(*labels)[CALabel] = "signed"
 }
 
 func removeCAMetadata(meatdata *v1.ObjectMeta) {
