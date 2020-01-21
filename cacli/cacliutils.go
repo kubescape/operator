@@ -55,11 +55,6 @@ func runCacliCommand(arg []string, display bool) (*exec.Cmd, error) {
 // LoginCacli -
 func LoginCacli() error {
 	cacliObj := Cacli{}
-	// cred := cautils.CredStruct{
-	// 	User:     "system_tests@cyberarmor.io",
-	// 	Password: "6hdGjPeHqgmzpjRmqXIA",
-	// 	Customer: "CyberArmor",
-	// }
 	cred, err := GetCALoginCred()
 	if err != nil {
 		return err

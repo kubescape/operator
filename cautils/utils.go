@@ -2,9 +2,11 @@ package cautils
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,11 +29,20 @@ func GetWLID(level0, level1, k, name string) string {
 
 // RunCommand -
 func RunCommand(command string, arg []string, display bool) (*exec.Cmd, error) {
+	var outb, errb bytes.Buffer
+	var cancel context.CancelFunc
+
+	// adding timeout
+	ctx := context.Background()
+	ctx, cancel = context.WithTimeout(context.Background(), time.Duration(120)*time.Second)
+	defer cancel()
+
 	if display {
 		glog.Infof("Running: %s %v", command, arg)
 	}
-	var outb, errb bytes.Buffer
-	cmd := exec.Command(command, arg...)
+
+	cmd := exec.CommandContext(ctx, command, arg...)
+
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 	err := cmd.Run()
