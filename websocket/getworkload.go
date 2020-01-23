@@ -33,7 +33,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 		return nil, fmt.Errorf("workload not found")
 
 	case "ReplicaSet":
-		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
+		w, _ := clientset.AppsV1().(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
 				return clientset.AppsV1().Deployments(namespace).Get(i.Name, v1.GetOptions{})
@@ -41,18 +41,18 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 		}
 		return nil, fmt.Errorf("workload not found")
 	case "DaemonSet":
-		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
+		w, _ := clientset.AppsV1().DaemonSets(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return clientset.AppsV1().Deployments(namespace).Get(i.Name, v1.GetOptions{})
+				return clientset.AppsV1().DaemonSets(namespace).Get(i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("workload not found")
 	case "StatefulSet":
-		w, _ := clientset.AppsV1().Deployments(namespace).List(v1.ListOptions{})
+		w, _ := clientset.AppsV1().StatefulSets(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return clientset.AppsV1().Deployments(namespace).Get(i.Name, v1.GetOptions{})
+				return clientset.AppsV1().StatefulSets(namespace).Get(i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("workload not found")
