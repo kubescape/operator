@@ -46,6 +46,12 @@ func CreateWebSocketHandler() *WebSocketHandler {
 
 // WebSokcet CAWebSokcet
 func (wsh *WebSocketHandler) WebSokcet() error {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("RECOVER WebSokcet %v", err)
+		}
+	}()
+
 	conn, err := wsh.dialWebSocket()
 	if err != nil {
 		return err
