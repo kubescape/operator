@@ -63,6 +63,7 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 		for {
 			time.Sleep(5 * time.Second)
 			if err = conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+				glog.Error(err)
 				return
 			}
 		}
