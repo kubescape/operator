@@ -39,5 +39,5 @@ func displayBuildTag() {
 	if err == nil {
 		imageVersion = string(dat)
 	}
-	glog.Infof("Image version: %s. date: %s (UTC)", imageVersion, time.Now().UTC().String())
+	glog.Infof("Image version: %s. date: %s", imageVersion, time.Now().UTC().String())
 }

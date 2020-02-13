@@ -52,7 +52,7 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 		}
 	}()
 
-	conn, err := wsh.dialWebSocket()
+	conn, err := wsh.ConnectToWebsocket()
 	if err != nil {
 		return err
 	}
@@ -62,9 +62,13 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 	go func() {
 		for {
 			time.Sleep(5 * time.Second)
-			if err = conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+			if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				glog.Error(err)
-				return
+				c, err := wsh.ConnectToWebsocket()
+				if err != nil {
+					panic("connection closed, restart websocket")
+				}
+				conn = c
 			}
 		}
 	}()
@@ -73,14 +77,29 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 		if err != nil {
 			return fmt.Errorf("webSocket closed")
 		}
-
 		switch messageType {
 		case websocket.TextMessage:
 			wsh.HandlePostmanRequest(bytes)
 		case websocket.CloseMessage:
 			return fmt.Errorf("webSocket closed")
 		default:
-			log.Println("Unrecognized message received.")
+			log.Println("Unrecognized message received")
+		}
+	}
+}
+
+// ConnectToWebsocket Connect To Websocket with reties
+func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
+	i := 0
+	for {
+		conn, err := wsh.dialWebSocket()
+		if err != nil {
+			return conn, err
+		}
+		time.Sleep(2)
+		i++
+		if i == 3 {
+			return conn, fmt.Errorf("failed connecting to websocket after %d tries. error message: %v", 3, err)
 		}
 	}
 }
