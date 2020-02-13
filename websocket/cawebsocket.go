@@ -63,7 +63,7 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 		for {
 			time.Sleep(5 * time.Second)
 			if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				glog.Error(err)
+				glog.Errorf("PING, %s", err.Error())
 				c, err := wsh.ConnectToWebsocket()
 				if err != nil {
 					panic("connection closed, restart websocket")
@@ -96,7 +96,7 @@ func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 		if err != nil {
 			return conn, err
 		}
-		time.Sleep(2)
+		time.Sleep(time.Second * 2)
 		i++
 		if i == 3 {
 			return conn, fmt.Errorf("failed connecting to websocket after %d tries. error message: %v", 3, err)
