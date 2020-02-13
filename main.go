@@ -6,6 +6,7 @@ import (
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/websocket"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -38,5 +39,5 @@ func displayBuildTag() {
 	if err == nil {
 		imageVersion = string(dat)
 	}
-	glog.Infof("Image version: %s", imageVersion)
+	glog.Infof("Image version: %s. date: %s (UTC)", imageVersion, time.Now().UTC().String())
 }
