@@ -93,14 +93,14 @@ func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 	i := 0
 	for {
 		conn, err := wsh.dialWebSocket()
-		if err != nil {
+		if err == nil {
 			return conn, err
 		}
-		time.Sleep(time.Second * 2)
 		i++
 		if i == 3 {
 			return conn, fmt.Errorf("failed connecting to websocket after %d tries. error message: %v", 3, err)
 		}
+		time.Sleep(time.Second * 2)
 	}
 }
 
