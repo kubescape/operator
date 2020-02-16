@@ -7,8 +7,9 @@ RUN pip3 install -U cacli --index-url https://cacustomer:x4qfg=4qip1r6t@d@carepo
 
 COPY ./dist /.
 COPY ./build_number.txt /
-
 # COPY ./k8s-ca-websocket . 
+
+RUN echo $(date -u) > /build_date.txt
 
 CMD /k8s-ca-websocket
 ENTRYPOINT ["./k8s-ca-websocket"]
