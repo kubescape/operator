@@ -3,7 +3,6 @@ package websocket
 import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
-	"log"
 	"net/url"
 	"time"
 
@@ -61,7 +60,7 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(30 * time.Second)
 			if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				glog.Errorf("PING, %s", err.Error())
 				c, err := wsh.ConnectToWebsocket()
@@ -75,15 +74,15 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 	for {
 		messageType, bytes, err := conn.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("webSocket closed")
+			return fmt.Errorf("error receiving data from websocket. message: %s", err.Error())
 		}
 		switch messageType {
 		case websocket.TextMessage:
 			wsh.HandlePostmanRequest(bytes)
 		case websocket.CloseMessage:
-			return fmt.Errorf("webSocket closed")
+			return fmt.Errorf("websocket closed by server, message: %s", string(bytes))
 		default:
-			log.Println("Unrecognized message received")
+			glog.Infof("Unrecognized message received. received: %d", messageType)
 		}
 	}
 }
@@ -107,11 +106,11 @@ func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
 	glog.Infof("Connecting to %s", u.String())
-
 	conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", u.String(), err)
 		return conn, err
 	}
+	glog.Infof("Successfully connected")
 	return conn, err
 }

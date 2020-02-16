@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/websocket"
-	"time"
 
 	"github.com/golang/glog"
 )
@@ -34,10 +34,15 @@ func main() {
 }
 
 func displayBuildTag() {
-	imageVersion := "UNKNOWN"
+	imageVersion := "local build"
 	dat, err := ioutil.ReadFile("./build_number.txt")
 	if err == nil {
 		imageVersion = string(dat)
+	} else {
+		dat, err = ioutil.ReadFile("./build_date.txt")
+		if err == nil {
+			imageVersion = fmt.Sprintf("%s, date: %s", imageVersion, string(dat))
+		}
 	}
-	glog.Infof("Image version: %s. date: %s", imageVersion, time.Now().UTC().String())
+	glog.Infof("Image version: %s", imageVersion)
 }
