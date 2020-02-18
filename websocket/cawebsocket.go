@@ -3,7 +3,6 @@ package websocket
 import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
-	"log"
 	"net/url"
 	"time"
 
@@ -46,7 +45,13 @@ func CreateWebSocketHandler() *WebSocketHandler {
 
 // WebSokcet CAWebSokcet
 func (wsh *WebSocketHandler) WebSokcet() error {
-	conn, err := wsh.dialWebSocket()
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("RECOVER WebSokcet %v", err)
+		}
+	}()
+
+	conn, err := wsh.ConnectToWebsocket()
 	if err != nil {
 		return err
 	}
@@ -55,37 +60,57 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
-			if err = conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
-				return
+			time.Sleep(30 * time.Second)
+			if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				glog.Errorf("PING, %s", err.Error())
+				c, err := wsh.ConnectToWebsocket()
+				if err != nil {
+					panic("connection closed, restart websocket")
+				}
+				conn = c
 			}
 		}
 	}()
 	for {
 		messageType, bytes, err := conn.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("webSocket closed")
+			return fmt.Errorf("error receiving data from websocket. message: %s", err.Error())
 		}
-
 		switch messageType {
 		case websocket.TextMessage:
 			wsh.HandlePostmanRequest(bytes)
 		case websocket.CloseMessage:
-			return fmt.Errorf("webSocket closed")
+			return fmt.Errorf("websocket closed by server, message: %s", string(bytes))
 		default:
-			log.Println("Unrecognized message received.")
+			glog.Infof("Unrecognized message received. received: %d", messageType)
 		}
+	}
+}
+
+// ConnectToWebsocket Connect To Websocket with reties
+func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
+	i := 0
+	for {
+		conn, err := wsh.dialWebSocket()
+		if err == nil {
+			return conn, err
+		}
+		i++
+		if i == 3 {
+			return conn, fmt.Errorf("failed connecting to websocket after %d tries. error message: %v", 3, err)
+		}
+		time.Sleep(time.Second * 2)
 	}
 }
 
 func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
 	glog.Infof("Connecting to %s", u.String())
-
 	conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", u.String(), err)
 		return conn, err
 	}
+	glog.Infof("Successfully connected")
 	return conn, err
 }

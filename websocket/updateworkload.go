@@ -13,42 +13,43 @@ import (
 func updateWorkload(workload interface{}, wlid string, command string) error {
 	microservice, _ := RestoreMicroserviceIDsFromSpiffe(wlid)
 	namespace, kind := microservice[1], microservice[2]
-	clientset, err := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
-	if err != nil {
-		return err
+	clientset, e := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
+	if e != nil {
+		return e
 	}
+	var err error
 	switch kind {
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
 		inject(&w.Spec.Template.ObjectMeta, command, wlid)
-		go clientset.AppsV1().Deployments(namespace).Update(w)
+		_, err = clientset.AppsV1().Deployments(namespace).Update(w)
 
 	case "ReplicaSet":
 		w := workload.(*appsv1.ReplicaSet)
 		inject(&w.Spec.Template.ObjectMeta, command, wlid)
-		go clientset.AppsV1().ReplicaSets(namespace).Update(w)
+		_, err = clientset.AppsV1().ReplicaSets(namespace).Update(w)
 
 	case "DaemonSet":
 		w := workload.(*appsv1.DaemonSet)
 		inject(&w.Spec.Template.ObjectMeta, command, wlid)
-		go clientset.AppsV1().DaemonSets(namespace).Update(w)
+		_, err = clientset.AppsV1().DaemonSets(namespace).Update(w)
 
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		inject(&w.Spec.Template.ObjectMeta, command, wlid)
-		go clientset.AppsV1().StatefulSets(namespace).Update(w)
+		_, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
 		inject(&w.ObjectMeta, command, wlid)
-		go clientset.CoreV1().PodTemplates(namespace).Update(w)
+		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
 
 	case "Pod":
 		w := workload.(*corev1.Pod)
 		inject(&w.ObjectMeta, command, wlid)
-		go clientset.CoreV1().Pods(namespace).Update(w)
+		_, err = clientset.CoreV1().Pods(namespace).Update(w)
 	}
-	return nil
+	return err
 
 }
 

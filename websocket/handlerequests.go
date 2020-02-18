@@ -37,16 +37,15 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 			glog.Error(err)
 			return []error{err}
 		}
-		go func(c cautils.Command) {
-			status := "SUCCESS"
-			glog.Infof("Running %s command, wlid: %s", c.CommandName, c.Wlid)
-			if err := wsh.runCommand(c); err != nil {
-				glog.Errorf("%v", err)
-				status = "FAIL"
-				errorList = append(errorList, err)
-			}
-			glog.Infof("Done command %s, wlid: %s, status: %s", c.CommandName, c.Wlid, status)
-		}(c)
+		status := "SUCCESS"
+		glog.Infof("Running %s command, wlid: %s", c.CommandName, c.Wlid)
+		if err := wsh.runCommand(c); err != nil {
+			glog.Errorf("%v", err)
+			status = "FAIL"
+			errorList = append(errorList, err)
+		}
+		glog.Infof("Done command %s, wlid: %s, status: %s", c.CommandName, c.Wlid, status)
+
 	}
 	return errorList
 }
@@ -64,7 +63,6 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 		return updateWorkload(workload, c.Wlid, REMOVE)
 	case SIGN:
 		return signWorkload(workload, c.Wlid)
-
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}

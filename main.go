@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
@@ -28,15 +29,20 @@ func main() {
 
 	// Websocket
 	websocketHandler := websocket.CreateWebSocketHandler()
-	glog.Fatal(websocketHandler.WebSokcet())
+	glog.Error(websocketHandler.WebSokcet())
 
 }
 
 func displayBuildTag() {
-	imageVersion := "UNKNOWN"
+	imageVersion := "local build"
 	dat, err := ioutil.ReadFile("./build_number.txt")
 	if err == nil {
 		imageVersion = string(dat)
+	} else {
+		dat, err = ioutil.ReadFile("./build_date.txt")
+		if err == nil {
+			imageVersion = fmt.Sprintf("%s, date: %s", imageVersion, string(dat))
+		}
 	}
 	glog.Infof("Image version: %s", imageVersion)
 }
