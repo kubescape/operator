@@ -1,7 +1,3 @@
-[submodule "signingservice"]
-	path = signingservice
-	url = git@asterix.cyberarmor.io:cyberarmor/signingservice.git
-	branch = master
 [submodule "jenkinstools"]
 	path = jenkinstools
 	url = git@asterix.cyberarmor.io:cyberarmor/jenkinstools.git
