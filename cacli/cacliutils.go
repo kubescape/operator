@@ -36,14 +36,21 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 func runCacliCommandRepeate(arg []string, display bool) ([]byte, error) {
 	cmd, err := runCacliCommand(arg, display)
 	if err != nil {
+		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
+		glog.Infof("logging in again and retrying %d times", 3)
 		if err := LoginCacli(); err != nil {
 			return nil, err
 		}
-		cmd, err = runCacliCommand(arg, display)
-		if err != nil {
-			glog.Errorf("cacli stdout: %v\ncacli stderr:%v,\nerr: %v", cmd.Stdout, cmd.Stderr, err)
-			return cmd.Stderr.(*bytes.Buffer).Bytes(), err
+		i := 0
+		for i < 3 { // retry
+			cmd, err = runCacliCommand(arg, display)
+			if err == nil {
+				glog.Infof("cacli executed successfully")
+				return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
+			}
 		}
+		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
+		return cmd.Stderr.(*bytes.Buffer).Bytes(), err
 	}
 	glog.Infof("cacli executed successfully")
 	return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
