@@ -3,6 +3,7 @@ package cacli
 import (
 	"encoding/json"
 	"k8s-ca-websocket/cautils"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -39,7 +40,7 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	// args = append(args, "development")
 	glog.Infof("Running: cacli %v", args[:len(args)-1])
 
-	_, err := runCacliCommand(args, false)
+	_, err := runCacliCommand(args, false, time.Duration(2)*time.Minute)
 	return err
 }
 
@@ -52,7 +53,7 @@ func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
 	args = append(args, "get")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
-	wtReceive, err := runCacliCommandRepeate(args, true)
+	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
 	if err == nil {
 		json.Unmarshal(wtReceive, &wt)
 	}
@@ -65,6 +66,6 @@ func (cacli *Cacli) Sign(wlid string) error {
 	args = append(args, "sign")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
-	_, err := runCacliCommandRepeate(args, true)
+	_, err := runCacliCommandRepeate(args, true, time.Duration(8)*time.Minute)
 	return err
 }

@@ -5,6 +5,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 	"os/exec"
+	"time"
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,8 +34,8 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 	return credStruct, nil
 }
 
-func runCacliCommandRepeate(arg []string, display bool) ([]byte, error) {
-	cmd, err := runCacliCommand(arg, display)
+func runCacliCommandRepeate(arg []string, display bool, timeout time.Duration) ([]byte, error) {
+	cmd, err := runCacliCommand(arg, display, timeout)
 	if err != nil {
 		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
 		glog.Infof("logging in again and retrying %d times", 3)
@@ -43,7 +44,7 @@ func runCacliCommandRepeate(arg []string, display bool) ([]byte, error) {
 		}
 		i := 0
 		for i < 3 { // retry
-			cmd, err = runCacliCommand(arg, display)
+			cmd, err = runCacliCommand(arg, display, timeout)
 			if err == nil {
 				glog.Infof("cacli executed successfully")
 				return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
@@ -55,8 +56,8 @@ func runCacliCommandRepeate(arg []string, display bool) ([]byte, error) {
 	glog.Infof("cacli executed successfully")
 	return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
 }
-func runCacliCommand(arg []string, display bool) (*exec.Cmd, error) {
-	return cautils.RunCommand("cacli", arg, display)
+func runCacliCommand(arg []string, display bool, timeout time.Duration) (*exec.Cmd, error) {
+	return cautils.RunCommand("cacli", arg, display, timeout)
 }
 
 // LoginCacli -

@@ -28,13 +28,13 @@ func GetWLID(level0, level1, k, name string) string {
 }
 
 // RunCommand -
-func RunCommand(command string, arg []string, display bool) (*exec.Cmd, error) {
+func RunCommand(command string, arg []string, display bool, timeout time.Duration) (*exec.Cmd, error) {
 	var outb, errb bytes.Buffer
 	var cancel context.CancelFunc
 
 	// adding timeout
 	ctx := context.Background()
-	ctx, cancel = context.WithTimeout(context.Background(), time.Duration(120)*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	if display {
