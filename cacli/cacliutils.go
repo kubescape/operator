@@ -49,6 +49,7 @@ func runCacliCommandRepeate(arg []string, display bool, timeout time.Duration) (
 				glog.Infof("cacli executed successfully")
 				return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
 			}
+			i++
 		}
 		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
 		return cmd.Stderr.(*bytes.Buffer).Bytes(), err

@@ -23,6 +23,7 @@ func NewSigner(wlid string) *Sign {
 
 // SignImage sign image usin cacli
 func (s *Sign) SignImage(workload interface{}) error {
+
 	// pull images
 	if err := s.prepareForSign(workload); err != nil {
 		return err

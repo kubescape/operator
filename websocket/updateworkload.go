@@ -10,14 +10,19 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func updateWorkload(workload interface{}, wlid string, command string) error {
+func updateWorkload(wlid string, command string) error {
+	var err error
 	microservice, _ := RestoreMicroserviceIDsFromSpiffe(wlid)
 	namespace, kind := microservice[1], microservice[2]
 	clientset, e := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
 	if e != nil {
 		return e
 	}
-	var err error
+	workload, err := getWorkload(wlid)
+	if err != nil {
+		return err
+	}
+
 	switch kind {
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)

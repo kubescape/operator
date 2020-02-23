@@ -51,30 +51,30 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 }
 func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 
-	workload, err := getWorkload(c.Wlid)
-	if err != nil {
-		return err
-	}
-
 	switch c.CommandName {
 	case UPDATE:
-		return updateWorkload(workload, c.Wlid, UPDATE)
+		return updateWorkload(c.Wlid, UPDATE)
 	case REMOVE:
-		return updateWorkload(workload, c.Wlid, REMOVE)
+		return updateWorkload(c.Wlid, REMOVE)
 	case SIGN:
-		return signWorkload(workload, c.Wlid)
+		return signWorkload(c.Wlid)
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
 	return nil
 }
 
-func signWorkload(workload interface{}, wlid string) error {
+func signWorkload(wlid string) error {
+	workload, err := getWorkload(wlid)
+	if err != nil {
+		return err
+	}
+
 	s := sign.NewSigner(wlid)
 
 	if err := s.SignImage(workload); err != nil {
 		return err
 	}
 	glog.Infof("Done signing, updating workload, wlid: %s", wlid)
-	return updateWorkload(workload, wlid, SIGN)
+	return updateWorkload(wlid, SIGN)
 }
