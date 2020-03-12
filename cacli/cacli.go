@@ -36,6 +36,11 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	args = append(args, cautils.CA_DASHBOARD_BACKEND)
 	args = append(args, "-p")
 	args = append(args, globalLoginCredentials.Password)
+
+	if cautils.CA_IGNORE_VERIFY_CACLI != "" {
+		args = append(args, "--skip-verify-certificate")
+	}
+
 	// args = append(args, "-e")
 	// args = append(args, "development")
 	glog.Infof("Running: cacli %v", args[:len(args)-1])

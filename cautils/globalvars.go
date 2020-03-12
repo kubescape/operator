@@ -6,15 +6,16 @@ import (
 )
 
 var (
-	CA_NAMESPACE         = ""
-	CA_SERVICE_NAME      = ""
-	CA_SERVICE_PORT      = ""
-	CA_PORATL_BACKEND    = ""
-	CA_CLUSTER_NAME      = ""
-	CA_POSTMAN           = ""
-	CA_CUSTOMER_GUID     = ""
-	CA_LOGIN_SECRET_NAME = ""
-	CA_DASHBOARD_BACKEND = ""
+	CA_NAMESPACE           = ""
+	CA_SERVICE_NAME        = ""
+	CA_SERVICE_PORT        = ""
+	CA_PORATL_BACKEND      = ""
+	CA_CLUSTER_NAME        = ""
+	CA_POSTMAN             = ""
+	CA_CUSTOMER_GUID       = ""
+	CA_LOGIN_SECRET_NAME   = ""
+	CA_DASHBOARD_BACKEND   = ""
+	CA_IGNORE_VERIFY_CACLI = ""
 )
 
 // LoadEnvironmentVaribles -
@@ -47,6 +48,10 @@ func LoadEnvironmentVaribles() (err error) {
 	if CA_DASHBOARD_BACKEND, err = testEnvironmentVarible("CA_DASHBOARD_BACKEND"); err != nil {
 		return err
 	}
+
+	// environment varible not mandatory
+	CA_IGNORE_VERIFY_CACLI, _ = testEnvironmentVarible("CA_IGNORE_VERIFY_CACLI")
+
 	return nil
 }
 func testEnvironmentVarible(key string) (string, error) {
