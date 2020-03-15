@@ -35,7 +35,7 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	args = append(args, "--cpanel")
 	args = append(args, cautils.CA_DASHBOARD_BACKEND)
 
-	if !cautils.CA_IGNORE_VERIFY_CACLI {
+	if cautils.CA_IGNORE_VERIFY_CACLI {
 		args = append(args, "--skip-verify-certificate")
 
 	}
