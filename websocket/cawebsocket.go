@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"crypto/tls"
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/url"
@@ -106,6 +107,10 @@ func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
 	glog.Infof("Connecting to %s", u.String())
+
+	if cautils.CA_IGNORE_VERIFY_CACLI {
+		websocket.DefaultDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 	conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", u.String(), err)

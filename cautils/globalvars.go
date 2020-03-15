@@ -15,7 +15,7 @@ var (
 	CA_CUSTOMER_GUID       = ""
 	CA_LOGIN_SECRET_NAME   = ""
 	CA_DASHBOARD_BACKEND   = ""
-	CA_IGNORE_VERIFY_CACLI = ""
+	CA_IGNORE_VERIFY_CACLI = false
 )
 
 // LoadEnvironmentVaribles -
@@ -50,7 +50,9 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 
 	// environment varible not mandatory
-	CA_IGNORE_VERIFY_CACLI, _ = testEnvironmentVarible("CA_IGNORE_VERIFY_CACLI")
+	if ignore, _ := testEnvironmentVarible("CA_IGNORE_VERIFY_CACLI"); ignore != "" {
+		CA_IGNORE_VERIFY_CACLI = true
+	}
 
 	return nil
 }
