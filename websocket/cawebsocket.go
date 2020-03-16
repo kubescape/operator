@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"crypto/tls"
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/url"
@@ -109,7 +108,7 @@ func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	glog.Infof("Connecting to %s", u.String())
 
 	if cautils.CA_IGNORE_VERIFY_CACLI {
-		websocket.DefaultDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		websocket.DefaultDialer.TLSClientConfig.InsecureSkipVerify = true
 	}
 	conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
