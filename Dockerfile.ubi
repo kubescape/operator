@@ -2,6 +2,11 @@
 # RUN apk update && apk add ca-certificates
 FROM registry.access.redhat.com/ubi8/ubi
 
+LABEL description="CyberArmor control panel connector image - this image is part of the CyberArmor operator deployment and it is not meant to be used alone"
+LABEL name="CyberArmor control panel connector"
+LABEL summary="CyberArmor control panel connector image"
+LABEL vendor="CyberArmor Ltd."
+
 RUN yum update -y && yum install -y python36 && pip3 install --upgrade pip
 RUN pip3 install -U cacli --index-url https://cacustomer:x4qfg=4qip1r6t@d@carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
 
