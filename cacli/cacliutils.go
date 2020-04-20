@@ -37,7 +37,6 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 func runCacliCommandRepeate(arg []string, display bool, timeout time.Duration) ([]byte, error) {
 	cmd, err := runCacliCommand(arg, display, timeout)
 	if err != nil {
-		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
 		glog.Infof("logging in again and retrying %d times", 3)
 		if err := LoginCacli(); err != nil {
 			return nil, err
