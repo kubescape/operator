@@ -52,7 +52,12 @@ func updateWorkload(wlid string, command string) error {
 	case "Pod":
 		w := workload.(*corev1.Pod)
 		inject(&w.ObjectMeta, command, wlid)
-		_, err = clientset.CoreV1().Pods(namespace).Update(w)
+		err = clientset.CoreV1().Pods(namespace).Delete(w.Name, &v1.DeleteOptions{})
+		if err == nil {
+			w.Status = corev1.PodStatus{}
+			w.ObjectMeta.ResourceVersion = ""
+			_, err = clientset.CoreV1().Pods(namespace).Create(w)
+		}
 	}
 	return err
 
