@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"fmt"
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
@@ -56,7 +57,18 @@ func updateWorkload(wlid string, command string) error {
 		if err == nil {
 			w.Status = corev1.PodStatus{}
 			w.ObjectMeta.ResourceVersion = ""
-			_, err = clientset.CoreV1().Pods(namespace).Create(w)
+			for {
+				_, err = clientset.CoreV1().Pods(namespace).Create(w)
+				if err != nil {
+					errMsg := fmt.Sprintf("pods \"%s\" already exists", w.Name)
+					fullErrMsg := fmt.Sprintf("object is being deleted: %s", errMsg)
+					if err.Error() != errMsg && err.Error() != fullErrMsg {
+						break
+					}
+				}
+				time.Sleep(time.Second * 2)
+
+			}
 		}
 	}
 	return err
