@@ -58,10 +58,7 @@ func updateWorkload(wlid string, command string) error {
 			w.ObjectMeta.ResourceVersion = ""
 			for {
 				_, err = clientset.CoreV1().Pods(namespace).Get(w.Name, v1.GetOptions{})
-				if err == nil {
-					// errMsg := fmt.Sprintf("pods \"%s\" already exists", w.Name)
-					// fullErrMsg := fmt.Sprintf("object is being deleted: %s", errMsg)
-					// if err.Error() != errMsg && err.Error() != fullErrMsg {
+				if err != nil {
 					break
 				}
 				time.Sleep(time.Second * 2)
