@@ -12,7 +12,7 @@ import (
 type ICacli interface {
 	Login(globalLoginCredentials cautils.CredStruct) error
 	Get(wlid string) (cautils.WorkloadTemplate, error)
-	Sign(wlid string) error
+	Sign(wlid, image, user, password string) error
 }
 
 // Cacli commands
@@ -32,7 +32,7 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	args = append(args, globalLoginCredentials.User)
 	args = append(args, "-c")
 	args = append(args, globalLoginCredentials.Customer)
-	args = append(args, "--cpanel")
+	args = append(args, "--dashboard")
 	args = append(args, cautils.CA_DASHBOARD_BACKEND)
 
 	if cautils.CA_IGNORE_VERIFY_CACLI {
@@ -67,11 +67,20 @@ func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
 }
 
 // Sign command
-func (cacli *Cacli) Sign(wlid string) error {
+func (cacli *Cacli) Sign(wlid, image, user, password string) error {
 	args := []string{}
 	args = append(args, "sign")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
+	args = append(args, "--oc-image-url")
+	args = append(args, cautils.CA_OCIMAGE_URL)
+	args = append(args, "--oc_image")
+	args = append(args, image)
+	args = append(args, "--oc_username")
+	args = append(args, user)
+	args = append(args, "--oc_password")
+	args = append(args, password)
+
 	_, err := runCacliCommandRepeate(args, true, time.Duration(8)*time.Minute)
 	return err
 }

@@ -24,13 +24,14 @@ func NewSigner(wlid string) *Sign {
 // SignImage sign image usin cacli
 func (s *Sign) SignImage(workload interface{}) error {
 
-	// pull images
-	if err := s.prepareForSign(workload); err != nil {
+	// get images and credentials
+	images, credentials, err := s.prepareForSign(workload)
+	if err != nil {
 		return err
 	}
 
 	// sign
-	if err := s.sign(s.wlid); err != nil {
+	if err := s.sign(s.wlid, images, credentials); err != nil {
 		return err
 	}
 
@@ -38,25 +39,40 @@ func (s *Sign) SignImage(workload interface{}) error {
 	return nil
 }
 
-func (s *Sign) prepareForSign(workload interface{}) error {
+func (s *Sign) prepareForSign(workload interface{}) ([]string, map[string]string, error) {
 	// get wt
 	wt, err := s.cacli.Get(s.wlid)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	// docker pull images
+	credentials := map[string]string{}
+	images := []string{}
+
+	// get image and secrets
+	secrets, err := getImagePullSecret(workload)
+	for i := range secrets {
+		credentials[secrets[i].Username] = credentials[secrets[i].Password]
+	}
+
+	// get list of images
 	for _, i := range wt.Containers {
-		if err := setDockerClient(workload, i.ImageTag); err != nil {
-			return err
-		}
-
+		images = append(images, i.ImageTag)
 	}
 
-	return nil
+	return images, credentials, nil
 }
 
 // run cacli sign
-func (s *Sign) sign(wlid string) error {
-	return s.cacli.Sign(s.wlid)
+func (s *Sign) sign(wlid string, images []string, credentials map[string]string) error {
+	for _, image := range images {
+		for user, password := range credentials {
+			if err := s.cacli.Sign(s.wlid, image, user, password); err == nil {
+				break
+			} else {
+				// handle errors
+			}
+		}
+	}
+	return nil
 }

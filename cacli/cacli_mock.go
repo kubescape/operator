@@ -83,6 +83,6 @@ func (caclim *CacliMock) Get(wlid string) (cautils.WorkloadTemplate, error) {
 }
 
 // Sign wordpress wlid
-func (caclim *CacliMock) Sign(wlid string) error {
+func (caclim *CacliMock) Sign(wlid, image, user, password string) error {
 	return nil
 }

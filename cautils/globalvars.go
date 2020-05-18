@@ -15,6 +15,7 @@ var (
 	CA_CUSTOMER_GUID       = ""
 	CA_LOGIN_SECRET_NAME   = ""
 	CA_DASHBOARD_BACKEND   = ""
+	CA_OCIMAGE_URL         = ""
 	CA_IGNORE_VERIFY_CACLI = false
 )
 
@@ -46,6 +47,9 @@ func LoadEnvironmentVaribles() (err error) {
 		return err
 	}
 	if CA_DASHBOARD_BACKEND, err = testEnvironmentVarible("CA_DASHBOARD_BACKEND"); err != nil {
+		return err
+	}
+	if CA_OCIMAGE_URL, err = testEnvironmentVarible("CA_OCIMAGE_URL"); err != nil {
 		return err
 	}
 
