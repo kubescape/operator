@@ -12,7 +12,7 @@ import (
 type ICacli interface {
 	Login(globalLoginCredentials cautils.CredStruct) error
 	Get(wlid string) (cautils.WorkloadTemplate, error)
-	Sign(wlid, image, user, password string) error
+	Sign(wlid, user, password string) error
 }
 
 // Cacli commands
@@ -67,20 +67,23 @@ func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
 }
 
 // Sign command
-func (cacli *Cacli) Sign(wlid, image, user, password string) error {
+func (cacli *Cacli) Sign(wlid, user, password string) error {
 	args := []string{}
+	display := true
 	args = append(args, "sign")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
-	args = append(args, "--oc-image-url")
+	args = append(args, "--dockerless-service-url")
 	args = append(args, cautils.CA_OCIMAGE_URL)
-	args = append(args, "--oc_image")
-	args = append(args, image)
-	args = append(args, "--oc_username")
-	args = append(args, user)
-	args = append(args, "--oc_password")
-	args = append(args, password)
 
-	_, err := runCacliCommandRepeate(args, true, time.Duration(8)*time.Minute)
+	if user != "" && password != "" {
+		display = false
+		args = append(args, "--docker-registry-user")
+		args = append(args, user)
+		args = append(args, "--docker-registry-password")
+		args = append(args, password)
+	}
+
+	_, err := runCacliCommand(args, display, time.Duration(8)*time.Minute)
 	return err
 }

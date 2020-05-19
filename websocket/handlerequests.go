@@ -71,7 +71,6 @@ func signWorkload(wlid string) error {
 	}
 
 	s := sign.NewSigner(wlid)
-
 	if err := s.SignImage(workload); err != nil {
 		return err
 	}

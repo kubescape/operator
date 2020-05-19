@@ -1,8 +1,10 @@
 package sign
 
 import (
+	"fmt"
 	"k8s-ca-websocket/cacli"
 
+	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
 )
 
@@ -24,14 +26,14 @@ func NewSigner(wlid string) *Sign {
 // SignImage sign image usin cacli
 func (s *Sign) SignImage(workload interface{}) error {
 
-	// get images and credentials
-	images, credentials, err := s.prepareForSign(workload)
+	// get registry credentials from secrets
+	credentials, err := getImagePullSecret(workload)
 	if err != nil {
 		return err
 	}
 
 	// sign
-	if err := s.sign(s.wlid, images, credentials); err != nil {
+	if err := s.sign(s.wlid, credentials); err != nil {
 		return err
 	}
 
@@ -39,40 +41,25 @@ func (s *Sign) SignImage(workload interface{}) error {
 	return nil
 }
 
-func (s *Sign) prepareForSign(workload interface{}) ([]string, map[string]string, error) {
-	// get wt
-	wt, err := s.cacli.Get(s.wlid)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	credentials := map[string]string{}
-	images := []string{}
-
-	// get image and secrets
-	secrets, err := getImagePullSecret(workload)
-	for i := range secrets {
-		credentials[secrets[i].Username] = credentials[secrets[i].Password]
-	}
-
-	// get list of images
-	for _, i := range wt.Containers {
-		images = append(images, i.ImageTag)
-	}
-
-	return images, credentials, nil
-}
-
 // run cacli sign
-func (s *Sign) sign(wlid string, images []string, credentials map[string]string) error {
-	for _, image := range images {
-		for user, password := range credentials {
-			if err := s.cacli.Sign(s.wlid, image, user, password); err == nil {
-				break
-			} else {
-				// handle errors
-			}
+func (s *Sign) sign(wlid string, credentials map[string]types.AuthConfig) error {
+	for secret, data := range credentials {
+		glog.Infof("siging image using registry credentials from secret: %s", secret)
+		err := s.cacli.Sign(s.wlid, data.Username, data.Password)
+		if err == nil {
+			return nil
+		} else {
+			// handle errors
 		}
 	}
-	return nil
+
+	glog.Infof("siging image without using registry credentials")
+	if err := s.cacli.Sign(s.wlid, "", ""); err == nil {
+		return nil
+	}
+	credNames := []string{}
+	for i := range credentials {
+		credNames = append(credNames, i)
+	}
+	return fmt.Errorf("did not sign image, wlid: %s. secrets found: %v", wlid, credNames)
 }
