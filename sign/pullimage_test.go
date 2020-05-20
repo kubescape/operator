@@ -25,13 +25,13 @@ func TestGetSecretContent(t *testing.T) {
 
 }
 
-func TestGetImagePullSecret(t *testing.T) {
-	dep := cautils.GetWordpressDeployment()
-	list, err := getImagePullSecret(dep)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(list) == 0 {
-		t.Errorf("len should be more than 1")
-	}
-}
+// func TestGetImagePullSecret(t *testing.T) {
+// 	dep := cautils.GetWordpressDeployment()
+// 	list, err := getImagePullSecret(dep)
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 	if len(list) == 0 {
+// 		t.Errorf("len should be more than 1")
+// 	}
+// }
