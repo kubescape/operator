@@ -17,6 +17,7 @@ var (
 	WlidPrefix          = "wlid://"
 	ClusterWlidPrefix   = "cluster-"
 	NamespaceWlidPrefix = "namespace-"
+	CAInitContainerName = "ca-init-container"
 )
 
 // GetWLID get the calculated wlid
