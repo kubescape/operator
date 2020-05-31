@@ -10,9 +10,10 @@ LABEL vendor="CyberArmor Ltd."
 RUN yum update -y && yum install -y python36 && pip3 install --upgrade pip
 RUN pip3 install -U cacli --index-url https://cacustomer:x4qfg=4qip1r6t@d@carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
 
+RUN mkdir .ca && chmod -R 777 .ca
+
 COPY ./dist /.
 COPY ./build_number.txt /
-# COPY ./k8s-ca-websocket . 
 
 RUN echo $(date -u) > /tmp/build_date.txt
 
