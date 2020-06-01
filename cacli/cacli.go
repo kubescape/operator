@@ -75,6 +75,7 @@ func (cacli *Cacli) Sign(wlid, user, password string) error {
 	args = append(args, wlid)
 	args = append(args, "--dockerless-service-url")
 	args = append(args, cautils.CA_OCIMAGE_URL)
+	args = append(args, "--bypass_accelerator")
 
 	if user != "" && password != "" {
 		display = false
