@@ -23,8 +23,8 @@ func NewSigner(wlid string) *Sign {
 
 }
 
-// SignImage sign image usin cacli
-func (s *Sign) SignImage(workload interface{}) error {
+// SignImageOcimage sign image usin cacli - ocimage
+func (s *Sign) SignImageOcimage(workload interface{}) error {
 
 	// get registry credentials from secrets
 	credentials, err := getImagePullSecret(workload)
@@ -62,4 +62,39 @@ func (s *Sign) sign(wlid string, credentials map[string]types.AuthConfig) error 
 		credNames = append(credNames, i)
 	}
 	return fmt.Errorf("did not sign image, wlid: %s. secrets found: %v", wlid, credNames)
+}
+
+// SignImageDocker sign image usin cacli - docker
+func (s *Sign) SignImageDocker(workload interface{}) error {
+
+	// pull images
+	if err := s.prepareForSign(workload); err != nil {
+		return err
+	}
+
+	// sign
+	if err := s.cacli.Sign(s.wlid, "", ""); err != nil {
+		return err
+	}
+
+	glog.Infof("signed %s", s.wlid)
+	return nil
+}
+
+func (s *Sign) prepareForSign(workload interface{}) error {
+	// get wt
+	wt, err := s.cacli.Get(s.wlid)
+	if err != nil {
+		return err
+	}
+
+	// docker pull images
+	for _, i := range wt.Containers {
+		if err := setDockerClient(workload, i.ImageTag); err != nil {
+			return err
+		}
+
+	}
+
+	return nil
 }

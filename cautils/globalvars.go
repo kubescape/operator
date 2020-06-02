@@ -16,6 +16,7 @@ var (
 	CA_LOGIN_SECRET_NAME   = ""
 	CA_DASHBOARD_BACKEND   = ""
 	CA_OCIMAGE_URL         = ""
+	CA_USE_DOCKER          = false
 	CA_IGNORE_VERIFY_CACLI = false
 )
 
@@ -56,6 +57,13 @@ func LoadEnvironmentVaribles() (err error) {
 	// environment varible not mandatory
 	if ignore, _ := testEnvironmentVarible("CA_IGNORE_VERIFY_CACLI"); ignore != "" {
 		CA_IGNORE_VERIFY_CACLI = true
+	}
+
+	// environment varible not mandatory
+	if useDocker, _ := testEnvironmentVarible("CA_USE_DOCKER"); useDocker != "" {
+		if useDocker == "true" {
+			CA_USE_DOCKER = true
+		}
 	}
 
 	return nil

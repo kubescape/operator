@@ -78,7 +78,7 @@ func (wsh *WebSocketHandler) WebSokcet() error {
 		}
 		switch messageType {
 		case websocket.TextMessage:
-			wsh.HandlePostmanRequest(bytes)
+			go wsh.HandlePostmanRequest(bytes)
 		case websocket.CloseMessage:
 			return fmt.Errorf("websocket closed by server, message: %s", string(bytes))
 		default:

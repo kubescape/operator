@@ -71,9 +71,15 @@ func signWorkload(wlid string) error {
 	}
 
 	s := sign.NewSigner(wlid)
-	if err := s.SignImage(workload); err != nil {
+	if cautils.CA_USE_DOCKER {
+		err = s.SignImageDocker(workload)
+	} else {
+		err = s.SignImageDocker(workload)
+	}
+	if err != nil {
 		return err
 	}
+
 	glog.Infof("Done signing, updating workload, wlid: %s", wlid)
 	return updateWorkload(wlid, SIGN)
 }
