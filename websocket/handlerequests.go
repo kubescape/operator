@@ -74,7 +74,7 @@ func signWorkload(wlid string) error {
 	if cautils.CA_USE_DOCKER {
 		err = s.SignImageDocker(workload)
 	} else {
-		err = s.SignImageDocker(workload)
+		err = s.SignImageOcimage(workload)
 	}
 	if err != nil {
 		return err
