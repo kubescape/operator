@@ -13,6 +13,7 @@ type ICacli interface {
 	Login(globalLoginCredentials cautils.CredStruct) error
 	Get(wlid string) (cautils.WorkloadTemplate, error)
 	Sign(wlid, user, password string) error
+	Status() (stat *Status, err error)
 }
 
 // Cacli commands
@@ -89,4 +90,16 @@ func (cacli *Cacli) Sign(wlid, user, password string) error {
 
 	_, err := runCacliCommand(args, display, time.Duration(8)*time.Minute)
 	return err
+}
+
+// Status -
+func (cacli *Cacli) Status() (*Status, error) {
+	status := &Status{}
+	args := []string{}
+	args = append(args, "--status")
+	statusReceive, err := runCacliCommand(args, true, time.Duration(1)*time.Minute)
+	if err == nil {
+		json.Unmarshal(statusReceive, status)
+	}
+	return status, err
 }

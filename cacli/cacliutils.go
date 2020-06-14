@@ -1,10 +1,9 @@
 package cacli
 
 import (
-	"bytes"
+	"encoding/json"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
-	"os/exec"
 	"time"
 
 	"github.com/golang/glog"
@@ -35,29 +34,37 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 }
 
 func runCacliCommandRepeate(arg []string, display bool, timeout time.Duration) ([]byte, error) {
-	cmd, err := runCacliCommand(arg, display, timeout)
+	rep, err := runCacliCommand(arg, display, timeout)
 	if err != nil {
-		glog.Infof("logging in again and retrying %d times", 3)
-		if err := LoginCacli(); err != nil {
-			return nil, err
+		if !IsLoggedin() {
+			glog.Infof("logging in again and retrying %d times", 3)
+			if err := LoginCacli(); err != nil {
+				return nil, err
+			}
 		}
 		i := 0
 		for i < 3 { // retry
-			cmd, err = runCacliCommand(arg, display, timeout)
+			rep, err = runCacliCommand(arg, display, timeout)
 			if err == nil {
 				glog.Infof("cacli executed successfully")
-				return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
+				return rep, nil
 			}
 			i++
 		}
-		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
-		return cmd.Stderr.(*bytes.Buffer).Bytes(), err
+		// glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
+		return nil, err
 	}
 	glog.Infof("cacli executed successfully")
-	return cmd.Stdout.(*bytes.Buffer).Bytes(), nil
+	return rep, nil
 }
-func runCacliCommand(arg []string, display bool, timeout time.Duration) (*exec.Cmd, error) {
+func runCacliCommand(arg []string, display bool, timeout time.Duration) ([]byte, error) {
 	return cautils.RunCommand("cacli", arg, display, timeout)
+}
+
+// StatusCacli -
+func StatusCacli() (*Status, error) {
+	cacliObj := Cacli{}
+	return cacliObj.Status()
 }
 
 // LoginCacli -
@@ -67,5 +74,15 @@ func LoginCacli() error {
 	if err != nil {
 		return err
 	}
-	return cacliObj.Login(cred)
+	err = cacliObj.Login(cred)
+	status, _ := cacliObj.Status()
+	s, _ := json.Marshal(status)
+	glog.Infof("%s", string(s))
+	return err
+}
+
+func IsLoggedin() bool {
+	cacliObj := Cacli{}
+	status, _ := cacliObj.Status()
+	return status.LoggedIn
 }

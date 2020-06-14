@@ -43,14 +43,20 @@ func (s *Sign) SignImageOcimage(workload interface{}) error {
 
 // run cacli sign
 func (s *Sign) sign(wlid string, credentials map[string]types.AuthConfig) error {
+	// is cacli loggedin
+	if !cacli.IsLoggedin() {
+		if err := cacli.LoginCacli(); err != nil {
+			return err
+		}
+	}
 	for secret, data := range credentials {
 		glog.Infof("siging image using registry credentials from secret: %s", secret)
-		err := s.cacli.Sign(s.wlid, data.Username, data.Password)
-		if err == nil {
+		if err := s.cacli.Sign(s.wlid, data.Username, data.Password); err == nil {
 			return nil
-		} else {
-			// handle errors
 		}
+		// } else {
+		// 	// handle errors
+		// }
 	}
 
 	glog.Infof("siging image without using registry credentials")

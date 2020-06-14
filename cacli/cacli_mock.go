@@ -86,3 +86,15 @@ func (caclim *CacliMock) Get(wlid string) (cautils.WorkloadTemplate, error) {
 func (caclim *CacliMock) Sign(wlid, user, password string) error {
 	return nil
 }
+
+// Status -
+func (caclim *CacliMock) Status() (*Status, error) {
+	return &Status{
+		CacliVersion:     "mock",
+		CacsignerVersion: "mock",
+		Customer:         "mock",
+		Server:           "mock",
+		UserName:         "mock",
+		LoggedIn:         true,
+	}, nil
+}

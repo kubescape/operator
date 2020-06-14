@@ -29,7 +29,7 @@ func GetWLID(level0, level1, k, name string) string {
 }
 
 // RunCommand -
-func RunCommand(command string, arg []string, display bool, timeout time.Duration) (*exec.Cmd, error) {
+func RunCommand(command string, arg []string, display bool, timeout time.Duration) ([]byte, error) {
 	var outb, errb bytes.Buffer
 	var cancel context.CancelFunc
 
@@ -53,7 +53,7 @@ func RunCommand(command string, arg []string, display bool, timeout time.Duratio
 		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
 		return nil, err
 	}
-	return cmd, err
+	return cmd.Stdout.(*bytes.Buffer).Bytes(), err
 }
 
 // GetNamespaceFromWorkload extrac namespace from workload
