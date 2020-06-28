@@ -20,6 +20,12 @@ var (
 	CALabel = "cyberarmor"
 
 	CAInject = "injectCyberArmor"
+
+	//annotation related
+	CAStatus   = "cyberarmor.status"
+	CAAttached = "cyberarmor.attached"
+	CASigned   = "cyberarmor.signed"
+	CAWlid     = "cyberarmor.wlid"
 )
 
 // HandlePostmanRequest Parse received commands and run the command

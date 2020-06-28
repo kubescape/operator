@@ -167,4 +167,8 @@ func removeCAMetadata(meatdata *v1.ObjectMeta) {
 	delete(meatdata.Labels, CAInject)
 	delete(meatdata.Labels, CALabel)
 	delete(meatdata.Annotations, "wlid")
+	delete(meatdata.Annotations, CAStatus)
+	delete(meatdata.Annotations, CASigned)
+	delete(meatdata.Annotations, CAWlid)
+	delete(meatdata.Annotations, CAAttached)
 }
