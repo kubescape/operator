@@ -31,8 +31,10 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	args = append(args, "login")
 	args = append(args, "-u")
 	args = append(args, globalLoginCredentials.User)
-	args = append(args, "-c")
-	args = append(args, globalLoginCredentials.Customer)
+	if globalLoginCredentials.Customer != "" {
+		args = append(args, "-c")
+		args = append(args, globalLoginCredentials.Customer)
+	}
 	args = append(args, "--dashboard")
 	args = append(args, cautils.CA_DASHBOARD_BACKEND)
 
