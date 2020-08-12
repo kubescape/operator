@@ -13,8 +13,8 @@ import (
 
 func updateWorkload(wlid string, command string) error {
 	var err error
-	microservice, _ := RestoreMicroserviceIDsFromSpiffe(wlid)
-	namespace, kind := microservice[1], microservice[2]
+	namespace := cautils.GetNamespaceFromWlid(wlid)
+	kind := cautils.GetKindFromWlid(wlid)
 	clientset, e := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
 	if e != nil {
 		return e

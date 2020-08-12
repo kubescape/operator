@@ -43,6 +43,11 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 			glog.Error(err)
 			return []error{err}
 		}
+		if err := cautils.IsWalidValid(c.Wlid); err != nil {
+			err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
+			glog.Error(err)
+			return []error{err}
+		}
 		status := "SUCCESS"
 		glog.Infof("Running %s command, wlid: %s", c.CommandName, c.Wlid)
 		if err := wsh.runCommand(c); err != nil {

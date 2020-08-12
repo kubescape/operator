@@ -3,9 +3,7 @@ package cautils
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -14,19 +12,8 @@ import (
 )
 
 var (
-	WlidPrefix          = "wlid://"
-	ClusterWlidPrefix   = "cluster-"
-	NamespaceWlidPrefix = "namespace-"
 	CAInitContainerName = "ca-init-container"
 )
-
-// GetWLID get the calculated wlid
-func GetWLID(level0, level1, k, name string) string {
-	kind := strings.ToLower(k)
-	kind = strings.Replace(kind, "-", "", -1)
-	return fmt.Sprintf("%s%s%s/%s%s/%s-%s", WlidPrefix, ClusterWlidPrefix, level0, NamespaceWlidPrefix, level1, kind, name)
-
-}
 
 // RunCommand -
 func RunCommand(command string, arg []string, display bool, timeout time.Duration) ([]byte, error) {

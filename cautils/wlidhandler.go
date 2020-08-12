@@ -1,4 +1,4 @@
-package websocket
+package cautils
 
 import (
 	"fmt"
@@ -67,4 +67,55 @@ func StringHasWhitespace(str string) bool {
 	}
 
 	return false
+}
+
+// GetK8SKindFronList get the calculated wlid
+func GetK8SKindFronList(kind string) string {
+	for i := range K8SKindsList {
+		if strings.ToLower(kind) == strings.ToLower(K8SKindsList[i]) {
+			return K8SKindsList[i]
+		}
+	}
+	return kind
+}
+
+// GetNamespaceFromWlid parse wlid and get Namespace
+func GetNamespaceFromWlid(wlid string) string {
+	r, err := RestoreMicroserviceIDsFromSpiffe(wlid)
+	if err != nil {
+		return ""
+	}
+	return r[1]
+}
+
+// GetKindFromWlid parse wlid and get kind
+func GetKindFromWlid(wlid string) string {
+	r, err := RestoreMicroserviceIDsFromSpiffe(wlid)
+	if err != nil {
+		return ""
+	}
+	return GetK8SKindFronList(r[2])
+}
+
+// GetNameFromWlid parse wlid and get name
+func GetNameFromWlid(wlid string) string {
+	r, err := RestoreMicroserviceIDsFromSpiffe(wlid)
+	if err != nil {
+		return ""
+	}
+	return r[3]
+}
+
+// GetWLID get the calculated wlid
+func GetWLID(level0, level1, k, name string) string {
+	kind := strings.ToLower(k)
+	kind = strings.Replace(kind, "-", "", -1)
+	return fmt.Sprintf("%s%s%s/%s%s/%s-%s", WlidPrefix, ClusterWlidPrefix, level0, NamespaceWlidPrefix, level1, kind, name)
+
+}
+
+// IsWalidValid test if wlid is a valid wlid
+func IsWalidValid(wlid string) error {
+	_, err := RestoreMicroserviceIDsFromSpiffe(wlid)
+	return err
 }
