@@ -14,7 +14,7 @@ func getWorkload(wlid string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getWorkloadFromK8S(microservice[0], cautils.GetKindFromWlid(wlid), microservice[3])
+	return getWorkloadFromK8S(microservice[1], cautils.GetKindFromWlid(wlid), microservice[3])
 }
 
 func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
