@@ -31,7 +31,7 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 		credStruct.Customer = string(customer)
 	}
 
-	glog.Infof("user name: %s", credStruct.Customer, credStruct.User)
+	glog.Infof("user name: %s", credStruct.User)
 	return credStruct, nil
 }
 
