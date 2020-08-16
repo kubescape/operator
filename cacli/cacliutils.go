@@ -27,9 +27,11 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 	// Read secrets
 	credStruct.User = string(sec.Data["username"])
 	credStruct.Password = string(sec.Data["password"])
-	credStruct.Customer = string(sec.Data["customer"])
+	if customer, ok := sec.Data["customer"]; ok {
+		credStruct.Customer = string(customer)
+	}
 
-	glog.Infof("Customer: %s, user name: %s", credStruct.Customer, credStruct.User)
+	glog.Infof("user name: %s", credStruct.Customer, credStruct.User)
 	return credStruct, nil
 }
 
