@@ -1,4 +1,4 @@
-FROM dreg.eust0.cyberarmorsoft.com:443/k8s-base-image:lateest
+FROM dreg.eust0.cyberarmorsoft.com:443/k8s-base-image:latest
 
 COPY ./k8s-ca-websocket . 
 
@@ -6,3 +6,4 @@ RUN echo $(date -u) > /build_date.txt
 
 CMD /k8s-ca-websocket
 ENTRYPOINT ["./k8s-ca-websocket"]
+
