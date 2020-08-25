@@ -73,6 +73,14 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("Pod '%s' not found in namespace: %s", name, namespace)
+	case "Namespace":
+		w, _ := clientset.CoreV1().Namespaces().List(v1.ListOptions{})
+		for _, i := range w.Items {
+			if i.Name == name {
+				return clientset.CoreV1().Namespaces().Get(i.Name, v1.GetOptions{})
+			}
+		}
+		return nil, fmt.Errorf("Namespace '%s' not found", namespace)
 	}
 	return nil, fmt.Errorf("kind: %s unknown", kind)
 

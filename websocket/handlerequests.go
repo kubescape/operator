@@ -16,6 +16,8 @@ var (
 	REMOVE = "remove"
 	// SIGN image
 	SIGN = "sign"
+	// INJECT namespace
+	INJECT = "inject"
 
 	CALabel = "cyberarmor"
 
@@ -38,8 +40,13 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 		return []error{err}
 	}
 	for _, c := range commands.Commands {
-		if c.Wlid == "" || c.CommandName == "" {
-			err := fmt.Errorf("command or wlid not found. wlid: %s, command: %s", c.Wlid, c.CommandName)
+		if c.CommandName == "" {
+			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
+			glog.Error(err)
+			return []error{err}
+		}
+		if c.Wlid == "" {
+			err := fmt.Errorf("wlid not found. command: %s", c.CommandName)
 			glog.Error(err)
 			return []error{err}
 		}
@@ -69,6 +76,8 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 		return updateWorkload(c.Wlid, REMOVE)
 	case SIGN:
 		return signWorkload(c.Wlid)
+	case INJECT:
+		return updateWorkload(c.Wlid, INJECT)
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}

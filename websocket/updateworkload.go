@@ -25,6 +25,11 @@ func updateWorkload(wlid string, command string) error {
 	}
 
 	switch kind {
+	case "Namespace":
+		w := workload.(*corev1.Namespace)
+		injectNS(&w.ObjectMeta, command)
+		_, err = clientset.CoreV1().Namespaces().Update(w)
+
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
 		inject(&w.Spec.Template, command, wlid)
@@ -76,6 +81,7 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 	case UPDATE:
 		injectWlid(&template.ObjectMeta.Annotations, wlid)
 		injectTime(&template.ObjectMeta.Annotations)
+		injectLabel(&template.ObjectMeta.Labels)
 
 	case SIGN:
 		updateLabel(&template.ObjectMeta.Labels)
@@ -92,6 +98,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 	case UPDATE:
 		injectWlid(&metadata.Annotations, wlid)
 		injectTime(&metadata.Annotations)
+		injectLabel(&metadata.Labels)
 
 	case SIGN:
 		updateLabel(&metadata.Labels)
@@ -102,6 +109,19 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 	}
 
 }
+
+func injectNS(metadata *v1.ObjectMeta, command string) {
+	switch command {
+	case UPDATE:
+		injectTime(&metadata.Annotations)
+		injectLabel(&metadata.Labels)
+
+	case REMOVE:
+		removeCAMetadata(metadata)
+	}
+
+}
+
 func removeCASpec(spec *corev1.PodSpec) {
 	// remove init container
 	nOfContainers := len(spec.InitContainers)
@@ -161,6 +181,13 @@ func updateLabel(labels *map[string]string) {
 		(*labels) = make(map[string]string)
 	}
 	(*labels)[CALabel] = "signed"
+}
+
+func injectLabel(labels *map[string]string) {
+	if *labels == nil {
+		(*labels) = make(map[string]string)
+	}
+	(*labels)[CAInject] = "add"
 }
 
 func removeCAMetadata(meatdata *v1.ObjectMeta) {

@@ -13,6 +13,7 @@ import (
 
 var (
 	CAInitContainerName = "ca-init-container"
+	CAInject            = "injectCyberArmor"
 )
 
 // RunCommand -
