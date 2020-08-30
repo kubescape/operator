@@ -18,6 +18,6 @@ rm -rf k8s-ca-websocket
  
 
 kubectl -n cyberarmor-system patch  deployment ca-websocket -p '{"spec": {"template": {"spec": { "containers": [{"name": "ca-websocket", "imagePullPolicy": "Never"}]}}}}' || true
-kubectl -n cyberarmor-system set image deployment/ca-websocket ca-websocket=dreg.eust0.cyberarmorsoft.com:443/k8s-ca-websocket:$WTAG || true
+kubectl -n cyberarmor-system set image deployment/ca-websocket ca-websocket-container=dreg.eust0.cyberarmorsoft.com:443/k8s-ca-websocket:$WTAG || true
 kubectl delete pod -n cyberarmor-system $(kubectl get pod -n cyberarmor-system | grep websocket |  awk '{print $1}')
 kubectl logs -f -n cyberarmor-system $(kubectl get pod -n cyberarmor-system | grep websocket |  awk '{print $1}')

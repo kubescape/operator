@@ -5,8 +5,11 @@ import (
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
+	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	// corev1beta1 "k8s.io/api/core/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -48,12 +51,23 @@ func updateWorkload(wlid string, command string) error {
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		inject(&w.Spec.Template, command, wlid)
-		_, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
+		glog.Infof("updating %s: %v", kind, w)
+		w, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
+		glog.Infof("after updating %s: %v", kind, w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
 		inject(&w.Template, command, wlid)
 		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
+
+	case "Job":
+		w := workload.(*batchv1.Job)
+		inject(&w.Spec.Template, command, wlid)
+		_, err = clientset.BatchV1().Jobs(namespace).Update(w)
+	// case "CronJob":
+	// 	w := workload.(*corev1beta1.CronJob)
+	// 	inject(&w.Spec.Template, command, wlid)
+	// 	_, err = clientset.BatchV1().Jobs(namespace).Update(w)
 
 	case "Pod":
 		w := workload.(*corev1.Pod)
