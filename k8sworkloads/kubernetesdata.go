@@ -1,13 +1,16 @@
 package k8sworkloads
 
 import (
+	"encoding/base64"
 	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/docker/docker/api/types"
+	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -99,9 +102,7 @@ func ReadSecret(secret interface{}, secretName string) (types.AuthConfig, error)
 			return authConfig, fmt.Errorf("cant find auths")
 		}
 		for serverAddress, authConfig := range sec["auths"] {
-			if authConfig.ServerAddress == "" {
-				authConfig.ServerAddress = serverAddress
-			}
+			updateSecret(&authConfig, serverAddress)
 			return authConfig, nil
 		}
 	}
@@ -122,4 +123,29 @@ func parseDecodedSecret(sec map[string]string) (string, string) {
 	psw, _ := sec[corev1.BasicAuthPasswordKey]
 	return user, psw
 
+}
+
+func updateSecret(authConfig *types.AuthConfig, serverAddress string) {
+	if authConfig.ServerAddress == "" {
+		authConfig.ServerAddress = serverAddress
+	}
+	if authConfig.Username == "" || authConfig.Password == "" {
+		glog.Infof("secret missing user name or password, using auth")
+		auth := authConfig.Auth
+		decodedAuth, err := base64.StdEncoding.DecodeString(auth)
+		if err != nil {
+			glog.Errorf("error: %s", err.Error())
+			return
+		}
+
+		splittedAuth := strings.Split(string(decodedAuth), ":")
+		if len(splittedAuth) == 2 {
+			authConfig.Username = splittedAuth[0]
+			authConfig.Password = splittedAuth[1]
+		}
+	}
+	if authConfig.Auth == "" {
+		auth := fmt.Sprintf("%s:%s", authConfig.Username, authConfig.Password)
+		authConfig.Auth = base64.StdEncoding.EncodeToString([]byte(auth))
+	}
 }
