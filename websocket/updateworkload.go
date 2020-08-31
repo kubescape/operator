@@ -63,11 +63,20 @@ func updateWorkload(wlid string, command string) error {
 	case "Job":
 		w := workload.(*batchv1.Job)
 		inject(&w.Spec.Template, command, wlid)
-		_, err = clientset.BatchV1().Jobs(namespace).Update(w)
-	// case "CronJob":
-	// 	w := workload.(*corev1beta1.CronJob)
-	// 	inject(&w.Spec.Template, command, wlid)
-	// 	_, err = clientset.BatchV1().Jobs(namespace).Update(w)
+		cleanSelector(w.Spec.Selector)
+		err = clientset.BatchV1().Jobs(namespace).Delete(w.Name, &v1.DeleteOptions{})
+		if err == nil {
+			w.Status = batchv1.JobStatus{}
+			w.ObjectMeta.ResourceVersion = ""
+			for {
+				_, err = clientset.BatchV1().Jobs(namespace).Get(w.Name, v1.GetOptions{})
+				if err != nil {
+					break
+				}
+				time.Sleep(time.Second * 1)
+			}
+			w, err = clientset.BatchV1().Jobs(namespace).Create(w)
+		}
 
 	case "Pod":
 		w := workload.(*corev1.Pod)
@@ -81,7 +90,7 @@ func updateWorkload(wlid string, command string) error {
 				if err != nil {
 					break
 				}
-				time.Sleep(time.Second * 2)
+				time.Sleep(time.Second * 1)
 			}
 			_, err = clientset.CoreV1().Pods(namespace).Create(w)
 		}
@@ -104,7 +113,7 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 		removeCASpec(&template.Spec)
 		removeCAMetadata(&template.ObjectMeta)
 	}
-
+	removeIDLabels(template.ObjectMeta.Labels)
 }
 
 func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
@@ -121,7 +130,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 		removeCASpec(spec)
 		removeCAMetadata(metadata)
 	}
-
+	removeIDLabels(metadata.Labels)
 }
 
 func injectNS(metadata *v1.ObjectMeta, command string) {
@@ -133,7 +142,7 @@ func injectNS(metadata *v1.ObjectMeta, command string) {
 	case REMOVE:
 		removeCAMetadata(metadata)
 	}
-
+	removeIDLabels(metadata.Labels)
 }
 
 func removeCASpec(spec *corev1.PodSpec) {
@@ -212,4 +221,15 @@ func removeCAMetadata(meatdata *v1.ObjectMeta) {
 	delete(meatdata.Annotations, CASigned)
 	delete(meatdata.Annotations, CAWlid)
 	delete(meatdata.Annotations, CAAttached)
+}
+
+func cleanSelector(selector *v1.LabelSelector) {
+	delete(selector.MatchLabels, controllerLable)
+	if len(selector.MatchLabels) == 0 && len(selector.MatchLabels) == 0 {
+		selector = &v1.LabelSelector{}
+	}
+}
+
+func removeIDLabels(labels map[string]string) {
+	delete(labels, controllerLable)
 }

@@ -29,6 +29,9 @@ var (
 	CASigned   = "cyberarmor.signed"
 	CAWlid     = "cyberarmor.wlid"
 )
+var (
+	controllerLable = "controller-uid"
+)
 
 // HandlePostmanRequest Parse received commands and run the command
 func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {

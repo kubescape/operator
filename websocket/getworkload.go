@@ -64,7 +64,7 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 				return clientset.BatchV1().Jobs(namespace).Get(i.Name, v1.GetOptions{})
 			}
 		}
-		return nil, fmt.Errorf("StatefulSet '%s' not found in namespace: %s", name, namespace)
+		return nil, fmt.Errorf("Job '%s' not found in namespace: %s", name, namespace)
 	case "PodTemplate":
 		w, _ := clientset.CoreV1().PodTemplates(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {
