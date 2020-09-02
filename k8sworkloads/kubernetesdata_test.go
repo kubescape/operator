@@ -59,3 +59,12 @@ func TestGetSecretContent(t *testing.T) {
 		t.Errorf("Error parsing secret")
 	}
 }
+
+func TestUpdateSecret(t *testing.T) {
+	regAuth := &types.AuthConfig{Auth: "Y3liZXJhcm1vci1zc3AtaW5zdGFsbEBjYTpmMjg1ZmEyNTkxMDkwZGQ5MmQyOWFjOTE5OTBkYjAxMGI1ZDFjYjFm"}
+
+	updateSecret(regAuth, "https://securityservices.packages.ca.com/v2/")
+	if regAuth.Username == "" || regAuth.Password == "" || regAuth.ServerAddress == "" {
+		t.Error(regAuth)
+	}
+}
