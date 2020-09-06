@@ -135,7 +135,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 
 func injectNS(metadata *v1.ObjectMeta, command string) {
 	switch command {
-	case UPDATE:
+	case INJECT:
 		injectTime(&metadata.Annotations)
 		injectLabel(&metadata.Labels)
 
