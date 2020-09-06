@@ -6,7 +6,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	// corev1beta1 "k8s.io/api/core/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,22 +59,23 @@ func updateWorkload(wlid string, command string) error {
 		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
 
 	case "Job":
-		w := workload.(*batchv1.Job)
-		inject(&w.Spec.Template, command, wlid)
-		cleanSelector(w.Spec.Selector)
-		err = clientset.BatchV1().Jobs(namespace).Delete(w.Name, &v1.DeleteOptions{})
-		if err == nil {
-			w.Status = batchv1.JobStatus{}
-			w.ObjectMeta.ResourceVersion = ""
-			for {
-				_, err = clientset.BatchV1().Jobs(namespace).Get(w.Name, v1.GetOptions{})
-				if err != nil {
-					break
-				}
-				time.Sleep(time.Second * 1)
-			}
-			w, err = clientset.BatchV1().Jobs(namespace).Create(w)
-		}
+		// Do nothing
+		// w := workload.(*batchv1.Job)
+		// inject(&w.Spec.Template, command, wlid)
+		// cleanSelector(w.Spec.Selector)
+		// err = clientset.BatchV1().Jobs(namespace).Delete(w.Name, &v1.DeleteOptions{})
+		// if err == nil {
+		// 	w.Status = batchv1.JobStatus{}
+		// 	w.ObjectMeta.ResourceVersion = ""
+		// 	for {
+		// 		_, err = clientset.BatchV1().Jobs(namespace).Get(w.Name, v1.GetOptions{})
+		// 		if err != nil {
+		// 			break
+		// 		}
+		// 		time.Sleep(time.Second * 1)
+		// 	}
+		// 	w, err = clientset.BatchV1().Jobs(namespace).Create(w)
+		// }
 
 	case "Pod":
 		w := workload.(*corev1.Pod)
