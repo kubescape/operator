@@ -5,7 +5,6 @@ import (
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
-	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -51,9 +50,9 @@ func updateWorkload(wlid string, command string) error {
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		inject(&w.Spec.Template, command, wlid)
-		glog.Infof("updating %s: %v", kind, w)
+		// glog.Infof("updating %s: %v", kind, w)
 		w, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
-		glog.Infof("after updating %s: %v", kind, w)
+		// glog.Infof("after updating %s: %v", kind, w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
