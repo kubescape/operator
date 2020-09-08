@@ -50,9 +50,7 @@ func updateWorkload(wlid string, command string) error {
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		inject(&w.Spec.Template, command, wlid)
-		// glog.Infof("updating %s: %v", kind, w)
 		w, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
-		// glog.Infof("after updating %s: %v", kind, w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
@@ -216,14 +214,14 @@ func injectLabel(labels *map[string]string) {
 		(*labels) = make(map[string]string)
 	}
 	(*labels)[CAInject] = "add"
-	(*labels)[CAInjectOld] = "add"
+	(*labels)[CAInjectOld] = "add" // DEPRECATED
 }
 
 func removeCAMetadata(meatdata *v1.ObjectMeta) {
 	delete(meatdata.Labels, CAInject)
-	delete(meatdata.Labels, CAInjectOld)
+	delete(meatdata.Labels, CAInjectOld) // DEPRECATED
 	delete(meatdata.Labels, CALabel)
-	delete(meatdata.Annotations, CAWlidOld)
+	delete(meatdata.Annotations, CAWlidOld) // DEPRECATED
 	delete(meatdata.Annotations, CAStatus)
 	delete(meatdata.Annotations, CASigned)
 	delete(meatdata.Annotations, CAWlid)
