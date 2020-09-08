@@ -65,6 +65,15 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("Job '%s' not found in namespace: %s", name, namespace)
+	case "CronJob":
+		w, _ := clientset.BatchV1beta1().CronJobs(namespace).List(v1.ListOptions{})
+		for _, i := range w.Items {
+			if i.Name == name {
+				return clientset.BatchV1beta1().CronJobs(namespace).Get(i.Name, v1.GetOptions{})
+			}
+		}
+		return nil, fmt.Errorf("Job '%s' not found in namespace: %s", name, namespace)
+
 	case "PodTemplate":
 		w, _ := clientset.CoreV1().PodTemplates(namespace).List(v1.ListOptions{})
 		for _, i := range w.Items {

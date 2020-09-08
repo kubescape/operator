@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	// corev1beta1 "k8s.io/api/core/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,6 +58,10 @@ func updateWorkload(wlid string, command string) error {
 		w := workload.(*corev1.PodTemplate)
 		inject(&w.Template, command, wlid)
 		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
+	case "CronJob":
+		w := workload.(*v1beta1.CronJob)
+		inject(&w.Spec.JobTemplate.Spec.Template, command, wlid)
+		_, err = clientset.BatchV1beta1().CronJobs(namespace).Update(w)
 
 	case "Job":
 		// Do nothing
@@ -188,14 +193,15 @@ func injectWlid(annotations *map[string]string, wlid string) {
 	if *annotations == nil {
 		(*annotations) = make(map[string]string)
 	}
-	(*annotations)["wlid"] = wlid
+	(*annotations)[CAWlidOld] = wlid
+	(*annotations)[CAWlid] = wlid
 }
 
 func injectTime(annotations *map[string]string) {
 	if *annotations == nil {
 		(*annotations) = make(map[string]string)
 	}
-	(*annotations)["latets-catriger-update"] = string(time.Now().UTC().Format("02-01-2006 15:04:05"))
+	(*annotations)[CAUpdate] = string(time.Now().UTC().Format("02-01-2006 15:04:05"))
 }
 
 func updateLabel(labels *map[string]string) {
@@ -210,12 +216,14 @@ func injectLabel(labels *map[string]string) {
 		(*labels) = make(map[string]string)
 	}
 	(*labels)[CAInject] = "add"
+	(*labels)[CAInjectOld] = "add"
 }
 
 func removeCAMetadata(meatdata *v1.ObjectMeta) {
 	delete(meatdata.Labels, CAInject)
+	delete(meatdata.Labels, CAInjectOld)
 	delete(meatdata.Labels, CALabel)
-	delete(meatdata.Annotations, "wlid")
+	delete(meatdata.Annotations, CAWlidOld)
 	delete(meatdata.Annotations, CAStatus)
 	delete(meatdata.Annotations, CASigned)
 	delete(meatdata.Annotations, CAWlid)
