@@ -5,9 +5,8 @@ import (
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
-	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	// corev1beta1 "k8s.io/api/core/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,23 +50,35 @@ func updateWorkload(wlid string, command string) error {
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		inject(&w.Spec.Template, command, wlid)
-		glog.Infof("updating %s: %v", kind, w)
 		w, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
-		glog.Infof("after updating %s: %v", kind, w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
 		inject(&w.Template, command, wlid)
 		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
+	case "CronJob":
+		w := workload.(*v1beta1.CronJob)
+		inject(&w.Spec.JobTemplate.Spec.Template, command, wlid)
+		_, err = clientset.BatchV1beta1().CronJobs(namespace).Update(w)
 
 	case "Job":
-		w := workload.(*batchv1.Job)
-		inject(&w.Spec.Template, command, wlid)
-		_, err = clientset.BatchV1().Jobs(namespace).Update(w)
-	// case "CronJob":
-	// 	w := workload.(*corev1beta1.CronJob)
-	// 	inject(&w.Spec.Template, command, wlid)
-	// 	_, err = clientset.BatchV1().Jobs(namespace).Update(w)
+		// Do nothing
+		// w := workload.(*batchv1.Job)
+		// inject(&w.Spec.Template, command, wlid)
+		// cleanSelector(w.Spec.Selector)
+		// err = clientset.BatchV1().Jobs(namespace).Delete(w.Name, &v1.DeleteOptions{})
+		// if err == nil {
+		// 	w.Status = batchv1.JobStatus{}
+		// 	w.ObjectMeta.ResourceVersion = ""
+		// 	for {
+		// 		_, err = clientset.BatchV1().Jobs(namespace).Get(w.Name, v1.GetOptions{})
+		// 		if err != nil {
+		// 			break
+		// 		}
+		// 		time.Sleep(time.Second * 1)
+		// 	}
+		// 	w, err = clientset.BatchV1().Jobs(namespace).Create(w)
+		// }
 
 	case "Pod":
 		w := workload.(*corev1.Pod)
@@ -81,7 +92,7 @@ func updateWorkload(wlid string, command string) error {
 				if err != nil {
 					break
 				}
-				time.Sleep(time.Second * 2)
+				time.Sleep(time.Second * 1)
 			}
 			_, err = clientset.CoreV1().Pods(namespace).Create(w)
 		}
@@ -104,7 +115,7 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 		removeCASpec(&template.Spec)
 		removeCAMetadata(&template.ObjectMeta)
 	}
-
+	removeIDLabels(template.ObjectMeta.Labels)
 }
 
 func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
@@ -121,19 +132,19 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 		removeCASpec(spec)
 		removeCAMetadata(metadata)
 	}
-
+	removeIDLabels(metadata.Labels)
 }
 
 func injectNS(metadata *v1.ObjectMeta, command string) {
 	switch command {
-	case UPDATE:
+	case INJECT:
 		injectTime(&metadata.Annotations)
 		injectLabel(&metadata.Labels)
 
 	case REMOVE:
 		removeCAMetadata(metadata)
 	}
-
+	removeIDLabels(metadata.Labels)
 }
 
 func removeCASpec(spec *corev1.PodSpec) {
@@ -180,14 +191,15 @@ func injectWlid(annotations *map[string]string, wlid string) {
 	if *annotations == nil {
 		(*annotations) = make(map[string]string)
 	}
-	(*annotations)["wlid"] = wlid
+	(*annotations)[CAWlidOld] = wlid
+	(*annotations)[CAWlid] = wlid
 }
 
 func injectTime(annotations *map[string]string) {
 	if *annotations == nil {
 		(*annotations) = make(map[string]string)
 	}
-	(*annotations)["latets-catriger-update"] = string(time.Now().UTC().Format("02-01-2006 15:04:05"))
+	(*annotations)[CAUpdate] = string(time.Now().UTC().Format("02-01-2006 15:04:05"))
 }
 
 func updateLabel(labels *map[string]string) {
@@ -202,14 +214,27 @@ func injectLabel(labels *map[string]string) {
 		(*labels) = make(map[string]string)
 	}
 	(*labels)[CAInject] = "add"
+	(*labels)[CAInjectOld] = "add" // DEPRECATED
 }
 
 func removeCAMetadata(meatdata *v1.ObjectMeta) {
 	delete(meatdata.Labels, CAInject)
+	delete(meatdata.Labels, CAInjectOld) // DEPRECATED
 	delete(meatdata.Labels, CALabel)
-	delete(meatdata.Annotations, "wlid")
+	delete(meatdata.Annotations, CAWlidOld) // DEPRECATED
 	delete(meatdata.Annotations, CAStatus)
 	delete(meatdata.Annotations, CASigned)
 	delete(meatdata.Annotations, CAWlid)
 	delete(meatdata.Annotations, CAAttached)
+}
+
+func cleanSelector(selector *v1.LabelSelector) {
+	delete(selector.MatchLabels, controllerLable)
+	if len(selector.MatchLabels) == 0 && len(selector.MatchLabels) == 0 {
+		selector = &v1.LabelSelector{}
+	}
+}
+
+func removeIDLabels(labels map[string]string) {
+	delete(labels, controllerLable)
 }

@@ -21,13 +21,19 @@ var (
 
 	CALabel = "cyberarmor"
 
-	CAInject = "injectCyberArmor"
+	CAInjectOld = "injectCyberArmor"
+	CAWlidOld   = "wlid"
+	CAInject    = "cyberarmor.inject"
 
 	//annotation related
 	CAStatus   = "cyberarmor.status"
 	CAAttached = "cyberarmor.attached"
 	CASigned   = "cyberarmor.signed"
 	CAWlid     = "cyberarmor.wlid"
+	CAUpdate   = "cyberarmor.last-update"
+)
+var (
+	controllerLable = "controller-uid"
 )
 
 // HandlePostmanRequest Parse received commands and run the command

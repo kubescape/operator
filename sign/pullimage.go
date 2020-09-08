@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
-	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -83,23 +82,23 @@ func (dc *DockerClient) pullImage(workload interface{}, imageName string) (out i
 
 	for secretName, regAuth := range secrets {
 		// If server address is known, then try pulling image based on sever address, otherwise try using all secretes
-		if regAuth.ServerAddress == "" || strings.HasPrefix(imageName, regAuth.ServerAddress) {
-			glog.Infof("Pulling image %s using %s secret", imageName, secretName)
+		// if regAuth.ServerAddress == "" || strings.HasPrefix(imageName, regAuth.ServerAddress) {
+		glog.Infof("Pulling image %s using %s secret", imageName, secretName)
 
-			// convert to byte and encode to base 64
-			encodedJSON, err := json.Marshal(regAuth)
-			if err != nil {
-				glog.Infof("Failed pulling image. reason: %v", err)
-				continue
-			}
-			authStr := base64.URLEncoding.EncodeToString(encodedJSON)
-
-			// Pulling image with credentials
-			out, err = dc.cli.ImagePull(dc.ctx, imageName, types.ImagePullOptions{RegistryAuth: authStr})
-			if err == nil {
-				return out, nil
-			}
+		// convert to byte and encode to base 64
+		encodedJSON, err := json.Marshal(regAuth)
+		if err != nil {
+			glog.Infof("Failed pulling image. reason: %v", err)
+			continue
 		}
+		authStr := base64.URLEncoding.EncodeToString(encodedJSON)
+
+		// Pulling image with credentials
+		out, err = dc.cli.ImagePull(dc.ctx, imageName, types.ImagePullOptions{RegistryAuth: authStr})
+		if err == nil {
+			return out, nil
+		}
+		// }
 	}
 
 	return out, fmt.Errorf("Failed to pull image %s", imageName)
@@ -149,6 +148,7 @@ func readSecrets(sec []corev1.LocalObjectReference, namespace string) (map[strin
 	}
 	return secrets, nil
 }
+
 func getSecretContent(secret *corev1.Secret) (interface{}, error) {
 
 	// Secret types- https://github.com/kubernetes/kubernetes/blob/7693a1d5fe2a35b6e2e205f03ae9b3eddcdabc6b/pkg/apis/core/types.go#L4394-L4478
@@ -186,6 +186,7 @@ func imageFoundInLoaclRegistry(imageList []types.ImageSummary, imageName string)
 	}
 	return false
 }
+
 func getSecretList(workload interface{}) ([]corev1.LocalObjectReference, error) {
 	if w, k := workload.(*appsv1.Deployment); k {
 		return w.Spec.Template.Spec.ImagePullSecrets, nil
