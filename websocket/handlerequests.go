@@ -85,6 +85,7 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 }
 
 func signWorkload(wlid string) error {
+	var err error
 	workload, err := getWorkload(wlid)
 	if err != nil {
 		return err
@@ -101,5 +102,6 @@ func signWorkload(wlid string) error {
 	}
 
 	glog.Infof("Done signing, updating workload, wlid: %s", wlid)
-	return updateWorkload(wlid, SIGN)
+	// err = updateWorkload(wlid, SIGN)
+	return err
 }
