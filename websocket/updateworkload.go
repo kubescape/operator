@@ -34,30 +34,36 @@ func updateWorkload(wlid string, command string) error {
 
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		_, err = clientset.AppsV1().Deployments(namespace).Update(w)
 
 	case "ReplicaSet":
 		w := workload.(*appsv1.ReplicaSet)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		_, err = clientset.AppsV1().ReplicaSets(namespace).Update(w)
 
 	case "DaemonSet":
 		w := workload.(*appsv1.DaemonSet)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		_, err = clientset.AppsV1().DaemonSets(namespace).Update(w)
 
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		w, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Template, command, wlid)
 		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
 	case "CronJob":
 		w := workload.(*v1beta1.CronJob)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.JobTemplate.Spec.Template, command, wlid)
 		_, err = clientset.BatchV1beta1().CronJobs(namespace).Update(w)
 
@@ -116,6 +122,13 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 		removeCAMetadata(&template.ObjectMeta)
 	}
 	removeIDLabels(template.ObjectMeta.Labels)
+}
+
+func workloadUpdate(objectMeta *v1.ObjectMeta, command, wlid string) {
+	switch command {
+	case REMOVE:
+		removeCAMetadata(objectMeta)
+	}
 }
 
 func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
