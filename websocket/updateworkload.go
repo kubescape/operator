@@ -210,34 +210,35 @@ func removeCASpec(spec *corev1.PodSpec) {
 
 	// remove volumes
 	for injected := range cautils.InjectedVolumes {
-		removeVolumes(spec.Volumes, cautils.InjectedEnvironments[injected])
+		removeVolumes(&spec.Volumes, cautils.InjectedVolumes[injected])
 	}
 
 	// remove environment varibles
 	for i := range spec.Containers {
 		for injectedEnvs := range cautils.InjectedEnvironments {
-			removeEnvironmentVariable(spec.Containers[i].Env, cautils.InjectedEnvironments[injectedEnvs])
+			removeEnvironmentVariable(&spec.Containers[i].Env, cautils.InjectedEnvironments[injectedEnvs])
 		}
 	}
 
 	// remove volumeMounts
 	for i := range spec.Containers {
 		for injected := range cautils.InjectedVolumeMounts {
-			removeVolumeMounts(spec.Containers[i].VolumeMounts, cautils.InjectedEnvironments[injected])
+			removeVolumeMounts(&spec.Containers[i].VolumeMounts, cautils.InjectedVolumeMounts[injected])
 		}
 	}
 }
 
-func removeEnvironmentVariable(envs []corev1.EnvVar, env string) {
-	nOfEnvs := len(envs)
+func removeEnvironmentVariable(envs *[]corev1.EnvVar, env string) {
+	nOfEnvs := len(*envs)
 	for i := 0; i < nOfEnvs; i++ {
-		if envs[i].Name == env {
+		if (*envs)[i].Name == env {
+			glog.Infof("removing: %s", env)
 			if nOfEnvs < 2 { //i is the only element in the slice so we need to remove this entry from the map
-				envs = []corev1.EnvVar{}
+				*envs = []corev1.EnvVar{}
 			} else if i == nOfEnvs-1 { // i is the last element in the slice so i+1 is out of range
-				envs = envs[:i]
+				*envs = (*envs)[:i]
 			} else {
-				envs = append(envs[:i], envs[i+1:]...)
+				*envs = append((*envs)[:i], (*envs)[i+1:]...)
 			}
 			nOfEnvs--
 			i--
@@ -245,16 +246,16 @@ func removeEnvironmentVariable(envs []corev1.EnvVar, env string) {
 	}
 }
 
-func removeVolumes(volumes []corev1.Volume, vol string) {
-	nOfvolumes := len(volumes)
+func removeVolumes(volumes *[]corev1.Volume, vol string) {
+	nOfvolumes := len(*volumes)
 	for i := 0; i < nOfvolumes; i++ {
-		if volumes[i].Name == vol {
+		if (*volumes)[i].Name == vol {
 			if nOfvolumes < 2 { //i is the only element in the slice so we need to remove this entry from the map
-				volumes = []corev1.Volume{}
+				*volumes = []corev1.Volume{}
 			} else if i == nOfvolumes-1 { // i is the last element in the slice so i+1 is out of range
-				volumes = volumes[:i]
+				*volumes = (*volumes)[:i]
 			} else {
-				volumes = append(volumes[:i], volumes[i+1:]...)
+				*volumes = append((*volumes)[:i], (*volumes)[i+1:]...)
 			}
 			nOfvolumes--
 			i--
@@ -262,16 +263,16 @@ func removeVolumes(volumes []corev1.Volume, vol string) {
 	}
 }
 
-func removeVolumeMounts(volumes []corev1.VolumeMount, vol string) {
-	nOfvolumes := len(volumes)
+func removeVolumeMounts(volumes *[]corev1.VolumeMount, vol string) {
+	nOfvolumes := len(*volumes)
 	for i := 0; i < nOfvolumes; i++ {
-		if volumes[i].Name == vol {
+		if (*volumes)[i].Name == vol {
 			if nOfvolumes < 2 { //i is the only element in the slice so we need to remove this entry from the map
-				volumes = []corev1.VolumeMount{}
+				*volumes = []corev1.VolumeMount{}
 			} else if i == nOfvolumes-1 { // i is the last element in the slice so i+1 is out of range
-				volumes = volumes[:i]
+				*volumes = (*volumes)[:i]
 			} else {
-				volumes = append(volumes[:i], volumes[i+1:]...)
+				*volumes = append((*volumes)[:i], (*volumes)[i+1:]...)
 			}
 			nOfvolumes--
 			i--
