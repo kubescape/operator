@@ -232,7 +232,6 @@ func removeEnvironmentVariable(envs *[]corev1.EnvVar, env string) {
 	nOfEnvs := len(*envs)
 	for i := 0; i < nOfEnvs; i++ {
 		if (*envs)[i].Name == env {
-			glog.Infof("removing: %s", env)
 			if nOfEnvs < 2 { //i is the only element in the slice so we need to remove this entry from the map
 				*envs = []corev1.EnvVar{}
 			} else if i == nOfEnvs-1 { // i is the last element in the slice so i+1 is out of range
