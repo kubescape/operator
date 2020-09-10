@@ -3,6 +3,7 @@ package cautils
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -31,13 +32,12 @@ func RunCommand(command string, arg []string, display bool, timeout time.Duratio
 
 	cmd := exec.CommandContext(ctx, command, arg...)
 
-	// cmd := exec.Command(command, arg...)
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 	err := cmd.Run()
 	if err != nil {
+		err = fmt.Errorf(fmt.Sprintf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err))
 		glog.Errorf("error running command, reason: %v", err.Error())
-		glog.Errorf("stdout: %v. stderr:%v. err: %v", cmd.Stdout, cmd.Stderr, err)
 		return nil, err
 	}
 	return cmd.Stdout.(*bytes.Buffer).Bytes(), err
