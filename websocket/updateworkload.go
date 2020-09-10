@@ -1,10 +1,12 @@
 package websocket
 
 import (
+	"encoding/json"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
+	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -118,6 +120,7 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 		updateLabel(&template.ObjectMeta.Labels)
 		injectTime(&template.ObjectMeta.Annotations)
 	case REMOVE:
+		restoreConatinerCommand(&template.Spec)
 		removeCASpec(&template.Spec)
 		removeCAMetadata(&template.ObjectMeta)
 	}
@@ -142,6 +145,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 		updateLabel(&metadata.Labels)
 		injectTime(&metadata.Annotations)
 	case REMOVE:
+		restoreConatinerCommand(spec)
 		removeCASpec(spec)
 		removeCAMetadata(metadata)
 	}
@@ -159,7 +163,34 @@ func injectNS(metadata *v1.ObjectMeta, command string) {
 	}
 	removeIDLabels(metadata.Labels)
 }
-
+func restoreConatinerCommand(spec *corev1.PodSpec) {
+	cmdEnv := "CAA_OVERRIDDEN_CMD"
+	argsEnv := "CAA_OVERRIDDEN_ARGS"
+	for con := range spec.Containers {
+		for env := range spec.Containers[con].Env {
+			if spec.Containers[con].Env[env].Name == cmdEnv {
+				cmdVal := spec.Containers[con].Env[env].Value
+				if cmdVal == "nil" {
+					glog.Error("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, cmdEnv, cmdVal, spec.Containers[con].Command, spec.Containers[con].Args)
+					continue
+				}
+				newCMD := []string{}
+				json.Unmarshal([]byte(cmdVal), &newCMD)
+				spec.Containers[con].Command = newCMD
+			}
+			if spec.Containers[con].Env[env].Name == argsEnv {
+				argsVal := spec.Containers[con].Env[env].Value
+				if argsVal == "nil" {
+					glog.Error("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, argsEnv, argsVal, spec.Containers[con].Command, spec.Containers[con].Args)
+					continue
+				}
+				newArgs := []string{}
+				json.Unmarshal([]byte(argsVal), &newArgs)
+				spec.Containers[con].Args = newArgs
+			}
+		}
+	}
+}
 func removeCASpec(spec *corev1.PodSpec) {
 	// remove init container
 	nOfContainers := len(spec.InitContainers)
@@ -177,9 +208,23 @@ func removeCASpec(spec *corev1.PodSpec) {
 		}
 	}
 
-	// remove LD_PRELOAD environment
+	// remove volumes
+	for injected := range cautils.InjectedVolumes {
+		removeVolumes(spec.Volumes, cautils.InjectedEnvironments[injected])
+	}
+
+	// remove environment varibles
 	for i := range spec.Containers {
-		removeEnvironmentVariable(spec.Containers[i].Env, "LD_PRELOAD")
+		for injectedEnvs := range cautils.InjectedEnvironments {
+			removeEnvironmentVariable(spec.Containers[i].Env, cautils.InjectedEnvironments[injectedEnvs])
+		}
+	}
+
+	// remove volumeMounts
+	for i := range spec.Containers {
+		for injected := range cautils.InjectedVolumeMounts {
+			removeVolumeMounts(spec.Containers[i].VolumeMounts, cautils.InjectedEnvironments[injected])
+		}
 	}
 }
 
@@ -195,6 +240,40 @@ func removeEnvironmentVariable(envs []corev1.EnvVar, env string) {
 				envs = append(envs[:i], envs[i+1:]...)
 			}
 			nOfEnvs--
+			i--
+		}
+	}
+}
+
+func removeVolumes(volumes []corev1.Volume, vol string) {
+	nOfvolumes := len(volumes)
+	for i := 0; i < nOfvolumes; i++ {
+		if volumes[i].Name == vol {
+			if nOfvolumes < 2 { //i is the only element in the slice so we need to remove this entry from the map
+				volumes = []corev1.Volume{}
+			} else if i == nOfvolumes-1 { // i is the last element in the slice so i+1 is out of range
+				volumes = volumes[:i]
+			} else {
+				volumes = append(volumes[:i], volumes[i+1:]...)
+			}
+			nOfvolumes--
+			i--
+		}
+	}
+}
+
+func removeVolumeMounts(volumes []corev1.VolumeMount, vol string) {
+	nOfvolumes := len(volumes)
+	for i := 0; i < nOfvolumes; i++ {
+		if volumes[i].Name == vol {
+			if nOfvolumes < 2 { //i is the only element in the slice so we need to remove this entry from the map
+				volumes = []corev1.VolumeMount{}
+			} else if i == nOfvolumes-1 { // i is the last element in the slice so i+1 is out of range
+				volumes = volumes[:i]
+			} else {
+				volumes = append(volumes[:i], volumes[i+1:]...)
+			}
+			nOfvolumes--
 			i--
 		}
 	}
