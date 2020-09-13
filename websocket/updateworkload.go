@@ -1,10 +1,12 @@
 package websocket
 
 import (
+	"encoding/json"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
 
+	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,30 +36,36 @@ func updateWorkload(wlid string, command string) error {
 
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		_, err = clientset.AppsV1().Deployments(namespace).Update(w)
 
 	case "ReplicaSet":
 		w := workload.(*appsv1.ReplicaSet)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		_, err = clientset.AppsV1().ReplicaSets(namespace).Update(w)
 
 	case "DaemonSet":
 		w := workload.(*appsv1.DaemonSet)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		_, err = clientset.AppsV1().DaemonSets(namespace).Update(w)
 
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.Template, command, wlid)
 		w, err = clientset.AppsV1().StatefulSets(namespace).Update(w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Template, command, wlid)
 		_, err = clientset.CoreV1().PodTemplates(namespace).Update(w)
 	case "CronJob":
 		w := workload.(*v1beta1.CronJob)
+		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.Spec.JobTemplate.Spec.Template, command, wlid)
 		_, err = clientset.BatchV1beta1().CronJobs(namespace).Update(w)
 
@@ -112,10 +120,18 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 		updateLabel(&template.ObjectMeta.Labels)
 		injectTime(&template.ObjectMeta.Annotations)
 	case REMOVE:
+		restoreConatinerCommand(&template.Spec)
 		removeCASpec(&template.Spec)
 		removeCAMetadata(&template.ObjectMeta)
 	}
 	removeIDLabels(template.ObjectMeta.Labels)
+}
+
+func workloadUpdate(objectMeta *v1.ObjectMeta, command, wlid string) {
+	switch command {
+	case REMOVE:
+		removeCAMetadata(objectMeta)
+	}
 }
 
 func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
@@ -129,6 +145,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 		updateLabel(&metadata.Labels)
 		injectTime(&metadata.Annotations)
 	case REMOVE:
+		restoreConatinerCommand(spec)
 		removeCASpec(spec)
 		removeCAMetadata(metadata)
 	}
@@ -146,7 +163,34 @@ func injectNS(metadata *v1.ObjectMeta, command string) {
 	}
 	removeIDLabels(metadata.Labels)
 }
-
+func restoreConatinerCommand(spec *corev1.PodSpec) {
+	cmdEnv := "CAA_OVERRIDDEN_CMD"
+	argsEnv := "CAA_OVERRIDDEN_ARGS"
+	for con := range spec.Containers {
+		for env := range spec.Containers[con].Env {
+			if spec.Containers[con].Env[env].Name == cmdEnv {
+				cmdVal := spec.Containers[con].Env[env].Value
+				if cmdVal == "nil" {
+					glog.Errorf("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, cmdEnv, cmdVal, spec.Containers[con].Command, spec.Containers[con].Args)
+					continue
+				}
+				newCMD := []string{}
+				json.Unmarshal([]byte(cmdVal), &newCMD)
+				spec.Containers[con].Command = newCMD
+			}
+			if spec.Containers[con].Env[env].Name == argsEnv {
+				argsVal := spec.Containers[con].Env[env].Value
+				if argsVal == "nil" {
+					glog.Errorf("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, argsEnv, argsVal, spec.Containers[con].Command, spec.Containers[con].Args)
+					continue
+				}
+				newArgs := []string{}
+				json.Unmarshal([]byte(argsVal), &newArgs)
+				spec.Containers[con].Args = newArgs
+			}
+		}
+	}
+}
 func removeCASpec(spec *corev1.PodSpec) {
 	// remove init container
 	nOfContainers := len(spec.InitContainers)
@@ -164,24 +208,72 @@ func removeCASpec(spec *corev1.PodSpec) {
 		}
 	}
 
-	// remove LD_PRELOAD environment
+	// remove volumes
+	for injected := range cautils.InjectedVolumes {
+		removeVolumes(&spec.Volumes, cautils.InjectedVolumes[injected])
+	}
+
+	// remove environment varibles
 	for i := range spec.Containers {
-		removeEnvironmentVariable(spec.Containers[i].Env, "LD_PRELOAD")
+		for injectedEnvs := range cautils.InjectedEnvironments {
+			removeEnvironmentVariable(&spec.Containers[i].Env, cautils.InjectedEnvironments[injectedEnvs])
+		}
+	}
+
+	// remove volumeMounts
+	for i := range spec.Containers {
+		for injected := range cautils.InjectedVolumeMounts {
+			removeVolumeMounts(&spec.Containers[i].VolumeMounts, cautils.InjectedVolumeMounts[injected])
+		}
 	}
 }
 
-func removeEnvironmentVariable(envs []corev1.EnvVar, env string) {
-	nOfEnvs := len(envs)
+func removeEnvironmentVariable(envs *[]corev1.EnvVar, env string) {
+	nOfEnvs := len(*envs)
 	for i := 0; i < nOfEnvs; i++ {
-		if envs[i].Name == env {
+		if (*envs)[i].Name == env {
 			if nOfEnvs < 2 { //i is the only element in the slice so we need to remove this entry from the map
-				envs = []corev1.EnvVar{}
+				*envs = []corev1.EnvVar{}
 			} else if i == nOfEnvs-1 { // i is the last element in the slice so i+1 is out of range
-				envs = envs[:i]
+				*envs = (*envs)[:i]
 			} else {
-				envs = append(envs[:i], envs[i+1:]...)
+				*envs = append((*envs)[:i], (*envs)[i+1:]...)
 			}
 			nOfEnvs--
+			i--
+		}
+	}
+}
+
+func removeVolumes(volumes *[]corev1.Volume, vol string) {
+	nOfvolumes := len(*volumes)
+	for i := 0; i < nOfvolumes; i++ {
+		if (*volumes)[i].Name == vol {
+			if nOfvolumes < 2 { //i is the only element in the slice so we need to remove this entry from the map
+				*volumes = []corev1.Volume{}
+			} else if i == nOfvolumes-1 { // i is the last element in the slice so i+1 is out of range
+				*volumes = (*volumes)[:i]
+			} else {
+				*volumes = append((*volumes)[:i], (*volumes)[i+1:]...)
+			}
+			nOfvolumes--
+			i--
+		}
+	}
+}
+
+func removeVolumeMounts(volumes *[]corev1.VolumeMount, vol string) {
+	nOfvolumes := len(*volumes)
+	for i := 0; i < nOfvolumes; i++ {
+		if (*volumes)[i].Name == vol {
+			if nOfvolumes < 2 { //i is the only element in the slice so we need to remove this entry from the map
+				*volumes = []corev1.VolumeMount{}
+			} else if i == nOfvolumes-1 { // i is the last element in the slice so i+1 is out of range
+				*volumes = (*volumes)[:i]
+			} else {
+				*volumes = append((*volumes)[:i], (*volumes)[i+1:]...)
+			}
+			nOfvolumes--
 			i--
 		}
 	}
