@@ -8,8 +8,8 @@ export WTAG=test
 CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o k8s-ca-websocket .
 chmod +x k8s-ca-websocket
 
-# # base image
-# docker build --no-cache -f Dockerfile.base -t dreg.eust0.cyberarmorsoft.com:443/k8s-base-image:$ITAG .
+# base image
+docker build --no-cache -f Dockerfile.base -t dreg.eust0.cyberarmorsoft.com:443/k8s-base-image:$ITAG .
 # docker push dreg.eust0.cyberarmorsoft.com:443/k8s-base-image:$ITAG
 
 docker build --no-cache -f Dockerfile.test -t dreg.eust0.cyberarmorsoft.com:443/k8s-ca-websocket:$WTAG .
