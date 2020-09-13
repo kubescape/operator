@@ -171,7 +171,7 @@ func restoreConatinerCommand(spec *corev1.PodSpec) {
 			if spec.Containers[con].Env[env].Name == cmdEnv {
 				cmdVal := spec.Containers[con].Env[env].Value
 				if cmdVal == "nil" {
-					glog.Error("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, cmdEnv, cmdVal, spec.Containers[con].Command, spec.Containers[con].Args)
+					glog.Errorf("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, cmdEnv, cmdVal, spec.Containers[con].Command, spec.Containers[con].Args)
 					continue
 				}
 				newCMD := []string{}
@@ -181,7 +181,7 @@ func restoreConatinerCommand(spec *corev1.PodSpec) {
 			if spec.Containers[con].Env[env].Name == argsEnv {
 				argsVal := spec.Containers[con].Env[env].Value
 				if argsVal == "nil" {
-					glog.Error("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, argsEnv, argsVal, spec.Containers[con].Command, spec.Containers[con].Args)
+					glog.Errorf("invalid env value. conatiner: %s, env: %s=%s. current container command: %v, current container args: %v", spec.Containers[con].Name, argsEnv, argsVal, spec.Containers[con].Command, spec.Containers[con].Args)
 					continue
 				}
 				newArgs := []string{}
