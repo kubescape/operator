@@ -73,6 +73,7 @@ func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
 func (cacli *Cacli) Sign(wlid, user, password string) error {
 	args := []string{}
 	display := true
+	args = append(args, "wt")
 	args = append(args, "sign")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
