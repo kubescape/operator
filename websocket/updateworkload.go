@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 	"time"
@@ -70,6 +71,7 @@ func updateWorkload(wlid string, command string) error {
 		_, err = clientset.BatchV1beta1().CronJobs(namespace).Update(w)
 
 	case "Job":
+		err = fmt.Errorf("")
 		// Do nothing
 		// w := workload.(*batchv1.Job)
 		// inject(&w.Spec.Template, command, wlid)
@@ -104,6 +106,8 @@ func updateWorkload(wlid string, command string) error {
 			}
 			_, err = clientset.CoreV1().Pods(namespace).Create(w)
 		}
+	default:
+		err = fmt.Errorf("command %s not supported with kind: %s", command, cautils.GetKindFromWlid(wlid))
 	}
 	return err
 
@@ -143,6 +147,8 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 
 	case SIGN:
 		updateLabel(&metadata.Labels)
+		injectTime(&metadata.Annotations)
+	case RESTART:
 		injectTime(&metadata.Annotations)
 	case REMOVE:
 		restoreConatinerCommand(spec)

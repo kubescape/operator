@@ -18,6 +18,8 @@ var (
 	SIGN = "sign"
 	// INJECT namespace
 	INJECT = "inject"
+	// RESTART pod
+	RESTART = "restart"
 
 	CALabel = "cyberarmor"
 
