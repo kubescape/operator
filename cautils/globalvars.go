@@ -74,6 +74,8 @@ func LoadEnvironmentVaribles() (err error) {
 		}
 	}
 
+	SetKindReverseMap()
+
 	return nil
 }
 func testEnvironmentVarible(key string) (string, error) {

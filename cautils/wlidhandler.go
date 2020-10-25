@@ -20,11 +20,15 @@ var (
 	KindReverseMap = map[string]string{}
 )
 
-//
-func restoreInnerIdentifiersFromWLID(spiffeSlices []string) []string {
+// SetKindReverseMap setup KindReverseMap obj
+func SetKindReverseMap() {
 	for _, kind := range K8SKindsList {
 		KindReverseMap[strings.ToLower(strings.Replace(kind, "-", "", -1))] = kind
 	}
+}
+
+func restoreInnerIdentifiersFromWLID(spiffeSlices []string) []string {
+
 	if strings.HasPrefix(spiffeSlices[0], ClusterWlidPrefix) &&
 		strings.HasPrefix(spiffeSlices[1], NamespaceWlidPrefix) &&
 		strings.Contains(spiffeSlices[2], "-") {
