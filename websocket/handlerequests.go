@@ -80,6 +80,8 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 	switch c.CommandName {
 	case UPDATE:
 		return updateWorkload(c.Wlid, UPDATE)
+	case RESTART:
+		return updateWorkload(c.Wlid, RESTART)
 	case REMOVE:
 		return updateWorkload(c.Wlid, REMOVE)
 	case SIGN:

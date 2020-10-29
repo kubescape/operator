@@ -119,7 +119,8 @@ func inject(template *corev1.PodTemplateSpec, command, wlid string) {
 		injectWlid(&template.ObjectMeta.Annotations, wlid)
 		injectTime(&template.ObjectMeta.Annotations)
 		injectLabel(&template.ObjectMeta.Labels)
-
+	case RESTART:
+		injectTime(&template.ObjectMeta.Annotations)
 	case SIGN:
 		updateLabel(&template.ObjectMeta.Labels)
 		injectTime(&template.ObjectMeta.Annotations)
