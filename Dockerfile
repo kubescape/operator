@@ -4,7 +4,7 @@ RUN apk update
 RUN apk add ca-certificates && apk add python3 
 
 RUN pip3 install --upgrade pip
-RUN pip3 install -U cacli --index-url https://@carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
+RUN pip3 install -U cacli --index-url https://carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
 
 RUN mkdir .ca && chmod -R 777 .ca
 

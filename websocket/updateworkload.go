@@ -29,13 +29,6 @@ func updateWorkload(wlid string, command string) error {
 		return err
 	}
 
-	// remove auto inject label from namespace
-	if command == REMOVE && kind != "Namespace" {
-		w := workload.(*corev1.Namespace)
-		injectNS(&w.ObjectMeta, command)
-		_, err = clientset.CoreV1().Namespaces().Update(w)
-	}
-
 	switch kind {
 	case "Namespace":
 		w := workload.(*corev1.Namespace)
