@@ -299,7 +299,7 @@ func injectAnnotation(annotations *map[string]string, key, val string) {
 
 func removeAnnotation(meatdata *v1.ObjectMeta, key string) {
 	if meatdata.Annotations != nil {
-		delete(meatdata.Annotations, CAStatus)
+		delete(meatdata.Annotations, key)
 	}
 }
 func injectWlid(annotations *map[string]string, wlid string) {
