@@ -16,7 +16,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // DockerClient -
@@ -117,13 +116,9 @@ func getImagePullSecret(workload interface{}) (map[string]types.AuthConfig, erro
 func readSecrets(sec []corev1.LocalObjectReference, namespace string) (map[string]types.AuthConfig, error) {
 
 	secrets := make(map[string]types.AuthConfig)
-	clientset, err := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
-	if err != nil {
-		err = fmt.Errorf("failed creating clientset. Error: %+v", err)
-		return secrets, err
-	}
+
 	for _, i := range sec {
-		res, err := clientset.CoreV1().Secrets(namespace).Get(i.Name, metav1.GetOptions{})
+		res, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Get(i.Name, metav1.GetOptions{})
 		if err != nil {
 			glog.Errorf("%v", err)
 			continue

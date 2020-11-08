@@ -1,5 +1,4 @@
-FROM dreg.eust0.cyberarmorsoft.com:443/k8s-base-image:latest
-
+FROM quay.io/armosec/k8s-ca-websocket-ubi:latest
 COPY ./k8s-ca-websocket . 
 
 RUN echo $(date -u) > /build_date.txt

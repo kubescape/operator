@@ -83,6 +83,15 @@ func GetK8SKindFronList(kind string) string {
 	return kind
 }
 
+// GetClusterFromWlid parse wlid and get cluster
+func GetClusterFromWlid(wlid string) string {
+	r, err := RestoreMicroserviceIDsFromSpiffe(wlid)
+	if err != nil {
+		return ""
+	}
+	return r[0]
+}
+
 // GetNamespaceFromWlid parse wlid and get Namespace
 func GetNamespaceFromWlid(wlid string) string {
 	r, err := RestoreMicroserviceIDsFromSpiffe(wlid)

@@ -8,18 +8,13 @@ import (
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // GetCALoginCred -
 func GetCALoginCred() (cautils.CredStruct, error) {
 	credStruct := cautils.CredStruct{}
-	clientset, err := kubernetes.NewForConfig(k8sworkloads.GetK8sConfig())
-	if err != nil {
-		return credStruct, err
-	}
 
-	sec, err := clientset.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
+	sec, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
 		return credStruct, err
 	}

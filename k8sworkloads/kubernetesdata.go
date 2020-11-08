@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -31,6 +32,17 @@ type PatchOperation struct {
 	// Value corev1.Pod `json:"value,omitempty"`
 }
 
+// KubernetesClient kubernetes client config
+var KubernetesClient = &kubernetes.Clientset{}
+
+// SetupKubernetesClient -
+func SetupKubernetesClient() error {
+	var err error
+	KubernetesClient, err = kubernetes.NewForConfig(GetK8sConfig())
+	return err
+
+}
+
 // LoadK8sConfig load config from local file or from cluster
 func LoadK8sConfig() error {
 	kubeconfigpath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
@@ -42,7 +54,7 @@ func LoadK8sConfig() error {
 		}
 	}
 	K8SConfig = kubeconfig
-	return nil
+	return SetupKubernetesClient()
 }
 
 // GetK8sConfig get config. load if not loaded yer

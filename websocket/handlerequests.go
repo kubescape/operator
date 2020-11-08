@@ -25,14 +25,17 @@ var (
 
 	CAInjectOld = "injectCyberArmor"
 	CAWlidOld   = "wlid"
-	CAInject    = "cyberarmor.inject"
 
-	//annotation related
-	CAStatus   = "cyberarmor.status"
-	CAAttached = "cyberarmor.attached"
-	CASigned   = "cyberarmor.signed"
-	CAWlid     = "cyberarmor.wlid"
-	CAUpdate   = "cyberarmor.last-update"
+	CAPrefix = "cyberarmor"
+	CAInject = CAPrefix + ".inject"
+
+	// annotation related
+	CAStatus   = CAPrefix + ".status"
+	CAAttached = CAPrefix + ".attached"
+	CASigned   = CAPrefix + ".signed"
+	CAWlid     = CAPrefix + ".wlid"
+	CAUpdate   = CAPrefix + ".last-update"
+	CAIgnoe    = CAPrefix + ".ignore"
 )
 var (
 	controllerLable = "controller-uid"
@@ -83,7 +86,7 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 	case RESTART:
 		return updateWorkload(c.Wlid, RESTART)
 	case REMOVE:
-		return updateWorkload(c.Wlid, REMOVE)
+		return detachWorkload(c.Wlid)
 	case SIGN:
 		return signWorkload(c.Wlid)
 	case INJECT:
@@ -94,6 +97,29 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 	return nil
 }
 
+func detachWorkload(wlid string) error {
+	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
+	// 	// add wlid to the ignore list
+	// 	ns := cautils.GetNamespaceFromWlid(wlid)
+	// 	namespaceWlid := cautils.GetWLID(cautils.GetClusterFromWlid(wlid), ns, "Namespace", ns)
+	// 	if err := excludeWlid(namespaceWlid, wlid); err != nil { // add wlid to the namespace ignore list
+	// 		return err
+	// 	}
+	// }
+	return updateWorkload(wlid, REMOVE)
+}
+
+func attachWorkload(wlid string) error {
+	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
+	// 	// remove wlid from the ignore list
+	// 	ns := cautils.GetNamespaceFromWlid(wlid)
+	// 	namespaceWlid := cautils.GetWLID(cautils.GetClusterFromWlid(wlid), ns, "Namespace", ns)
+	// 	if err := includeWlid(namespaceWlid, wlid); err != nil { // add wlid to the namespace ignore list
+	// 		return err
+	// 	}
+	// }
+	return updateWorkload(wlid, REMOVE)
+}
 func signWorkload(wlid string) error {
 	var err error
 	workload, err := getWorkload(wlid)
