@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/websocket"
 
 	"github.com/golang/glog"
@@ -16,6 +17,10 @@ func main() {
 	flag.Parse()
 
 	displayBuildTag()
+	if err := k8sworkloads.SetupKubernetesClient(); err != nil {
+		glog.Error(err)
+		return
+	}
 
 	if err := cautils.LoadEnvironmentVaribles(); err != nil {
 		glog.Error(err)

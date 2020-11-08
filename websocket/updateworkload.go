@@ -116,8 +116,8 @@ func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command
 		injectWlid(&template.ObjectMeta.Annotations, wlid)
 		injectTime(&template.ObjectMeta.Annotations)
 		injectLabel(&template.ObjectMeta.Labels)
-		removeAnnotation(&template.ObjectMeta, CAInject)
-		removeAnnotation(objectMeta, CAInject)
+		removeAnnotation(&template.ObjectMeta, CAIgnoe)
+		removeAnnotation(objectMeta, CAIgnoe)
 
 	case RESTART:
 		injectTime(&template.ObjectMeta.Annotations)
@@ -128,8 +128,8 @@ func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command
 		restoreConatinerCommand(&template.Spec)
 		removeCASpec(&template.Spec)
 		removeCAMetadata(&template.ObjectMeta)
-		injectAnnotation(&template.ObjectMeta.Annotations, CAInject, "true")
-		injectAnnotation(&objectMeta.Annotations, CAInject, "true")
+		injectAnnotation(&template.ObjectMeta.Annotations, CAIgnoe, "true")
+		injectAnnotation(&objectMeta.Annotations, CAIgnoe, "true")
 	}
 	removeIDLabels(template.ObjectMeta.Labels)
 }

@@ -21,7 +21,7 @@ import (
 type DockerConfigJsonstructure map[string]map[string]types.AuthConfig
 
 // K8SConfig pointer to k8s config
-var K8SConfig *restclient.Config
+// var K8SConfig *restclient.Config
 
 // PatchOperation -
 type PatchOperation struct {
@@ -37,32 +37,24 @@ var KubernetesClient = &kubernetes.Clientset{}
 
 // SetupKubernetesClient -
 func SetupKubernetesClient() error {
-	var err error
-	KubernetesClient, err = kubernetes.NewForConfig(GetK8sConfig())
+	// var err error
+	kubeconfig, err := LoadK8sConfig()
+	KubernetesClient, err = kubernetes.NewForConfig(kubeconfig)
 	return err
 
 }
 
 // LoadK8sConfig load config from local file or from cluster
-func LoadK8sConfig() error {
+func LoadK8sConfig() (*restclient.Config, error) {
 	kubeconfigpath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigpath)
 	if err != nil {
 		kubeconfig, err = restclient.InClusterConfig()
 		if err != nil {
-			return fmt.Errorf("cant load config kubernetes (check config path), err: %v", err)
+			return nil, fmt.Errorf("cant load config kubernetes (check config path), err: %v", err)
 		}
 	}
-	K8SConfig = kubeconfig
-	return SetupKubernetesClient()
-}
-
-// GetK8sConfig get config. load if not loaded yer
-func GetK8sConfig() *restclient.Config {
-	if err := LoadK8sConfig(); err != nil {
-		return nil
-	}
-	return K8SConfig
+	return kubeconfig, nil
 }
 
 // GetSecretContent -
