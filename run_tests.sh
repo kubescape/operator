@@ -8,7 +8,7 @@ for path in $dirslist; do
     [[ $path == 'jenkinstools'* ]] && continue  # if jenkinstools subdirectory, skip
     dirname="./"$path
     basename="$(basename "${path}")"
-    if [[ $dirname == *"jenkinstools"* ]] || [[ $dirname == *"dist"* ]] || [[ $dirname == "src" ]] || [[ $dirname == "pkg" ]] || [[ $dirname == "bin" ]]; then
+    if [[ $dirname == *"jenkinstools"* ]]    || [[ $dirname == *"dist"* ]] || [[ $dirname == *"vendor"* ]] || [[ $dirname == "src" ]] || [[ $dirname == "pkg" ]] || [[ $dirname == "bin" ]]; then
         continue
     fi
     echo testing "${dirname}"
