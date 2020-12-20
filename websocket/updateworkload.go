@@ -8,15 +8,18 @@ import (
 	"strings"
 	"time"
 
+	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+
 	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+
 	// corev1beta1 "k8s.io/api/core/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func updateWorkload(wlid string, command string) error {
+func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
 	var err error
 	namespace := cautils.GetNamespaceFromWlid(wlid)
 	kind := cautils.GetKindFromWlid(wlid)
@@ -35,36 +38,36 @@ func updateWorkload(wlid string, command string) error {
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid)
+		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
 		_, err = k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Update(w)
 
 	case "ReplicaSet":
 		w := workload.(*appsv1.ReplicaSet)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid)
+		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
 		_, err = k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Update(w)
 
 	case "DaemonSet":
 		w := workload.(*appsv1.DaemonSet)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid)
+		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
 		_, err = k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Update(w)
 
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid)
+		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
 		w, err = k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Update(w)
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Template, command, wlid)
+		inject(&w.ObjectMeta, &w.Template, command, wlid, cmd)
 		_, err = k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Update(w)
 	case "CronJob":
 		w := workload.(*v1beta1.CronJob)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.JobTemplate.Spec.Template, command, wlid)
+		inject(&w.ObjectMeta, &w.Spec.JobTemplate.Spec.Template, command, wlid, cmd)
 		_, err = k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Update(w)
 
 	case "Job":
@@ -110,12 +113,24 @@ func updateWorkload(wlid string, command string) error {
 
 }
 
-func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command, wlid string) {
+func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command, wlid string, cmd *cautils.Command) {
+	jobsAnnot := reporterlib.JobsAnnotations{}
+	var annot []byte
+	if jobid, hasJobID := cmd.Args["jobID"]; hasJobID {
+		jobsAnnot.CurrJobID = fmt.Sprintf("%v", jobid)
+		jobsAnnot.LastActionID = "3"
+
+		annot, _ = json.Marshal(jobsAnnot)
+
+	}
 	switch command {
 	case UPDATE:
 		injectWlid(&template.ObjectMeta.Annotations, wlid)
 		injectTime(&template.ObjectMeta.Annotations)
 		injectLabel(&template.ObjectMeta.Labels)
+		if len(jobsAnnot.CurrJobID) > 0 {
+			template.ObjectMeta.Annotations[reporterlib.CAJobs] = string(annot)
+		}
 		removeAnnotation(&template.ObjectMeta, CAIgnoe)
 		removeAnnotation(objectMeta, CAIgnoe)
 
@@ -124,6 +139,9 @@ func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command
 	case SIGN:
 		updateLabel(&template.ObjectMeta.Labels)
 		injectTime(&template.ObjectMeta.Annotations)
+		if len(jobsAnnot.CurrJobID) > 0 {
+			template.ObjectMeta.Annotations[reporterlib.CAJobs] = string(annot)
+		}
 	case REMOVE:
 		restoreConatinerCommand(&template.Spec)
 		removeCASpec(&template.Spec)
@@ -146,6 +164,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 	case UPDATE:
 		injectWlid(&metadata.Annotations, wlid)
 		injectTime(&metadata.Annotations)
+		injectAnnotation(&(metadata.Annotations), reporterlib.CAJobs, wlid)
 		injectLabel(&metadata.Labels)
 		removeAnnotation(metadata, CAIgnoe)
 	case SIGN:

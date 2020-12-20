@@ -6,8 +6,12 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 
+	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+
 	"github.com/golang/glog"
 )
+
+var previousReports []string
 
 var (
 	// UPDATE workload
@@ -79,18 +83,54 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	return errorList
 }
 func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
-
+	reporter := reporterlib.BaseReport{ActionID: "2", ActionIDN: 1, Reporter: "websocket", Status: reporterlib.JobStarted, Target: c.Wlid}
+	if jobid, hasJobID := c.Args["jobID"]; hasJobID {
+		reporter.JobID = fmt.Sprintf("%v", jobid)
+	}
 	switch c.CommandName {
 	case UPDATE:
-		return updateWorkload(c.Wlid, UPDATE)
+		glog.Infof("in update/attach")
+		reporter.ActionName = "attach(inject wlid)"
+		reporter.SendAsRoutine(previousReports, true)
+		er := updateWorkload(c.Wlid, UPDATE, &c)
+		if er != nil {
+			reporter.AddError(er.Error())
+			reporter.Status = reporterlib.JobFailed
+		} else {
+			reporter.Status = reporterlib.JobSuccess
+		}
+		reporter.SendAsRoutine(previousReports, true)
+		return er
 	case RESTART:
-		return updateWorkload(c.Wlid, RESTART)
+		reporter.ActionName = "update(resetart)"
+		reporter.SendAsRoutine(previousReports, true)
+		er := updateWorkload(c.Wlid, RESTART, &c)
+		if er != nil {
+			reporter.AddError(er.Error())
+			reporter.Status = reporterlib.JobFailed
+		} else {
+			reporter.Status = reporterlib.JobSuccess
+		}
+		reporter.SendAsRoutine(previousReports, true)
+		return er
 	case REMOVE:
+		reporter.ActionName = "detach"
+		reporter.SendAsRoutine(previousReports, true)
 		return detachWorkload(c.Wlid)
 	case SIGN:
-		return signWorkload(c.Wlid)
+		reporter.ActionName = "sign"
+		reporter.SendAsRoutine(previousReports, true)
+		er := signWorkload(c.Wlid)
+		if er != nil {
+			reporter.AddError(er.Error())
+			reporter.Status = reporterlib.JobFailed
+		} else {
+			reporter.Status = reporterlib.JobSuccess
+		}
+		reporter.SendAsRoutine(previousReports, true)
+		return er
 	case INJECT:
-		return updateWorkload(c.Wlid, INJECT)
+		return updateWorkload(c.Wlid, INJECT, &c)
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
@@ -106,7 +146,7 @@ func detachWorkload(wlid string) error {
 	// 		return err
 	// 	}
 	// }
-	return updateWorkload(wlid, REMOVE)
+	return updateWorkload(wlid, REMOVE, &cautils.Command{})
 }
 
 func attachWorkload(wlid string) error {
@@ -118,7 +158,7 @@ func attachWorkload(wlid string) error {
 	// 		return err
 	// 	}
 	// }
-	return updateWorkload(wlid, REMOVE)
+	return updateWorkload(wlid, REMOVE, &cautils.Command{})
 }
 func signWorkload(wlid string) error {
 	var err error

@@ -2,7 +2,11 @@ module k8s-ca-websocket
 
 go 1.13
 
+replace asterix.cyberarmor.io/cyberarmor/capacketsgo => ./vendor/asterix.cyberarmor.io/cyberarmor/capacketsgo
+
 require (
+	asterix.cyberarmor.io/cyberarmor/capacketsgo v0.0.0
+	github.com/Microsoft/go-winio v0.4.15 // indirect
 	github.com/containerd/containerd v1.3.3 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.4.2-0.20200214221943-d8772509d1a2
