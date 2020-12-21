@@ -31,6 +31,7 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 			return err
 		}
 	}
+	glog.Infof("logged in")
 
 	// sign
 	if err := s.cacli.Sign(s.wlid, username, password); err != nil {

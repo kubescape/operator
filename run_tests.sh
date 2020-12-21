@@ -19,7 +19,10 @@ TESTS_FAILED=$(find -type f -name "*.txt" -exec grep -l 'FAIL' {} +)
 if [ -z "${TESTS_FAILED}" ]; then 
     echo "<---------------GOLANG Tests passed:---------------------->"
     echo $TESTS_FAILED
+    rm -rf *tests_xunit.xml
+    rm -rf *_tests_go.txt
     exit 1
 else
     echo "GOLANG Failed tests: $TESTS_FAILED"
 fi
+

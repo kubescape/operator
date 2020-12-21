@@ -78,8 +78,13 @@ func LoginCacli() error {
 	return err
 }
 
+// IsLoggedin test if logged in using the --status command
 func IsLoggedin() bool {
 	cacliObj := Cacli{}
-	status, _ := cacliObj.Status()
+	status, err := cacliObj.Status()
+	if err != nil {
+		glog.Errorf("IsLoggedin, %s", err.Error())
+		return false
+	}
 	return status.LoggedIn
 }

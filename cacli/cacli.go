@@ -102,7 +102,7 @@ func (cacli *Cacli) Status() (*Status, error) {
 	args = append(args, "--status")
 	statusReceive, err := runCacliCommand(args, true, time.Duration(1)*time.Minute)
 	if err == nil {
-		json.Unmarshal(statusReceive, status)
+		err = json.Unmarshal(statusReceive, status)
 	}
 	return status, err
 }
