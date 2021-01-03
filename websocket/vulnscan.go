@@ -1,7 +1,7 @@
 package websocket
 
 import (
-	"cacli"
+	"k8s-ca-websocket/cacli"
 	"log"
 )
 
