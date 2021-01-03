@@ -61,16 +61,6 @@ type DockerContainers struct {
 	SigningProfileName string            `json:"signingProfileName,omitempty"`
 }
 
-// ModulesInformation holds data of specific module in signing profile
-type ModulesInformation struct {
-	FullPath                string `json:"fullPath"`
-	Name                    string `json:"name"`
-	Mandatory               int    `json:"mandatory"`
-	Version                 string `json:"version,omitempty"`
-	SignatureMismatchAction int    `json:"signatureMismatchAction,omitempty"`
-	Type                    int    `json:"type,omitempty"`
-}
-
 // CredStruct holds the various credentials needed to do login into CA BE
 type CredStruct struct {
 	User     string `json:"user"`
@@ -78,6 +68,7 @@ type CredStruct struct {
 	Customer string `json:"customer"`
 }
 
+// ModulesInformation holds data of specific module in signing profile
 type ModulesInformation struct {
 	FullPath                string `json:"fullPath"`
 	Name                    string `json:"name"`

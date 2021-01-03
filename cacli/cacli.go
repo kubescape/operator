@@ -68,7 +68,7 @@ func (cacli *Cacli) GetSigningProfile(spName string) (*cautils.SigningProfile, e
 	if err == nil {
 		err = json.Unmarshal(spReceive, &sp)
 	}
-	return sp, err
+	return &sp, err
 }
 
 // Get command
@@ -100,7 +100,7 @@ func (cacli *Cacli) GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, e
 	if err == nil {
 		json.Unmarshal(wtReceive, &wt)
 	}
-	return wt, err
+	return &wt, err
 }
 
 // Sign command

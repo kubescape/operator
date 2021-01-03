@@ -1,8 +1,11 @@
 package websocket
 
 import (
+	"bytes"
+	"encoding/json"
 	"k8s-ca-websocket/cacli"
 	"log"
+	"net/http"
 )
 
 func sendWorkloadToVulnerabilityScanner(vulnScanURL string, wlid string) {
@@ -17,7 +20,7 @@ func sendWorkloadToVulnerabilityScanner(vulnScanURL string, wlid string) {
 		return
 	}
 	spName := workload.Containers[0].SigningProfileName
-	sp, err := cacli.GetSigningProfile(spName)
+	sp, err := caCliClient.GetSigningProfile(spName)
 	if err != nil {
 		log.Printf("failed retrieving signing profile from cacli %s", wlid)
 		return

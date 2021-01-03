@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
+	"os"
 
 	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
 
@@ -167,7 +168,7 @@ func signWorkload(wlid string) error {
 		return err
 	}
 
-	vulnScanURL, found: = os.LookupEnv("CA_VULNSCAN")
+	vulnScanURL, found := os.LookupEnv("CA_VULNSCAN")
 	if found {
 		go sendWorkloadToVulnerabilityScanner(vulnScanURL, wlid)
 	}
