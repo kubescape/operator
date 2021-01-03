@@ -12,6 +12,8 @@ import (
 type ICacli interface {
 	Login(globalLoginCredentials cautils.CredStruct) error
 	Get(wlid string) (cautils.WorkloadTemplate, error)
+	GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, error)
+	GetSigningProfile(spName string) (*cautils.SigningProfile, error)
 	Sign(wlid, user, password string) error
 	Status() (stat *Status, err error)
 }
@@ -53,6 +55,22 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	return err
 }
 
+// GetSigningProfile command
+// func (cacli *Cacli) GetSigningProfile(spName string) (*cautils.SigningProfile, error) {
+func (cacli *Cacli) GetSigningProfile(spName string) (*cautils.SigningProfile, error) {
+	sp := cautils.SigningProfile{}
+	args := []string{}
+	args = append(args, "sp")
+	args = append(args, "get")
+	args = append(args, "-n")
+	args = append(args, spName)
+	spReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	if err == nil {
+		err = json.Unmarshal(spReceive, &sp)
+	}
+	return sp, err
+}
+
 // Get command
 // func (cacli *Cacli) Get(wlid string) error {
 func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
@@ -60,6 +78,22 @@ func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
 	args := []string{}
 	args = append(args, "wt")
 	args = append(args, "get")
+	args = append(args, "-wlid")
+	args = append(args, wlid)
+	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	if err == nil {
+		json.Unmarshal(wtReceive, &wt)
+	}
+	return wt, err
+}
+
+// GetWtTriple command
+// func (cacli *Cacli) Get(wlid string) error {
+func (cacli *Cacli) GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, error) {
+	wt := cautils.WorkloadTemplateTriple{}
+	args := []string{}
+	args = append(args, "wt")
+	args = append(args, "triplet")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
 	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)

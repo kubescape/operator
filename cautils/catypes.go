@@ -29,6 +29,11 @@ type WorkloadTemplate struct {
 	Containers                 []DockerContainers       `json:"containers"`
 	WorkloadTemplateAttributes map[string]string        `json:"attributes,omitempty"`
 }
+type WorkloadTemplateTriple struct {
+	CustomerGUID  string `json:"customerGUID"`
+	SolutionGUID  string `json:"solutionGUID"`
+	ComponentGUID string `json:"componentGUID,omitempty"`
+}
 
 // WorkloadTemplateMetaInfo attributes in workload
 type WorkloadTemplateMetaInfo struct {
@@ -71,4 +76,51 @@ type CredStruct struct {
 	User     string `json:"user"`
 	Password string `json:"password"`
 	Customer string `json:"customer"`
+}
+
+type ModulesInformation struct {
+	FullPath                string `json:"fullPath"`
+	Name                    string `json:"name"`
+	Mandatory               int    `json:"mandatory"`
+	Version                 string `json:"version,omitempty"`
+	SignatureMismatchAction int    `json:"signatureMismatchAction,omitempty"`
+	Type                    int    `json:"type,omitempty"`
+}
+
+// ExecutablesList holds the list of executables in this signing profile
+type ExecutablesList struct {
+	MainProcess                     string               `json:"mainProcess"`
+	FullProcessCommandLine          string               `json:"fullProcessCommandLine,omitempty"`
+	FullProcessEnvironmentVariables map[string]string    `json:"fullProcessEnvironmentVariables,omitempty"`
+	ModulesInfo                     []ModulesInformation `json:"modulesInfo"`
+	Filters                         FiltersSection       `json:"filter,omitempty"`
+}
+
+// FiltersSection holds the filter section of  ExecutablesList
+type FiltersSection struct {
+	IncludePaths      []string `json:"includePaths,omitempty"`
+	IncludeExtensions []string `json:"includeExtensions,omitempty"`
+}
+
+// SigningProfile signingProfile configuration
+type SigningProfile struct {
+	Name           string                  `json:"name"`
+	GUID           string                  `json:"guid"`
+	Platform       int64                   `json:"platform"`
+	Architecture   int64                   `json:"architecture"`
+	CreationTime   string                  `json:"creation_time"`
+	LastEditTime   string                  `json:"last_edit_time"`
+	Attributes     SignigProfileAttributes `json:"attributes"`
+	ExecutableList []ExecutablesList       `json:"executablesList"` // Use structs from catypes
+	FullPathMap    map[string]bool         `json:"-"`
+}
+
+// SignigProfileAttributes -
+type SignigProfileAttributes struct {
+	IsStockProfile    bool   `json:"isStockProfile,omitempty"`
+	ContainerName     string `json:"containerName,omitempty"`
+	DockerImageTag    string `json:"dockerImageTag,omitempty"`
+	DockerImageSHA256 string `json:"dockerImageSHA256,omitempty"`
+	GeneratedFor      string `json:"generatedFor,omitempty"`
+	GeneratedFrom     string `json:"generatedFrom,omitempty"`
 }

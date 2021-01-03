@@ -167,6 +167,11 @@ func signWorkload(wlid string) error {
 		return err
 	}
 
+	vulnScanURL, found: = os.LookupEnv("CA_VULNSCAN")
+	if found {
+		go sendWorkloadToVulnerabilityScanner(vulnScanURL, wlid)
+	}
+
 	s := sign.NewSigner(wlid)
 	if cautils.CA_USE_DOCKER {
 		err = s.SignImageDocker(workload)
