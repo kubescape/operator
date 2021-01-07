@@ -84,7 +84,7 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	return errorList
 }
 func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
-	reporter := reporterlib.BaseReport{ActionID: "2", ActionIDN: 1, Reporter: "websocket", Status: reporterlib.JobStarted, Target: c.Wlid}
+	reporter := reporterlib.BaseReport{ActionID: "2", ActionIDN: 1, Reporter: "websocket", Status: reporterlib.JobStarted, Target: c.Wlid, CustomerGUID: cautils.CA_CUSTOMER_GUID}
 	if jobid, hasJobID := c.Args["jobID"]; hasJobID {
 		reporter.JobID = fmt.Sprintf("%v", jobid)
 	}
