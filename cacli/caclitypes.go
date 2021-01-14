@@ -9,3 +9,10 @@ type Status struct {
 	UserName         string `json:"user-name"`
 	LoggedIn         bool   `json:"logged-in"`
 }
+
+// SecretMetadata cacli secret metadata
+type SecretMetadata struct {
+	Version   int    `json:"version"`
+	Algorithm string `json:"algorithm"`
+	KeyID     string `json:"keyID"`
+}

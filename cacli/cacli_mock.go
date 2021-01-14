@@ -98,3 +98,37 @@ func (caclim *CacliMock) Status() (*Status, error) {
 		LoggedIn:         true,
 	}, nil
 }
+
+// SecretMetadata -
+func (caclim *CacliMock) SecretMetadata(secret string) (*SecretMetadata, error) {
+	return &SecretMetadata{
+		Version:   1,
+		Algorithm: "CTR",
+		KeyID:     "a2c5df325ba333fd6d96b911043f6cc7",
+	}, nil
+
+}
+
+// GetKey -
+func (caclim *CacliMock) GetKey(keyID string) (*cautils.Key, error) {
+	return &cautils.Key{
+		GUID:        "",
+		Name:        "",
+		CustomID:    "a2c5df325ba333fd6d96b911043f6cc7",
+		Key:         "327b4509ac382d31dbd4b549ac5fa07b",
+		Algorithm:   "CTR",
+		Description: "mock key",
+		BackupInDB:  true,
+	}, nil
+
+}
+
+// SecretEncrypt -
+func (caclim *CacliMock) SecretEncrypt(message string) ([]byte, error) {
+	return nil, nil
+}
+
+// SecretDecrypt -
+func (caclim *CacliMock) SecretDecrypt(message string) ([]byte, error) {
+	return nil, nil
+}

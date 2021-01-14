@@ -115,3 +115,33 @@ type SignigProfileAttributes struct {
 	GeneratedFor      string `json:"generatedFor,omitempty"`
 	GeneratedFrom     string `json:"generatedFrom,omitempty"`
 }
+
+// Key portal key structure
+type Key struct {
+	GUID                string            `json:"guid"`
+	Name                string            `json:"name"`
+	CustomID            string            `json:"custom_id"`
+	Key                 string            `json:"key"`
+	Algorithm           string            `json:"algorithm"`
+	Description         string            `json:"description"`
+	DliveryFlags        string            `json:"delivery_flags"`
+	BackupInDB          bool              `json:"backup_in_ca_db"`
+	BusinessRulePackage interface{}       `json:"business_rule_package"`
+	Attributes          map[string]string `json:"attributes"`
+}
+
+// SecretPolicy portal SecretPolicy structure
+type SecretPolicy struct {
+	AccessPolicy     string                `json:"guid"`
+	Name             string                `json:"name"`
+	EncryptionStatus string                `json:"custom_id"`
+	KeyID            string                `json:"key"`
+	Type             string                `json:"algorithm"`
+	AccessSet        SecretAccessSetPolicy `json:"secretAccessSetPolicy"`
+}
+
+// SecretAccessSetPolicy portal SecretPolicy structure
+type SecretAccessSetPolicy struct {
+	Wlids      []string          `json:"wlids"`
+	Attributes map[string]string `json:"attributes"`
+}

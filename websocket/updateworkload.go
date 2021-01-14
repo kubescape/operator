@@ -16,7 +16,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	// corev1beta1 "k8s.io/api/core/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
@@ -93,12 +94,12 @@ func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
 	case "Pod":
 		w := workload.(*corev1.Pod)
 		injectPod(&w.ObjectMeta, &w.Spec, command, wlid)
-		err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Delete(w.Name, &v1.DeleteOptions{})
+		err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Delete(w.Name, &metav1.DeleteOptions{})
 		if err == nil {
 			w.Status = corev1.PodStatus{}
 			w.ObjectMeta.ResourceVersion = ""
 			for {
-				_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(w.Name, v1.GetOptions{})
+				_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(w.Name, metav1.GetOptions{})
 				if err != nil {
 					break
 				}
@@ -113,7 +114,7 @@ func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
 
 }
 
-func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command, wlid string, cmd *cautils.Command) {
+func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, command, wlid string, cmd *cautils.Command) {
 	jobsAnnot := reporterlib.JobsAnnotations{}
 	var annot []byte
 	if jobid, hasJobID := cmd.Args["jobID"]; hasJobID {
@@ -152,14 +153,14 @@ func inject(objectMeta *v1.ObjectMeta, template *corev1.PodTemplateSpec, command
 	removeIDLabels(template.ObjectMeta.Labels)
 }
 
-func workloadUpdate(objectMeta *v1.ObjectMeta, command, wlid string) {
+func workloadUpdate(objectMeta *metav1.ObjectMeta, command, wlid string) {
 	switch command {
 	case REMOVE:
 		removeCAMetadata(objectMeta)
 	}
 }
 
-func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
+func injectPod(metadata *metav1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
 	switch command {
 	case UPDATE:
 		injectWlid(&metadata.Annotations, wlid)
@@ -182,7 +183,7 @@ func injectPod(metadata *v1.ObjectMeta, spec *corev1.PodSpec, command, wlid stri
 	removeIDLabels(metadata.Labels)
 }
 
-func injectNS(metadata *v1.ObjectMeta, command string) {
+func injectNS(metadata *metav1.ObjectMeta, command string) {
 	switch command {
 	case INJECT:
 		injectTime(&metadata.Annotations)
@@ -316,7 +317,7 @@ func injectAnnotation(annotations *map[string]string, key, val string) {
 	(*annotations)[key] = val
 }
 
-func removeAnnotation(meatdata *v1.ObjectMeta, key string) {
+func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
 	if meatdata.Annotations != nil {
 		delete(meatdata.Annotations, key)
 	}
@@ -345,7 +346,7 @@ func injectLabel(labels *map[string]string) {
 	(*labels)[CAInjectOld] = "add" // DEPRECATED
 }
 
-func removeCAMetadata(meatdata *v1.ObjectMeta) {
+func removeCAMetadata(meatdata *metav1.ObjectMeta) {
 	if meatdata.Labels != nil {
 		delete(meatdata.Labels, CAInject)
 		delete(meatdata.Labels, CAInjectOld) // DEPRECATED
@@ -361,10 +362,10 @@ func removeCAMetadata(meatdata *v1.ObjectMeta) {
 	}
 }
 
-func cleanSelector(selector *v1.LabelSelector) {
+func cleanSelector(selector *metav1.LabelSelector) {
 	delete(selector.MatchLabels, controllerLable)
 	if len(selector.MatchLabels) == 0 && len(selector.MatchLabels) == 0 {
-		selector = &v1.LabelSelector{}
+		selector = &metav1.LabelSelector{}
 	}
 }
 
@@ -440,4 +441,42 @@ func isInjectLableFound(labels map[string]string) bool {
 		return true
 	}
 	return false
+}
+
+// CreateSecret create secret in k8s
+func CreateSecret(secret *corev1.Secret) error {
+
+	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Create(secret)
+	return err
+}
+
+// UpdateSecret create secret in k8s
+func UpdateSecret(secret *corev1.Secret) error {
+
+	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(secret)
+	return err
+}
+
+// DeleteSecret delete secret from k8s
+func DeleteSecret(namespace, secretName string) error {
+
+	err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Delete(secretName, &metav1.DeleteOptions{})
+	return err
+}
+
+// GetSecret get secret from k8s
+func GetSecret(namespace, secretName string) (*corev1.Secret, error) {
+
+	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Get(secretName, metav1.GetOptions{})
+}
+
+// ListSecrets list secret from k8s
+func ListSecrets(namespace string, labelSelector map[string]string) (*corev1.SecretList, error) {
+
+	listOptions := metav1.ListOptions{}
+	if labelSelector != nil {
+		set := labels.Set(labelSelector)
+		listOptions.LabelSelector = set.AsSelector().String()
+	}
+	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).List(listOptions)
 }

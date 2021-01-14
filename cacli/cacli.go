@@ -2,6 +2,7 @@ package cacli
 
 import (
 	"encoding/json"
+	"fmt"
 	"k8s-ca-websocket/cautils"
 	"time"
 
@@ -16,6 +17,11 @@ type ICacli interface {
 	GetSigningProfile(spName string) (*cautils.SigningProfile, error)
 	Sign(wlid, user, password string) error
 	Status() (stat *Status, err error)
+
+	SecretMetadata(string) (*SecretMetadata, error)
+	SecretEncrypt(string) ([]byte, error)
+	SecretDecrypt(string) ([]byte, error)
+	GetKey(string) (*cautils.Key, error)
 }
 
 // Cacli commands
@@ -139,4 +145,79 @@ func (cacli *Cacli) Status() (*Status, error) {
 		err = json.Unmarshal(statusReceive, status)
 	}
 	return status, err
+}
+
+// SecretMetadata -
+func (cacli *Cacli) SecretMetadata(message string) (*SecretMetadata, error) {
+	secretMetadata := &SecretMetadata{}
+	args := []string{}
+	args = append(args, "secret-policy")
+	args = append(args, "decrypt")
+	if message != "" {
+		args = append(args, "--message")
+		args = append(args, message)
+	}
+	args = append(args, "--display-metadata")
+	// args = append(args, "--base64")
+
+	statusReceive, err := runCacliCommand(args, true, time.Duration(2)*time.Minute)
+	if err == nil {
+		json.Unmarshal(statusReceive, secretMetadata)
+	}
+	return secretMetadata, err
+}
+
+// GetKey -
+func (cacli *Cacli) GetKey(keyID string) (*cautils.Key, error) {
+	key := &cautils.Key{}
+	args := []string{}
+	args = append(args, "key")
+	args = append(args, "get")
+	args = append(args, "-id")
+	args = append(args, keyID)
+	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	if err == nil {
+		json.Unmarshal(wtReceive, key)
+		if key.Key == "" {
+			return key, fmt.Errorf("user does not have key permissions")
+		}
+	}
+	return key, err
+}
+
+// SecretEncrypt -
+func (cacli *Cacli) SecretEncrypt(message string) ([]byte, error) {
+	args := []string{}
+	args = append(args, "secret-policy")
+	args = append(args, "encrypt")
+	if message != "" {
+		args = append(args, "--message")
+		args = append(args, message)
+	}
+	// args = append(args, "--base64")
+
+	messageByte, err := runCacliCommand(args, false, time.Duration(2)*time.Minute)
+	// if err == nil {
+	// 	json.Unmarshal(statusReceive, secretMetadata)
+	// }
+	return messageByte, err
+}
+
+// SecretDecrypt -
+func (cacli *Cacli) SecretDecrypt(message string) ([]byte, error) {
+	// secretMetadata := &SecretMetadata{}
+	args := []string{}
+	args = append(args, "secret-policy")
+	args = append(args, "decrypt")
+	if message != "" {
+		args = append(args, "--message")
+		args = append(args, message)
+	}
+	// args = append(args, "--base64")
+
+	messageByte, err := runCacliCommand(args, true, time.Duration(2)*time.Minute)
+	// if err == nil {
+	// 	json.Unmarshal(statusReceive, secretMetadata)
+	// }
+	return messageByte, err
 }

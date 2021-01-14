@@ -7,6 +7,8 @@ import (
 	"k8s-ca-websocket/sign"
 	"os"
 
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+
 	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
 
 	"github.com/golang/glog"
@@ -16,15 +18,20 @@ var previousReports []string
 
 var (
 	// UPDATE workload
-	UPDATE = "update"
+	UPDATE string = "update"
 	// REMOVE workload
-	REMOVE = "remove"
+	REMOVE string = "remove"
 	// SIGN image
-	SIGN = "sign"
+	SIGN string = "sign"
 	// INJECT namespace
-	INJECT = "inject"
+	INJECT string = "inject"
 	// RESTART pod
-	RESTART = "restart"
+	RESTART string = "restart"
+
+	// ENCRYPT secret
+	ENCRYPT string = "encryptSecret"
+	// DECRYPT secret
+	DECRYPT string = "decryptSecret"
 
 	CALabel = "cyberarmor"
 
@@ -56,24 +63,29 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 		return []error{err}
 	}
 	for _, c := range commands.Commands {
+		sid := ""
+		var err error
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
 			glog.Error(err)
 			return []error{err}
 		}
-		if c.Wlid == "" {
-			err := fmt.Errorf("wlid not found. command: %s", c.CommandName)
-			glog.Error(err)
-			return []error{err}
-		}
-		if err := cautils.IsWalidValid(c.Wlid); err != nil {
-			err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
-			glog.Error(err)
-			return []error{err}
+		if c.Wlid != "" {
+			if err := cautils.IsWalidValid(c.Wlid); err != nil {
+				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
+				glog.Error(err)
+				return []error{err}
+			}
+		} else {
+			if sid, err = getSIDFromArgs(c.Args); err != nil {
+				err := fmt.Errorf("invalid secret-id, sid: %s", err.Error(), c.Wlid)
+				glog.Error(err)
+				return []error{err}
+			}
 		}
 		status := "SUCCESS"
-		glog.Infof("Running %s command, wlid: %s", c.CommandName, c.Wlid)
-		if err := wsh.runCommand(c); err != nil {
+
+		if err := wsh.runCommand(c, sid); err != nil {
 			glog.Errorf("%v", err)
 			status = "FAIL"
 			errorList = append(errorList, err)
@@ -83,7 +95,14 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	}
 	return errorList
 }
-func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
+func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
+	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
+	if c.Wlid != "" {
+		logCommandInfo += fmt.Sprintf(", wlid: %s", c.Wlid)
+	} else {
+		logCommandInfo += fmt.Sprintf(", secre-id: %s", sid)
+	}
+	glog.Infof(logCommandInfo)
 	reporter := reporterlib.BaseReport{ActionID: "2", ActionIDN: 1, Reporter: "websocket", Status: reporterlib.JobStarted, Target: c.Wlid, CustomerGUID: cautils.CA_CUSTOMER_GUID}
 	if jobid, hasJobID := c.Args["jobID"]; hasJobID {
 		reporter.JobID = fmt.Sprintf("%v", jobid)
@@ -132,6 +151,32 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 		return er
 	case INJECT:
 		return updateWorkload(c.Wlid, INJECT, &c)
+	case ENCRYPT:
+		reporter.ActionName = "encrypt secret"
+		reporter.SendAsRoutine(previousReports, true)
+		secretHandler := NewSecretHandler(sid)
+		err := secretHandler.encryptSecret(sid)
+		if err != nil {
+			reporter.AddError(err.Error())
+			reporter.Status = reporterlib.JobFailed
+		} else {
+			reporter.Status = reporterlib.JobSuccess
+		}
+		reporter.SendAsRoutine(previousReports, true)
+		return err
+	case DECRYPT:
+		reporter.ActionName = "decrypt secret"
+		reporter.SendAsRoutine(previousReports, true)
+		secretHandler := NewSecretHandler(sid)
+		err := secretHandler.decryptSecret(sid)
+		if err != nil {
+			reporter.AddError(err.Error())
+			reporter.Status = reporterlib.JobFailed
+		} else {
+			reporter.Status = reporterlib.JobSuccess
+		}
+		reporter.SendAsRoutine(previousReports, true)
+		return err
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
@@ -186,4 +231,19 @@ func signWorkload(wlid string) error {
 	glog.Infof("Done signing, updating workload, wlid: %s", wlid)
 	// err = updateWorkload(wlid, SIGN)
 	return err
+}
+
+func getSIDFromArgs(args map[string]interface{}) (string, error) {
+	sidInterface, ok := args["sid"]
+	if !ok {
+		return "", fmt.Errorf("sid not found in args")
+	}
+	sid, ok := sidInterface.(string)
+	if !ok || sid == "" {
+		return "", fmt.Errorf("sid found in args but empty")
+	}
+	if _, err := secrethandling.SplitSecretID(sid); err != nil {
+		return "", err
+	}
+	return sid, nil
 }
