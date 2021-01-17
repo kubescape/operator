@@ -72,6 +72,18 @@ func NewCacliMock() *CacliMock {
 	return &CacliMock{}
 }
 
+// GetSigningProfile command
+func (caclim *CacliMock) GetSigningProfile(spName string) (*cautils.SigningProfile, error) {
+	sp := cautils.SigningProfile{}
+	return &sp, nil
+}
+
+// GetWtTriple command
+func (caclim *CacliMock) GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, error) {
+	wt := cautils.WorkloadTemplateTriple{}
+	return &wt, nil
+}
+
 // Login -
 func (caclim *CacliMock) Login(globalLoginCredentials cautils.CredStruct) error {
 	return nil
@@ -124,11 +136,11 @@ func (caclim *CacliMock) GetKey(keyID string) (*cautils.Key, error) {
 }
 
 // SecretEncrypt -
-func (caclim *CacliMock) SecretEncrypt(message string) ([]byte, error) {
+func (caclim *CacliMock) SecretEncrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
 	return nil, nil
 }
 
 // SecretDecrypt -
-func (caclim *CacliMock) SecretDecrypt(message string) ([]byte, error) {
+func (caclim *CacliMock) SecretDecrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
 	return nil, nil
 }

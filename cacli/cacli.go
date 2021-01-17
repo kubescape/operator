@@ -19,8 +19,8 @@ type ICacli interface {
 	Status() (stat *Status, err error)
 
 	SecretMetadata(string) (*SecretMetadata, error)
-	SecretEncrypt(string) ([]byte, error)
-	SecretDecrypt(string) ([]byte, error)
+	SecretEncrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error)
+	SecretDecrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error)
 	GetKey(string) (*cautils.Key, error)
 }
 
@@ -186,7 +186,7 @@ func (cacli *Cacli) GetKey(keyID string) (*cautils.Key, error) {
 }
 
 // SecretEncrypt -
-func (cacli *Cacli) SecretEncrypt(message string) ([]byte, error) {
+func (cacli *Cacli) SecretEncrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
 	args := []string{}
 	args = append(args, "secret-policy")
 	args = append(args, "encrypt")
@@ -194,18 +194,24 @@ func (cacli *Cacli) SecretEncrypt(message string) ([]byte, error) {
 		args = append(args, "--message")
 		args = append(args, message)
 	}
-	// args = append(args, "--base64")
+	if inputFile != "" {
+		args = append(args, "--input")
+		args = append(args, inputFile)
+	}
+	if outputFile != "" {
+		args = append(args, "--output")
+		args = append(args, outputFile)
+	}
+	if base64Enc {
+		args = append(args, "--base64")
+	}
 
 	messageByte, err := runCacliCommand(args, false, time.Duration(2)*time.Minute)
-	// if err == nil {
-	// 	json.Unmarshal(statusReceive, secretMetadata)
-	// }
 	return messageByte, err
 }
 
 // SecretDecrypt -
-func (cacli *Cacli) SecretDecrypt(message string) ([]byte, error) {
-	// secretMetadata := &SecretMetadata{}
+func (cacli *Cacli) SecretDecrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
 	args := []string{}
 	args = append(args, "secret-policy")
 	args = append(args, "decrypt")
@@ -213,11 +219,19 @@ func (cacli *Cacli) SecretDecrypt(message string) ([]byte, error) {
 		args = append(args, "--message")
 		args = append(args, message)
 	}
-	// args = append(args, "--base64")
+	if inputFile != "" {
+		args = append(args, "--input")
+		args = append(args, inputFile)
+	}
+	if outputFile != "" {
+		args = append(args, "--output")
+		args = append(args, outputFile)
+	}
+	if base64Enc {
+		args = append(args, "--base64")
+	}
 
 	messageByte, err := runCacliCommand(args, true, time.Duration(2)*time.Minute)
-	// if err == nil {
-	// 	json.Unmarshal(statusReceive, secretMetadata)
-	// }
+
 	return messageByte, err
 }

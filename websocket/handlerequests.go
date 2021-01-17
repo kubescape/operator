@@ -78,7 +78,7 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 			}
 		} else {
 			if sid, err = getSIDFromArgs(c.Args); err != nil {
-				err := fmt.Errorf("invalid secret-id, sid: %s", err.Error(), c.Wlid)
+				err := fmt.Errorf("invalid secret-id: %s", err.Error())
 				glog.Error(err)
 				return []error{err}
 			}
@@ -155,7 +155,7 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
 		reporter.ActionName = "encrypt secret"
 		reporter.SendAsRoutine(previousReports, true)
 		secretHandler := NewSecretHandler(sid)
-		err := secretHandler.encryptSecret(sid)
+		err := secretHandler.encryptSecret()
 		if err != nil {
 			reporter.AddError(err.Error())
 			reporter.Status = reporterlib.JobFailed
@@ -168,7 +168,7 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
 		reporter.ActionName = "decrypt secret"
 		reporter.SendAsRoutine(previousReports, true)
 		secretHandler := NewSecretHandler(sid)
-		err := secretHandler.decryptSecret(sid)
+		err := secretHandler.decryptSecret()
 		if err != nil {
 			reporter.AddError(err.Error())
 			reporter.Status = reporterlib.JobFailed

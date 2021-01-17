@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"fmt"
-	"testing"
 )
 
 // //wss://postman.eudev2.cyberarmorsoft.com/waitfornotification/5d817063-096f-4d91-b39b-8665240080af-dav-att-test1
@@ -32,10 +31,31 @@ func CreateWebSocketHandlerMock() *WebSocketHandler {
 	}
 
 }
-func TestDoNothoing1(t *testing.T) {
-	// wsh := CreateWebSocketHandlerMock()
-	// cautils.CA_IGNORE_VERIFY_CACLI = true
-	// if _, err := wsh.dialWebSocket(); err != nil {
-	// 	t.Errorf("%v", err)
-	// }
-}
+
+// func TestDoNothoing1(t *testing.T) {
+// 	k8sworkloads.SetupKubernetesClient()
+// 	sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
+// 	sh := NewSecretHandler(sid)
+// 	if err := sh.encryptSecret(); err != nil {
+// 		t.Errorf(err.Error())
+// 	}
+// 	// wsh := CreateWebSocketHandlerMock()
+// 	// cautils.CA_IGNORE_VERIFY_CACLI = true
+// 	// if _, err := wsh.dialWebSocket(); err != nil {
+// 	// 	t.Errorf("%v", err)
+// 	// }
+// }
+
+// func TestDoNothoing2(t *testing.T) {
+// 	k8sworkloads.SetupKubernetesClient()
+// 	sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
+// 	sh := NewSecretHandler(sid)
+// 	if err := sh.decryptSecret(); err != nil {
+// 		t.Errorf(err.Error())
+// 	}
+// 	// wsh := CreateWebSocketHandlerMock()
+// 	// cautils.CA_IGNORE_VERIFY_CACLI = true
+// 	// if _, err := wsh.dialWebSocket(); err != nil {
+// 	// 	t.Errorf("%v", err)
+// 	// }
+// }
