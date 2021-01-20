@@ -108,6 +108,12 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 		}
 	}
 
+	// remove shadow secret
+	shadowSecret := secrethandling.ArmoShadowSecretPrefix + secretHandler.secretName
+	if err := DeleteSecret(secretHandler.namespace, secrethandling.ArmoShadowSecretPrefix+secretHandler.secretName); err != nil {
+		return fmt.Errorf("failed removing shadow secret %s, reason: %s", shadowSecret, err.Error())
+	}
+
 	return nil
 }
 
