@@ -224,7 +224,7 @@ func (secretHandler *SecretHandler) getFieldsToEncryptFromSecretPolicy(secretDat
 		for _, subsecret := range secretPolicy.Secrets[secrets].KeyIDs {
 			secretData, ok := secretDate[subsecret.SubSecretName]
 			if !ok {
-				return fieldsToEncrypt, fmt.Errorf("subsecret %s not found in sid '%s' data", secretHandler.subsecretName, secretHandler.sid)
+				return fieldsToEncrypt, fmt.Errorf("subsecret %s not found in sid '%s' data", subsecret.SubSecretName, secretHandler.sid)
 			}
 			if !secrethandling.HasSecretTLV(secretData) {
 				fieldsToEncrypt[subsecret.SubSecretName] = subsecret.KeyID
