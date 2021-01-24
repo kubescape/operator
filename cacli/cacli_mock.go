@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"k8s-ca-websocket/cautils"
+
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
 )
 
 // WrokloadTemplateWordpressMock worpres mock
@@ -136,11 +138,36 @@ func (caclim *CacliMock) GetKey(keyID string) (*cautils.Key, error) {
 }
 
 // SecretEncrypt -
-func (caclim *CacliMock) SecretEncrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
+func (caclim *CacliMock) SecretEncrypt(message, inputFile, outputFile, keyID string, base64Enc bool) ([]byte, error) {
 	return nil, nil
 }
 
 // SecretDecrypt -
 func (caclim *CacliMock) SecretDecrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
 	return nil, nil
+}
+
+// GetSecretAccessPolicy -
+func (caclim *CacliMock) GetSecretAccessPolicy(sid, name, cluster, namespace string) ([]secrethandling.SecretAccessPolicy, error) {
+
+	return []secrethandling.SecretAccessPolicy{
+		{
+			Designators: []secrethandling.PortalDesignator{
+				{
+					WLID: "wlid://cluster-system-test/namespace-default/deployment-wordpress",
+				},
+			},
+			Secrets: []secrethandling.PortalSecretDefinition{
+				{
+					SecretID: "sid://cluster-system-test/namespace-default/secret-credentials",
+					KeyIDs: []secrethandling.PortalSubSecretDefinition{
+						{
+							SubSecretName: "",
+							KeyID:         "",
+						},
+					},
+				},
+			},
+		},
+	}, nil
 }

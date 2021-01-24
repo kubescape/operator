@@ -30,7 +30,7 @@ func GetCALoginCred() (cautils.CredStruct, error) {
 	return credStruct, nil
 }
 
-func runCacliCommandRepeate(arg []string, display bool, timeout time.Duration) ([]byte, error) {
+func runCacliCommandRepeat(arg []string, display bool, timeout time.Duration) ([]byte, error) {
 	rep, err := runCacliCommand(arg, display, timeout)
 	if err != nil {
 		if !IsLoggedin() {

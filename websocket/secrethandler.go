@@ -46,17 +46,26 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 		return fmt.Errorf("no data in secret to encrypt")
 	}
 
+	secretPolicyList, err := secretHandler.cacli.GetSecretAccessPolicy(secretHandler.sid, "", "", "")
+	if err != nil {
+		return err
+	}
+	if len(secretPolicyList) == 0 {
+		return fmt.Errorf("somthing went wrong, no secret policy found for secret-id: '%s'", secretHandler.sid)
+	}
+	secretPolicy := secretPolicyList[0]
+
 	// set subsecret fields to encrypt
-	fieldsToEncrypt, err := secretHandler.getFieldsToEncrypt(secret.Data)
+	fieldsToEncrypt, err := secretHandler.getFieldsToEncrypt(secret.Data, &secretPolicy)
 	if err != nil {
 		return err
 	}
 
 	updateSecret := false
 
-	// encrpyt subsecret/s
-	for i := range fieldsToEncrypt {
-		if err := secretHandler.encryptSubsecret(secret.Data, fieldsToEncrypt[i]); err != nil {
+	// encrypt subsecret/s
+	for subsecretName, keyID := range fieldsToEncrypt {
+		if err := secretHandler.encryptSubsecret(secret.Data, subsecretName, keyID); err != nil {
 			return err
 		}
 		updateSecret = true
@@ -92,7 +101,7 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 
 	updateSecret := false
 
-	// encrpyt subsecret/s
+	// encrypt subsecret/s
 	for i := range fieldsToDecrypt {
 		if err := secretHandler.decryptSubsecret(secret.Data, fieldsToDecrypt[i]); err != nil {
 			return err
@@ -117,11 +126,11 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 	return nil
 }
 
-func (secretHandler *SecretHandler) encryptSubsecret(secretDate map[string][]byte, subsecret string) error {
+func (secretHandler *SecretHandler) encryptSubsecret(secretDate map[string][]byte, subsecret string, keyID string) error {
 	glog.Infof("encrypting subsecret '%s', sid: '%s'", subsecret, secretHandler.sid)
 
 	tmpFileName := fmt.Sprintf("/tmp/enc-%s.%s.%s.%d", secretHandler.namespace, secretHandler.secretName, subsecret, rand.Int())
-	_, err := secretHandler.cacli.SecretEncrypt(string(secretDate[subsecret]), "", tmpFileName, false)
+	_, err := secretHandler.cacli.SecretEncrypt(string(secretDate[subsecret]), "", tmpFileName, keyID, false)
 
 	encryptedData, err := ioutil.ReadFile(tmpFileName)
 	if err != nil {
@@ -158,21 +167,25 @@ func (secretHandler *SecretHandler) decryptSubsecret(secretDate map[string][]byt
 	return nil
 }
 
-func (secretHandler *SecretHandler) getFieldsToEncrypt(secretDate map[string][]byte) ([]string, error) {
-	fieldsToEncrypt := []string{}
+func (secretHandler *SecretHandler) getFieldsToEncrypt(secretDate map[string][]byte, secretPolicy *secrethandling.SecretAccessPolicy) (map[string]string, error) {
+	fieldsToEncrypt, err := secretHandler.getFieldsToEncryptFromSecretPolicy(secretDate, secretPolicy)
+	if err != nil || len(fieldsToEncrypt) != 0 { // if subsecrets are defined in secret policy
+		return fieldsToEncrypt, err
+	}
 
+	// if secret policy doesn't have subsecrets
 	if secretHandler.subsecretName != "" {
 		secretData, ok := secretDate[secretHandler.subsecretName]
 		if !ok {
 			return fieldsToEncrypt, fmt.Errorf("subsecret %s not found in sid '%s' data", secretHandler.subsecretName, secretHandler.sid)
 		}
 		if !secrethandling.HasSecretTLV(secretData) {
-			fieldsToEncrypt = append(fieldsToEncrypt, secretHandler.subsecretName)
+			fieldsToEncrypt[secretHandler.subsecretName] = ""
 		}
 	} else {
 		for subsecret, secretData := range secretDate {
 			if !secrethandling.HasSecretTLV(secretData) {
-				fieldsToEncrypt = append(fieldsToEncrypt, subsecret)
+				fieldsToEncrypt[subsecret] = ""
 			}
 		}
 
@@ -200,4 +213,23 @@ func (secretHandler *SecretHandler) getFieldsToDecrypt(secretDate map[string][]b
 
 	}
 	return fieldsToDecrypt, nil
+}
+
+func (secretHandler *SecretHandler) getFieldsToEncryptFromSecretPolicy(secretDate map[string][]byte, secretPolicy *secrethandling.SecretAccessPolicy) (map[string]string, error) {
+	fieldsToEncrypt := make(map[string]string)
+	if secretPolicy == nil || secretPolicy.Secrets == nil {
+		return fieldsToEncrypt, nil
+	}
+	for secrets := range secretPolicy.Secrets {
+		for _, subsecret := range secretPolicy.Secrets[secrets].KeyIDs {
+			secretData, ok := secretDate[subsecret.SubSecretName]
+			if !ok {
+				return fieldsToEncrypt, fmt.Errorf("subsecret %s not found in sid '%s' data", secretHandler.subsecretName, secretHandler.sid)
+			}
+			if !secrethandling.HasSecretTLV(secretData) {
+				fieldsToEncrypt[subsecret.SubSecretName] = subsecret.KeyID
+			}
+		}
+	}
+	return fieldsToEncrypt, nil
 }

@@ -6,6 +6,8 @@ import (
 	"k8s-ca-websocket/cautils"
 	"time"
 
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+
 	"github.com/golang/glog"
 )
 
@@ -19,9 +21,10 @@ type ICacli interface {
 	Status() (stat *Status, err error)
 
 	SecretMetadata(string) (*SecretMetadata, error)
-	SecretEncrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error)
+	SecretEncrypt(message, inputFile, outputFile, keyID string, base64Enc bool) ([]byte, error)
 	SecretDecrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error)
 	GetKey(string) (*cautils.Key, error)
+	GetSecretAccessPolicy(sid, name, cluster, namespace string) ([]secrethandling.SecretAccessPolicy, error)
 }
 
 // Cacli commands
@@ -70,7 +73,7 @@ func (cacli *Cacli) GetSigningProfile(spName string) (*cautils.SigningProfile, e
 	args = append(args, "get")
 	args = append(args, "-n")
 	args = append(args, spName)
-	spReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	spReceive, err := runCacliCommandRepeat(args, true, time.Duration(2)*time.Minute)
 	if err == nil {
 		err = json.Unmarshal(spReceive, &sp)
 	}
@@ -86,7 +89,7 @@ func (cacli *Cacli) Get(wlid string) (cautils.WorkloadTemplate, error) {
 	args = append(args, "get")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
-	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	wtReceive, err := runCacliCommandRepeat(args, true, time.Duration(2)*time.Minute)
 	if err == nil {
 		json.Unmarshal(wtReceive, &wt)
 	}
@@ -102,7 +105,7 @@ func (cacli *Cacli) GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, e
 	args = append(args, "triplet")
 	args = append(args, "-wlid")
 	args = append(args, wlid)
-	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	wtReceive, err := runCacliCommandRepeat(args, true, time.Duration(2)*time.Minute)
 	if err == nil {
 		json.Unmarshal(wtReceive, &wt)
 	}
@@ -175,7 +178,7 @@ func (cacli *Cacli) GetKey(keyID string) (*cautils.Key, error) {
 	args = append(args, "get")
 	args = append(args, "-id")
 	args = append(args, keyID)
-	wtReceive, err := runCacliCommandRepeate(args, true, time.Duration(2)*time.Minute)
+	wtReceive, err := runCacliCommandRepeat(args, true, time.Duration(2)*time.Minute)
 	if err == nil {
 		json.Unmarshal(wtReceive, key)
 		if key.Key == "" {
@@ -186,7 +189,7 @@ func (cacli *Cacli) GetKey(keyID string) (*cautils.Key, error) {
 }
 
 // SecretEncrypt -
-func (cacli *Cacli) SecretEncrypt(message, inputFile, outputFile string, base64Enc bool) ([]byte, error) {
+func (cacli *Cacli) SecretEncrypt(message, inputFile, outputFile, keyID string, base64Enc bool) ([]byte, error) {
 	args := []string{}
 	args = append(args, "secret-policy")
 	args = append(args, "encrypt")
@@ -197,6 +200,10 @@ func (cacli *Cacli) SecretEncrypt(message, inputFile, outputFile string, base64E
 	if inputFile != "" {
 		args = append(args, "--input")
 		args = append(args, inputFile)
+	}
+	if keyID != "" {
+		args = append(args, "-kid")
+		args = append(args, keyID)
 	}
 	if outputFile != "" {
 		args = append(args, "--output")
@@ -234,4 +241,39 @@ func (cacli *Cacli) SecretDecrypt(message, inputFile, outputFile string, base64E
 	messageByte, err := runCacliCommand(args, true, time.Duration(2)*time.Minute)
 
 	return messageByte, err
+}
+
+// GetSecretAccessPolicy -
+func (cacli *Cacli) GetSecretAccessPolicy(sid, name, cluster, namespace string) ([]secrethandling.SecretAccessPolicy, error) {
+	secretAccessPolicy := []secrethandling.SecretAccessPolicy{}
+	args := []string{}
+	args = append(args, "secret-policy")
+	args = append(args, "get")
+	if sid != "" {
+		args = append(args, "-sid")
+		args = append(args, sid)
+	} else if name != "" {
+		args = append(args, "--name")
+		args = append(args, name)
+	} else {
+		if cluster != "" {
+			args = append(args, "--cluster")
+			args = append(args, cluster)
+			if namespace != "" {
+				args = append(args, "--namespace")
+				args = append(args, namespace)
+			}
+		}
+	}
+	sReceive, err := runCacliCommandRepeat(args, true, 2*time.Minute)
+	if err == nil {
+		if err = json.Unmarshal(sReceive, &secretAccessPolicy); err != nil {
+			tmpSecretAccessPolicy := secrethandling.SecretAccessPolicy{}
+			if err = json.Unmarshal(sReceive, &tmpSecretAccessPolicy); err == nil {
+				secretAccessPolicy = []secrethandling.SecretAccessPolicy{tmpSecretAccessPolicy}
+			}
+		}
+		err = nil // if received and empty list
+	}
+	return secretAccessPolicy, err
 }

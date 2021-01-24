@@ -9,7 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var clesrSecretMock = `{
+var clearSecretMock = `{
     "apiVersion": "v1",
     "data": {
         "customer": "Q3liZXJBcm1vclRlc3Rz",
@@ -40,7 +40,7 @@ var encryptedSecretMock = `{
 
 func GetClearSecretMock() *corev1.Secret {
 	secret := &corev1.Secret{}
-	json.Unmarshal([]byte(clesrSecretMock), secret)
+	json.Unmarshal([]byte(clearSecretMock), secret)
 	return secret
 }
 
@@ -68,7 +68,7 @@ func TestGetFieldsToEncrypt(t *testing.T) {
 	clearSecret := GetClearSecretMock()
 	encryptedSecret := GetEncryptedSecretMock()
 
-	fieldsToEncrypt, err := sech.getFieldsToEncrypt(clearSecret.Data)
+	fieldsToEncrypt, err := sech.getFieldsToEncrypt(clearSecret.Data, nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -76,7 +76,7 @@ func TestGetFieldsToEncrypt(t *testing.T) {
 		t.Errorf("expecting %d, received: %d", len(clearSecret.Data), len(fieldsToEncrypt))
 	}
 
-	fieldsToEncrypt2, err := sech.getFieldsToEncrypt(encryptedSecret.Data)
+	fieldsToEncrypt2, err := sech.getFieldsToEncrypt(encryptedSecret.Data, nil)
 	if err != nil {
 		t.Error(err)
 	}
