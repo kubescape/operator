@@ -322,6 +322,11 @@ func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
 		delete(meatdata.Annotations, key)
 	}
 }
+func removeLabel(meatdata *metav1.ObjectMeta, key string) {
+	if meatdata.Labels != nil {
+		delete(meatdata.Labels, key)
+	}
+}
 func injectWlid(annotations *map[string]string, wlid string) {
 	injectAnnotation(annotations, CAWlidOld, wlid)
 	injectAnnotation(annotations, CAWlid, wlid)
@@ -445,21 +450,19 @@ func isInjectLableFound(labels map[string]string) bool {
 
 // CreateSecret create secret in k8s
 func CreateSecret(secret *corev1.Secret) error {
-
 	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Create(secret)
 	return err
 }
 
 // UpdateSecret create secret in k8s
-func UpdateSecret(secret *corev1.Secret) error {
-
+func UpdateSecret(secret *corev1.Secret, command string) error {
+	secretUpdate(&secret.ObjectMeta, command)
 	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(secret)
 	return err
 }
 
 // DeleteSecret delete secret from k8s
 func DeleteSecret(namespace, secretName string) error {
-
 	err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Delete(secretName, &metav1.DeleteOptions{})
 	return err
 }
@@ -479,4 +482,15 @@ func ListSecrets(namespace string, labelSelector map[string]string) (*corev1.Sec
 		listOptions.LabelSelector = set.AsSelector().String()
 	}
 	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).List(listOptions)
+}
+
+func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
+	switch command {
+	case DECRYPT:
+		removeLabel(objectMeta, CAInject)
+		removeLabel(objectMeta, CAInjectOld) // DEPRECATED
+		injectAnnotation(&objectMeta.Annotations, CAIgnoe, "true")
+	case ENCRYPT:
+		removeAnnotation(objectMeta, CAIgnoe)
+	}
 }

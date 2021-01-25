@@ -74,7 +74,7 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 	// update secret
 	if updateSecret {
 		glog.Infof("updating secret: %s", secretHandler.sid)
-		if err := UpdateSecret(secret); err != nil {
+		if err := UpdateSecret(secret, ENCRYPT); err != nil {
 			return err
 		}
 	}
@@ -112,7 +112,7 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 	// update secret
 	if updateSecret {
 		glog.Infof("updating secret: %s", secretHandler.sid)
-		if err := UpdateSecret(secret); err != nil {
+		if err := UpdateSecret(secret, DECRYPT); err != nil {
 			return err
 		}
 	}
