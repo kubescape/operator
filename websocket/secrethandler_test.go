@@ -63,12 +63,12 @@ func NewSecretHandlerMock(sid string) *SecretHandler {
 
 }
 func TestGetFieldsToEncrypt(t *testing.T) {
-	sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
-	sech := NewSecretHandlerMock(sid)
+	// sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
+	// sech := NewSecretHandlerMock(sid)
 	clearSecret := GetClearSecretMock()
 	encryptedSecret := GetEncryptedSecretMock()
 
-	fieldsToEncrypt, err := sech.getFieldsToEncrypt(clearSecret.Data, nil)
+	fieldsToEncrypt, err := secrethandling.GetFieldsToEncrypt(clearSecret.Data, nil, "")
 	if err != nil {
 		t.Error(err)
 	}
@@ -76,7 +76,7 @@ func TestGetFieldsToEncrypt(t *testing.T) {
 		t.Errorf("expecting %d, received: %d", len(clearSecret.Data), len(fieldsToEncrypt))
 	}
 
-	fieldsToEncrypt2, err := sech.getFieldsToEncrypt(encryptedSecret.Data, nil)
+	fieldsToEncrypt2, err := secrethandling.GetFieldsToEncrypt(encryptedSecret.Data, nil, "")
 	if err != nil {
 		t.Error(err)
 	}
@@ -86,12 +86,12 @@ func TestGetFieldsToEncrypt(t *testing.T) {
 }
 
 func TestGetFieldsToDecrypt(t *testing.T) {
-	sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
-	sech := NewSecretHandlerMock(sid)
+	// sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
+	// sech := NewSecretHandlerMock(sid)
 	clearSecret := GetClearSecretMock()
 	encryptedSecret := GetEncryptedSecretMock()
 
-	fieldsToDecrypt, err := sech.getFieldsToDecrypt(clearSecret.Data)
+	fieldsToDecrypt, err := secrethandling.GetFieldsToDecrypt(clearSecret.Data, "")
 	if err != nil {
 		t.Error(err)
 	}
@@ -99,7 +99,7 @@ func TestGetFieldsToDecrypt(t *testing.T) {
 		t.Errorf("expecting %d, received: %d", 0, len(fieldsToDecrypt))
 	}
 
-	fieldsToDecrypt2, err := sech.getFieldsToDecrypt(encryptedSecret.Data)
+	fieldsToDecrypt2, err := secrethandling.GetFieldsToDecrypt(encryptedSecret.Data, "")
 	if err != nil {
 		t.Error(err)
 	}
