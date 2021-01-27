@@ -79,14 +79,15 @@ func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.Auth
 	}
 
 	glog.Infof("siging image without using registry credentials")
-	if err := s.triggerCacliSign("", ""); err == nil {
+	err := s.triggerCacliSign("", "")
+	if err == nil {
 		return nil
 	}
 	credNames := []string{}
 	for i := range credentials {
 		credNames = append(credNames, i)
 	}
-	return fmt.Errorf("did not sign image, wlid: %s. secrets found: %v", wlid, credNames)
+	return fmt.Errorf("did not sign image, wlid: %s. secrets found: %v, error: %s", wlid, credNames, err.Error())
 }
 
 // **************************************************************************************************
