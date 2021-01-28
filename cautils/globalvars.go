@@ -17,6 +17,7 @@ var (
 	CA_DASHBOARD_BACKEND   = ""
 	CA_OCIMAGE_URL         = ""
 	CA_USE_DOCKER          = false
+	CA_DEBUG_SIGNER        = false
 	CA_IGNORE_VERIFY_CACLI = false
 )
 
@@ -62,15 +63,22 @@ func LoadEnvironmentVaribles() (err error) {
 		return err
 	}
 
-	// environment varible not mandatory
+	// environment variable not mandatory
 	if ignore, _ := testEnvironmentVarible("CA_IGNORE_VERIFY_CACLI"); ignore != "" {
 		CA_IGNORE_VERIFY_CACLI = true
 	}
 
-	// environment varible not mandatory
+	// environment variable not mandatory
 	if useDocker, _ := testEnvironmentVarible("CA_USE_DOCKER"); useDocker != "" {
 		if useDocker == "true" {
 			CA_USE_DOCKER = true
+		}
+	}
+
+	// environment variable not mandatory
+	if useDocker, _ := testEnvironmentVarible("CA_DEBUG_SIGNER"); useDocker != "" {
+		if useDocker == "true" {
+			CA_DEBUG_SIGNER = true
 		}
 	}
 

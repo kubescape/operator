@@ -17,7 +17,7 @@ type ICacli interface {
 	Get(wlid string) (cautils.WorkloadTemplate, error)
 	GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, error)
 	GetSigningProfile(spName string) (*cautils.SigningProfile, error)
-	Sign(wlid, user, password string) error
+	Sign(wlid, user, password string, debug bool) error
 	Status() (stat *Status, err error)
 
 	SecretMetadata(string) (*SecretMetadata, error)
@@ -113,9 +113,10 @@ func (cacli *Cacli) GetWtTriple(wlid string) (*cautils.WorkloadTemplateTriple, e
 }
 
 // Sign command
-func (cacli *Cacli) Sign(wlid, user, password string) error {
+func (cacli *Cacli) Sign(wlid, user, password string, debug bool) error {
 	args := []string{}
 	display := true
+	args = append(args, "--debug")
 	args = append(args, "wt")
 	args = append(args, "sign")
 	args = append(args, "-wlid")

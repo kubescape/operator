@@ -3,6 +3,7 @@ package sign
 import (
 	"fmt"
 	"k8s-ca-websocket/cacli"
+	"k8s-ca-websocket/cautils"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -13,6 +14,7 @@ import (
 type Sign struct {
 	cacli *cacli.Cacli
 	wlid  string
+	debug bool
 }
 
 //NewSigner -
@@ -20,6 +22,7 @@ func NewSigner(wlid string) *Sign {
 	return &Sign{
 		cacli: cacli.NewCacli(),
 		wlid:  wlid,
+		debug: cautils.CA_DEBUG_SIGNER,
 	}
 
 }
@@ -34,12 +37,12 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 	glog.Infof("logged in")
 
 	// sign
-	if err := s.cacli.Sign(s.wlid, username, password); err != nil {
+	if err := s.cacli.Sign(s.wlid, username, password, s.debug); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
 			if err := cacli.LoginCacli(); err != nil {
 				return err
 			}
-			err = s.cacli.Sign(s.wlid, username, password)
+			err = s.cacli.Sign(s.wlid, username, password, s.debug)
 		}
 		return err
 	}
