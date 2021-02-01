@@ -43,11 +43,11 @@ func CreateWebSocketHandler() *WebSocketHandler {
 	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL}
 }
 
-// WebSokcet CAWebSokcet
-func (wsh *WebSocketHandler) WebSokcet() error {
+// Websocket main function
+func (wsh *WebSocketHandler) Websocket() error {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Printf("RECOVER WebSokcet %v", err)
+			fmt.Printf("RECOVER Websocket %v", err)
 		}
 	}()
 

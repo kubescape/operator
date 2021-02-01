@@ -16,6 +16,7 @@ var (
 	CA_LOGIN_SECRET_NAME   = ""
 	CA_DASHBOARD_BACKEND   = ""
 	CA_OCIMAGE_URL         = ""
+	CA_VULNSCAN            = ""
 	CA_USE_DOCKER          = false
 	CA_DEBUG_SIGNER        = false
 	CA_IGNORE_VERIFY_CACLI = false
@@ -61,6 +62,9 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 	if CA_OCIMAGE_URL, err = testEnvironmentVarible("CA_OCIMAGE_URL"); err != nil {
 		return err
+	}
+	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil {
+		// ignore
 	}
 
 	// environment variable not mandatory

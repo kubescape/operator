@@ -34,7 +34,7 @@ func main() {
 
 	// Websocket
 	websocketHandler := websocket.CreateWebSocketHandler()
-	glog.Error(websocketHandler.WebSokcet())
+	glog.Error(websocketHandler.Websocket())
 
 }
 

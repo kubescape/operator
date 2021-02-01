@@ -1,54 +1,28 @@
 package websocket
 
 import (
-	"bytes"
-	"encoding/json"
-	"k8s-ca-websocket/cacli"
-	"log"
+	"fmt"
+	"k8s-ca-websocket/cautils"
 	"net/http"
+	"strconv"
+
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
 )
 
-func sendWorkloadToVulnerabilityScanner(vulnScanURL string, wlid string) {
-	caCliClient := cacli.NewCacli()
-	workload, err := caCliClient.Get(wlid)
-	if err != nil {
-		log.Printf("failed retrieving workload from cacli %s", err)
-		return
-	}
-	if len(workload.Containers) == 0 || workload.Containers[0].SigningProfileName == "" {
-		log.Printf("no container to scan %s", wlid)
-		return
-	}
-	spName := workload.Containers[0].SigningProfileName
-	sp, err := caCliClient.GetSigningProfile(spName)
-	if err != nil {
-		log.Printf("failed retrieving signing profile from cacli %s", wlid)
-		return
-	}
-	wtTriplet, err := caCliClient.GetWtTriple(wlid)
-	if err != nil {
-		log.Printf("failed retrieving workload triple from cacli %s", err)
-		return
-	}
-
-	jsonSP, err := json.Marshal(sp)
-	if err != nil {
-		log.Printf("problem converting signing profile %s", err)
-		return
-	}
-	req, err := http.NewRequest("POST", vulnScanURL+"/scanImage", bytes.NewBuffer(jsonSP))
+func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScanCommand) error {
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath), nil)
 	req.Header.Set("Content-Type", "application/json")
 	q := req.URL.Query()
-	q.Add("customerGuid", wtTriplet.CustomerGUID)
-	q.Add("solutionGuid", wtTriplet.SolutionGUID)
-	q.Add("wlid", wlid)
+	// q.Add("customerGUID", cautils.CA_CUSTOMER_GUID)
+	q.Add("imageTag", websocketScanCommand.ImageTag)
+	q.Add("isScanned", strconv.FormatBool(websocketScanCommand.IsScanned))
 	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Failed posting to vulnerabilty scanner %s", err)
-		return
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", req.URL.RawQuery, err.Error())
 	}
 	defer resp.Body.Close()
+	return nil
 }

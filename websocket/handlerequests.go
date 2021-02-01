@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
-	"os"
 
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
 
 	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
@@ -16,23 +16,20 @@ import (
 
 var previousReports []string
 
-var (
-	// UPDATE workload
-	UPDATE string = "update"
-	// REMOVE workload
-	REMOVE string = "remove"
-	// SIGN image
-	SIGN string = "sign"
-	// INJECT namespace
-	INJECT string = "inject"
-	// RESTART pod
+// commands send via websocket
+const (
+	UPDATE  string = "update"
+	REMOVE  string = "remove"
+	SIGN    string = "sign"
+	INJECT  string = "inject"
 	RESTART string = "restart"
-
-	// ENCRYPT secret
 	ENCRYPT string = "encryptSecret"
-	// DECRYPT secret
 	DECRYPT string = "decryptSecret"
+	SCAN    string = "scan"
+)
 
+// labels and annotations
+const (
 	CALabel = "cyberarmor"
 
 	CAInjectOld = "injectCyberArmor"
@@ -49,9 +46,6 @@ var (
 	CAUpdate   = CAPrefix + ".last-update"
 	CAIgnoe    = CAPrefix + ".ignore"
 )
-var (
-	controllerLable = "controller-uid"
-)
 
 // HandlePostmanRequest Parse received commands and run the command
 func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
@@ -63,8 +57,6 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 		return []error{err}
 	}
 	for _, c := range commands.Commands {
-		sid := ""
-		var err error
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
 			glog.Error(err)
@@ -76,16 +68,9 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 				glog.Error(err)
 				return []error{err}
 			}
-		} else {
-			if sid, err = getSIDFromArgs(c.Args); err != nil {
-				err := fmt.Errorf("invalid secret-id: %s", err.Error())
-				glog.Error(err)
-				return []error{err}
-			}
 		}
 		status := "SUCCESS"
-
-		if err := wsh.runCommand(c, sid); err != nil {
+		if err := wsh.runCommand(c); err != nil {
 			glog.Errorf("%v", err)
 			status = "FAIL"
 			errorList = append(errorList, err)
@@ -95,12 +80,10 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 	}
 	return errorList
 }
-func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
+func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
 	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
 	if c.Wlid != "" {
 		logCommandInfo += fmt.Sprintf(", wlid: %s", c.Wlid)
-	} else {
-		logCommandInfo += fmt.Sprintf(", secre-id: %s", sid)
 	}
 	glog.Infof(logCommandInfo)
 	reporter := reporterlib.BaseReport{ActionID: "2", ActionIDN: 1, Reporter: "websocket", Status: reporterlib.JobStarted, Target: c.Wlid, CustomerGUID: cautils.CA_CUSTOMER_GUID}
@@ -154,8 +137,15 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
 	case ENCRYPT:
 		reporter.ActionName = "encrypt secret"
 		reporter.SendAsRoutine(previousReports, true)
+		sid, err := getSIDFromArgs(c.Args)
+		if err != nil {
+			reporter.AddError(err.Error())
+			reporter.Status = reporterlib.JobFailed
+			err := fmt.Errorf("invalid secret-id: %s", err.Error())
+			return err
+		}
 		secretHandler := NewSecretHandler(sid)
-		err := secretHandler.encryptSecret()
+		err = secretHandler.encryptSecret()
 		if err != nil {
 			reporter.AddError(err.Error())
 			reporter.Status = reporterlib.JobFailed
@@ -167,8 +157,15 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
 	case DECRYPT:
 		reporter.ActionName = "decrypt secret"
 		reporter.SendAsRoutine(previousReports, true)
+		sid, err := getSIDFromArgs(c.Args)
+		if err != nil {
+			reporter.AddError(err.Error())
+			reporter.Status = reporterlib.JobFailed
+			err := fmt.Errorf("invalid secret-id: %s", err.Error())
+			return err
+		}
 		secretHandler := NewSecretHandler(sid)
-		err := secretHandler.decryptSecret()
+		err = secretHandler.decryptSecret()
 		if err != nil {
 			reporter.AddError(err.Error())
 			reporter.Status = reporterlib.JobFailed
@@ -177,6 +174,24 @@ func (wsh *WebSocketHandler) runCommand(c cautils.Command, sid string) error {
 		}
 		reporter.SendAsRoutine(previousReports, true)
 		return err
+	case SCAN:
+		reporter.ActionName = "scan"
+		reporter.SendAsRoutine(previousReports, true)
+		scanArgs, err := getScanFromArgs(c.Args)
+		if err != nil {
+			reporter.AddError(err.Error())
+			reporter.Status = reporterlib.JobFailed
+			return err
+		}
+		er := sendWorkloadToVulnerabilityScanner(scanArgs)
+		if er != nil {
+			reporter.AddError(er.Error())
+			reporter.Status = reporterlib.JobFailed
+		} else {
+			reporter.Status = reporterlib.JobSuccess
+		}
+		reporter.SendAsRoutine(previousReports, true)
+		return er
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
@@ -213,11 +228,6 @@ func signWorkload(wlid string) error {
 		return err
 	}
 
-	vulnScanURL, found := os.LookupEnv("CA_VULNSCAN")
-	if found {
-		go sendWorkloadToVulnerabilityScanner(vulnScanURL, wlid)
-	}
-
 	s := sign.NewSigner(wlid)
 	if cautils.CA_USE_DOCKER {
 		err = s.SignImageDocker(workload)
@@ -229,14 +239,13 @@ func signWorkload(wlid string) error {
 	}
 
 	glog.Infof("Done signing, updating workload, wlid: %s", wlid)
-	// err = updateWorkload(wlid, SIGN)
 	return err
 }
 
 func getSIDFromArgs(args map[string]interface{}) (string, error) {
 	sidInterface, ok := args["sid"]
 	if !ok {
-		return "", fmt.Errorf("sid not found in args")
+		return "", nil
 	}
 	sid, ok := sidInterface.(string)
 	if !ok || sid == "" {
@@ -246,4 +255,20 @@ func getSIDFromArgs(args map[string]interface{}) (string, error) {
 		return "", err
 	}
 	return sid, nil
+}
+
+func getScanFromArgs(args map[string]interface{}) (*apis.WebsocketScanCommand, error) {
+	scanInterface, ok := args["scan"]
+	if !ok {
+		return nil, nil
+	}
+	websocketScanCommand := &apis.WebsocketScanCommand{}
+	scanBytes, err := json.Marshal(scanInterface)
+	if err != nil {
+		return nil, fmt.Errorf("cannot convert 'interface scan' to 'bytes array', reason: %s", err.Error())
+	}
+	if err = json.Unmarshal(scanBytes, websocketScanCommand); err != nil {
+		return nil, fmt.Errorf("cannot convert 'bytes array scan' to 'WebsocketScanCommand', reason: %s", err.Error())
+	}
+	return websocketScanCommand, nil
 }

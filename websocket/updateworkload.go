@@ -150,7 +150,6 @@ func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, com
 		injectAnnotation(&template.ObjectMeta.Annotations, CAIgnoe, "true")
 		injectAnnotation(&objectMeta.Annotations, CAIgnoe, "true")
 	}
-	removeIDLabels(template.ObjectMeta.Labels)
 }
 
 func workloadUpdate(objectMeta *metav1.ObjectMeta, command, wlid string) {
@@ -180,7 +179,6 @@ func injectPod(metadata *metav1.ObjectMeta, spec *corev1.PodSpec, command, wlid 
 		injectAnnotation(&metadata.Annotations, CAIgnoe, "true")
 
 	}
-	removeIDLabels(metadata.Labels)
 }
 
 func injectNS(metadata *metav1.ObjectMeta, command string) {
@@ -192,7 +190,6 @@ func injectNS(metadata *metav1.ObjectMeta, command string) {
 	case REMOVE:
 		removeCAMetadata(metadata)
 	}
-	removeIDLabels(metadata.Labels)
 }
 func restoreConatinerCommand(spec *corev1.PodSpec) {
 	cmdEnv := "CAA_OVERRIDDEN_CMD"
@@ -368,14 +365,9 @@ func removeCAMetadata(meatdata *metav1.ObjectMeta) {
 }
 
 func cleanSelector(selector *metav1.LabelSelector) {
-	delete(selector.MatchLabels, controllerLable)
 	if len(selector.MatchLabels) == 0 && len(selector.MatchLabels) == 0 {
 		selector = &metav1.LabelSelector{}
 	}
-}
-
-func removeIDLabels(labels map[string]string) {
-	delete(labels, controllerLable)
 }
 
 // excludeWlid - add a wlid to the ignore list
