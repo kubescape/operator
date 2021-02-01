@@ -48,7 +48,7 @@ const (
 )
 
 // HandlePostmanRequest Parse received commands and run the command
-func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
+func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
 	commands := cautils.Commands{}
 	errorList := []error{}
 
@@ -69,129 +69,68 @@ func (wsh *WebSocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 				return []error{err}
 			}
 		}
+		reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "websocket")
+		if jobID, hasJobID := c.Args["jobID"]; hasJobID {
+			reporter.SetActionID(fmt.Sprintf("%v", jobID))
+		}
+		reporter.SetActionName(c.CommandName)
+		reporter.SetTarget(c.Wlid)
+		reporter.SendAsRoutine(previousReports, true)
+
 		status := "SUCCESS"
 		if err := wsh.runCommand(c); err != nil {
+			reporter.AddError(err.Error())
+			reporter.SetStatus(reporterlib.JobFailed)
 			glog.Errorf("%v", err)
 			status = "FAIL"
 			errorList = append(errorList, err)
+		} else {
+			reporter.SetStatus(reporterlib.JobSuccess)
 		}
+		reporter.SendAsRoutine(previousReports, true)
 		glog.Infof("Done command %s, wlid: %s, status: %s", c.CommandName, c.Wlid, status)
 
 	}
 	return errorList
 }
-func (wsh *WebSocketHandler) runCommand(c cautils.Command) error {
+func (wsh *WebsocketHandler) runCommand(c cautils.Command) error {
 	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
 	if c.Wlid != "" {
 		logCommandInfo += fmt.Sprintf(", wlid: %s", c.Wlid)
 	}
 	glog.Infof(logCommandInfo)
-	reporter := reporterlib.BaseReport{ActionID: "2", ActionIDN: 1, Reporter: "websocket", Status: reporterlib.JobStarted, Target: c.Wlid, CustomerGUID: cautils.CA_CUSTOMER_GUID}
-	if jobid, hasJobID := c.Args["jobID"]; hasJobID {
-		reporter.JobID = fmt.Sprintf("%v", jobid)
-	}
 	switch c.CommandName {
 	case UPDATE:
-		glog.Infof("in update/attach")
-		reporter.ActionName = "attach(inject wlid)"
-		reporter.SendAsRoutine(previousReports, true)
-		er := updateWorkload(c.Wlid, UPDATE, &c)
-		if er != nil {
-			reporter.AddError(er.Error())
-			reporter.Status = reporterlib.JobFailed
-		} else {
-			reporter.Status = reporterlib.JobSuccess
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		return er
+		return updateWorkload(c.Wlid, UPDATE, &c)
 	case RESTART:
-		reporter.ActionName = "update(resetart)"
-		reporter.SendAsRoutine(previousReports, true)
-		er := updateWorkload(c.Wlid, RESTART, &c)
-		if er != nil {
-			reporter.AddError(er.Error())
-			reporter.Status = reporterlib.JobFailed
-		} else {
-			reporter.Status = reporterlib.JobSuccess
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		return er
+		return updateWorkload(c.Wlid, RESTART, &c)
 	case REMOVE:
-		reporter.ActionName = "detach"
-		reporter.SendAsRoutine(previousReports, true)
 		return detachWorkload(c.Wlid)
 	case SIGN:
-		reporter.ActionName = "sign"
-		reporter.SendAsRoutine(previousReports, true)
-		er := signWorkload(c.Wlid)
-		if er != nil {
-			reporter.AddError(er.Error())
-			reporter.Status = reporterlib.JobFailed
-		} else {
-			reporter.Status = reporterlib.JobSuccess
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		return er
+		return signWorkload(c.Wlid)
 	case INJECT:
 		return updateWorkload(c.Wlid, INJECT, &c)
 	case ENCRYPT:
-		reporter.ActionName = "encrypt secret"
-		reporter.SendAsRoutine(previousReports, true)
 		sid, err := getSIDFromArgs(c.Args)
 		if err != nil {
-			reporter.AddError(err.Error())
-			reporter.Status = reporterlib.JobFailed
-			err := fmt.Errorf("invalid secret-id: %s", err.Error())
 			return err
 		}
 		secretHandler := NewSecretHandler(sid)
-		err = secretHandler.encryptSecret()
-		if err != nil {
-			reporter.AddError(err.Error())
-			reporter.Status = reporterlib.JobFailed
-		} else {
-			reporter.Status = reporterlib.JobSuccess
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		return err
+		return secretHandler.encryptSecret()
 	case DECRYPT:
-		reporter.ActionName = "decrypt secret"
-		reporter.SendAsRoutine(previousReports, true)
 		sid, err := getSIDFromArgs(c.Args)
 		if err != nil {
-			reporter.AddError(err.Error())
-			reporter.Status = reporterlib.JobFailed
 			err := fmt.Errorf("invalid secret-id: %s", err.Error())
 			return err
 		}
 		secretHandler := NewSecretHandler(sid)
-		err = secretHandler.decryptSecret()
-		if err != nil {
-			reporter.AddError(err.Error())
-			reporter.Status = reporterlib.JobFailed
-		} else {
-			reporter.Status = reporterlib.JobSuccess
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		return err
+		return secretHandler.decryptSecret()
 	case SCAN:
-		reporter.ActionName = "scan"
-		reporter.SendAsRoutine(previousReports, true)
 		scanArgs, err := getScanFromArgs(c.Args)
 		if err != nil {
-			reporter.AddError(err.Error())
-			reporter.Status = reporterlib.JobFailed
 			return err
 		}
-		er := sendWorkloadToVulnerabilityScanner(scanArgs)
-		if er != nil {
-			reporter.AddError(er.Error())
-			reporter.Status = reporterlib.JobFailed
-		} else {
-			reporter.Status = reporterlib.JobSuccess
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		return er
+		return sendWorkloadToVulnerabilityScanner(scanArgs)
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}

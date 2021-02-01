@@ -25,14 +25,14 @@ type DataSocket struct {
 	RType   ReqType
 }
 
-// WebSocketHandler -
-type WebSocketHandler struct {
+// WebsocketHandler -
+type WebsocketHandler struct {
 	data         chan DataSocket
 	webSocketURL WebSocketURL
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func CreateWebSocketHandler() *WebSocketHandler {
+func CreateWebSocketHandler() *WebsocketHandler {
 	var websocketURL WebSocketURL
 
 	websocketURL.Scheme = "wss"
@@ -40,11 +40,14 @@ func CreateWebSocketHandler() *WebSocketHandler {
 	websocketURL.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
 	websocketURL.ForceQuery = false
 
-	return &WebSocketHandler{data: make(chan DataSocket), webSocketURL: websocketURL}
+	return &WebsocketHandler{
+		data:         make(chan DataSocket),
+		webSocketURL: websocketURL,
+	}
 }
 
 // Websocket main function
-func (wsh *WebSocketHandler) Websocket() error {
+func (wsh *WebsocketHandler) Websocket() error {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Printf("RECOVER Websocket %v", err)
@@ -88,7 +91,7 @@ func (wsh *WebSocketHandler) Websocket() error {
 }
 
 // ConnectToWebsocket Connect To Websocket with reties
-func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
+func (wsh *WebsocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 	i := 0
 	for {
 		conn, err := wsh.dialWebSocket()
@@ -103,7 +106,7 @@ func (wsh *WebSocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 	}
 }
 
-func (wsh *WebSocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
+func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
 	glog.Infof("Connecting to %s", u.String())
 
