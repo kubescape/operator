@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
 	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
 
 	"github.com/golang/glog"
@@ -125,7 +126,7 @@ func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, com
 
 	}
 	switch command {
-	case UPDATE:
+	case apis.UPDATE:
 		injectWlid(&template.ObjectMeta.Annotations, wlid)
 		injectTime(&template.ObjectMeta.Annotations)
 		injectLabel(&template.ObjectMeta.Labels)
@@ -135,15 +136,15 @@ func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, com
 		removeAnnotation(&template.ObjectMeta, CAIgnoe)
 		removeAnnotation(objectMeta, CAIgnoe)
 
-	case RESTART:
+	case apis.RESTART:
 		injectTime(&template.ObjectMeta.Annotations)
-	case SIGN:
+	case apis.SIGN:
 		updateLabel(&template.ObjectMeta.Labels)
 		injectTime(&template.ObjectMeta.Annotations)
 		if len(jobsAnnot.CurrJobID) > 0 {
 			template.ObjectMeta.Annotations[reporterlib.CAJobs] = string(annot)
 		}
-	case REMOVE:
+	case apis.REMOVE:
 		restoreConatinerCommand(&template.Spec)
 		removeCASpec(&template.Spec)
 		removeCAMetadata(&template.ObjectMeta)
@@ -154,25 +155,25 @@ func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, com
 
 func workloadUpdate(objectMeta *metav1.ObjectMeta, command, wlid string) {
 	switch command {
-	case REMOVE:
+	case apis.REMOVE:
 		removeCAMetadata(objectMeta)
 	}
 }
 
 func injectPod(metadata *metav1.ObjectMeta, spec *corev1.PodSpec, command, wlid string) {
 	switch command {
-	case UPDATE:
+	case apis.UPDATE:
 		injectWlid(&metadata.Annotations, wlid)
 		injectTime(&metadata.Annotations)
 		injectAnnotation(&(metadata.Annotations), reporterlib.CAJobs, wlid)
 		injectLabel(&metadata.Labels)
 		removeAnnotation(metadata, CAIgnoe)
-	case SIGN:
+	case apis.SIGN:
 		updateLabel(&metadata.Labels)
 		injectTime(&metadata.Annotations)
-	case RESTART:
+	case apis.RESTART:
 		injectTime(&metadata.Annotations)
-	case REMOVE:
+	case apis.REMOVE:
 		restoreConatinerCommand(spec)
 		removeCASpec(spec)
 		removeCAMetadata(metadata)
@@ -183,11 +184,11 @@ func injectPod(metadata *metav1.ObjectMeta, spec *corev1.PodSpec, command, wlid 
 
 func injectNS(metadata *metav1.ObjectMeta, command string) {
 	switch command {
-	case INJECT:
+	case apis.INJECT:
 		injectTime(&metadata.Annotations)
 		injectLabel(&metadata.Labels)
 
-	case REMOVE:
+	case apis.REMOVE:
 		removeCAMetadata(metadata)
 	}
 }
@@ -478,11 +479,11 @@ func ListSecrets(namespace string, labelSelector map[string]string) (*corev1.Sec
 
 func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
 	switch command {
-	case DECRYPT:
+	case apis.DECRYPT:
 		removeLabel(objectMeta, CAInject)
 		removeLabel(objectMeta, CAInjectOld) // DEPRECATED
 		injectAnnotation(&objectMeta.Annotations, CAIgnoe, "true")
-	case ENCRYPT:
+	case apis.ENCRYPT:
 		removeAnnotation(objectMeta, CAIgnoe)
 	}
 }

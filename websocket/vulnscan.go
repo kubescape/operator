@@ -10,7 +10,30 @@ import (
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
 )
 
+func scanWorkload(wlid string) error {
+	// get all images of workload
+	errs := ""
+	images, err := getWorkloadImages(wlid, apis.SCAN)
+	if err != nil {
+
+	}
+	websocketScanCommand := &apis.WebsocketScanCommand{
+		Wlid: wlid,
+	}
+	for i := range images {
+		websocketScanCommand.ImageTag = images[i]
+		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
+			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', reason: %s", wlid, images[i], err.Error())
+		}
+	}
+	if errs != "" {
+		return fmt.Errorf(errs)
+	}
+	return nil
+}
+
 func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScanCommand) error {
+
 	jsonScannerC, err := json.Marshal(websocketScanCommand)
 	if err != nil {
 		return err

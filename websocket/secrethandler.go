@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
 	"github.com/golang/glog"
 )
@@ -74,7 +75,7 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 	// update secret
 	if updateSecret {
 		glog.Infof("updating secret: %s", secretHandler.sid)
-		if err := UpdateSecret(secret, ENCRYPT); err != nil {
+		if err := UpdateSecret(secret, apis.ENCRYPT); err != nil {
 			return err
 		}
 	}
@@ -112,7 +113,7 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 	// update secret
 	if updateSecret {
 		glog.Infof("updating secret: %s", secretHandler.sid)
-		if err := UpdateSecret(secret, DECRYPT); err != nil {
+		if err := UpdateSecret(secret, apis.DECRYPT); err != nil {
 			return err
 		}
 	}

@@ -5,6 +5,8 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -95,5 +97,74 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 		return nil, fmt.Errorf("Namespace '%s' not found", namespace)
 	}
 	return nil, fmt.Errorf("kind: %s unknown", kind)
+
+}
+
+func getWorkloadImages(wlid, command string) ([]string, error) {
+	kind := cautils.GetKindFromWlid(wlid)
+
+	images := make(map[string]bool)
+
+	workload, err := getWorkload(wlid)
+	if err != nil {
+		return []string{}, err
+	}
+
+	switch kind {
+	// case "Namespace":
+	// 	w := workload.(*corev1.Namespace)
+	// 	injectNS(&w.ObjectMeta, command)
+	// 	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(w)
+
+	case "Deployment":
+		w := workload.(*appsv1.Deployment)
+		for i := range w.Spec.Template.Spec.Containers {
+			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		}
+	case "ReplicaSet":
+		w := workload.(*appsv1.ReplicaSet)
+		for i := range w.Spec.Template.Spec.Containers {
+			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		}
+	case "DaemonSet":
+		w := workload.(*appsv1.DaemonSet)
+		for i := range w.Spec.Template.Spec.Containers {
+			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		}
+	case "StatefulSet":
+		w := workload.(*appsv1.StatefulSet)
+		for i := range w.Spec.Template.Spec.Containers {
+			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		}
+	case "PodTemplate":
+		w := workload.(*corev1.PodTemplate)
+		for i := range w.Template.Spec.Containers {
+			images[w.Template.Spec.Containers[i].Image] = true
+		}
+	case "CronJob":
+		// w := workload.(*v1beta1.CronJob)
+		// for i := range w.Spec.JobTemplate. {
+		// 	images[w.Template.Spec.Containers[i]] = true
+		// }
+	case "Job":
+		// w := workload.(*v1beta1.Job)
+		// for i := range w. {
+		// 	images[w.Template.Spec.Containers[i]] = true
+		// }
+
+	case "Pod":
+		w := workload.(*corev1.Pod)
+		for i := range w.Spec.Containers {
+			images[w.Spec.Containers[i].Image] = true
+		}
+	default:
+		err = fmt.Errorf("command %s not supported with kind: %s", command, cautils.GetKindFromWlid(wlid))
+	}
+
+	listImages := []string{}
+	for i := range images {
+		listImages = append(listImages, i)
+	}
+	return listImages, nil
 
 }
