@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
+	"github.com/golang/glog"
 )
 
 func scanWorkload(wlid string) error {
@@ -38,7 +39,14 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath), bytes.NewBuffer(jsonScannerC))
+	pathScan := fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
+	glog.Infof("requesting scan. url: %s, data: %s", pathScan, string(jsonScannerC))
+
+	req, err := http.NewRequest("POST", pathScan, bytes.NewBuffer(jsonScannerC))
+	if err != nil {
+		return err
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 	// q := req.URL.Query()
 	// q.Add("imageTag", websocketScanCommand.ImageTag)
@@ -51,5 +59,12 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", string(jsonScannerC), err.Error())
 	}
 	defer resp.Body.Close()
+	if resp == nil {
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", string(jsonScannerC))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', status code: %d", string(jsonScannerC), resp.StatusCode)
+	}
 	return nil
 }
