@@ -10,6 +10,12 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ContainerData specific container data
+type ContainerData struct {
+	image     string
+	container string
+}
+
 func getWorkload(wlid string) (interface{}, error) {
 	microservice, err := cautils.RestoreMicroserviceIDsFromSpiffe(wlid)
 	if err != nil {
@@ -100,14 +106,14 @@ func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
 
 }
 
-func getWorkloadImages(wlid, command string) ([]string, error) {
+func getWorkloadImages(wlid, command string) ([]ContainerData, error) {
 	kind := cautils.GetKindFromWlid(wlid)
 
-	images := make(map[string]bool)
+	containersData := []ContainerData{}
 
 	workload, err := getWorkload(wlid)
 	if err != nil {
-		return []string{}, err
+		return containersData, err
 	}
 
 	switch kind {
@@ -118,28 +124,28 @@ func getWorkloadImages(wlid, command string) ([]string, error) {
 
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
-		for i := range w.Spec.Template.Spec.Containers {
-			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		for _, i := range w.Spec.Template.Spec.Containers {
+			containersData = append(containersData, ContainerData{image: i.Image, container: i.Name})
 		}
 	case "ReplicaSet":
 		w := workload.(*appsv1.ReplicaSet)
-		for i := range w.Spec.Template.Spec.Containers {
-			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		for _, i := range w.Spec.Template.Spec.Containers {
+			containersData = append(containersData, ContainerData{image: i.Image, container: i.Name})
 		}
 	case "DaemonSet":
 		w := workload.(*appsv1.DaemonSet)
-		for i := range w.Spec.Template.Spec.Containers {
-			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		for _, i := range w.Spec.Template.Spec.Containers {
+			containersData = append(containersData, ContainerData{image: i.Image, container: i.Name})
 		}
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
-		for i := range w.Spec.Template.Spec.Containers {
-			images[w.Spec.Template.Spec.Containers[i].Image] = true
+		for _, i := range w.Spec.Template.Spec.Containers {
+			containersData = append(containersData, ContainerData{image: i.Image, container: i.Name})
 		}
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
-		for i := range w.Template.Spec.Containers {
-			images[w.Template.Spec.Containers[i].Image] = true
+		for _, i := range w.Template.Spec.Containers {
+			containersData = append(containersData, ContainerData{image: i.Image, container: i.Name})
 		}
 	case "CronJob":
 		// w := workload.(*v1beta1.CronJob)
@@ -154,17 +160,13 @@ func getWorkloadImages(wlid, command string) ([]string, error) {
 
 	case "Pod":
 		w := workload.(*corev1.Pod)
-		for i := range w.Spec.Containers {
-			images[w.Spec.Containers[i].Image] = true
+		for _, i := range w.Spec.Containers {
+			containersData = append(containersData, ContainerData{image: i.Image, container: i.Name})
 		}
 	default:
 		err = fmt.Errorf("command %s not supported with kind: %s", command, cautils.GetKindFromWlid(wlid))
 	}
 
-	listImages := []string{}
-	for i := range images {
-		listImages = append(listImages, i)
-	}
-	return listImages, nil
+	return containersData, nil
 
 }

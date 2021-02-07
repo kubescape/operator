@@ -14,17 +14,18 @@ import (
 func scanWorkload(wlid string) error {
 	// get all images of workload
 	errs := ""
-	images, err := getWorkloadImages(wlid, apis.SCAN)
+	containers, err := getWorkloadImages(wlid, apis.SCAN)
 	if err != nil {
-
+		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", wlid, err.Error())
 	}
 	websocketScanCommand := &apis.WebsocketScanCommand{
 		Wlid: wlid,
 	}
-	for i := range images {
-		websocketScanCommand.ImageTag = images[i]
+	for i := range containers {
+		websocketScanCommand.ImageTag = containers[i].image
+		websocketScanCommand.ContainerName = containers[i].container
 		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
-			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', reason: %s", wlid, images[i], err.Error())
+			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", wlid, containers[i].image, containers[i].container, err.Error())
 		}
 	}
 	if errs != "" {
