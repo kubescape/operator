@@ -66,17 +66,21 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) []err
 		reporter.SendAsRoutine(previousReports, true)
 
 		status := "SUCCESS"
-		if err := wsh.runCommand(c); err != nil {
+		err := wsh.runCommand(c)
+		if err != nil {
 			reporter.AddError(err.Error())
 			reporter.SetStatus(reporterlib.JobFailed)
-			glog.Errorf("%v", err)
 			status = "FAIL"
 			errorList = append(errorList, err)
 		} else {
 			reporter.SetStatus(reporterlib.JobSuccess)
 		}
 		reporter.SendAsRoutine(previousReports, true)
-		glog.Infof("Done command %s, wlid: %s, status: %s", c.CommandName, c.Wlid, status)
+		donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", c.CommandName, c.Wlid, status)
+		if err != nil {
+			donePrint += fmt.Sprintf(", reason: %s", err.Error())
+		}
+		glog.Infof(donePrint)
 
 	}
 	return errorList

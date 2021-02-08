@@ -64,8 +64,8 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", string(jsonScannerC))
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', status code: %d", string(jsonScannerC), resp.StatusCode)
+	if resp.StatusCode > 200 || resp.StatusCode > 203 {
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'received bad status code: %d'", string(jsonScannerC), resp.StatusCode)
 	}
 	return nil
 }
