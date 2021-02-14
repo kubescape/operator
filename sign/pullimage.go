@@ -9,6 +9,8 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 
+	extutils "asterix.cyberarmor.io/cyberarmor/capacketsgo/cautils"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/golang/glog"
@@ -48,6 +50,7 @@ func setDockerClient(workload interface{}, imageName string) error {
 
 		// Pulling image using docker client.
 		// If the image is from private registry, we will use the kubernetes "pullImageSecret"
+		// if the image hosted in AMAZON ECR, we will tkae login details from there
 		out, err := dc.pullImage(workload, imageName)
 		if err != nil {
 			return err
@@ -74,6 +77,18 @@ func (dc *DockerClient) pullImage(workload interface{}, imageName string) (out i
 	secrets, err := getImagePullSecret(workload)
 	if err != nil {
 		return out, err
+	}
+	if extutils.CheckIsECRImage(imageName) {
+		glog.Infof("pulling image using ECR secrets for image: %s", imageName)
+		userName, password, err := extutils.GetLoginDetailsForECR(imageName)
+		if err != nil {
+			glog.Errorf("Failed to GetLoginDetailsForECR(%s): %v", imageName, err)
+		} else {
+			secrets = map[string]types.AuthConfig{"ECR": {
+				Username: userName,
+				Password: password,
+			}}
+		}
 	}
 	if len(secrets) == 0 {
 		return out, fmt.Errorf("No secrets found. check previous printed errors.\nerror received pulling image without secret: %v", clearErr)
