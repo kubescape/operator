@@ -25,7 +25,7 @@ var (
 // InjectedEnvironments the environment vars that the webhook injects
 var (
 	InjectedEnvironments = []string{"CAA_LITTLE_BOY", "CAA_ENABLE_DISCOVERY", "CAA_CONTAINER_NAME", "CAA_CONTAINER_IMAGE_NAME", "CAA_ORACLE_SERVER", "CAA_HOME", "CAA_NOTIFICATION_SERVER",
-		"CAA_LOADNAMES", "CAA_GUID", "LD_PRELOAD", "CAA_ENABLE_GOLANG_HOOK", "CAA_OVERRIDDEN_CMD", "CAA_OVERRIDDEN_ARGS", "CAA_POD_NAME"}
+		"CAA_LOADNAMES", "CAA_GUID", "LD_PRELOAD", "CAA_ENABLE_GOLANG_HOOK", "CAA_OVERRIDDEN_CMD", "CAA_OVERRIDDEN_ARGS", "CAA_POD_NAME", "CAA_POD_NAMESPACE"}
 	InjectedVolumes      = []string{"caa-home-vol"}
 	InjectedVolumeMounts = []string{"caa-home-vol"}
 )

@@ -362,6 +362,7 @@ func removeCAMetadata(meatdata *metav1.ObjectMeta) {
 		delete(meatdata.Annotations, CAWlid)
 		delete(meatdata.Annotations, CAAttached)
 		delete(meatdata.Annotations, CAUpdate)
+		delete(meatdata.Annotations, CAJobs)
 	}
 }
 

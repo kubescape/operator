@@ -33,6 +33,7 @@ const (
 	CAWlid     = CAPrefix + ".wlid"
 	CAUpdate   = CAPrefix + ".last-update"
 	CAIgnoe    = CAPrefix + ".ignore"
+	CAJobs     = CAPrefix + ".jobs"
 )
 
 // HandlePostmanRequest Parse received commands and run the command
