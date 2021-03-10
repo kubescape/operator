@@ -9,12 +9,17 @@ import (
 	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/websocket"
 
+	"asterix.cyberarmor.io/cyberarmor/capacketsgo/k8sshared/probes"
+
 	"github.com/golang/glog"
 )
 
 // main function
 func main() {
 	flag.Parse()
+
+	isReadinessReady := false
+	go probes.InitReadinessV1(&isReadinessReady)
 
 	displayBuildTag()
 	if err := k8sworkloads.SetupKubernetesClient(); err != nil {
@@ -34,6 +39,8 @@ func main() {
 
 	// Websocket
 	websocketHandler := websocket.CreateWebSocketHandler()
+
+	isReadinessReady = true
 	glog.Error(websocketHandler.Websocket())
 
 }
