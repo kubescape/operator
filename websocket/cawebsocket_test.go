@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"fmt"
+	"net/url"
 )
 
 // //wss://postman.eudev2.cyberarmorsoft.com/waitfornotification/5d817063-096f-4d91-b39b-8665240080af-dav-att-test1
@@ -20,16 +21,15 @@ import (
 
 //wss://postman.onprem.eudev2.cyberarmorsoft.com/waitfornotification/1e3a88bf-92ce-44f8-914e-cbe71830d566-onprem-test-1
 func CreateWebSocketHandlerMock() *WebsocketHandler {
-	var websocketURL WebSocketURL
-	websocketURL.Scheme = "wss"
-	websocketURL.Host = "postman.onprem.eudev3.cyberarmorsoft.com"
-	websocketURL.Path = fmt.Sprintf("waitfornotification/1e3a88bf-92ce-44f8-914e-cbe71830d566-onprem-test-1")
-	websocketURL.ForceQuery = false
+	urlObj := url.URL{}
+	urlObj.Scheme = "wss"
+	urlObj.Host = "postman.onprem.eudev3.cyberarmorsoft.com"
+	urlObj.Path = fmt.Sprintf("waitfornotification/1e3a88bf-92ce-44f8-914e-cbe71830d566-onprem-test-1")
+	urlObj.ForceQuery = false
 	return &WebsocketHandler{
 		data:         make(chan DataSocket),
-		webSocketURL: websocketURL,
+		webSocketURL: urlObj,
 	}
-
 }
 
 // func TestDoNothoing1(t *testing.T) {

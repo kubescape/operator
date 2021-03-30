@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -11,13 +12,6 @@ import (
 )
 
 type ReqType int
-
-type WebSocketURL struct {
-	Scheme     string `json:"Scheme"`
-	Host       string `json:"Host"`
-	Path       string `json:"Path"`
-	ForceQuery bool   `json:"ForceQuery"`
-}
 
 // DataSocket-
 type DataSocket struct {
@@ -28,22 +22,38 @@ type DataSocket struct {
 // WebsocketHandler -
 type WebsocketHandler struct {
 	data         chan DataSocket
-	webSocketURL WebSocketURL
+	webSocketURL url.URL
 }
 
 // CreateWebSocketHandler Create ws-handler obj
 func CreateWebSocketHandler() *WebsocketHandler {
-	var websocketURL WebSocketURL
-
-	websocketURL.Scheme = "wss"
-	websocketURL.Host = cautils.CA_POSTMAN
-	websocketURL.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
-	websocketURL.ForceQuery = false
+	urlObj := initPostmanURL()
 
 	return &WebsocketHandler{
 		data:         make(chan DataSocket),
-		webSocketURL: websocketURL,
+		webSocketURL: urlObj,
 	}
+}
+func initPostmanURL() url.URL {
+	urlObj := url.URL{}
+	host := cautils.CA_POSTMAN
+
+	scheme := "wss"
+
+	if strings.HasPrefix(host, "ws://") {
+		host = strings.TrimPrefix(host, "ws://")
+		scheme = "ws"
+	} else if strings.HasPrefix(host, "wss://") {
+		host = strings.TrimPrefix(host, "wss://")
+		scheme = "wss"
+	}
+
+	urlObj.Scheme = scheme
+	urlObj.Host = host
+	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
+	urlObj.ForceQuery = false
+
+	return urlObj
 }
 
 // Websocket main function
@@ -107,15 +117,14 @@ func (wsh *WebsocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 }
 
 func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
-	u := url.URL{Scheme: wsh.webSocketURL.Scheme, Host: wsh.webSocketURL.Host, Path: wsh.webSocketURL.Path, ForceQuery: wsh.webSocketURL.ForceQuery}
-	glog.Infof("Connecting to %s", u.String())
+	glog.Infof("Connecting to %s", wsh.webSocketURL.String())
 
 	if cautils.CA_IGNORE_VERIFY_CACLI {
 		websocket.DefaultDialer.TLSClientConfig.InsecureSkipVerify = true
 	}
-	conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+	conn, _, err = websocket.DefaultDialer.Dial(wsh.webSocketURL.String(), nil)
 	if err != nil {
-		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", u.String(), err)
+		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", wsh.webSocketURL.String(), err)
 		return conn, err
 	}
 	glog.Infof("Successfully connected")
