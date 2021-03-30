@@ -7,9 +7,6 @@ import (
 
 var (
 	CA_NAMESPACE           = ""
-	CA_SERVICE_NAME        = ""
-	CA_SERVICE_PORT        = ""
-	CA_PORATL_BACKEND      = ""
 	CA_CLUSTER_NAME        = ""
 	CA_POSTMAN             = ""
 	CA_CUSTOMER_GUID       = ""
@@ -34,15 +31,6 @@ var (
 func LoadEnvironmentVaribles() (err error) {
 
 	if CA_NAMESPACE, err = testEnvironmentVarible("CA_NAMESPACE"); err != nil {
-		return err
-	}
-	if CA_SERVICE_NAME, err = testEnvironmentVarible("CA_SERVICE_NAME"); err != nil {
-		return err
-	}
-	if CA_SERVICE_PORT, err = testEnvironmentVarible("CA_SERVICE_PORT"); err != nil {
-		return err
-	}
-	if CA_PORATL_BACKEND, err = testEnvironmentVarible("CA_PORATL_BACKEND"); err != nil {
 		return err
 	}
 	if CA_CLUSTER_NAME, err = testEnvironmentVarible("CA_CLUSTER_NAME"); err != nil {
