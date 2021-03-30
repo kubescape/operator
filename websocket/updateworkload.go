@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"k8s-ca-websocket/cautils"
@@ -30,47 +31,47 @@ func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
 	if err != nil {
 		return err
 	}
-
+	ctx := context.Background()
 	switch kind {
 	case "Namespace":
 		w := workload.(*corev1.Namespace)
 		injectNS(&w.ObjectMeta, command)
-		_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(w)
+		_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
 
 	case "Deployment":
 		w := workload.(*appsv1.Deployment)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Update(w)
+		_, err = k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Update(ctx, w, metav1.UpdateOptions{})
 
 	case "ReplicaSet":
 		w := workload.(*appsv1.ReplicaSet)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Update(w)
+		_, err = k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
 
 	case "DaemonSet":
 		w := workload.(*appsv1.DaemonSet)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Update(w)
+		_, err = k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
 
 	case "StatefulSet":
 		w := workload.(*appsv1.StatefulSet)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		w, err = k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Update(w)
+		w, err = k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
 
 	case "PodTemplate":
 		w := workload.(*corev1.PodTemplate)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.ObjectMeta, &w.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Update(w)
+		_, err = k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Update(ctx, w, metav1.UpdateOptions{})
 	case "CronJob":
 		w := workload.(*v1beta1.CronJob)
 		workloadUpdate(&w.ObjectMeta, command, wlid)
 		inject(&w.ObjectMeta, &w.Spec.JobTemplate.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Update(w)
+		_, err = k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Update(ctx, w, metav1.UpdateOptions{})
 
 	case "Job":
 		err = fmt.Errorf("")
@@ -95,18 +96,18 @@ func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
 	case "Pod":
 		w := workload.(*corev1.Pod)
 		injectPod(&w.ObjectMeta, &w.Spec, command, wlid)
-		err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Delete(w.Name, &metav1.DeleteOptions{})
+		err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, w.Name, metav1.DeleteOptions{})
 		if err == nil {
 			w.Status = corev1.PodStatus{}
 			w.ObjectMeta.ResourceVersion = ""
 			for {
-				_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(w.Name, metav1.GetOptions{})
+				_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, w.Name, metav1.GetOptions{})
 				if err != nil {
 					break
 				}
 				time.Sleep(time.Second * 1)
 			}
-			_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Create(w)
+			_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Create(ctx, w, metav1.CreateOptions{})
 		}
 	default:
 		err = fmt.Errorf("command %s not supported with kind: %s", command, cautils.GetKindFromWlid(wlid))
@@ -374,6 +375,7 @@ func cleanSelector(selector *metav1.LabelSelector) {
 
 // excludeWlid - add a wlid to the ignore list
 func excludeWlid(nsWlid, workloadWlid string) error {
+	ctx := context.Background()
 	workload, err := getWorkload(nsWlid)
 	if err != nil {
 		return err
@@ -391,12 +393,13 @@ func excludeWlid(nsWlid, workloadWlid string) error {
 		}
 	}
 	injectAnnotation(&w.Annotations, CAIgnoe, injectList)
-	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(w)
+	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
 	return err
 }
 
 // excludeWlid - remove a wlid from the ignore list
 func includeWlid(nsWlid, workloadWlid string) error {
+	ctx := context.Background()
 	workload, err := getWorkload(nsWlid)
 	if err != nil {
 		return err
@@ -425,7 +428,7 @@ func includeWlid(nsWlid, workloadWlid string) error {
 		}
 	}
 	injectAnnotation(&w.Annotations, CAIgnoe, injectList)
-	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(w)
+	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
 	return err
 }
 
@@ -444,38 +447,42 @@ func isInjectLableFound(labels map[string]string) bool {
 
 // CreateSecret create secret in k8s
 func CreateSecret(secret *corev1.Secret) error {
-	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Create(secret)
+	ctx := context.Background()
+	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
 	return err
 }
 
 // UpdateSecret create secret in k8s
 func UpdateSecret(secret *corev1.Secret, command string) error {
+	ctx := context.Background()
 	secretUpdate(&secret.ObjectMeta, command)
-	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(secret)
+	_, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	return err
 }
 
 // DeleteSecret delete secret from k8s
 func DeleteSecret(namespace, secretName string) error {
-	err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Delete(secretName, &metav1.DeleteOptions{})
+	ctx := context.Background()
+	err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Delete(ctx, secretName, metav1.DeleteOptions{})
 	return err
 }
 
 // GetSecret get secret from k8s
 func GetSecret(namespace, secretName string) (*corev1.Secret, error) {
-
-	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Get(secretName, metav1.GetOptions{})
+	ctx := context.Background()
+	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
 }
 
 // ListSecrets list secret from k8s
 func ListSecrets(namespace string, labelSelector map[string]string) (*corev1.SecretList, error) {
+	ctx := context.Background()
 
 	listOptions := metav1.ListOptions{}
 	if labelSelector != nil {
 		set := labels.Set(labelSelector)
 		listOptions.LabelSelector = set.AsSelector().String()
 	}
-	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).List(listOptions)
+	return k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).List(ctx, listOptions)
 }
 
 func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {

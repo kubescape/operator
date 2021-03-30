@@ -1,6 +1,7 @@
 package cacli
 
 import (
+	"context"
 	"encoding/json"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
@@ -13,8 +14,8 @@ import (
 // GetCALoginCred -
 func GetCALoginCred() (cautils.CredStruct, error) {
 	credStruct := cautils.CredStruct{}
-
-	sec, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
+	ctx := context.Background()
+	sec, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(cautils.CA_NAMESPACE).Get(ctx, cautils.CA_LOGIN_SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
 		return credStruct, err
 	}

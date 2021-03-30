@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
@@ -25,79 +26,79 @@ func getWorkload(wlid string) (interface{}, error) {
 }
 
 func getWorkloadFromK8S(namespace, kind, name string) (interface{}, error) {
-
+	ctx := context.Background()
 	switch kind {
 	case "Deployment":
-		w, _ := k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("Deployment '%s' not found in namespace: %s", name, namespace)
 
 	case "ReplicaSet":
-		w, _ := k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("ReplicaSet '%s' not found in namespace: %s", name, namespace)
 	case "DaemonSet":
-		w, _ := k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("DaemonSet '%s' not found in namespace: %s", name, namespace)
 	case "StatefulSet":
-		w, _ := k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("StatefulSet '%s' not found in namespace: %s", name, namespace)
 	case "Job":
-		w, _ := k8sworkloads.KubernetesClient.BatchV1().Jobs(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.BatchV1().Jobs(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.BatchV1().Jobs(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.BatchV1().Jobs(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("Job '%s' not found in namespace: %s", name, namespace)
 	case "CronJob":
-		w, _ := k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("Job '%s' not found in namespace: %s", name, namespace)
 
 	case "PodTemplate":
-		w, _ := k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("PodTemplate '%s' not found in namespace: %s", name, namespace)
 	case "Pod":
-		w, _ := k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("Pod '%s' not found in namespace: %s", name, namespace)
 	case "Namespace":
-		w, _ := k8sworkloads.KubernetesClient.CoreV1().Namespaces().List(v1.ListOptions{})
+		w, _ := k8sworkloads.KubernetesClient.CoreV1().Namespaces().List(ctx, v1.ListOptions{})
 		for _, i := range w.Items {
 			if i.Name == name {
-				return k8sworkloads.KubernetesClient.CoreV1().Namespaces().Get(i.Name, v1.GetOptions{})
+				return k8sworkloads.KubernetesClient.CoreV1().Namespaces().Get(ctx, i.Name, v1.GetOptions{})
 			}
 		}
 		return nil, fmt.Errorf("Namespace '%s' not found", namespace)

@@ -131,9 +131,9 @@ func getImagePullSecret(workload interface{}) (map[string]types.AuthConfig, erro
 func readSecrets(sec []corev1.LocalObjectReference, namespace string) (map[string]types.AuthConfig, error) {
 
 	secrets := make(map[string]types.AuthConfig)
-
+	ctx := context.Background()
 	for _, i := range sec {
-		res, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Get(i.Name, metav1.GetOptions{})
+		res, err := k8sworkloads.KubernetesClient.CoreV1().Secrets(namespace).Get(ctx, i.Name, metav1.GetOptions{})
 		if err != nil {
 			glog.Errorf("%v", err)
 			continue
