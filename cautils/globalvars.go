@@ -14,6 +14,7 @@ var (
 	CA_DASHBOARD_BACKEND   = ""
 	CA_OCIMAGE_URL         = ""
 	CA_VULNSCAN            = ""
+	RestAPIPort            = ""
 	CA_USE_DOCKER          = false
 	CA_DEBUG_SIGNER        = false
 	CA_IGNORE_VERIFY_CACLI = false
@@ -53,6 +54,9 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil {
 		// ignore
+	}
+	if RestAPIPort, err = testEnvironmentVarible("CA_WEBSOCKET_PORT"); err != nil {
+		RestAPIPort = "4002"
 	}
 
 	// environment variable not mandatory

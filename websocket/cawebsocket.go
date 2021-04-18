@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/url"
@@ -11,27 +12,19 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type ReqType int
-
-// DataSocket-
-type DataSocket struct {
-	message string
-	RType   ReqType
-}
-
 // WebsocketHandler -
 type WebsocketHandler struct {
-	data         chan DataSocket
+	sessionObj   *chan cautils.SessionObj
 	webSocketURL url.URL
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func CreateWebSocketHandler() *WebsocketHandler {
+func NewWebsocketHandler(sessionObj *chan cautils.SessionObj) *WebsocketHandler {
 	urlObj := initPostmanURL()
 
 	return &WebsocketHandler{
-		data:         make(chan DataSocket),
 		webSocketURL: urlObj,
+		sessionObj:   sessionObj,
 	}
 }
 func initPostmanURL() url.URL {
@@ -91,7 +84,7 @@ func (wsh *WebsocketHandler) Websocket() error {
 		}
 		switch messageType {
 		case websocket.TextMessage:
-			go wsh.HandlePostmanRequest(bytes)
+			wsh.HandlePostmanRequest(bytes)
 		case websocket.CloseMessage:
 			return fmt.Errorf("websocket closed by server, message: %s", string(bytes))
 		default:
@@ -129,4 +122,31 @@ func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	}
 	glog.Infof("Successfully connected")
 	return conn, err
+}
+
+// HandlePostmanRequest Parse received commands and run the command
+func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
+	commands := cautils.Commands{}
+
+	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
+		glog.Error(err)
+	}
+	for _, c := range commands.Commands {
+		sessionObj := cautils.NewSessionObj(&c, fmt.Sprintf("Websocket received: %s", receivedCommands))
+
+		if c.CommandName == "" {
+			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
+			glog.Error(err)
+			sessionObj.Reporter.SendError(err, true, true)
+		}
+		if c.Wlid != "" {
+			if err := cautils.IsWlidValid(c.Wlid); err != nil {
+				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
+				glog.Error(err)
+				sessionObj.Reporter.SendError(err, true, true)
+			}
+		}
+
+		*wsh.sessionObj <- *sessionObj
+	}
 }

@@ -1,8 +1,16 @@
 package cautils
 
+import reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+
 // Commands list of commands received from websocket
 type Commands struct {
 	Commands []Command `json:"commands"`
+}
+
+// Commands list of commands received from websocket
+type SessionObj struct {
+	Command  Command               `json:"command"`
+	Reporter reporterlib.IReporter `json:"reporter"`
 }
 
 // Command structure of command received from websocket

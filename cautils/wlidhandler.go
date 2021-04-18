@@ -127,8 +127,8 @@ func GetWLID(level0, level1, k, name string) string {
 
 }
 
-// IsWalidValid test if wlid is a valid wlid
-func IsWalidValid(wlid string) error {
+// IsWlidValid test if wlid is a valid wlid
+func IsWlidValid(wlid string) error {
 	_, err := RestoreMicroserviceIDsFromSpiffe(wlid)
 	return err
 }

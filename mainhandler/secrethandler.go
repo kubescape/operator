@@ -1,4 +1,4 @@
-package websocket
+package mainhandler
 
 import (
 	"encoding/base64"

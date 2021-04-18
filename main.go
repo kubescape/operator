@@ -7,6 +7,8 @@ import (
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
+	"k8s-ca-websocket/mainhandler"
+	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
 
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/k8sshared/probes"
@@ -37,11 +39,24 @@ func main() {
 		return
 	}
 
+	sessionObj := make(chan cautils.SessionObj)
+
 	// Websocket
-	websocketHandler := websocket.CreateWebSocketHandler()
+	go func() {
+		websocketHandler := websocket.NewWebsocketHandler(&sessionObj)
+		glog.Fatal(websocketHandler.Websocket())
+	}()
+
+	// http listener
+	go func() {
+		restAPIHandler := restapihandler.NewHTTPHandler(&sessionObj)
+		glog.Fatal(restAPIHandler.SetupHTTPListener())
+	}()
 
 	isReadinessReady = true
-	glog.Error(websocketHandler.Websocket())
+
+	mainHandler := mainhandler.NewMainHandler(&sessionObj)
+	mainHandler.HandleRequest()
 
 }
 

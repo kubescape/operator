@@ -27,7 +27,7 @@ func CreateWebSocketHandlerMock() *WebsocketHandler {
 	urlObj.Path = fmt.Sprintf("waitfornotification/1e3a88bf-92ce-44f8-914e-cbe71830d566-onprem-test-1")
 	urlObj.ForceQuery = false
 	return &WebsocketHandler{
-		data:         make(chan DataSocket),
+		// data:         make(chan DataSocket),
 		webSocketURL: urlObj,
 	}
 }

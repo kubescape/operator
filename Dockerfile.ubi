@@ -8,8 +8,6 @@ LABEL vendor="Armo Ltd."
 RUN yum update -y && yum install -y python3 && pip3 install --upgrade pip
 RUN pip3 install -U cacli --index-url https://carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
 
-
-
 RUN mkdir .ca && chmod -R 777 .ca
 
 COPY ./dist /.

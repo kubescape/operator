@@ -1,4 +1,4 @@
-package websocket
+package mainhandler
 
 import (
 	"encoding/json"
@@ -36,57 +36,48 @@ const (
 	CAJobs     = CAPrefix + ".jobs"
 )
 
-// HandlePostmanRequest Parse received commands and run the command
-func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) []error {
-	commands := cautils.Commands{}
-	errorList := []error{}
-
-	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
-		glog.Error(err)
-		return []error{err}
-	}
-	for _, c := range commands.Commands {
-		if c.CommandName == "" {
-			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
-			glog.Error(err)
-			return []error{err}
-		}
-		if c.Wlid != "" {
-			if err := cautils.IsWalidValid(c.Wlid); err != nil {
-				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
-				glog.Error(err)
-				return []error{err}
-			}
-		}
-		reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "websocket")
-		if jobID, hasJobID := c.Args["jobID"]; hasJobID {
-			reporter.SetActionID(fmt.Sprintf("%v", jobID))
-		}
-		reporter.SetActionName(c.CommandName)
-		reporter.SetTarget(c.Wlid)
-		reporter.SendAsRoutine(previousReports, true)
-
-		status := "SUCCESS"
-		err := wsh.runCommand(c)
-		if err != nil {
-			reporter.AddError(err.Error())
-			reporter.SetStatus(reporterlib.JobFailed)
-			status = "FAIL"
-			errorList = append(errorList, err)
-		} else {
-			reporter.SetStatus(reporterlib.JobSuccess)
-		}
-		reporter.SendAsRoutine(previousReports, true)
-		donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", c.CommandName, c.Wlid, status)
-		if err != nil {
-			donePrint += fmt.Sprintf(", reason: %s", err.Error())
-		}
-		glog.Infof(donePrint)
-
-	}
-	return errorList
+type MainHandler struct {
+	sessionObj *chan cautils.SessionObj
 }
-func (wsh *WebsocketHandler) runCommand(c cautils.Command) error {
+
+// CreateWebSocketHandler Create ws-handler obj
+func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
+	return &MainHandler{
+		sessionObj: sessionObj,
+	}
+}
+
+// HandlePostmanRequest Parse received commands and run the command
+func (mainHandler *MainHandler) HandleRequest() []error {
+	for {
+		// recover
+		defer func() {
+			if err := recover(); err != nil {
+				glog.Errorf("RECOVER in HandleRequest, reason: %v", err)
+			}
+		}()
+		sessionObj := <-*mainHandler.sessionObj
+		go func() {
+			status := "SUCCESS"
+
+			sessionObj.Reporter.SendAction(fmt.Sprintf("Processing request: '%s', ", sessionObj.Command.CommandName), true)
+			err := mainHandler.runCommand(&sessionObj)
+			if err != nil {
+				sessionObj.Reporter.SendError(err, true, true)
+				status = "FAIL"
+			} else {
+				sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+			}
+			donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.Wlid, status)
+			if err != nil {
+				donePrint += fmt.Sprintf(", reason: %s", err.Error())
+			}
+			glog.Infof(donePrint)
+		}()
+	}
+}
+func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error {
+	c := sessionObj.Command
 	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
 	if c.Wlid != "" {
 		logCommandInfo += fmt.Sprintf(", wlid: %s", c.Wlid)
