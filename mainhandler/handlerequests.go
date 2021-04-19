@@ -43,6 +43,7 @@ type MainHandler struct {
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
+	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
 		sessionObj: sessionObj,
 	}
