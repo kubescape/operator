@@ -7,6 +7,7 @@ import (
 	"k8s-ca-websocket/sign"
 
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
+	pkgcautils "asterix.cyberarmor.io/cyberarmor/capacketsgo/cautils"
 	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
 
 	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
@@ -78,6 +79,12 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 }
 func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
+	if c.Wlid != "" {
+		if pkgcautils.IfIgnoreNamespace(cautils.GetNamespaceFromWlid(c.Wlid)) {
+			glog.Infof("Ignoring wlid: '%s'", c.Wlid)
+			return nil
+		}
+	}
 	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
 	if c.Wlid != "" {
 		logCommandInfo += fmt.Sprintf(", wlid: %s", c.Wlid)
@@ -94,21 +101,8 @@ func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error
 		return signWorkload(c.Wlid)
 	case apis.INJECT:
 		return updateWorkload(c.Wlid, apis.INJECT, &c)
-	case apis.ENCRYPT:
-		sid, err := getSIDFromArgs(c.Args)
-		if err != nil {
-			return err
-		}
-		secretHandler := NewSecretHandler(sid)
-		return secretHandler.encryptSecret()
-	case apis.DECRYPT:
-		sid, err := getSIDFromArgs(c.Args)
-		if err != nil {
-			err := fmt.Errorf("invalid secret-id: %s", err.Error())
-			return err
-		}
-		secretHandler := NewSecretHandler(sid)
-		return secretHandler.decryptSecret()
+	case apis.ENCRYPT, apis.DECRYPT:
+		return runSecretCommand(sessionObj)
 	case apis.SCAN:
 		return scanWorkload(c.Wlid)
 	default:
@@ -117,6 +111,27 @@ func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error
 	return nil
 }
 
+func runSecretCommand(sessionObj *cautils.SessionObj) error {
+	c := sessionObj.Command
+
+	sid, err := getSIDFromArgs(c.Args)
+	if err != nil {
+		return err
+	}
+	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(sid)) {
+		glog.Infof("Ignoring wlid: '%s'", c.Wlid)
+		return nil
+	}
+	secretHandler := NewSecretHandler(sid)
+
+	switch c.CommandName {
+	case apis.ENCRYPT:
+		err = secretHandler.encryptSecret()
+	case apis.DECRYPT:
+		err = secretHandler.decryptSecret()
+	}
+	return err
+}
 func detachWorkload(wlid string) error {
 	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
 	// 	// add wlid to the ignore list
