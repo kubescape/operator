@@ -67,7 +67,7 @@ func (resthandler *HTTPHandler) AgentRestAPIReport(w http.ResponseWriter, r *htt
 	readBuffer, _ := ioutil.ReadAll(r.Body)
 
 	switch r.Method {
-	case http.MethodDelete:
+	case http.MethodPost:
 		err = resthandler.handleDelete(r.URL.Query(), readBuffer)
 	default:
 		httpStatus = http.StatusMethodNotAllowed
@@ -91,7 +91,7 @@ func (resthandler *HTTPHandler) handleDelete(urlVals url.Values, readBuffer []by
 		return err
 	}
 	command := cautils.Command{
-		CommandName: apis.REMOVE,
+		CommandName: apis.REMOVE, //
 		Wlid:        wlid,
 	}
 
