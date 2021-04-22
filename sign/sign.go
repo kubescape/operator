@@ -6,23 +6,27 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
+	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
 )
 
 // Sign -
 type Sign struct {
-	cacli *cacli.Cacli
-	wlid  string
-	debug bool
+	cacli    *cacli.Cacli
+	wlid     string
+	debug    bool
+	reporter reporterlib.IReporter
 }
 
 //NewSigner -
-func NewSigner(wlid string) *Sign {
+func NewSigner(wlid string, reporter reporterlib.IReporter) *Sign {
 	return &Sign{
-		cacli: cacli.NewCacli(),
-		wlid:  wlid,
-		debug: cautils.CA_DEBUG_SIGNER,
+		cacli:    cacli.NewCacli(),
+		wlid:     wlid,
+		debug:    cautils.CA_DEBUG_SIGNER,
+		reporter: reporter,
 	}
 
 }
@@ -30,13 +34,16 @@ func NewSigner(wlid string) *Sign {
 func (s *Sign) triggerCacliSign(username, password string) error {
 	// is cacli loggedin
 	if !cacli.IsLoggedin() {
+		s.reporter.SendAction("Sign in cacli", true)
 		if err := cacli.LoginCacli(); err != nil {
 			return err
 		}
+		s.reporter.SendStatus(reporterlib.JobSuccess, true)
 	}
 	glog.Infof("logged in")
 
 	// sign
+	s.reporter.SendAction("Running cacli sign", true)
 	if err := s.cacli.Sign(s.wlid, username, password, s.debug); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
 			if err := cacli.LoginCacli(); err != nil {
@@ -46,6 +53,7 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 		}
 		return err
 	}
+	s.reporter.SendStatus(reporterlib.JobSuccess, true)
 	return nil
 }
 
@@ -75,15 +83,21 @@ func (s *Sign) SignImageOcimage(workload interface{}) error {
 func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.AuthConfig) error {
 
 	for secret, data := range credentials {
-		glog.Infof("siging image using registry credentials from secret: %s", secret)
+		logs := fmt.Sprintf("Signing '%s' using oci engine and secret '%s' credentails", wlid, secret)
+		glog.Infof(logs)
+		s.reporter.SendAction(logs, true)
 		if err := s.triggerCacliSign(data.Username, data.Password); err == nil {
+			s.reporter.SendStatus(reporterlib.JobSuccess, true)
 			return nil
 		}
 	}
 
-	glog.Infof("siging image without using registry credentials")
+	logs := fmt.Sprintf("Signing '%s' using oci engine without using registry credentials", wlid)
+	glog.Infof(logs)
+	s.reporter.SendAction(logs, true)
 	err := s.triggerCacliSign("", "")
 	if err == nil {
+		s.reporter.SendStatus(reporterlib.JobSuccess, true)
 		return nil
 	}
 	credNames := []string{}
@@ -123,10 +137,13 @@ func (s *Sign) prepareForSign(workload interface{}) error {
 
 	// docker pull images
 	for _, i := range wt.Containers {
+		logs := fmt.Sprintf("Pulling image '%s' using docker engine for wlid: '%s'", i.ImageTag, wt.Wlid)
+		glog.Infof(logs)
+		s.reporter.SendAction(logs, true)
 		if err := setDockerClient(workload, i.ImageTag); err != nil {
 			return err
 		}
-
+		s.reporter.SendStatus(reporterlib.JobSuccess, true)
 	}
 
 	return nil

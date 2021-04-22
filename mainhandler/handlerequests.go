@@ -62,7 +62,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		go func() {
 			status := "SUCCESS"
 
-			sessionObj.Reporter.SendAction(fmt.Sprintf("Processing request: '%s', ", sessionObj.Command.CommandName), true)
+			sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
 			err := mainHandler.runCommand(&sessionObj)
 			if err != nil {
 				sessionObj.Reporter.SendError(err, true, true)
@@ -99,7 +99,7 @@ func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error
 	case apis.REMOVE:
 		return detachWorkload(c.Wlid)
 	case apis.SIGN:
-		return signWorkload(c.Wlid)
+		return signWorkload(c.Wlid, sessionObj.Reporter)
 	case apis.INJECT:
 		return updateWorkload(c.Wlid, apis.INJECT, &c)
 	case apis.ENCRYPT, apis.DECRYPT:
@@ -156,14 +156,14 @@ func attachWorkload(wlid string) error {
 	// }
 	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
 }
-func signWorkload(wlid string) error {
+func signWorkload(wlid string, reporter reporterlib.IReporter) error {
 	var err error
 	workload, err := getWorkload(wlid)
 	if err != nil {
 		return err
 	}
 
-	s := sign.NewSigner(wlid)
+	s := sign.NewSigner(wlid, reporter)
 	if cautils.CA_USE_DOCKER {
 		err = s.SignImageDocker(workload)
 	} else {
