@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
 	"github.com/golang/glog"
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 
 	// corev1beta1 "k8s.io/api/core/v1beta1"
@@ -22,99 +21,164 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
-	var err error
-	namespace := cautils.GetNamespaceFromWlid(wlid)
-	kind := cautils.GetKindFromWlid(wlid)
-
-	workload, err := getWorkload(wlid)
+func (actionHandler *ActionHandler) update(command string) error {
+	kind := cautils.GetKindFromWlid(actionHandler.wlid)
+	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
+	actionHandler.editWorkload(workload, command)
+
 	switch kind {
-	case "Namespace":
-		w := workload.(*corev1.Namespace)
-		injectNS(&w.ObjectMeta, command)
-		_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
-
-	case "Deployment":
-		w := workload.(*appsv1.Deployment)
-		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Update(ctx, w, metav1.UpdateOptions{})
-
-	case "ReplicaSet":
-		w := workload.(*appsv1.ReplicaSet)
-		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
-
-	case "DaemonSet":
-		w := workload.(*appsv1.DaemonSet)
-		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
-
-	case "StatefulSet":
-		w := workload.(*appsv1.StatefulSet)
-		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
-		w, err = k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
-
-	case "PodTemplate":
-		w := workload.(*corev1.PodTemplate)
-		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Update(ctx, w, metav1.UpdateOptions{})
-	case "CronJob":
-		w := workload.(*v1beta1.CronJob)
-		workloadUpdate(&w.ObjectMeta, command, wlid)
-		inject(&w.ObjectMeta, &w.Spec.JobTemplate.Spec.Template, command, wlid, cmd)
-		_, err = k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Update(ctx, w, metav1.UpdateOptions{})
-
-	case "Job":
-		err = fmt.Errorf("")
-		// Do nothing
-		// w := workload.(*batchv1.Job)
-		// inject(&w.Spec.Template, command, wlid)
-		// cleanSelector(w.Spec.Selector)
-		// err = clientset.BatchV1().Jobs(namespace).Delete(w.Name, &v1.DeleteOptions{})
-		// if err == nil {
-		// 	w.Status = batchv1.JobStatus{}
-		// 	w.ObjectMeta.ResourceVersion = ""
-		// 	for {
-		// 		_, err = clientset.BatchV1().Jobs(namespace).Get(w.Name, v1.GetOptions{})
-		// 		if err != nil {
-		// 			break
-		// 		}
-		// 		time.Sleep(time.Second * 1)
-		// 	}
-		// 	w, err = clientset.BatchV1().Jobs(namespace).Create(w)
-		// }
-
 	case "Pod":
-		w := workload.(*corev1.Pod)
-		injectPod(&w.ObjectMeta, &w.Spec, command, wlid)
-		err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, w.Name, metav1.DeleteOptions{})
-		if err == nil {
-			w.Status = corev1.PodStatus{}
-			w.ObjectMeta.ResourceVersion = ""
-			for {
-				_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, w.Name, metav1.GetOptions{})
-				if err != nil {
-					break
-				}
-				time.Sleep(time.Second * 1)
-			}
-			_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Create(ctx, w, metav1.CreateOptions{})
-		}
+		return actionHandler.updatePod(workload)
 	default:
-		err = fmt.Errorf("command %s not supported with kind: %s", command, cautils.GetKindFromWlid(wlid))
+		return actionHandler.updateWorkload(workload)
 	}
-	return err
-
 }
+
+func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Workload) error {
+	if !persistentVolumeFound(workload) {
+		_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
+		return err
+
+	}
+	_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
+	return err
+}
+
+func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) error {
+	if err := actionHandler.k8sAPI.DeleteWorkloadByWlid(actionHandler.wlid); err == nil {
+		workload.RemovePodStatus()
+		workload.RemoveResourceVersion()
+		for {
+			_, err = actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
+			if err != nil {
+				break
+			}
+			time.Sleep(time.Second * 1)
+		}
+		actionHandler.k8sAPI.CreateWorkload(workload)
+	}
+	return nil
+}
+
+func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) {
+	switch command {
+	case apis.UPDATE:
+		workload.SetInject()
+		workload.SetWlid(actionHandler.wlid)
+		workload.SetUpdateTime()
+	case apis.REMOVE:
+		workload.RemoveInject()
+		workload.RemoveWlid()
+		workload.RemoveUpdateTime()
+	}
+}
+
+func persistentVolumeFound(workload *k8sinterface.Workload) bool {
+	volumes, _ := workload.GetVolumes()
+	for _, vol := range volumes {
+		if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// func updateWorkload(wlid string, command string, cmd *cautils.Command) error {
+// 	var err error
+// 	namespace := cautils.GetNamespaceFromWlid(wlid)
+// 	kind := cautils.GetKindFromWlid(wlid)
+
+// 	workload, err := getWorkload(wlid)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	ctx := context.Background()
+// 	switch kind {
+// 	case "Namespace":
+// 		w := workload.(*corev1.Namespace)
+// 		injectNS(&w.ObjectMeta, command)
+// 		_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
+
+// 	case "Deployment":
+// 		w := workload.(*appsv1.Deployment)
+// 		workloadUpdate(&w.ObjectMeta, command, wlid)
+// 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
+// 		_, err = k8sworkloads.KubernetesClient.AppsV1().Deployments(namespace).Update(ctx, w, metav1.UpdateOptions{})
+
+// 	case "ReplicaSet":
+// 		w := workload.(*appsv1.ReplicaSet)
+// 		workloadUpdate(&w.ObjectMeta, command, wlid)
+// 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
+// 		_, err = k8sworkloads.KubernetesClient.AppsV1().ReplicaSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
+
+// 	case "DaemonSet":
+// 		w := workload.(*appsv1.DaemonSet)
+// 		workloadUpdate(&w.ObjectMeta, command, wlid)
+// 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
+// 		_, err = k8sworkloads.KubernetesClient.AppsV1().DaemonSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
+
+// 	case "StatefulSet":
+// 		w := workload.(*appsv1.StatefulSet)
+// 		workloadUpdate(&w.ObjectMeta, command, wlid)
+// 		inject(&w.ObjectMeta, &w.Spec.Template, command, wlid, cmd)
+// 		w, err = k8sworkloads.KubernetesClient.AppsV1().StatefulSets(namespace).Update(ctx, w, metav1.UpdateOptions{})
+
+// 	case "PodTemplate":
+// 		w := workload.(*corev1.PodTemplate)
+// 		workloadUpdate(&w.ObjectMeta, command, wlid)
+// 		inject(&w.ObjectMeta, &w.Template, command, wlid, cmd)
+// 		_, err = k8sworkloads.KubernetesClient.CoreV1().PodTemplates(namespace).Update(ctx, w, metav1.UpdateOptions{})
+// 	case "CronJob":
+// 		w := workload.(*v1beta1.CronJob)
+// 		workloadUpdate(&w.ObjectMeta, command, wlid)
+// 		inject(&w.ObjectMeta, &w.Spec.JobTemplate.Spec.Template, command, wlid, cmd)
+// 		_, err = k8sworkloads.KubernetesClient.BatchV1beta1().CronJobs(namespace).Update(ctx, w, metav1.UpdateOptions{})
+
+// 	case "Job":
+// 		err = fmt.Errorf("")
+// 		// Do nothing
+// 		// w := workload.(*batchv1.Job)
+// 		// inject(&w.Spec.Template, command, wlid)
+// 		// cleanSelector(w.Spec.Selector)
+// 		// err = clientset.BatchV1().Jobs(namespace).Delete(w.Name, &v1.DeleteOptions{})
+// 		// if err == nil {
+// 		// 	w.Status = batchv1.JobStatus{}
+// 		// 	w.ObjectMeta.ResourceVersion = ""
+// 		// 	for {
+// 		// 		_, err = clientset.BatchV1().Jobs(namespace).Get(w.Name, v1.GetOptions{})
+// 		// 		if err != nil {
+// 		// 			break
+// 		// 		}
+// 		// 		time.Sleep(time.Second * 1)
+// 		// 	}
+// 		// 	w, err = clientset.BatchV1().Jobs(namespace).Create(w)
+// 		// }
+
+// 	case "Pod":
+// 		w := workload.(*corev1.Pod)
+// 		injectPod(&w.ObjectMeta, &w.Spec, command, wlid)
+// 		err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, w.Name, metav1.DeleteOptions{})
+// 		if err == nil {
+// 			w.Status = corev1.PodStatus{}
+// 			w.ObjectMeta.ResourceVersion = ""
+// 			for {
+// 				_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, w.Name, metav1.GetOptions{})
+// 				if err != nil {
+// 					break
+// 				}
+// 				time.Sleep(time.Second * 1)
+// 			}
+// 			_, err = k8sworkloads.KubernetesClient.CoreV1().Pods(namespace).Create(ctx, w, metav1.CreateOptions{})
+// 		}
+// 	default:
+// 		err = fmt.Errorf("command %s not supported with kind: %s", command, cautils.GetKindFromWlid(wlid))
+// 	}
+// 	return err
+
+// }
 
 func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, command, wlid string, cmd *cautils.Command) {
 	jobsAnnot := reporterlib.JobsAnnotations{}
@@ -139,12 +203,6 @@ func inject(objectMeta *metav1.ObjectMeta, template *corev1.PodTemplateSpec, com
 
 	case apis.RESTART:
 		injectTime(&template.ObjectMeta.Annotations)
-	case apis.SIGN:
-		updateLabel(&template.ObjectMeta.Labels)
-		injectTime(&template.ObjectMeta.Annotations)
-		if len(jobsAnnot.CurrJobID) > 0 {
-			template.ObjectMeta.Annotations[reporterlib.CAJobs] = string(annot)
-		}
 	case apis.REMOVE:
 		restoreConatinerCommand(&template.Spec)
 		removeCASpec(&template.Spec)

@@ -118,15 +118,15 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
 	case apis.UPDATE:
-		return updateWorkload(c.Wlid, apis.UPDATE, &c)
+		return actionHandler.update(apis.UPDATE)
 	case apis.RESTART:
-		return updateWorkload(c.Wlid, apis.RESTART, &c)
+		return actionHandler.update(apis.UPDATE)
 	case apis.REMOVE:
-		return detachWorkload(c.Wlid)
+		return actionHandler.update(apis.REMOVE)
 	case apis.SIGN:
 		return actionHandler.signWorkload()
-	case apis.INJECT:
-		return updateWorkload(c.Wlid, apis.INJECT, &c)
+	// case apis.INJECT:
+	// 	return updateWorkload(c.Wlid, apis.INJECT, &c)
 	case apis.ENCRYPT, apis.DECRYPT:
 		return runSecretCommand(sessionObj)
 	case apis.SCAN:
@@ -158,29 +158,19 @@ func runSecretCommand(sessionObj *cautils.SessionObj) error {
 	}
 	return err
 }
-func detachWorkload(wlid string) error {
-	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
-	// 	// add wlid to the ignore list
-	// 	ns := cautils.GetNamespaceFromWlid(wlid)
-	// 	namespaceWlid := cautils.GetWLID(cautils.GetClusterFromWlid(wlid), ns, "Namespace", ns)
-	// 	if err := excludeWlid(namespaceWlid, wlid); err != nil { // add wlid to the namespace ignore list
-	// 		return err
-	// 	}
-	// }
-	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
-}
 
-func attachWorkload(wlid string) error {
-	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
-	// 	// remove wlid from the ignore list
-	// 	ns := cautils.GetNamespaceFromWlid(wlid)
-	// 	namespaceWlid := cautils.GetWLID(cautils.GetClusterFromWlid(wlid), ns, "Namespace", ns)
-	// 	if err := includeWlid(namespaceWlid, wlid); err != nil { // add wlid to the namespace ignore list
-	// 		return err
-	// 	}
-	// }
-	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
-}
+// func detachWorkload(wlid string) error {
+// 	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
+// 	// 	// add wlid to the ignore list
+// 	// 	ns := cautils.GetNamespaceFromWlid(wlid)
+// 	// 	namespaceWlid := cautils.GetWLID(cautils.GetClusterFromWlid(wlid), ns, "Namespace", ns)
+// 	// 	if err := excludeWlid(namespaceWlid, wlid); err != nil { // add wlid to the namespace ignore list
+// 	// 		return err
+// 	// 	}
+// 	// }
+// 	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
+// }
+
 func (actionHandler *ActionHandler) signWorkload() error {
 	var err error
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
