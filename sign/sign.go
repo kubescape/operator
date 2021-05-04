@@ -49,12 +49,12 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 
 	// sign
 	s.reporter.SendAction("Running cacli sign", true)
-	if err := s.cacli.Sign(s.wlid, username, password, ""); err != nil {
+	if err := s.cacli.WTSign(s.wlid, username, password, ""); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
 			if err := cacli.LoginCacli(); err != nil {
 				return err
 			}
-			err = s.cacli.Sign(s.wlid, username, password, "")
+			err = s.cacli.WTSign(s.wlid, username, password, "")
 		}
 		return err
 	}
