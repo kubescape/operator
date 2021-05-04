@@ -17,8 +17,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// DockerConfigJsonstructure -
-type DockerConfigJsonstructure map[string]map[string]types.AuthConfig
+// DockerConfigJsonStructure -
+type DockerConfigJsonStructure map[string]map[string]types.AuthConfig
 
 // K8SConfig pointer to k8s config
 // var K8SConfig *restclient.Config
@@ -63,7 +63,7 @@ func GetSecretContent(secret *corev1.Secret) (interface{}, error) {
 	// Secret types- https://github.com/kubernetes/kubernetes/blob/7693a1d5fe2a35b6e2e205f03ae9b3eddcdabc6b/pkg/apis/core/types.go#L4394-L4478
 	switch secret.Type {
 	case corev1.SecretTypeDockerConfigJson:
-		sec := make(DockerConfigJsonstructure)
+		sec := make(DockerConfigJsonStructure)
 		if err := json.Unmarshal(secret.Data[corev1.DockerConfigJsonKey], &sec); err != nil {
 			return nil, err
 		}
@@ -101,7 +101,7 @@ func ReadSecret(secret interface{}, secretName string) (types.AuthConfig, error)
 	if sec, ok := secret.(map[string]string); ok {
 		return types.AuthConfig{Username: sec["username"]}, nil
 	}
-	if sec, ok := secret.(DockerConfigJsonstructure); ok {
+	if sec, ok := secret.(DockerConfigJsonStructure); ok {
 		if _, k := sec["auths"]; !k {
 			return authConfig, fmt.Errorf("cant find auths")
 		}
