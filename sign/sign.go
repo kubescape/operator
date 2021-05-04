@@ -6,6 +6,8 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
+	icacli "github.com/armosec/capacketsgo/cacli"
+	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
 	"github.com/docker/docker/api/types"
@@ -14,16 +16,19 @@ import (
 
 // Sign -
 type Sign struct {
-	cacli    *cacli.Cacli
-	wlid     string
-	debug    bool
-	reporter reporterlib.IReporter
+	wlid         string
+	debug        bool
+	cacli        icacli.ICacli
+	k8sAPI       *k8sinterface.KubernetesApi
+	reporter     reporterlib.IReporter
+	dockerClient DockerClient
 }
 
 //NewSigner -
-func NewSigner(wlid string, reporter reporterlib.IReporter) *Sign {
+func NewSigner(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, reporter reporterlib.IReporter, wlid string) *Sign {
 	return &Sign{
-		cacli:    cacli.NewCacli(),
+		cacli:    cacliObj,
+		k8sAPI:   k8sAPI,
 		wlid:     wlid,
 		debug:    cautils.CA_DEBUG_SIGNER,
 		reporter: reporter,
@@ -44,12 +49,12 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 
 	// sign
 	s.reporter.SendAction("Running cacli sign", true)
-	if err := s.cacli.Sign(s.wlid, username, password, s.debug); err != nil {
+	if err := s.cacli.Sign(s.wlid, username, password, ""); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
 			if err := cacli.LoginCacli(); err != nil {
 				return err
 			}
-			err = s.cacli.Sign(s.wlid, username, password, s.debug)
+			err = s.cacli.Sign(s.wlid, username, password, "")
 		}
 		return err
 	}
@@ -62,10 +67,10 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 // **************************************************************************************************
 
 // SignImageOcimage sign image usin cacli - ocimage
-func (s *Sign) SignImageOcimage(workload interface{}) error {
+func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
 
 	// get registry credentials from secrets
-	credentials, err := getImagePullSecret(workload)
+	credentials, err := s.getImagePullSecret(workload)
 	if err != nil {
 		return err
 	}
@@ -112,7 +117,7 @@ func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.Auth
 // **************************************************************************************************
 
 // SignImageDocker sign image usin cacli - docker
-func (s *Sign) SignImageDocker(workload interface{}) error {
+func (s *Sign) SignImageDocker(workload *k8sinterface.Workload) error {
 
 	// pull images
 	if err := s.prepareForSign(workload); err != nil {
@@ -128,9 +133,9 @@ func (s *Sign) SignImageDocker(workload interface{}) error {
 	return nil
 }
 
-func (s *Sign) prepareForSign(workload interface{}) error {
+func (s *Sign) prepareForSign(workload *k8sinterface.Workload) error {
 	// get wt
-	wt, err := s.cacli.Get(s.wlid)
+	wt, err := s.cacli.WTGet(s.wlid)
 	if err != nil {
 		return err
 	}
@@ -140,7 +145,8 @@ func (s *Sign) prepareForSign(workload interface{}) error {
 		logs := fmt.Sprintf("Pulling image '%s' using docker engine for wlid: '%s'", i.ImageTag, wt.Wlid)
 		glog.Infof(logs)
 		s.reporter.SendAction(logs, true)
-		if err := setDockerClient(workload, i.ImageTag); err != nil {
+
+		if err := s.setDockerClient(workload, i.ImageTag); err != nil {
 			return err
 		}
 		s.reporter.SendStatus(reporterlib.JobSuccess, true)

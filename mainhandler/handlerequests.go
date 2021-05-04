@@ -10,8 +10,10 @@ import (
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
 	"github.com/armosec/capacketsgo/secrethandling"
 
+	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
+	icacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/golang/glog"
 )
 
@@ -39,6 +41,16 @@ const (
 
 type MainHandler struct {
 	sessionObj *chan cautils.SessionObj
+	cacli      icacli.ICacli
+	k8sAPI     *k8sinterface.KubernetesApi
+}
+
+type ActionHandler struct {
+	cacli    icacli.ICacli
+	k8sAPI   *k8sinterface.KubernetesApi
+	reporter reporterlib.IReporter
+	wlid     string
+	sid      string
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -46,6 +58,18 @@ func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
 	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
 		sessionObj: sessionObj,
+		cacli:      icacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
+		k8sAPI:     k8sinterface.NewKubernetesApi(),
+	}
+}
+
+// CreateWebSocketHandler Create ws-handler obj
+func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, reporter reporterlib.IReporter) *ActionHandler {
+	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+	return &ActionHandler{
+		reporter: reporter,
+		cacli:    cacliObj,
+		k8sAPI:   k8sAPI,
 	}
 }
 
@@ -61,9 +85,9 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		sessionObj := <-*mainHandler.sessionObj
 		go func() {
 			status := "SUCCESS"
-
+			actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, sessionObj.Reporter)
 			sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
-			err := mainHandler.runCommand(&sessionObj)
+			err := actionHandler.runCommand(&sessionObj)
 			if err != nil {
 				sessionObj.Reporter.SendError(err, true, true)
 				status = "FAIL"
@@ -78,13 +102,14 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		}()
 	}
 }
-func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error {
+func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
 	if c.Wlid != "" {
 		if pkgcautils.IfIgnoreNamespace(cautils.GetNamespaceFromWlid(c.Wlid)) {
 			glog.Infof("Ignoring wlid: '%s'", c.Wlid)
 			return nil
 		}
+		actionHandler.wlid = c.Wlid
 	}
 	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
 	if c.Wlid != "" {
@@ -99,7 +124,7 @@ func (mainHandler *MainHandler) runCommand(sessionObj *cautils.SessionObj) error
 	case apis.REMOVE:
 		return detachWorkload(c.Wlid)
 	case apis.SIGN:
-		return signWorkload(c.Wlid, sessionObj.Reporter)
+		return actionHandler.signWorkload()
 	case apis.INJECT:
 		return updateWorkload(c.Wlid, apis.INJECT, &c)
 	case apis.ENCRYPT, apis.DECRYPT:
@@ -156,14 +181,14 @@ func attachWorkload(wlid string) error {
 	// }
 	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
 }
-func signWorkload(wlid string, reporter reporterlib.IReporter) error {
+func (actionHandler *ActionHandler) signWorkload() error {
 	var err error
-	workload, err := getWorkload(wlid)
+	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		return err
 	}
 
-	s := sign.NewSigner(wlid, reporter)
+	s := sign.NewSigner(actionHandler.cacli, actionHandler.k8sAPI, actionHandler.reporter, actionHandler.wlid)
 	if cautils.CA_USE_DOCKER {
 		err = s.SignImageDocker(workload)
 	} else {
@@ -173,7 +198,7 @@ func signWorkload(wlid string, reporter reporterlib.IReporter) error {
 		return err
 	}
 
-	glog.Infof("Done signing, updating workload, wlid: %s", wlid)
+	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
 	return err
 }
 
