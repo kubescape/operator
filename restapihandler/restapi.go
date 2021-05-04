@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/opapolicy"
+	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/capacketsgo/opapolicy"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )

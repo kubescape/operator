@@ -11,7 +11,7 @@ import (
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/k8sshared/probes"
+	"github.com/armosec/capacketsgo/k8sshared/probes"
 
 	"github.com/golang/glog"
 )

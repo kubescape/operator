@@ -5,7 +5,7 @@ import (
 	"k8s-ca-websocket/cacli"
 	"testing"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+	"github.com/armosec/capacketsgo/secrethandling"
 	corev1 "k8s.io/api/core/v1"
 )
 

@@ -1,8 +1,8 @@
 package cautils
 
 import (
-	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
-	reportutils "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/utilities"
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	reportutils "github.com/armosec/capacketsgo/system-reports/utilities"
 )
 
 func NewSessionObj(command *Command, message string) *SessionObj {

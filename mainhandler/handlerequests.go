@@ -6,11 +6,11 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
-	pkgcautils "asterix.cyberarmor.io/cyberarmor/capacketsgo/cautils"
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+	"github.com/armosec/capacketsgo/apis"
+	pkgcautils "github.com/armosec/capacketsgo/cautils"
+	"github.com/armosec/capacketsgo/secrethandling"
 
-	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
 	"github.com/golang/glog"
 )

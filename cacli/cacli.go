@@ -6,7 +6,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"time"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+	"github.com/armosec/capacketsgo/secrethandling"
 
 	"github.com/golang/glog"
 )

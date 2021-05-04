@@ -6,7 +6,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
-	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"

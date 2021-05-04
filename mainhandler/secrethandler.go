@@ -8,8 +8,8 @@ import (
 	"math/rand"
 	"os"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/capacketsgo/secrethandling"
 	"github.com/golang/glog"
 )
 

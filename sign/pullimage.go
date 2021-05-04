@@ -9,7 +9,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/k8sworkloads"
 
-	extutils "asterix.cyberarmor.io/cyberarmor/capacketsgo/cautils"
+	extutils "github.com/armosec/capacketsgo/cautils"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"

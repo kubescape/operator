@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/apis"
-	reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+	"github.com/armosec/capacketsgo/apis"
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
 	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"

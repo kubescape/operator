@@ -1,6 +1,6 @@
 package cautils
 
-import reporterlib "asterix.cyberarmor.io/cyberarmor/capacketsgo/system-reports/datastructures"
+import reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 
 // Commands list of commands received from websocket
 type Commands struct {

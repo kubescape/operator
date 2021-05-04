@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 
-	"asterix.cyberarmor.io/cyberarmor/capacketsgo/secrethandling"
+	"github.com/armosec/capacketsgo/secrethandling"
 )
 
 // WrokloadTemplateWordpressMock worpres mock
