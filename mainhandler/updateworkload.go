@@ -38,12 +38,10 @@ func (actionHandler *ActionHandler) update(command string) error {
 }
 
 func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Workload) error {
-	if !persistentVolumeFound(workload) {
-		_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
-		return err
-
-	}
 	_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
+	if persistentVolumeFound(workload) {
+		return actionHandler.deletePods(workload)
+	}
 	return err
 }
 
@@ -74,6 +72,16 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.RemoveWlid()
 		workload.RemoveUpdateTime()
 	}
+}
+func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) error {
+	selector, err := workload.GetSelector()
+	if err != nil || selector == nil {
+
+	}
+	lisOptions := metav1.ListOptions{
+		LabelSelector: labels.Set(selector.MatchLabels).AsSelector().String(),
+	}
+	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
 func persistentVolumeFound(workload *k8sinterface.Workload) bool {
