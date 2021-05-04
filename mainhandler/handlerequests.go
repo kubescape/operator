@@ -51,6 +51,7 @@ type ActionHandler struct {
 	reporter reporterlib.IReporter
 	wlid     string
 	sid      string
+	command  cautils.Command
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -64,10 +65,11 @@ func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, reporter reporterlib.IReporter) *ActionHandler {
+func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, sessionObj *cautils.SessionObj) *ActionHandler {
 	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &ActionHandler{
-		reporter: reporter,
+		reporter: sessionObj.Reporter,
+		command:  sessionObj.Command,
 		cacli:    cacliObj,
 		k8sAPI:   k8sAPI,
 	}
@@ -85,7 +87,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		sessionObj := <-*mainHandler.sessionObj
 		go func() {
 			status := "SUCCESS"
-			actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, sessionObj.Reporter)
+			actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, &sessionObj)
 			sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
 			err := actionHandler.runCommand(&sessionObj)
 			if err != nil {
@@ -221,4 +223,14 @@ func getScanFromArgs(args map[string]interface{}) (*apis.WebsocketScanCommand, e
 		return nil, fmt.Errorf("cannot convert 'bytes array scan' to 'WebsocketScanCommand', reason: %s", err.Error())
 	}
 	return websocketScanCommand, nil
+}
+
+func isForceDelete(args map[string]interface{}) bool {
+	if args == nil || len(args) == 0 {
+		return false
+	}
+	if v, ok := args["forceDelete"]; ok && v != nil {
+		return v.(bool)
+	}
+	return false
 }

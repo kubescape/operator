@@ -38,13 +38,16 @@ func (actionHandler *ActionHandler) update(command string) error {
 }
 
 func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Workload) error {
-	_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
-	if err != nil {
-		glog.Errorf("failed to update workloadID: '%s', reason: %s", actionHandler.wlid, err.Error())
-	}
+	deletePods := isForceDelete(actionHandler.command.Args)
+
 	if persistentVolumeFound(workload) {
+		deletePods = true
+	}
+
+	if deletePods {
 		return actionHandler.deletePods(workload)
 	}
+	_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
 	return err
 }
 
