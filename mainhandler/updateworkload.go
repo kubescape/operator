@@ -45,6 +45,7 @@ func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Worklo
 	}
 
 	if deletePods {
+		glog.Infof("Updating workload by deleting pods, workloadID: %s", actionHandler.wlid)
 		return actionHandler.deletePods(workload)
 	}
 	_, err := actionHandler.k8sAPI.UpdateWorkload(workload)
