@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
+	"os"
 	"strings"
 
 	icacli "github.com/armosec/capacketsgo/cacli"
@@ -49,7 +50,14 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 
 	// sign
 	s.reporter.SendAction("Running cacli sign", true)
-	if err := s.cacli.WTSign(s.wlid, username, password, ""); err != nil {
+
+	glog.Infof("wlid: %v user: %v use docker?: %v", s.wlid, username, cautils.CA_USE_DOCKER)
+	url := ""
+	if useDocker, ok := os.LookupEnv("CA_USE_DOCKER"); useDocker != "true" || !ok {
+		url = cautils.CA_OCIMAGE_URL
+	}
+
+	if err := s.cacli.WTSign(s.wlid, username, password, url); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
 			if err := cacli.LoginCacli(); err != nil {
 				return err
@@ -74,7 +82,7 @@ func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
 	if err != nil {
 		return err
 	}
-
+	// glog.Infof("signing wl:\n%v\nusing creds:\n%v\n", workload, credentials)
 	// sign
 	if err := s.triggerOCImageSign(s.wlid, credentials); err != nil {
 		return err
