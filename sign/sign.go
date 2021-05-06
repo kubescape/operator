@@ -96,7 +96,7 @@ func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
 func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.AuthConfig) error {
 
 	for secret, data := range credentials {
-		logs := fmt.Sprintf("Signing '%s' using oci engine and credentails", wlid)
+		logs := fmt.Sprintf("Signing '%s' using oci engine and secret %s credentails", wlid, secret)
 		glog.Infof(logs)
 		s.reporter.SendAction(logs, true)
 		if err := s.triggerCacliSign(data.Username, data.Password); err == nil {
