@@ -64,5 +64,7 @@ func GetNamespaceFromWorkload(workload interface{}) string {
 		return w.ObjectMeta.Namespace
 	}
 
-	return "default"
+	//@DAVID why is that default?
+
+	return ""
 }

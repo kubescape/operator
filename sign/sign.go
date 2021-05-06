@@ -82,7 +82,7 @@ func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
 	if err != nil {
 		return err
 	}
-	// glog.Infof("signing wl:\n%v\nusing creds:\n%v\n", workload, credentials)
+	glog.Infof("signing wl:\n%v\nusing creds", workload)
 	// sign
 	if err := s.triggerOCImageSign(s.wlid, credentials); err != nil {
 		return err
@@ -96,7 +96,7 @@ func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
 func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.AuthConfig) error {
 
 	for secret, data := range credentials {
-		logs := fmt.Sprintf("Signing '%s' using oci engine and secret '%s' credentails", wlid, secret)
+		logs := fmt.Sprintf("Signing '%s' using oci engine and credentails", wlid)
 		glog.Infof(logs)
 		s.reporter.SendAction(logs, true)
 		if err := s.triggerCacliSign(data.Username, data.Password); err == nil {

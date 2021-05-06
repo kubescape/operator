@@ -135,8 +135,18 @@ func (s *Sign) getImagePullSecret(workload *k8sinterface.Workload) (map[string]t
 		s.reporter.SendError(err, true, true)
 	}
 	podImagePullSecrets = append(podImagePullSecrets, podImagePullSecretsTemp...)
+	ns := cautils.GetNamespaceFromWorkload(workload)
+	if len(ns) == 0 {
+		ns = cautils.GetNamespaceFromWlid(s.wlid)
+		if len(ns) == 0 {
+			err := fmt.Errorf("cant pull secrets no namespace was given")
+			glog.Error(err)
+			return nil, err
+		}
+	}
 
-	return s.readSecrets(podImagePullSecrets, cautils.GetNamespaceFromWorkload(workload))
+	glog.Infof("namespace: %v\n\n%v", ns, workload)
+	return s.readSecrets(podImagePullSecrets, ns)
 }
 
 func (s *Sign) readSecrets(sec []corev1.LocalObjectReference, namespace string) (map[string]types.AuthConfig, error) {
