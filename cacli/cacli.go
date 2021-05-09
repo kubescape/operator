@@ -64,6 +64,26 @@ func (cacli *Cacli) Login(globalLoginCredentials cautils.CredStruct) error {
 	return err
 }
 
+func (cacli *Cacli) RunPostureScan(framework, cluster string) error {
+	args := []string{}
+	// cacli k8s posture create --framework "MITRE" --cluster childrenofbodom
+
+	args = append(args, "k8s")
+	args = append(args, "posture")
+	args = append(args, "create")
+	args = append(args, "--cluster")
+	args = append(args, cluster)
+	args = append(args, "--framework")
+	args = append(args, framework)
+	res, err := runCacliCommandRepeat(args, false, time.Duration(2)*time.Minute)
+	if err != nil {
+		return err
+	}
+	glog.Infof("%v", string(res))
+	return nil
+
+}
+
 // GetSigningProfile command
 // func (cacli *Cacli) GetSigningProfile(spName string) (*cautils.SigningProfile, error) {
 func (cacli *Cacli) GetSigningProfile(spName string) (*cautils.SigningProfile, error) {

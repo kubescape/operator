@@ -6,14 +6,15 @@ import (
 	"io/ioutil"
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/cronjobs"
 	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
 
 	"github.com/armosec/capacketsgo/k8sshared/probes"
-
 	"github.com/golang/glog"
+	"github.com/robfig/cron"
 )
 
 // main function
@@ -56,6 +57,20 @@ func main() {
 	isReadinessReady = true
 
 	mainHandler := mainhandler.NewMainHandler(&sessionObj)
+
+	//cronjobs - add these so websocket can trigger various jobs
+	go func() {
+		glog.Infof("starting websocket cronjobs")
+		cronjobmgr := cron.New()
+		glog.Infof("starting posture scan in main")
+		cronjobmgr.AddFunc(cronjobs.GetPostureScanSchedule(), cronjobs.PostureScanCronJob)
+		glog.Infof("starting vuln scan in main")
+
+		cronjobmgr.AddFunc(cronjobs.GetPvulnerabilityScanSchedule(), cronjobs.VulnScanCronJob)
+
+		cronjobmgr.Start()
+	}()
+
 	mainHandler.HandleRequest()
 
 }
