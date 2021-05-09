@@ -84,16 +84,16 @@ func (s *Sign) pullImage(workload *k8sinterface.Workload, imageName string) (out
 	if err != nil {
 		return out, err
 	}
-	if extutils.CheckIsECRImage(imageName) {
-		glog.Infof("pulling image using ECR secrets for image: %s", imageName)
-		userName, password, err := extutils.GetLoginDetailsForECR(imageName)
-		if err != nil {
-			glog.Errorf("Failed to GetLoginDetailsForECR(%s): %v", imageName, err)
-		} else {
-			secrets = map[string]types.AuthConfig{"ECR": {
-				Username: userName,
-				Password: password,
-			}}
+	if len(secrets) == 0 {
+		secrets = make(map[string]types.AuthConfig)
+	}
+	cloudVendorSecrets, err := extutils.GetCloudVendorRegistryCredentials(imageName)
+	if err != nil {
+		glog.Errorf("Failed to GetCloudVendorRegistryCredentials(%s): %v", imageName, err)
+
+	} else if len(cloudVendorSecrets) > 0 {
+		for secName := range cloudVendorSecrets {
+			secrets[secName] = cloudVendorSecrets[secName]
 		}
 	}
 	if len(secrets) == 0 {
