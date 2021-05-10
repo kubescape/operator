@@ -23,16 +23,22 @@ import (
 
 func (actionHandler *ActionHandler) update(command string) error {
 	kind := cautils.GetKindFromWlid(actionHandler.wlid)
+	glog.Infof("got kind : '%v'", kind)
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
+		glog.Error(err)
 		return err
 	}
+
+	glog.Infof("calling editWorkload with %v %v ", command, workload)
 	actionHandler.editWorkload(workload, command)
 
 	switch kind {
 	case "Pod":
+		glog.Infof("updating pod")
 		return actionHandler.updatePod(workload)
 	default:
+		glog.Infof("default")
 		return actionHandler.updateWorkload(workload)
 	}
 }
@@ -53,18 +59,23 @@ func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Worklo
 }
 
 func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) error {
+	glog.Infof("in updatePod")
 	if err := actionHandler.k8sAPI.DeleteWorkloadByWlid(actionHandler.wlid); err == nil {
 		workload.RemovePodStatus()
 		workload.RemoveResourceVersion()
 		for {
+
+			//infinite loop potentially??
 			_, err = actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 			if err != nil {
+				glog.Error(err)
 				break
 			}
 			time.Sleep(time.Second * 1)
 		}
 		actionHandler.k8sAPI.CreateWorkload(workload)
 	}
+	glog.Errorf("coulnt DeleteWorkloadByWlid successfully")
 	return nil
 }
 
