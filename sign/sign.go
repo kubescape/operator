@@ -10,6 +10,7 @@ import (
 	icacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
@@ -76,9 +77,14 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 
 // SignImageOcimage sign image usin cacli - ocimage
 func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
-
-	// get registry credentials from secrets
-	credentials, err := s.getImagePullSecret(workload)
+	podSpec, err := workload.GetPodSpec()
+	if err != nil {
+		glog.Errorf("In pullImage failed to GetPodSpec: %v", err)
+	}
+	podObj := &corev1.Pod{Spec: *podSpec}
+	podObj.ObjectMeta.Namespace = workload.GetNamespace()
+	glog.Infof("pulling image using secret")
+	credentials, err := k8sinterface.GetImageRegistryCredentials("", podObj)
 	if err != nil {
 		return err
 	}

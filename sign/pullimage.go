@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"k8s-ca-websocket/cautils"
-	"k8s-ca-websocket/k8sworkloads"
 
-	extutils "github.com/armosec/capacketsgo/cautils"
 	"github.com/armosec/capacketsgo/k8sinterface"
 
 	"github.com/docker/docker/api/types"
@@ -17,7 +14,6 @@ import (
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // DockerClient -
@@ -76,28 +72,19 @@ func (s *Sign) pullImage(workload *k8sinterface.Workload, imageName string) (out
 	if clearErr == nil {
 		return out, nil
 	}
-
-	// If image pull returnd error, try pulling using credentials
-	// Get kubernetes secrets from podSpec
+	podSpec, err := workload.GetPodSpec()
+	if err != nil {
+		glog.Errorf("In pullImage failed to GetPodSpec: %v", err)
+	}
+	podObj := &corev1.Pod{Spec: *podSpec}
+	podObj.ObjectMeta.Namespace = workload.GetNamespace()
 	glog.Infof("pulling image using secret")
-	secrets, err := s.getImagePullSecret(workload)
+	secrets, err := k8sinterface.GetImageRegistryCredentials(imageName, podObj)
 	if err != nil {
-		return out, err
+		glog.Errorf("In pullImage failed to GetImageRegistryCredentials: %v", err)
 	}
 	if len(secrets) == 0 {
-		secrets = make(map[string]types.AuthConfig)
-	}
-	cloudVendorSecrets, err := extutils.GetCloudVendorRegistryCredentials(imageName)
-	if err != nil {
-		glog.Errorf("Failed to GetCloudVendorRegistryCredentials(%s): %v", imageName, err)
-
-	} else if len(cloudVendorSecrets) > 0 {
-		for secName := range cloudVendorSecrets {
-			secrets[secName] = cloudVendorSecrets[secName]
-		}
-	}
-	if len(secrets) == 0 {
-		return out, fmt.Errorf("No secrets found. check previous printed errors.\nerror received pulling image without secret: %v", clearErr)
+		return out, fmt.Errorf("no secrets found. check previous printed errors.\nerror received pulling image without secret: %v", clearErr)
 	}
 
 	for secretName, regAuth := range secrets {
@@ -121,88 +108,7 @@ func (s *Sign) pullImage(workload *k8sinterface.Workload, imageName string) (out
 		// }
 	}
 
-	return out, fmt.Errorf("Failed to pull image %s", imageName)
-}
-
-func (s *Sign) getImagePullSecret(workload *k8sinterface.Workload) (map[string]types.AuthConfig, error) {
-	podImagePullSecrets, err := workload.GetImagePullSecret()
-	if err != nil {
-		return nil, err
-	}
-	podImagePullSecretsTemp, err := s.getServiceAccountImagePullSecret(workload)
-	if err != nil {
-		glog.Errorf(err.Error())
-		s.reporter.SendError(err, true, true)
-	}
-	podImagePullSecrets = append(podImagePullSecrets, podImagePullSecretsTemp...)
-	ns := cautils.GetNamespaceFromWorkload(workload)
-	if len(ns) == 0 {
-		ns = cautils.GetNamespaceFromWlid(s.wlid)
-		if len(ns) == 0 {
-			err := fmt.Errorf("cant pull secrets no namespace was given")
-			glog.Error(err)
-			return nil, err
-		}
-	}
-
-	glog.Infof("namespace: %v\n\n%v", ns, workload)
-	return s.readSecrets(podImagePullSecrets, ns)
-}
-
-func (s *Sign) readSecrets(sec []corev1.LocalObjectReference, namespace string) (map[string]types.AuthConfig, error) {
-
-	secrets := make(map[string]types.AuthConfig)
-	for _, i := range sec {
-		res, err := s.k8sAPI.KubernetesClient.CoreV1().Secrets(namespace).Get(context.Background(), i.Name, metav1.GetOptions{})
-		if err != nil {
-			glog.Errorf("%v", err)
-			continue
-		}
-
-		// Read secret
-		secret, err := k8sworkloads.GetSecretContent(res)
-		if err != nil {
-			glog.Error(err)
-			continue
-		}
-
-		if secret == nil {
-			glog.Errorf("Secret %s not found", i.Name)
-			continue
-		}
-		ts, err := k8sworkloads.ReadSecret(secret, i.Name)
-		if err != nil {
-			return secrets, err
-		}
-		secrets[i.Name] = ts
-	}
-	return secrets, nil
-}
-
-func getSecretContent(secret *corev1.Secret) (interface{}, error) {
-
-	// Secret types- https://github.com/kubernetes/kubernetes/blob/7693a1d5fe2a35b6e2e205f03ae9b3eddcdabc6b/pkg/apis/core/types.go#L4394-L4478
-	switch secret.Type {
-	case corev1.SecretTypeDockerConfigJson:
-		sec := make(DockerConfigJsonstructure)
-		if err := json.Unmarshal(secret.Data[corev1.DockerConfigJsonKey], &sec); err != nil {
-			return nil, err
-		}
-		return sec, nil
-	default:
-		user, ok := secret.Data[corev1.BasicAuthUsernameKey]
-		if !ok {
-			return nil, fmt.Errorf("user not found in secret")
-		}
-		psw, ok := secret.Data[corev1.BasicAuthPasswordKey]
-		if !ok {
-			return nil, fmt.Errorf("password not found in secret")
-		}
-		encUser := base64.URLEncoding.EncodeToString(user)
-		encPSW := base64.URLEncoding.EncodeToString(psw)
-
-		return &types.AuthConfig{Username: encUser, Password: encPSW}, nil
-	}
+	return out, fmt.Errorf("failed to pull image %s", imageName)
 }
 
 func imageFoundInLocalRegistry(imageList []types.ImageSummary, imageName string) bool {
@@ -215,20 +121,4 @@ func imageFoundInLocalRegistry(imageList []types.ImageSummary, imageName string)
 		}
 	}
 	return false
-}
-
-func (s *Sign) getServiceAccountImagePullSecret(workload *k8sinterface.Workload) ([]corev1.LocalObjectReference, error) {
-	pullSecrets := []corev1.LocalObjectReference{}
-	serviceA := workload.GetServiceAccountName()
-	if serviceA == "" {
-		return pullSecrets, nil
-	}
-	serviceAccount, err := s.k8sAPI.KubernetesClient.CoreV1().ServiceAccounts(workload.GetNamespace()).Get(context.Background(), serviceA, metav1.GetOptions{})
-	if err != nil {
-		return pullSecrets, fmt.Errorf("Failed to get serviceAccount '%s', reason: %s. Will not use credentials for pulling secrets", serviceA, err.Error())
-	}
-	if serviceAccount.ImagePullSecrets != nil {
-		return serviceAccount.ImagePullSecrets, nil
-	}
-	return pullSecrets, nil
 }
