@@ -45,9 +45,9 @@ func scanWorkload(wlid string, pod *corev1.Pod, reporter reporterlib.IReporter) 
 
 				}
 			}
-			glog.Infof("secrets %v", secrets)
+			// glog.Infof("secrets %v", secrets)
 			if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk && err == nil && len(secrets) > 0 {
-				glog.Infof("found relevant secret %v for: %v", secret, websocketScanCommand.ImageTag)
+				glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
 				websocketScanCommand.Credentials = &secret
 
 			}
