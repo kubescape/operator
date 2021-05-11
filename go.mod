@@ -6,7 +6,7 @@ replace github.com/armosec/capacketsgo => ./vendor/github.com/armosec/capacketsg
 
 require (
 	github.com/Microsoft/go-winio v0.4.16 // indirect
-	github.com/armosec/capacketsgo v0.0.3
+	github.com/armosec/capacketsgo v0.0.5
 	github.com/containerd/containerd v1.4.4 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v20.10.6+incompatible
