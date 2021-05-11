@@ -8,10 +8,13 @@ import (
 	"net/http"
 
 	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/capacketsgo/k8sinterface"
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 	"github.com/golang/glog"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func scanWorkload(wlid string) error {
+func scanWorkload(wlid string, pod *corev1.Pod, reporter reporterlib.IReporter) error {
 	// get all images of workload
 	errs := ""
 	containers, err := getWorkloadImages(wlid, apis.SCAN)
@@ -21,12 +24,28 @@ func scanWorkload(wlid string) error {
 	websocketScanCommand := &apis.WebsocketScanCommand{
 		Wlid: wlid,
 	}
+	if reporter != nil {
+		websocketScanCommand.JobID = reporter.GetJobID()
+		websocketScanCommand.LastAction = reporter.GetActionIDN()
+	}
+
 	for i := range containers {
 		websocketScanCommand.ImageTag = containers[i].image
 		websocketScanCommand.ContainerName = containers[i].container
-		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
-			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", wlid, containers[i].image, containers[i].container, err.Error())
+		if pod != nil {
+			secrets, err := k8sinterface.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
+			if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk && err == nil && len(secrets) > 0 {
+				glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
+				websocketScanCommand.Credentials = &secret
+
+			}
 		}
+		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
+			glog.Errorf("scanning %v failed due to: %v", websocketScanCommand.ImageTag, err.Error())
+			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", wlid, containers[i].image, containers[i].container, err.Error())
+
+		}
+
 	}
 	if errs != "" {
 		return fmt.Errorf(errs)

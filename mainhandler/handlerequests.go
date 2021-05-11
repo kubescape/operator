@@ -9,6 +9,7 @@ import (
 	"github.com/armosec/capacketsgo/apis"
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
 	"github.com/armosec/capacketsgo/secrethandling"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
@@ -136,7 +137,11 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.ENCRYPT, apis.DECRYPT:
 		return runSecretCommand(sessionObj)
 	case apis.SCAN:
-		return scanWorkload(c.Wlid)
+		pod, err := actionHandler.GetPodByWLID(c.Wlid)
+		if err != nil {
+			glog.Errorf("scanning might fail if some images require credentials")
+		}
+		return scanWorkload(c.Wlid, pod, actionHandler.reporter)
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
@@ -237,4 +242,19 @@ func isForceDelete(args map[string]interface{}) bool {
 		return v.(bool)
 	}
 	return false
+}
+
+func (actionHandler *ActionHandler) GetPodByWLID(wlid string) (*corev1.Pod, error) {
+	var err error
+	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
+	if err != nil {
+		return nil, err
+	}
+	podspec, err := workload.GetPodSpec()
+	if err != nil {
+		return nil, err
+	}
+	podObj := &corev1.Pod{Spec: *podspec}
+	podObj.ObjectMeta.Namespace = cautils.GetNamespaceFromWlid(wlid)
+	return podObj, nil
 }
