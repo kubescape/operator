@@ -69,7 +69,8 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 		return err
 	}
 	pathScan := fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
-	glog.Infof("requesting scan. url: %s, data: %s", pathScan, string(jsonScannerC))
+	hasCreds := websocketScanCommand.Credentials != nil && len(websocketScanCommand.Credentials.Username) > 0 && len(websocketScanCommand.Credentials.Password) > 0
+	glog.Infof("requesting scan. url: %s wlid: %s image: %s with credentials: %v", pathScan, websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds)
 
 	req, err := http.NewRequest("POST", pathScan, bytes.NewBuffer(jsonScannerC))
 	if err != nil {
