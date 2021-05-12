@@ -14,7 +14,6 @@ import (
 
 	"github.com/armosec/capacketsgo/k8sshared/probes"
 	"github.com/golang/glog"
-	"github.com/robfig/cron"
 )
 
 // main function
@@ -60,15 +59,7 @@ func main() {
 
 	//cronjobs - add these so websocket can trigger various jobs
 	go func() {
-		glog.Infof("starting websocket cronjobs")
-		cronjobmgr := cron.New()
-		glog.Infof("starting posture scan in main")
-		cronjobmgr.AddFunc(cronjobs.GetPostureScanSchedule(), cronjobs.PostureScanCronJob)
-		glog.Infof("starting vuln scan in main")
-
-		cronjobmgr.AddFunc(cronjobs.GetPvulnerabilityScanSchedule(), cronjobs.VulnScanCronJob)
-
-		cronjobmgr.Start()
+		cronjobs.StartCronJob()
 	}()
 
 	mainHandler.HandleRequest()
