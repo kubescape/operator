@@ -60,23 +60,30 @@ func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Worklo
 
 func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) error {
 	glog.Infof("in updatePod")
-	if err := actionHandler.k8sAPI.DeleteWorkloadByWlid(actionHandler.wlid); err == nil {
+	var err error
+	maxTime := float64(360) // wait for 3 minutes
+	timer := float64(0)
+	sleepTime := time.Second * 1
+
+	if err = actionHandler.k8sAPI.DeleteWorkloadByWlid(actionHandler.wlid); err == nil {
 		workload.RemovePodStatus()
 		workload.RemoveResourceVersion()
 		for {
-
-			//infinite loop potentially??
 			_, err = actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 			if err != nil {
 				glog.Error(err)
 				break
 			}
-			time.Sleep(time.Second * 1)
+			if maxTime <= timer {
+				return fmt.Errorf("Failed to restart pod, time: %v seconds, workloadID: %s", maxTime, actionHandler.wlid)
+			}
+			time.Sleep(sleepTime)
+			timer += sleepTime.Seconds()
+
 		}
-		actionHandler.k8sAPI.CreateWorkload(workload)
+		_, err = actionHandler.k8sAPI.CreateWorkload(workload)
 	}
-	glog.Errorf("coulnt DeleteWorkloadByWlid successfully")
-	return nil
+	return err
 }
 
 func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) {
@@ -94,13 +101,13 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	}
 }
 func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) error {
-	selector, err := workload.GetSelector()
-	if err != nil || selector == nil {
+	lisOptions := metav1.ListOptions{}
 
+	selector, err := workload.GetSelector()
+	if err == nil && selector != nil {
+		lisOptions.LabelSelector = labels.Set(selector.MatchLabels).AsSelector().String()
 	}
-	lisOptions := metav1.ListOptions{
-		LabelSelector: labels.Set(selector.MatchLabels).AsSelector().String(),
-	}
+
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
