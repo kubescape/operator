@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
-	"os"
 	"strings"
 
 	icacli "github.com/armosec/capacketsgo/cacli"
@@ -38,7 +37,7 @@ func NewSigner(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, repor
 
 }
 
-func (s *Sign) triggerCacliSign(username, password string) error {
+func (s *Sign) triggerCacliSign(username, password, ociURL string) error {
 	// is cacli loggedin
 	if !cacli.IsLoggedin() {
 		s.reporter.SendAction("Sign in cacli", true)
@@ -53,17 +52,13 @@ func (s *Sign) triggerCacliSign(username, password string) error {
 	s.reporter.SendAction("Running cacli sign", true)
 
 	glog.Infof("wlid: %v user: %v use docker?: %v", s.wlid, username, cautils.CA_USE_DOCKER)
-	url := ""
-	if useDocker, ok := os.LookupEnv("CA_USE_DOCKER"); useDocker != "true" || !ok {
-		url = cautils.CA_OCIMAGE_URL
-	}
 
-	if err := s.cacli.WTSign(s.wlid, username, password, url); err != nil {
+	if err := s.cacli.WTSign(s.wlid, username, password, ociURL); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
 			if err := cacli.LoginCacli(); err != nil {
 				return err
 			}
-			err = s.cacli.WTSign(s.wlid, username, password, "")
+			err = s.cacli.WTSign(s.wlid, username, password, ociURL)
 		}
 		return err
 	}
@@ -83,12 +78,14 @@ func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
 	}
 	podObj := &corev1.Pod{Spec: *podSpec}
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
+
 	glog.Infof("pulling image using secret")
 	credentials, err := k8sinterface.GetImageRegistryCredentials("", podObj)
 	if err != nil {
 		return err
 	}
-	glog.Infof("signing wl:\n%v\nusing creds", workload)
+
+	glog.Infof("Signing workload with credentials. WorkloadID: %s", s.wlid)
 	// sign
 	if err := s.triggerOCImageSign(s.wlid, credentials); err != nil {
 		return err
@@ -105,7 +102,7 @@ func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.Auth
 		logs := fmt.Sprintf("Signing '%s' using oci engine and secret %s credentails", wlid, secret)
 		glog.Infof(logs)
 		s.reporter.SendAction(logs, true)
-		if err := s.triggerCacliSign(data.Username, data.Password); err == nil {
+		if err := s.triggerCacliSign(data.Username, data.Password, cautils.CA_OCIMAGE_URL); err == nil {
 			s.reporter.SendStatus(reporterlib.JobSuccess, true)
 			return nil
 		}
@@ -114,7 +111,7 @@ func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.Auth
 	logs := fmt.Sprintf("Signing '%s' using oci engine without using registry credentials", wlid)
 	glog.Infof(logs)
 	s.reporter.SendAction(logs, true)
-	err := s.triggerCacliSign("", "")
+	err := s.triggerCacliSign("", "", cautils.CA_OCIMAGE_URL)
 	if err == nil {
 		s.reporter.SendStatus(reporterlib.JobSuccess, true)
 		return nil
@@ -139,7 +136,7 @@ func (s *Sign) SignImageDocker(workload *k8sinterface.Workload) error {
 	}
 
 	// sign
-	if err := s.triggerCacliSign("", ""); err != nil {
+	if err := s.triggerCacliSign("", "", ""); err != nil {
 		return err
 	}
 
