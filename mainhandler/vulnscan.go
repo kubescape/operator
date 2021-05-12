@@ -39,19 +39,17 @@ func scanWorkload(wlid string, pod *corev1.Pod, reporter reporterlib.IReporter) 
 			secrets, err := k8sinterface.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
 			if err != nil {
 				glog.Error(err)
-				if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
-					glog.Errorf("#2 scanning %v failed due to: %v", websocketScanCommand.ImageTag, err.Error())
-					errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", wlid, containers[i].image, containers[i].container, err.Error())
-
+			} else if len(secrets) > 0 {
+				if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk {
+					glog.Infof("found relevant secret for: %v\nsecret:\n%v\n", websocketScanCommand.ImageTag, secret)
+					websocketScanCommand.Credentials = &secret
+				} else {
+					glog.Errorf("couldn't find image: %v secret", websocketScanCommand.ImageTag)
 				}
-			}
-			// glog.Infof("secrets %v", secrets)
-			if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk && err == nil && len(secrets) > 0 {
-				glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
-				websocketScanCommand.Credentials = &secret
 
 			}
-		} else if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
+		}
+		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
 			glog.Errorf("scanning %v failed due to: %v", websocketScanCommand.ImageTag, err.Error())
 			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", wlid, containers[i].image, containers[i].container, err.Error())
 
