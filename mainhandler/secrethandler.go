@@ -24,21 +24,21 @@ type SecretHandler struct {
 }
 
 //NewSecretHandler -
-func NewSecretHandler(sid string) *SecretHandler {
-	return &SecretHandler{
-		cacli:         cacli.NewCacli(),
-		sid:           sid,
-		cluster:       secrethandling.GetSIDCluster(sid),
-		namespace:     secrethandling.GetSIDNamespace(sid),
-		secretName:    secrethandling.GetSIDName(sid),
-		subsecretName: secrethandling.GetSIDSubsecret(sid),
-	}
+// func NewSecretHandler(sid string) *SecretHandler {
+// 	return &SecretHandler{
+// 		cacli:         cacli.NewCacli(),
+// 		sid:           sid,
+// 		cluster:       secrethandling.GetSIDCluster(sid),
+// 		namespace:     secrethandling.GetSIDNamespace(sid),
+// 		secretName:    secrethandling.GetSIDName(sid),
+// 		subsecretName: secrethandling.GetSIDSubsecret(sid),
+// 	}
 
-}
+// }
 
-func (secretHandler *SecretHandler) encryptSecret() error {
+func (actionHandler *ActionHandler) encryptSecret() error {
 	// get secret
-	secret, err := GetSecret(secretHandler.namespace, secretHandler.secretName)
+	secret, err := actionHandler.GetSecret(secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid))
 	if err != nil {
 		return err
 	}
@@ -47,17 +47,17 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 		return fmt.Errorf("no data in secret to encrypt")
 	}
 
-	secretPolicyList, err := secretHandler.cacli.GetSecretAccessPolicy(secretHandler.sid, "", "", "")
+	secretPolicyList, err := actionHandler.cacli.SECPGet(actionHandler.sid, "", "", "")
 	if err != nil {
 		return err
 	}
 	if len(secretPolicyList) == 0 {
-		return fmt.Errorf("somthing went wrong, no secret policy found for secret-id: '%s'", secretHandler.sid)
+		return fmt.Errorf("somthing went wrong, no secret policy found for secret-id: '%s'", actionHandler.sid)
 	}
 	secretPolicy := secretPolicyList[0]
 
 	// set subsecret fields to encrypt
-	fieldsToEncrypt, err := secrethandling.GetFieldsToEncrypt(secret.Data, &secretPolicy, secretHandler.subsecretName)
+	fieldsToEncrypt, err := secrethandling.GetFieldsToEncrypt(secret.Data, &secretPolicy, secrethandling.GetSIDSubsecret(actionHandler.sid))
 	if err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 
 	// encrypt subsecret/s
 	for subsecretName, keyID := range fieldsToEncrypt {
-		if err := secretHandler.encryptSubsecret(secret.Data, subsecretName, keyID); err != nil {
+		if err := actionHandler.encryptSubsecret(secret.Data, subsecretName, keyID); err != nil {
 			return err
 		}
 		updateSecret = true
@@ -74,8 +74,8 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 
 	// update secret
 	if updateSecret {
-		glog.Infof("updating secret: %s", secretHandler.sid)
-		if err := UpdateSecret(secret, apis.ENCRYPT); err != nil {
+		glog.Infof("updating secret: %s", actionHandler.sid)
+		if err := actionHandler.UpdateSecret(secret, apis.ENCRYPT); err != nil {
 			return err
 		}
 	}
@@ -83,9 +83,9 @@ func (secretHandler *SecretHandler) encryptSecret() error {
 	return nil
 }
 
-func (secretHandler *SecretHandler) decryptSecret() error {
+func (actionHandler *ActionHandler) decryptSecret() error {
 	// get secret
-	secret, err := GetSecret(secretHandler.namespace, secretHandler.secretName)
+	secret, err := actionHandler.GetSecret(secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid))
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 		return fmt.Errorf("no data in secret to encrypt")
 	}
 
-	fieldsToDecrypt, err := secrethandling.GetFieldsToDecrypt(secret.Data, secretHandler.subsecretName)
+	fieldsToDecrypt, err := secrethandling.GetFieldsToDecrypt(secret.Data, secrethandling.GetSIDSubsecret(actionHandler.sid))
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 
 	// encrypt subsecret/s
 	for i := range fieldsToDecrypt {
-		if err := secretHandler.decryptSubsecret(secret.Data, fieldsToDecrypt[i]); err != nil {
+		if err := actionHandler.decryptSubsecret(secret.Data, fieldsToDecrypt[i]); err != nil {
 			return err
 		}
 		updateSecret = true
@@ -112,26 +112,26 @@ func (secretHandler *SecretHandler) decryptSecret() error {
 
 	// update secret
 	if updateSecret {
-		glog.Infof("updating secret: %s", secretHandler.sid)
-		if err := UpdateSecret(secret, apis.DECRYPT); err != nil {
+		glog.Infof("updating secret: %s", actionHandler.sid)
+		if err := actionHandler.UpdateSecret(secret, apis.DECRYPT); err != nil {
 			return err
 		}
 	}
 
 	// remove shadow secret
-	shadowSecret := secrethandling.ArmoShadowSecretPrefix + secretHandler.secretName
-	if err := DeleteSecret(secretHandler.namespace, secrethandling.ArmoShadowSecretPrefix+secretHandler.secretName); err != nil {
+	shadowSecret := secrethandling.ArmoShadowSecretPrefix + secrethandling.GetSIDName(actionHandler.sid)
+	if err := actionHandler.DeleteSecret(secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.ArmoShadowSecretPrefix+secrethandling.GetSIDName(actionHandler.sid)); err != nil {
 		return fmt.Errorf("failed removing shadow secret %s, reason: %s", shadowSecret, err.Error())
 	}
 
 	return nil
 }
 
-func (secretHandler *SecretHandler) encryptSubsecret(secretDate map[string][]byte, subsecret string, keyID string) error {
-	glog.Infof("encrypting subsecret '%s', sid: '%s'", subsecret, secretHandler.sid)
+func (actionHandler *ActionHandler) encryptSubsecret(secretDate map[string][]byte, subsecret string, keyID string) error {
+	glog.Infof("Encrypting subsecret '%s', sid: '%s'", subsecret, actionHandler.sid)
 
-	tmpFileName := fmt.Sprintf("/tmp/enc-%s.%s.%s.%d", secretHandler.namespace, secretHandler.secretName, subsecret, rand.Int())
-	_, err := secretHandler.cacli.SecretEncrypt(string(secretDate[subsecret]), "", tmpFileName, keyID, false)
+	tmpFileName := fmt.Sprintf("/tmp/enc-%s.%s.%s.%d", secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid), subsecret, rand.Int())
+	_, err := actionHandler.cacli.SECPEncrypt(string(secretDate[subsecret]), "", tmpFileName, keyID, false)
 
 	encryptedData, err := ioutil.ReadFile(tmpFileName)
 	if err != nil {
@@ -145,14 +145,14 @@ func (secretHandler *SecretHandler) encryptSubsecret(secretDate map[string][]byt
 	return nil
 }
 
-func (secretHandler *SecretHandler) decryptSubsecret(secretDate map[string][]byte, subsecret string) error {
-	glog.Infof("decrypting subsecret '%s', sid: '%s'", subsecret, secretHandler.sid)
+func (actionHandler *ActionHandler) decryptSubsecret(secretDate map[string][]byte, subsecret string) error {
+	glog.Infof("decrypting subsecret '%s', sid: '%s'", subsecret, actionHandler.sid)
 
-	tmpFileName := fmt.Sprintf("/tmp/dec-%s.%s.%s.%d", secretHandler.namespace, secretHandler.secretName, subsecret, rand.Int())
+	tmpFileName := fmt.Sprintf("/tmp/dec-%s.%s.%s.%d", secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid), subsecret, rand.Int())
 	if err := ioutil.WriteFile(tmpFileName, []byte(base64.StdEncoding.EncodeToString(secretDate[subsecret])), 0644); err != nil {
 		return err
 	}
-	decryptedData, err := secretHandler.cacli.SecretDecrypt("", tmpFileName, "", true)
+	decryptedData, err := actionHandler.cacli.SECPDecrypt("", tmpFileName, "", true)
 	if err != nil {
 		return err
 	}

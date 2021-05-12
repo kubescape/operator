@@ -135,7 +135,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	// case apis.INJECT:
 	// 	return updateWorkload(c.Wlid, apis.INJECT, &c)
 	case apis.ENCRYPT, apis.DECRYPT:
-		return runSecretCommand(sessionObj)
+		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
 		pod, err := actionHandler.GetPodByWLID(c.Wlid)
 		if err != nil {
@@ -148,7 +148,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	return nil
 }
 
-func runSecretCommand(sessionObj *cautils.SessionObj) error {
+func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
 
 	sid, err := getSIDFromArgs(c.Args)
@@ -159,13 +159,13 @@ func runSecretCommand(sessionObj *cautils.SessionObj) error {
 		glog.Infof("Ignoring wlid: '%s'", c.Wlid)
 		return nil
 	}
-	secretHandler := NewSecretHandler(sid)
+	// secretHandler := NewSecretHandler(sid)
 
 	switch c.CommandName {
 	case apis.ENCRYPT:
-		err = secretHandler.encryptSecret()
+		err = actionHandler.encryptSecret()
 	case apis.DECRYPT:
-		err = secretHandler.decryptSecret()
+		err = actionHandler.decryptSecret()
 	}
 	return err
 }
