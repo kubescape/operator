@@ -21,15 +21,15 @@ import (
 
 func (actionHandler *ActionHandler) update(command string) error {
 	kind := cautils.GetKindFromWlid(actionHandler.wlid)
-	glog.Infof("got kind : '%v'", kind)
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		glog.Error(err)
 		return err
 	}
 
-	glog.Infof("calling editWorkload with %v %v ", command, workload)
 	actionHandler.editWorkload(workload, command)
+
+	glog.Infof("Command: %s, Updated workload: %s", command, workload.Json())
 
 	switch kind {
 	case "Pod":
@@ -91,6 +91,11 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
 		workload.SetUpdateTime()
+	case apis.RESTART:
+		workload.SetUpdateTime()
+	case apis.INJECT:
+		workload.RemoveIgnore()
+		workload.SetInject()
 	case apis.REMOVE:
 		workload.SetIgnore()
 		workload.RemoveInject()

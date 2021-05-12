@@ -120,16 +120,10 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	}
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
-	case apis.UPDATE:
-		glog.Infof("UPDATE")
-		return actionHandler.update(apis.UPDATE)
-	case apis.RESTART:
+	case apis.UPDATE, apis.INJECT, apis.RESTART:
 		return actionHandler.update(apis.UPDATE)
 	case apis.REMOVE:
 		return actionHandler.update(apis.REMOVE)
-	case apis.INJECT:
-		glog.Infof("INJECT")
-		return actionHandler.update(apis.UPDATE)
 	case apis.SIGN:
 		return actionHandler.signWorkload()
 	// case apis.INJECT:

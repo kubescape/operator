@@ -107,3 +107,12 @@ func TestGetFieldsToDecrypt(t *testing.T) {
 		t.Errorf("expecting %d, received: %d", len(encryptedSecret.Data), len(fieldsToDecrypt2))
 	}
 }
+
+// func TestBla(t *testing.T) {
+// 	kk := k8sinterface.NewKubernetesApi()
+
+// 	wlid := "wlid://cluster-david-v2/namespace-bla/namespace-bla"
+// 	if _, err := kk.GetWorkloadByWlid(wlid); err != nil {
+// 		t.Error(err)
+// 	}
+// }
