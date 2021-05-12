@@ -41,7 +41,7 @@ func scanWorkload(wlid string, pod *corev1.Pod, reporter reporterlib.IReporter) 
 				glog.Error(err)
 			} else if len(secrets) > 0 {
 				if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk {
-					glog.Infof("found relevant secret for: %v\nsecret:\n%v\n", websocketScanCommand.ImageTag, secret)
+					glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
 					websocketScanCommand.Credentials = &secret
 				} else {
 					glog.Errorf("couldn't find image: %v secret", websocketScanCommand.ImageTag)
@@ -69,7 +69,8 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 		return err
 	}
 	pathScan := fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
-	glog.Infof("requesting scan. url: %s, data: %s", pathScan, string(jsonScannerC))
+	hasCreds := websocketScanCommand.Credentials != nil && len(websocketScanCommand.Credentials.Username) > 0 && len(websocketScanCommand.Credentials.Password) > 0
+	glog.Infof("requesting scan. url: %s wlid: %s image: %s with credentials: %v", pathScan, websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds)
 
 	req, err := http.NewRequest("POST", pathScan, bytes.NewBuffer(jsonScannerC))
 	if err != nil {
@@ -85,15 +86,15 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", string(jsonScannerC), err.Error())
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 	}
 	defer resp.Body.Close()
 	if resp == nil {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", string(jsonScannerC))
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", websocketScanCommand.ImageTag)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 203 {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'received bad status code: %d'", string(jsonScannerC), resp.StatusCode)
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'received bad status code: %d'", websocketScanCommand.ImageTag, resp.StatusCode)
 	}
 	return nil
 }
