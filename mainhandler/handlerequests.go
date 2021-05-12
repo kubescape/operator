@@ -149,11 +149,11 @@ func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.Session
 	if err != nil {
 		return err
 	}
+	actionHandler.sid = sid
 	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(sid)) {
 		glog.Infof("Ignoring wlid: '%s'", c.Wlid)
 		return nil
 	}
-	// secretHandler := NewSecretHandler(sid)
 
 	switch c.CommandName {
 	case apis.ENCRYPT:
