@@ -108,10 +108,6 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
 	if c.Wlid != "" {
-		if pkgcautils.IfIgnoreNamespace(cautils.GetNamespaceFromWlid(c.Wlid)) {
-			glog.Infof("Ignoring wlid: '%s'", c.Wlid)
-			return nil
-		}
 		actionHandler.wlid = c.Wlid
 	}
 	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
