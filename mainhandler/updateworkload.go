@@ -274,9 +274,9 @@ func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
 	switch command {
 	case apis.DECRYPT:
 		removeLabel(objectMeta, CAInject)
-		removeLabel(objectMeta, CAInjectOld) // DEPRECATED
 		injectAnnotation(&objectMeta.Annotations, CAIgnoe, "true")
 	case apis.ENCRYPT:
 		removeAnnotation(objectMeta, CAIgnoe)
+		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 	}
 }
