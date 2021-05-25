@@ -114,6 +114,11 @@ func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) 
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
+func (actionHandler *ActionHandler) deleteConfigMaps() error {
+	confName := cautils.GenarateConfigMapName(actionHandler.wlid)
+	return actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.GetNamespaceFromWlid(actionHandler.wlid)).Delete(context.Background(), confName, metav1.DeleteOptions{})
+}
+
 func persistentVolumeFound(workload *k8sinterface.Workload) bool {
 	volumes, _ := workload.GetVolumes()
 	for _, vol := range volumes {

@@ -119,6 +119,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.UPDATE, apis.INJECT, apis.RESTART:
 		return actionHandler.update(apis.UPDATE)
 	case apis.REMOVE:
+		actionHandler.deleteConfigMaps()
 		return actionHandler.update(apis.REMOVE)
 	case apis.SIGN:
 		return actionHandler.signWorkload()
