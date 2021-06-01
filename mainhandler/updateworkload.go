@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"k8s-ca-websocket/cautils"
-	"k8s-ca-websocket/k8sworkloads"
-	"strings"
 	"time"
 
 	"github.com/armosec/capacketsgo/apis"
@@ -140,103 +138,6 @@ func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
 	if meatdata.Annotations != nil {
 		delete(meatdata.Annotations, key)
 	}
-}
-
-func injectTime(annotations *map[string]string) {
-	injectAnnotation(annotations, CAUpdate, string(time.Now().UTC().Format("02-01-2006 15:04:05")))
-}
-
-func updateLabel(labels *map[string]string) {
-	if *labels == nil {
-		(*labels) = make(map[string]string)
-	}
-	(*labels)[CALabel] = "signed"
-}
-
-func injectLabel(labels *map[string]string) {
-	if *labels == nil {
-		(*labels) = make(map[string]string)
-	}
-	(*labels)[CAInject] = "add"
-	(*labels)[CAInjectOld] = "add" // DEPRECATED
-}
-
-func cleanSelector(selector *metav1.LabelSelector) {
-	if len(selector.MatchLabels) == 0 && len(selector.MatchLabels) == 0 {
-		selector = &metav1.LabelSelector{}
-	}
-}
-
-// excludeWlid - add a wlid to the ignore list
-func excludeWlid(nsWlid, workloadWlid string) error {
-	ctx := context.Background()
-	workload, err := getWorkload(nsWlid)
-	if err != nil {
-		return err
-	}
-	w := workload.(*corev1.Namespace)
-	// if inject lable not in namespace than ignore namespace
-	if !isInjectLableFound(w.Labels) {
-		return nil
-	}
-	injectList := workloadWlid
-	if w.Annotations != nil {
-		if ignoreList, ok := w.Annotations[CAIgnoe]; ok && ignoreList != "" {
-			// wlids := strings.Split(ignoreList, ";")
-			injectList = fmt.Sprintf("%s;%s", ignoreList, workloadWlid)
-		}
-	}
-	injectAnnotation(&w.Annotations, CAIgnoe, injectList)
-	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
-	return err
-}
-
-// excludeWlid - remove a wlid from the ignore list
-func includeWlid(nsWlid, workloadWlid string) error {
-	ctx := context.Background()
-	workload, err := getWorkload(nsWlid)
-	if err != nil {
-		return err
-	}
-	w := workload.(*corev1.Namespace)
-
-	// if inject lable not in namespace than ignore namespace
-	if !isInjectLableFound(w.Labels) {
-		return nil
-	}
-
-	// if there are no annotations so there is nothing to remove
-	if w.Annotations == nil {
-		return nil
-	}
-	ignoreList, ok := w.Annotations[CAIgnoe]
-	if !ok || ignoreList == "" {
-		return nil
-	}
-
-	injectList := ""
-	wlids := strings.Split(ignoreList, ";")
-	for i := range wlids {
-		if wlids[i] != workloadWlid {
-			injectList += wlids[i] + ";"
-		}
-	}
-	injectAnnotation(&w.Annotations, CAIgnoe, injectList)
-	_, err = k8sworkloads.KubernetesClient.CoreV1().Namespaces().Update(ctx, w, metav1.UpdateOptions{})
-	return err
-}
-
-func isInjectLableFound(labels map[string]string) bool {
-	if labels == nil {
-		return false
-	}
-	if _, ok := labels[CAInject]; ok {
-		return true
-	}
-	if _, ok := labels[CAInjectOld]; ok {
-		return true
-	}
-	return false
 }
 
 // UpdateSecret create secret in k8s

@@ -1,6 +1,7 @@
 package mainhandler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"k8s-ca-websocket/cautils"
@@ -11,68 +12,61 @@ import (
 	"github.com/armosec/capacketsgo/secrethandling"
 	corev1 "k8s.io/api/core/v1"
 
+	icacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
-
-	icacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/golang/glog"
+	"golang.org/x/sync/semaphore"
 )
 
 var previousReports []string
 
 // labels and annotations
 const (
-	CALabel = "cyberarmor"
-
-	CAInjectOld = "injectCyberArmor"
-	CAWlidOld   = "wlid"
-
 	CAPrefix = "cyberarmor"
 	CAInject = CAPrefix + ".inject"
 
 	// annotation related
-	CAStatus   = CAPrefix + ".status"
-	CAAttached = CAPrefix + ".attached"
-	CASigned   = CAPrefix + ".signed"
-	CAWlid     = CAPrefix + ".wlid"
-	CAUpdate   = CAPrefix + ".last-update"
-	CAIgnoe    = CAPrefix + ".ignore"
-	CAJobs     = CAPrefix + ".jobs"
+	CAIgnoe = CAPrefix + ".ignore"
 )
 
 type MainHandler struct {
-	sessionObj *chan cautils.SessionObj
-	cacli      icacli.ICacli
-	k8sAPI     *k8sinterface.KubernetesApi
+	sessionObj      *chan cautils.SessionObj
+	cacli           icacli.ICacli
+	k8sAPI          *k8sinterface.KubernetesApi
+	signerSemaphore *semaphore.Weighted
 }
 
 type ActionHandler struct {
-	cacli    icacli.ICacli
-	k8sAPI   *k8sinterface.KubernetesApi
-	reporter reporterlib.IReporter
-	wlid     string
-	sid      string
-	command  cautils.Command
+	cacli           icacli.ICacli
+	k8sAPI          *k8sinterface.KubernetesApi
+	reporter        reporterlib.IReporter
+	wlid            string
+	sid             string
+	command         cautils.Command
+	signerSemaphore *semaphore.Weighted
 }
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
 	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
-		sessionObj: sessionObj,
-		cacli:      icacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
-		k8sAPI:     k8sinterface.NewKubernetesApi(),
+		sessionObj:      sessionObj,
+		cacli:           icacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
+		k8sAPI:          k8sinterface.NewKubernetesApi(),
+		signerSemaphore: semaphore.NewWeighted(cautils.SignerSemaphore),
 	}
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, sessionObj *cautils.SessionObj) *ActionHandler {
+func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj) *ActionHandler {
 	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &ActionHandler{
-		reporter: sessionObj.Reporter,
-		command:  sessionObj.Command,
-		cacli:    cacliObj,
-		k8sAPI:   k8sAPI,
+		reporter:        sessionObj.Reporter,
+		command:         sessionObj.Command,
+		cacli:           cacliObj,
+		k8sAPI:          k8sAPI,
+		signerSemaphore: signerSemaphore,
 	}
 }
 
@@ -88,7 +82,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		sessionObj := <-*mainHandler.sessionObj
 		go func() {
 			status := "SUCCESS"
-			actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, &sessionObj)
+			actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, &sessionObj)
 			sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
 			err := actionHandler.runCommand(&sessionObj)
 			if err != nil {
@@ -122,6 +116,8 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		actionHandler.deleteConfigMaps()
 		return actionHandler.update(apis.REMOVE)
 	case apis.SIGN:
+		actionHandler.signerSemaphore.Acquire(context.Background(), 1)
+		defer actionHandler.signerSemaphore.Release(1)
 		return actionHandler.signWorkload()
 	// case apis.INJECT:
 	// 	return updateWorkload(c.Wlid, apis.INJECT, &c)
@@ -173,6 +169,9 @@ func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.Session
 // 	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
 // }
 
+func (actionHandler *ActionHandler) b() {
+
+}
 func (actionHandler *ActionHandler) signWorkload() error {
 	var err error
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)

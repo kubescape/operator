@@ -16,6 +16,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/robfig/cron v1.2.0
 	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.20.4
 	k8s.io/apimachinery v0.20.4
 	k8s.io/client-go v0.20.4

@@ -3,29 +3,23 @@ package cautils
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 var (
-	CA_NAMESPACE           = ""
-	CA_CLUSTER_NAME        = ""
-	CA_POSTMAN             = ""
-	CA_CUSTOMER_GUID       = ""
-	CA_LOGIN_SECRET_NAME   = ""
-	CA_DASHBOARD_BACKEND   = ""
-	CA_OCIMAGE_URL         = ""
-	CA_VULNSCAN            = ""
-	RestAPIPort            = ""
-	CA_USE_DOCKER          = false
-	CA_DEBUG_SIGNER        = false
-	CA_IGNORE_VERIFY_CACLI = false
-)
-
-// InjectedEnvironments the environment vars that the webhook injects
-var (
-	InjectedEnvironments = []string{"CAA_LITTLE_BOY", "CAA_ENABLE_DISCOVERY", "CAA_CONTAINER_NAME", "CAA_CONTAINER_IMAGE_NAME", "CAA_ORACLE_SERVER", "CAA_HOME", "CAA_NOTIFICATION_SERVER",
-		"CAA_LOADNAMES", "CAA_GUID", "LD_PRELOAD", "CAA_ENABLE_GOLANG_HOOK", "CAA_OVERRIDDEN_CMD", "CAA_OVERRIDDEN_ARGS", "CAA_POD_NAME", "CAA_POD_NAMESPACE", "CAA_FAILURE_REPORT"}
-	InjectedVolumes      = []string{"caa-home-vol"}
-	InjectedVolumeMounts = []string{"caa-home-vol"}
+	CA_NAMESPACE                 = ""
+	CA_CLUSTER_NAME              = ""
+	CA_POSTMAN                   = ""
+	CA_CUSTOMER_GUID             = ""
+	CA_LOGIN_SECRET_NAME         = ""
+	CA_DASHBOARD_BACKEND         = ""
+	CA_OCIMAGE_URL               = ""
+	CA_VULNSCAN                  = ""
+	RestAPIPort                  = ""
+	CA_USE_DOCKER                = false
+	CA_DEBUG_SIGNER              = false
+	CA_IGNORE_VERIFY_CACLI       = false
+	SignerSemaphore        int64 = 4
 )
 
 // LoadEnvironmentVaribles -
@@ -57,6 +51,14 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 	if RestAPIPort, err = testEnvironmentVarible("CA_WEBSOCKET_PORT"); err != nil {
 		RestAPIPort = "4002"
+	}
+
+	if signerSemaphore, err := testEnvironmentVarible("CA_SIGNER_SEMAPHORE"); err == nil {
+		i, err := strconv.ParseInt(signerSemaphore, 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to convert '%s' from 'CA_SIGNER_SEMAPHORE' to int64, reason: %s", signerSemaphore, err.Error())
+		}
+		SignerSemaphore = i
 	}
 
 	// environment variable not mandatory
