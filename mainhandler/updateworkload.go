@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func (actionHandler *ActionHandler) update(command string) error {
+func (actionHandler *ActionHandler) update() error {
 	kind := cautils.GetKindFromWlid(actionHandler.wlid)
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
@@ -25,9 +25,9 @@ func (actionHandler *ActionHandler) update(command string) error {
 		return err
 	}
 
-	actionHandler.editWorkload(workload, command)
+	actionHandler.editWorkload(workload)
 
-	glog.Infof("Command: %s, Updated workload: %s", command, workload.Json())
+	glog.Infof("Command: %s, Updated workload: %s", actionHandler.command.CommandName, workload.Json())
 
 	switch kind {
 	case "Pod":
@@ -82,8 +82,8 @@ func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) e
 	return err
 }
 
-func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) {
-	switch command {
+func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload) {
+	switch actionHandler.command.CommandName {
 	case apis.UPDATE:
 		workload.RemoveIgnore()
 		workload.SetInject()

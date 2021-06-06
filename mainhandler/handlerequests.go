@@ -111,10 +111,10 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
 	case apis.UPDATE, apis.INJECT, apis.RESTART:
-		return actionHandler.update(apis.UPDATE)
+		return actionHandler.update()
 	case apis.REMOVE:
 		actionHandler.deleteConfigMaps()
-		return actionHandler.update(apis.REMOVE)
+		return actionHandler.update()
 	case apis.SIGN:
 		actionHandler.signerSemaphore.Acquire(context.Background(), 1)
 		defer actionHandler.signerSemaphore.Release(1)
