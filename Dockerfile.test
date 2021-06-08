@@ -3,7 +3,7 @@ FROM quay.io/armosec/k8s-ca-websocket-ubi:latest
 RUN pip3 install -U cacli --index-url https://carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
 COPY ./k8s-ca-websocket . 
 
-RUN echo $(date -u) > /build_date.txt
+RUN echo $(date -u) > /build_number.txt
 
 ENTRYPOINT ["./k8s-ca-websocket"]
 

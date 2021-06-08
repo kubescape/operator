@@ -2,15 +2,12 @@ package mainhandler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 
 	"github.com/armosec/capacketsgo/apis"
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
-	"github.com/armosec/capacketsgo/secrethandling"
-	corev1 "k8s.io/api/core/v1"
 
 	icacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/armosec/capacketsgo/k8sinterface"
@@ -20,15 +17,6 @@ import (
 )
 
 var previousReports []string
-
-// labels and annotations
-const (
-	CAPrefix = "cyberarmor"
-	CAInject = CAPrefix + ".inject"
-
-	// annotation related
-	CAIgnoe = CAPrefix + ".ignore"
-)
 
 type MainHandler struct {
 	sessionObj      *chan cautils.SessionObj
@@ -43,7 +31,7 @@ type ActionHandler struct {
 	reporter        reporterlib.IReporter
 	wlid            string
 	sid             string
-	command         cautils.Command
+	command         apis.Command
 	signerSemaphore *semaphore.Weighted
 }
 
@@ -80,25 +68,75 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			}
 		}()
 		sessionObj := <-*mainHandler.sessionObj
-		go func() {
-			status := "SUCCESS"
-			actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, &sessionObj)
-			sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
-			err := actionHandler.runCommand(&sessionObj)
-			if err != nil {
-				sessionObj.Reporter.SendError(err, true, true)
-				status = "FAIL"
-			} else {
-				sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
-			}
-			donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.Wlid, status)
-			if err != nil {
-				donePrint += fmt.Sprintf(", reason: %s", err.Error())
-			}
-			glog.Infof(donePrint)
-		}()
+		if sessionObj.Command.WildWlid != "" {
+			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
+		} else {
+			go mainHandler.HandleSingleRequest(&sessionObj) // secrets - TODO - add 'sid' key
+		}
 	}
 }
+func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionObj) {
+	status := "SUCCESS"
+	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
+	sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
+	err := actionHandler.runCommand(sessionObj)
+	if err != nil {
+		sessionObj.Reporter.SendError(err, true, true)
+		status = "FAIL"
+	} else {
+		sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+	}
+	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.Wlid, status)
+	if err != nil {
+		donePrint += fmt.Sprintf(", reason: %s", err.Error())
+	}
+	glog.Infof(donePrint)
+}
+
+// HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
+func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
+	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.WildWlid)
+	labels := sessionObj.Command.GetLabels()
+	workloads, err := mainHandler.listWorkloads(namespace, "pods", labels)
+	if err != nil {
+		glog.Errorf(err.Error())
+		sessionObj.Reporter.SendError(err, true, true)
+	}
+	if len(workloads) == 0 {
+		err := fmt.Errorf("No workloads found. namespace: %s, labels: %v", namespace, labels)
+		glog.Warningf(err.Error())
+		sessionObj.Reporter.SendError(err, true, true)
+		return
+	}
+	wlids, errs := mainHandler.calculatePodsWlids(namespace, workloads)
+	if len(errs) != 0 {
+		for _, e := range errs {
+			glog.Errorf(e.Error())
+			sessionObj.Reporter.AddError(e.Error())
+		}
+		sessionObj.Reporter.Send()
+	}
+	if len(wlids) == 0 {
+		err := fmt.Errorf("Failed to calculate workloadIDs. namespace: %s, labels: %v", namespace, labels)
+		glog.Errorf(err.Error())
+		sessionObj.Reporter.SendError(err, true, true)
+		return
+	}
+	for i := range wlids {
+		newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), sessionObj.Reporter.GetActionIDN())
+		newSessionObj.Command.Wlid = wlids[i]
+		newSessionObj.Command.WildWlid = ""
+		if err := cautils.IsWlidValid(newSessionObj.Command.Wlid); err != nil {
+			err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), newSessionObj.Command.Wlid)
+			glog.Error(err)
+			sessionObj.Reporter.SendError(err, true, true)
+			continue
+		}
+
+		*mainHandler.sessionObj <- *newSessionObj
+	}
+}
+
 func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
 	if c.Wlid != "" {
@@ -114,64 +152,22 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.update()
 	case apis.REMOVE:
 		actionHandler.deleteConfigMaps()
+		actionHandler.deleteWorkloadTemplate()
 		return actionHandler.update()
 	case apis.SIGN:
 		actionHandler.signerSemaphore.Acquire(context.Background(), 1)
 		defer actionHandler.signerSemaphore.Release(1)
 		return actionHandler.signWorkload()
-	// case apis.INJECT:
-	// 	return updateWorkload(c.Wlid, apis.INJECT, &c)
 	case apis.ENCRYPT, apis.DECRYPT:
 		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
-		pod, err := actionHandler.GetPodByWLID(c.Wlid)
-		if err != nil {
-			glog.Errorf("scanning might fail if some images require credentials")
-		}
-		return scanWorkload(c.Wlid, pod, actionHandler.reporter)
+		return actionHandler.scanWorkload()
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
 	return nil
 }
 
-func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.SessionObj) error {
-	c := sessionObj.Command
-
-	sid, err := getSIDFromArgs(c.Args)
-	if err != nil {
-		return err
-	}
-	actionHandler.sid = sid
-	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(sid)) {
-		glog.Infof("Ignoring wlid: '%s'", c.Wlid)
-		return nil
-	}
-
-	switch c.CommandName {
-	case apis.ENCRYPT:
-		err = actionHandler.encryptSecret()
-	case apis.DECRYPT:
-		err = actionHandler.decryptSecret()
-	}
-	return err
-}
-
-// func detachWorkload(wlid string) error {
-// 	// if cautils.GetKindFromWlid(wlid) != "Namespace" {
-// 	// 	// add wlid to the ignore list
-// 	// 	ns := cautils.GetNamespaceFromWlid(wlid)
-// 	// 	namespaceWlid := cautils.GetWLID(cautils.GetClusterFromWlid(wlid), ns, "Namespace", ns)
-// 	// 	if err := excludeWlid(namespaceWlid, wlid); err != nil { // add wlid to the namespace ignore list
-// 	// 		return err
-// 	// 	}
-// 	// }
-// 	return updateWorkload(wlid, apis.REMOVE, &cautils.Command{})
-// }
-
-func (actionHandler *ActionHandler) b() {
-
-}
 func (actionHandler *ActionHandler) signWorkload() error {
 	var err error
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
@@ -191,60 +187,4 @@ func (actionHandler *ActionHandler) signWorkload() error {
 
 	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
 	return err
-}
-
-func getSIDFromArgs(args map[string]interface{}) (string, error) {
-	sidInterface, ok := args["sid"]
-	if !ok {
-		return "", nil
-	}
-	sid, ok := sidInterface.(string)
-	if !ok || sid == "" {
-		return "", fmt.Errorf("sid found in args but empty")
-	}
-	if _, err := secrethandling.SplitSecretID(sid); err != nil {
-		return "", err
-	}
-	return sid, nil
-}
-
-func getScanFromArgs(args map[string]interface{}) (*apis.WebsocketScanCommand, error) {
-	scanInterface, ok := args["scan"]
-	if !ok {
-		return nil, nil
-	}
-	websocketScanCommand := &apis.WebsocketScanCommand{}
-	scanBytes, err := json.Marshal(scanInterface)
-	if err != nil {
-		return nil, fmt.Errorf("cannot convert 'interface scan' to 'bytes array', reason: %s", err.Error())
-	}
-	if err = json.Unmarshal(scanBytes, websocketScanCommand); err != nil {
-		return nil, fmt.Errorf("cannot convert 'bytes array scan' to 'WebsocketScanCommand', reason: %s", err.Error())
-	}
-	return websocketScanCommand, nil
-}
-
-func isForceDelete(args map[string]interface{}) bool {
-	if args == nil || len(args) == 0 {
-		return false
-	}
-	if v, ok := args["forceDelete"]; ok && v != nil {
-		return v.(bool)
-	}
-	return false
-}
-
-func (actionHandler *ActionHandler) GetPodByWLID(wlid string) (*corev1.Pod, error) {
-	var err error
-	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-	if err != nil {
-		return nil, err
-	}
-	podspec, err := workload.GetPodSpec()
-	if err != nil {
-		return nil, err
-	}
-	podObj := &corev1.Pod{Spec: *podspec}
-	podObj.ObjectMeta.Namespace = cautils.GetNamespaceFromWlid(wlid)
-	return podObj, nil
 }

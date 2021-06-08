@@ -132,3 +132,44 @@ func IsWlidValid(wlid string) error {
 	_, err := RestoreMicroserviceIDsFromSpiffe(wlid)
 	return err
 }
+
+func restoreInnerIdentifiersFromWildWlid(spiffeSlices []string) []string {
+	// spiffeSlices
+	if strings.HasPrefix(spiffeSlices[0], ClusterWlidPrefix) {
+		spiffeSlices[0] = spiffeSlices[0][len(ClusterWlidPrefix):]
+	}
+	if strings.HasPrefix(spiffeSlices[1], NamespaceWlidPrefix) {
+		spiffeSlices[1] = spiffeSlices[1][len(NamespaceWlidPrefix):]
+	}
+	if strings.Contains(spiffeSlices[2], "-") {
+		dashIdx := strings.Index(spiffeSlices[2], "-")
+		spiffeSlices = append(spiffeSlices, spiffeSlices[2][dashIdx+1:])
+		spiffeSlices[2] = spiffeSlices[2][:dashIdx]
+		if val, ok := KindReverseMap[spiffeSlices[2]]; ok {
+			spiffeSlices[2] = val
+		}
+	}
+	return spiffeSlices
+}
+
+// RestoreMicroserviceIDsFromSpiffe -
+func RestoreWildWlid(spiffe string) ([]string, error) {
+	if StringHasWhitespace(spiffe) {
+		return nil, fmt.Errorf("wlid %s invalid. whitespace found", spiffe)
+	}
+	if strings.HasPrefix(spiffe, WlidPrefix) {
+		spiffe = spiffe[len(WlidPrefix):]
+	}
+	spiffeSlices := strings.Split(spiffe, "/")
+
+	return restoreInnerIdentifiersFromWildWlid(spiffeSlices), nil
+}
+
+// GetNamespaceFromWlid parse wlid and get Namespace
+func GetNamespaceFromWildWlid(wildWlid string) string {
+	r, _ := RestoreWildWlid(wildWlid)
+	if len(r) >= 2 {
+		return r[1]
+	}
+	return ""
+}

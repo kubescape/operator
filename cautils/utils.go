@@ -74,3 +74,11 @@ func GetNamespaceFromWorkload(workload interface{}) string {
 func GenarateConfigMapName(wlid string) string {
 	return strings.ToLower(fmt.Sprintf("ca-%s-%s-%s", pkgcautils.GetNamespaceFromWlid(wlid), pkgcautils.GetKindFromWlid(wlid), pkgcautils.GetNameFromWlid(wlid)))
 }
+
+func MapToString(m map[string]interface{}) []string {
+	s := []string{}
+	for i := range m {
+		s = append(s, i)
+	}
+	return s
+}

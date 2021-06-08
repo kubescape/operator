@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"k8s-ca-websocket/cacli"
+	"k8s-ca-websocket/cautils"
 	"math/rand"
 	"os"
+
+	pkgcautils "github.com/armosec/capacketsgo/cautils"
 
 	"github.com/armosec/capacketsgo/apis"
 	"github.com/armosec/capacketsgo/secrethandling"
@@ -36,6 +39,27 @@ type SecretHandler struct {
 
 // }
 
+func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.SessionObj) error {
+	c := sessionObj.Command
+
+	sid, err := getSIDFromArgs(c.Args)
+	if err != nil {
+		return err
+	}
+	actionHandler.sid = sid
+	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(sid)) {
+		glog.Infof("Ignoring wlid: '%s'", c.Wlid)
+		return nil
+	}
+
+	switch c.CommandName {
+	case apis.ENCRYPT:
+		err = actionHandler.encryptSecret()
+	case apis.DECRYPT:
+		err = actionHandler.decryptSecret()
+	}
+	return err
+}
 func (actionHandler *ActionHandler) encryptSecret() error {
 	// get secret
 	secret, err := actionHandler.GetSecret(secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid))
@@ -166,4 +190,19 @@ func (actionHandler *ActionHandler) decryptSubsecret(secretDate map[string][]byt
 		glog.Errorf("cant remove tmp file: %s", err.Error())
 	}
 	return nil
+}
+
+func getSIDFromArgs(args map[string]interface{}) (string, error) {
+	sidInterface, ok := args["sid"]
+	if !ok {
+		return "", nil
+	}
+	sid, ok := sidInterface.(string)
+	if !ok || sid == "" {
+		return "", fmt.Errorf("sid found in args but empty")
+	}
+	if _, err := secrethandling.SplitSecretID(sid); err != nil {
+		return "", err
+	}
+	return sid, nil
 }

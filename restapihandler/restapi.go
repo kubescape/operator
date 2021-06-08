@@ -90,13 +90,13 @@ func (resthandler *HTTPHandler) handleDelete(urlVals url.Values, readBuffer []by
 		glog.Error(err)
 		return err
 	}
-	command := cautils.Command{
+	command := apis.Command{
 		CommandName: apis.REMOVE, //
 		Wlid:        wlid,
 	}
 
 	message := fmt.Sprintf("Detaching wlid '%s' since agent failed to load in container, agent log: %v", wlid, readBuffer)
-	sessionObj := cautils.NewSessionObj(&command, message)
+	sessionObj := cautils.NewSessionObj(&command, message, "", 1)
 	*resthandler.sessionObj <- *sessionObj
 	return nil
 }

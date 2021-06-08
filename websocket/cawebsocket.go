@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armosec/capacketsgo/apis"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )
@@ -126,26 +127,26 @@ func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 
 // HandlePostmanRequest Parse received commands and run the command
 func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
-	commands := cautils.Commands{}
-
+	commands := apis.Commands{}
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
 		glog.Error(err)
 	}
 	for _, c := range commands.Commands {
-		sessionObj := cautils.NewSessionObj(&c, "Websocket")
+		sessionObj := cautils.NewSessionObj(&c, "Websocket", "", 1)
 
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
 			glog.Error(err)
 			sessionObj.Reporter.SendError(err, true, true)
+			continue
 		}
-		if c.Wlid != "" {
-			if err := cautils.IsWlidValid(c.Wlid); err != nil {
-				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
-				glog.Error(err)
-				sessionObj.Reporter.SendError(err, true, true)
-			}
-		}
+		// if c.Wlid != "" {
+		// 	if err := cautils.IsWlidValid(c.Wlid); err != nil {
+		// 		err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
+		// 		glog.Error(err)
+		// 		sessionObj.Reporter.SendError(err, true, true)
+		// 	}
+		// }
 
 		*wsh.sessionObj <- *sessionObj
 	}

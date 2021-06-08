@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/armosec/capacketsgo/apis"
+	pkgcautils "github.com/armosec/capacketsgo/cautils"
 	"github.com/armosec/capacketsgo/k8sinterface"
 
 	"github.com/golang/glog"
@@ -18,7 +19,6 @@ import (
 )
 
 func (actionHandler *ActionHandler) update() error {
-	kind := cautils.GetKindFromWlid(actionHandler.wlid)
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		glog.Error(err)
@@ -29,16 +29,15 @@ func (actionHandler *ActionHandler) update() error {
 
 	glog.Infof("Command: %s, Updated workload: %s", actionHandler.command.CommandName, workload.Json())
 
-	switch kind {
+	switch cautils.GetKindFromWlid(actionHandler.wlid) {
 	case "Pod":
-		glog.Infof("updating pod")
+		glog.Infof("updating pod: '%s'", workload.GetName())
 		return actionHandler.updatePod(workload)
 	default:
-		glog.Infof("default")
+		glog.Infof("updating workload: '%s'", workload.GetName())
 		return actionHandler.updateWorkload(workload)
 	}
 }
-
 func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Workload) error {
 	deletePods := isForceDelete(actionHandler.command.Args)
 
@@ -112,21 +111,6 @@ func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) 
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
-func (actionHandler *ActionHandler) deleteConfigMaps() error {
-	confName := cautils.GenarateConfigMapName(actionHandler.wlid)
-	return actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.GetNamespaceFromWlid(actionHandler.wlid)).Delete(context.Background(), confName, metav1.DeleteOptions{})
-}
-
-func persistentVolumeFound(workload *k8sinterface.Workload) bool {
-	volumes, _ := workload.GetVolumes()
-	for _, vol := range volumes {
-		if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func injectAnnotation(annotations *map[string]string, key, val string) {
 	if *annotations == nil {
 		(*annotations) = make(map[string]string)
@@ -179,10 +163,10 @@ func removeLabel(meatdata *metav1.ObjectMeta, key string) {
 func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
 	switch command {
 	case apis.DECRYPT:
-		removeLabel(objectMeta, CAInject)
-		injectAnnotation(&objectMeta.Annotations, CAIgnoe, "true")
+		removeLabel(objectMeta, pkgcautils.CAInject)
+		injectAnnotation(&objectMeta.Annotations, pkgcautils.CAIgnore, "true")
 	case apis.ENCRYPT:
-		removeAnnotation(objectMeta, CAIgnoe)
+		removeAnnotation(objectMeta, pkgcautils.CAIgnore)
 		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 	}
 }

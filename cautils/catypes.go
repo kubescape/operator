@@ -1,24 +1,14 @@
 package cautils
 
-import reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
-
-// Commands list of commands received from websocket
-type Commands struct {
-	Commands []Command `json:"commands"`
-}
+import (
+	"github.com/armosec/capacketsgo/apis"
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+)
 
 // Commands list of commands received from websocket
 type SessionObj struct {
-	Command  Command               `json:"command"`
+	Command  apis.Command          `json:"command"`
 	Reporter reporterlib.IReporter `json:"reporter"`
-}
-
-// Command structure of command received from websocket
-type Command struct {
-	CommandName string                 `json:"commandName"`
-	ResponseID  string                 `json:"responseID"`
-	Wlid        string                 `json:"wlid"`
-	Args        map[string]interface{} `json:"args"`
 }
 
 //WorkloadTemplate sent
