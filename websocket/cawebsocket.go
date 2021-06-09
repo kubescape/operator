@@ -131,6 +131,7 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
 		glog.Error(err)
 	}
+	glog.Infof("receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", "", 1)
 
@@ -140,14 +141,13 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
-		// if c.Wlid != "" {
-		// 	if err := cautils.IsWlidValid(c.Wlid); err != nil {
-		// 		err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), c.Wlid)
-		// 		glog.Error(err)
-		// 		sessionObj.Reporter.SendError(err, true, true)
-		// 	}
-		// }
 
 		*wsh.sessionObj <- *sessionObj
+
+		// This is a workaround
+		if c.WildWlid != "" {
+			// add log
+			break
+		}
 	}
 }

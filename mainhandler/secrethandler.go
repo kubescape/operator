@@ -48,7 +48,7 @@ func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.Session
 	}
 	actionHandler.sid = sid
 	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(sid)) {
-		glog.Infof("Ignoring wlid: '%s'", c.Wlid)
+		glog.Infof("Ignoring sid: '%s'", sid)
 		return nil
 	}
 

@@ -68,6 +68,12 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			}
 		}()
 		sessionObj := <-*mainHandler.sessionObj
+
+		if ignoreNamespace(sessionObj.Command.CommandName, getCommandNamespace(&sessionObj.Command)) {
+			glog.Infof("namespace '%s' out of scope. Ignoring wlid: %s, command: %s", getCommandNamespace(&sessionObj.Command), getCommandID(&sessionObj.Command), sessionObj.Command.CommandName)
+			continue
+		}
+
 		if sessionObj.Command.WildWlid != "" {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 		} else {
@@ -75,6 +81,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		}
 	}
 }
+
 func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionObj) {
 	status := "SUCCESS"
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
@@ -93,50 +100,6 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	glog.Infof(donePrint)
 }
 
-// HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
-func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
-	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.WildWlid)
-	labels := sessionObj.Command.GetLabels()
-	workloads, err := mainHandler.listWorkloads(namespace, "pods", labels)
-	if err != nil {
-		glog.Errorf(err.Error())
-		sessionObj.Reporter.SendError(err, true, true)
-	}
-	if len(workloads) == 0 {
-		err := fmt.Errorf("No workloads found. namespace: %s, labels: %v", namespace, labels)
-		glog.Warningf(err.Error())
-		sessionObj.Reporter.SendError(err, true, true)
-		return
-	}
-	wlids, errs := mainHandler.calculatePodsWlids(namespace, workloads)
-	if len(errs) != 0 {
-		for _, e := range errs {
-			glog.Errorf(e.Error())
-			sessionObj.Reporter.AddError(e.Error())
-		}
-		sessionObj.Reporter.Send()
-	}
-	if len(wlids) == 0 {
-		err := fmt.Errorf("Failed to calculate workloadIDs. namespace: %s, labels: %v", namespace, labels)
-		glog.Errorf(err.Error())
-		sessionObj.Reporter.SendError(err, true, true)
-		return
-	}
-	for i := range wlids {
-		newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), sessionObj.Reporter.GetActionIDN())
-		newSessionObj.Command.Wlid = wlids[i]
-		newSessionObj.Command.WildWlid = ""
-		if err := cautils.IsWlidValid(newSessionObj.Command.Wlid); err != nil {
-			err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), newSessionObj.Command.Wlid)
-			glog.Error(err)
-			sessionObj.Reporter.SendError(err, true, true)
-			continue
-		}
-
-		*mainHandler.sessionObj <- *newSessionObj
-	}
-}
-
 func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
 	if c.Wlid != "" {
@@ -148,7 +111,9 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	}
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
-	case apis.UPDATE, apis.INJECT, apis.RESTART:
+	case apis.UPDATE, apis.INJECT:
+		return actionHandler.update()
+	case apis.RESTART:
 		return actionHandler.update()
 	case apis.REMOVE:
 		actionHandler.deleteConfigMaps()
@@ -187,4 +152,62 @@ func (actionHandler *ActionHandler) signWorkload() error {
 
 	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
 	return err
+}
+
+// HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
+func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
+	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.WildWlid)
+	labels := sessionObj.Command.GetLabels()
+
+	info := fmt.Sprintf("wildWlid: '%s', namespace: '%s', labels: '%v'", sessionObj.Command.WildWlid, namespace, labels)
+	glog.Infof(info)
+	sessionObj.Reporter.SendAction(info, true)
+
+	workloads, err := mainHandler.listWorkloads(namespace, "pods", labels)
+	if err != nil {
+		glog.Errorf(err.Error())
+		sessionObj.Reporter.SendError(err, true, true)
+	}
+	if len(workloads) == 0 {
+		err := fmt.Errorf("No workloads found. namespace: %s, labels: %v", namespace, labels)
+		glog.Warningf(err.Error())
+		sessionObj.Reporter.SendError(err, true, true)
+		sessionObj.Reporter.SendStatus(reporterlib.JobFailed, true)
+		return
+	}
+	wlids, errs := mainHandler.calculatePodsWlids(namespace, workloads)
+	if len(errs) != 0 {
+		for _, e := range errs {
+			glog.Errorf(e.Error())
+			sessionObj.Reporter.AddError(e.Error())
+		}
+		sessionObj.Reporter.Send()
+	}
+	if len(wlids) == 0 {
+		err := fmt.Errorf("Failed to calculate workloadIDs. namespace: %s, labels: %v", namespace, labels)
+		glog.Errorf(err.Error())
+		sessionObj.Reporter.SendError(err, true, true)
+		sessionObj.Reporter.SendStatus(reporterlib.JobFailed, true)
+		return
+	}
+	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+
+	glog.Infof("wlids found: '%v'", wlids)
+	go func() { // send to goroutine so the channel will be released release the channel
+		for i := range wlids {
+			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), sessionObj.Reporter.GetActionIDN())
+			newSessionObj.Command.Wlid = wlids[i]
+			newSessionObj.Command.WildWlid = ""
+			if err := cautils.IsWlidValid(newSessionObj.Command.Wlid); err != nil {
+				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), newSessionObj.Command.Wlid)
+				glog.Error(err)
+				sessionObj.Reporter.SendError(err, true, true)
+				continue
+			}
+			glog.Infof("triggering wlid: '%s'", newSessionObj.Command.Wlid)
+			sessionObj.Reporter.SendAction(fmt.Sprintf("triggering wlid: '%s'", newSessionObj.Command.Wlid), true)
+			*mainHandler.sessionObj <- *newSessionObj
+			sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+		}
+	}()
 }

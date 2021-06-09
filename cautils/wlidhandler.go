@@ -135,18 +135,28 @@ func IsWlidValid(wlid string) error {
 
 func restoreInnerIdentifiersFromWildWlid(spiffeSlices []string) []string {
 	// spiffeSlices
-	if strings.HasPrefix(spiffeSlices[0], ClusterWlidPrefix) {
-		spiffeSlices[0] = spiffeSlices[0][len(ClusterWlidPrefix):]
+	if len(spiffeSlices) >= 1 {
+		if strings.HasPrefix(spiffeSlices[0], ClusterWlidPrefix) {
+			spiffeSlices[0] = spiffeSlices[0][len(ClusterWlidPrefix):]
+		}
+	} else {
+		return spiffeSlices
 	}
-	if strings.HasPrefix(spiffeSlices[1], NamespaceWlidPrefix) {
-		spiffeSlices[1] = spiffeSlices[1][len(NamespaceWlidPrefix):]
+	if len(spiffeSlices) >= 2 {
+		if strings.HasPrefix(spiffeSlices[1], NamespaceWlidPrefix) {
+			spiffeSlices[1] = spiffeSlices[1][len(NamespaceWlidPrefix):]
+		}
+	} else {
+		return spiffeSlices
 	}
-	if strings.Contains(spiffeSlices[2], "-") {
-		dashIdx := strings.Index(spiffeSlices[2], "-")
-		spiffeSlices = append(spiffeSlices, spiffeSlices[2][dashIdx+1:])
-		spiffeSlices[2] = spiffeSlices[2][:dashIdx]
-		if val, ok := KindReverseMap[spiffeSlices[2]]; ok {
-			spiffeSlices[2] = val
+	if len(spiffeSlices) >= 3 {
+		if strings.Contains(spiffeSlices[2], "-") {
+			dashIdx := strings.Index(spiffeSlices[2], "-")
+			spiffeSlices = append(spiffeSlices, spiffeSlices[2][dashIdx+1:])
+			spiffeSlices[2] = spiffeSlices[2][:dashIdx]
+			if val, ok := KindReverseMap[spiffeSlices[2]]; ok {
+				spiffeSlices[2] = val
+			}
 		}
 	}
 	return spiffeSlices
