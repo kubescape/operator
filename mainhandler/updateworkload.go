@@ -115,11 +115,11 @@ func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) 
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
-func injectAnnotation(annotations *map[string]string, key, val string) {
-	if *annotations == nil {
-		(*annotations) = make(map[string]string)
+func injectLabel(labels map[string]string, key, val string) {
+	if labels == nil {
+		labels = make(map[string]string)
 	}
-	(*annotations)[key] = val
+	labels[key] = val
 }
 
 func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
@@ -167,10 +167,11 @@ func removeLabel(meatdata *metav1.ObjectMeta, key string) {
 func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
 	switch command {
 	case apis.DECRYPT:
-		removeLabel(objectMeta, pkgcautils.CAInject)
-		injectAnnotation(&objectMeta.Annotations, pkgcautils.CAIgnore, "true")
+		removeLabel(objectMeta, pkgcautils.ArmoAttach)
+		removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
+		removeLabel(objectMeta, pkgcautils.CAProtectedSecret) // DEPRECATED
 	case apis.ENCRYPT:
-		removeAnnotation(objectMeta, pkgcautils.CAIgnore)
+		injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
 		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 	}
 }

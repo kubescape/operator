@@ -121,6 +121,9 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		go actionHandler.workloadCleanupDiscovery()
 		return err
 	case apis.UNREGISTERED:
+		// TODO - decrypt all secrets
+		// TODO - Cleanup namespaces
+		// TODO - Cleanup other workloads
 		err := actionHandler.update()
 		go actionHandler.workloadCleanupAll()
 		return err

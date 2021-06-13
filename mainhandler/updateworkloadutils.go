@@ -24,10 +24,10 @@ func (actionHandler *ActionHandler) deleteConfigMaps() error {
 }
 
 func (actionHandler *ActionHandler) workloadCleanupAll() error {
-	return actionHandler.cacli.UTILSCleanup(actionHandler.wlid)
+	return actionHandler.cacli.UTILSCleanup(actionHandler.wlid, false)
 }
 func (actionHandler *ActionHandler) workloadCleanupDiscovery() error {
-	return actionHandler.cacli.WTDelete(actionHandler.wlid)
+	return actionHandler.cacli.UTILSCleanup(actionHandler.wlid, true)
 }
 
 func persistentVolumeFound(workload *k8sinterface.Workload) bool {
