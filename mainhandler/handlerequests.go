@@ -117,8 +117,13 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.update()
 	case apis.REMOVE:
 		actionHandler.deleteConfigMaps()
-		actionHandler.deleteWorkloadTemplate()
-		return actionHandler.update()
+		err := actionHandler.update()
+		go actionHandler.workloadCleanupDiscovery()
+		return err
+	case apis.UNREGISTERED:
+		err := actionHandler.update()
+		go actionHandler.workloadCleanupAll()
+		return err
 	case apis.SIGN:
 		actionHandler.signerSemaphore.Acquire(context.Background(), 1)
 		defer actionHandler.signerSemaphore.Release(1)
@@ -151,7 +156,8 @@ func (actionHandler *ActionHandler) signWorkload() error {
 	}
 
 	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
-	return err
+
+	return actionHandler.update()
 }
 
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace

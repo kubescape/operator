@@ -84,18 +84,22 @@ func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) e
 func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload) {
 	switch actionHandler.command.CommandName {
 	case apis.UPDATE:
-		workload.RemoveIgnore()
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
 		workload.SetUpdateTime()
 	case apis.RESTART:
 		workload.SetUpdateTime()
 	case apis.INJECT:
-		workload.RemoveIgnore()
 		workload.SetInject()
 	case apis.REMOVE:
+		workload.RemoveInject() // DEPRECATED
 		workload.SetIgnore()
-		workload.RemoveInject()
+		workload.RemoveWlid()
+		workload.RemoveUpdateTime()
+	case apis.UNREGISTERED: // TODO
+		// TODO - remove from namespace
+		workload.RemoveInject() // DEPRECATED
+		workload.RemoveIgnore()
 		workload.RemoveWlid()
 		workload.RemoveUpdateTime()
 	}

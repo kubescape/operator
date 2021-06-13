@@ -23,7 +23,10 @@ func (actionHandler *ActionHandler) deleteConfigMaps() error {
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.GetNamespaceFromWlid(actionHandler.wlid)).Delete(context.Background(), confName, metav1.DeleteOptions{})
 }
 
-func (actionHandler *ActionHandler) deleteWorkloadTemplate() error {
+func (actionHandler *ActionHandler) workloadCleanupAll() error {
+	return actionHandler.cacli.UTILSCleanup(actionHandler.wlid)
+}
+func (actionHandler *ActionHandler) workloadCleanupDiscovery() error {
 	return actionHandler.cacli.WTDelete(actionHandler.wlid)
 }
 
