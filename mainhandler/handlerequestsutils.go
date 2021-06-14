@@ -52,7 +52,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(namespace string, workloads []k8
 	for i := range workloads {
 		switch workloads[i].GetKind() {
 		case "Namespace":
-			idMap[pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, namespace, "namespace", namespace)] = true
+			idMap[pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		case "Secret":
 			// check if secret type supported
 			// check is shadow secret
