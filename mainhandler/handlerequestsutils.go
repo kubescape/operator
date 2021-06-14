@@ -9,6 +9,7 @@ import (
 	"github.com/armosec/capacketsgo/apis"
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
 	"github.com/armosec/capacketsgo/k8sinterface"
+	"github.com/armosec/capacketsgo/secrethandling"
 )
 
 var IgnoreCommandInNamespace = map[string][]string{}
@@ -45,25 +46,34 @@ func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels
 	}
 	return mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels)
 }
-func (mainHandler *MainHandler) calculatePodsWlids(namespace string, pods []k8sinterface.Workload) ([]string, []error) {
+func (mainHandler *MainHandler) GetResourcesIDs(namespace string, workloads []k8sinterface.Workload) ([]string, []error) {
 	errs := []error{}
-	wlidsMap := make(map[string]interface{})
-	for i := range pods {
-		if wlid := pods[i].GetWlid(); wlid != "" {
-			wlidsMap[wlid] = true
-		} else {
-			// find wlid
-			kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(&pods[i])
-			if err != nil {
-				errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", pods[i].GetNamespace(), pods[i].GetName(), err.Error()))
-			}
-			wlid := cautils.GetWLID(cautils.CA_CLUSTER_NAME, namespace, kind, name)
-			if wlid != "" {
-				wlidsMap[wlid] = true
+	idMap := make(map[string]interface{})
+	for i := range workloads {
+		switch workloads[i].GetKind() {
+		case "Namespace":
+			idMap[pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, namespace, "namespace", namespace)] = true
+		case "Secret":
+			// check if secret type supported
+			// check is shadow secret
+			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, namespace, workloads[i].GetName(), "")] = true
+		default:
+			if wlid := workloads[i].GetWlid(); wlid != "" {
+				idMap[wlid] = true
+			} else {
+				// find wlid
+				kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(&workloads[i])
+				if err != nil {
+					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
+				}
+				wlid := pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, namespace, kind, name)
+				if wlid != "" {
+					idMap[wlid] = true
+				}
 			}
 		}
 	}
-	return cautils.MapToString(wlidsMap), errs
+	return cautils.MapToString(idMap), errs
 }
 
 func getCommandNamespace(command *apis.Command) string {
@@ -84,4 +94,18 @@ func getCommandID(command *apis.Command) string {
 		return command.WildWlid
 	}
 	return ""
+}
+
+func resourceList(command string) []string {
+	switch command {
+	case apis.UNREGISTERED:
+		return []string{"namespaces", "pods"}
+		// return []string{"namespaces", "secrets", "pods"}
+	case apis.DECRYPT, apis.ENCRYPT:
+		return []string{"secrets"}
+	default:
+		return []string{"pods"}
+
+	}
+
 }

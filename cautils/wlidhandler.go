@@ -119,14 +119,6 @@ func GetNameFromWlid(wlid string) string {
 	return r[3]
 }
 
-// GetWLID get the calculated wlid
-func GetWLID(level0, level1, k, name string) string {
-	kind := strings.ToLower(k)
-	kind = strings.Replace(kind, "-", "", -1)
-	return fmt.Sprintf("%s%s%s/%s%s/%s-%s", WlidPrefix, ClusterWlidPrefix, level0, NamespaceWlidPrefix, level1, kind, name)
-
-}
-
 // IsWlidValid test if wlid is a valid wlid
 func IsWlidValid(wlid string) error {
 	_, err := RestoreMicroserviceIDsFromSpiffe(wlid)

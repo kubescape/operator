@@ -76,8 +76,10 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 
 		if sessionObj.Command.WildWlid != "" {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
+		} else if sessionObj.Command.Sid != "" {
+			go mainHandler.HandleSingleRequest(&sessionObj)
 		} else {
-			go mainHandler.HandleSingleRequest(&sessionObj) // secrets - TODO - add 'sid' key
+			go mainHandler.HandleSingleRequest(&sessionObj)
 		}
 	}
 }
@@ -121,9 +123,6 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		go actionHandler.workloadCleanupDiscovery()
 		return err
 	case apis.UNREGISTERED:
-		// TODO - decrypt all secrets
-		// TODO - Cleanup namespaces
-		// TODO - Cleanup other workloads
 		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupAll()
 		return err
@@ -167,46 +166,28 @@ func (actionHandler *ActionHandler) signWorkload() error {
 func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
 	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.WildWlid)
 	labels := sessionObj.Command.GetLabels()
+	resources := resourceList(sessionObj.Command.CommandName)
 
 	info := fmt.Sprintf("wildWlid: '%s', namespace: '%s', labels: '%v'", sessionObj.Command.WildWlid, namespace, labels)
 	glog.Infof(info)
 	sessionObj.Reporter.SendAction(info, true)
 
-	workloads, err := mainHandler.listWorkloads(namespace, "pods", labels)
-	if err != nil {
-		glog.Errorf(err.Error())
-		sessionObj.Reporter.SendError(err, true, true)
+	ids, errs := mainHandler.GetWlids(namespace, labels, resources)
+	for i := range errs {
+		glog.Warningf(errs[i].Error())
+		sessionObj.Reporter.SendError(errs[i], true, true)
 	}
-	if len(workloads) == 0 {
-		err := fmt.Errorf("No workloads found. namespace: %s, labels: %v", namespace, labels)
-		glog.Warningf(err.Error())
-		sessionObj.Reporter.SendError(err, true, true)
-		sessionObj.Reporter.SendStatus(reporterlib.JobFailed, true)
-		return
-	}
-	wlids, errs := mainHandler.calculatePodsWlids(namespace, workloads)
-	if len(errs) != 0 {
-		for _, e := range errs {
-			glog.Errorf(e.Error())
-			sessionObj.Reporter.AddError(e.Error())
-		}
-		sessionObj.Reporter.Send()
-	}
-	if len(wlids) == 0 {
-		err := fmt.Errorf("Failed to calculate workloadIDs. namespace: %s, labels: %v", namespace, labels)
-		glog.Errorf(err.Error())
-		sessionObj.Reporter.SendError(err, true, true)
-		sessionObj.Reporter.SendStatus(reporterlib.JobFailed, true)
-		return
-	}
+
 	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 
-	glog.Infof("wlids found: '%v'", wlids)
+	glog.Infof("ids found: '%v'", ids)
 	go func() { // send to goroutine so the channel will be released release the channel
-		for i := range wlids {
+		for i := range ids {
 			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), sessionObj.Reporter.GetActionIDN())
-			newSessionObj.Command.Wlid = wlids[i]
+			newSessionObj.Command.Wlid = ids[i]
+			// newSessionObj.Command.Sid = ids[i]
 			newSessionObj.Command.WildWlid = ""
+
 			if err := cautils.IsWlidValid(newSessionObj.Command.Wlid); err != nil {
 				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), newSessionObj.Command.Wlid)
 				glog.Error(err)
@@ -219,4 +200,31 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 		}
 	}()
+}
+
+func (mainHandler *MainHandler) GetWlids(namespace string, labels map[string]string, resources []string) ([]string, []error) {
+	wlids := []string{}
+	errs := []error{}
+	for _, resource := range resources {
+		workloads, err := mainHandler.listWorkloads(namespace, resource, labels)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if len(workloads) == 0 {
+			err := fmt.Errorf("Resource: '%s', no workloads found. namespace: '%s', labels: '%v'", resource, namespace, labels)
+			errs = append(errs, err)
+			continue
+		}
+		w, e := mainHandler.GetResourcesIDs(namespace, workloads)
+		if len(errs) != 0 {
+			errs = append(errs, e...)
+		}
+		if len(w) == 0 {
+			err := fmt.Errorf("Resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
+			errs = append(errs, err)
+		}
+		wlids = append(wlids, w...)
+	}
+
+	return wlids, errs
 }

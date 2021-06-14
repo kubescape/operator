@@ -55,7 +55,7 @@ func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.Session
 	switch c.CommandName {
 	case apis.ENCRYPT:
 		err = actionHandler.encryptSecret()
-	case apis.DECRYPT:
+	case apis.DECRYPT, apis.UNREGISTERED:
 		err = actionHandler.decryptSecret()
 	}
 	return err

@@ -96,12 +96,14 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.SetIgnore()
 		workload.RemoveWlid()
 		workload.RemoveUpdateTime()
-	case apis.UNREGISTERED: // TODO
-		// TODO - remove from namespace
-		workload.RemoveInject() // DEPRECATED
-		workload.RemoveIgnore()
-		workload.RemoveWlid()
-		workload.RemoveUpdateTime()
+	case apis.UNREGISTERED:
+		workload.RemoveInject()                            // NS/WL DEPRECATED
+		workload.RemoveIgnore()                            // NS/WL DEPRECATED
+		workload.RemoveWlid()                              // WL
+		workload.RemoveUpdateTime()                        // WL
+		workload.RemoveLabel(pkgcautils.ArmoInitialSecret) // secret
+		workload.RemoveLabel(pkgcautils.CAInitialSecret)   // secret
+		workload.RemoveLabel(pkgcautils.CAProtectedSecret) // secret
 	}
 }
 func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) error {
@@ -167,11 +169,17 @@ func removeLabel(meatdata *metav1.ObjectMeta, key string) {
 func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
 	switch command {
 	case apis.DECRYPT:
-		removeLabel(objectMeta, pkgcautils.ArmoAttach)
 		removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
+		removeLabel(objectMeta, pkgcautils.CAInitialSecret)   // DEPRECATED
 		removeLabel(objectMeta, pkgcautils.CAProtectedSecret) // DEPRECATED
+		injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "false")
 	case apis.ENCRYPT:
-		injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
+		// injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
 		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
+	case apis.UNREGISTERED:
+		removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
+		removeLabel(objectMeta, pkgcautils.CAInitialSecret)   // DEPRECATED
+		removeLabel(objectMeta, pkgcautils.CAProtectedSecret) // DEPRECATED
+		removeLabel(objectMeta, pkgcautils.ArmoAttach)        // DEPRECATED
 	}
 }
