@@ -112,19 +112,19 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
 	case apis.UPDATE, apis.INJECT:
-		return actionHandler.update()
+		return actionHandler.update(c.CommandName)
 	case apis.RESTART:
-		return actionHandler.update()
+		return actionHandler.update(c.CommandName)
 	case apis.REMOVE:
 		actionHandler.deleteConfigMaps()
-		err := actionHandler.update()
+		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupDiscovery()
 		return err
 	case apis.UNREGISTERED:
 		// TODO - decrypt all secrets
 		// TODO - Cleanup namespaces
 		// TODO - Cleanup other workloads
-		err := actionHandler.update()
+		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupAll()
 		return err
 	case apis.SIGN:
@@ -160,7 +160,7 @@ func (actionHandler *ActionHandler) signWorkload() error {
 
 	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
 
-	return actionHandler.update()
+	return actionHandler.update(apis.RESTART)
 }
 
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace

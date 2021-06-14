@@ -18,14 +18,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func (actionHandler *ActionHandler) update() error {
+func (actionHandler *ActionHandler) update(command string) error {
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		glog.Error(err)
 		return err
 	}
 
-	actionHandler.editWorkload(workload)
+	actionHandler.editWorkload(workload, command)
 
 	glog.Infof("Command: %s, Updated workload: %s", actionHandler.command.CommandName, workload.Json())
 
@@ -81,8 +81,8 @@ func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) e
 	return err
 }
 
-func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload) {
-	switch actionHandler.command.CommandName {
+func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) {
+	switch command {
 	case apis.UPDATE:
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
