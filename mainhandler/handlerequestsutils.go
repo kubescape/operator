@@ -46,7 +46,7 @@ func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels
 	}
 	return mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels)
 }
-func (mainHandler *MainHandler) GetResourcesIDs(namespace string, workloads []k8sinterface.Workload) ([]string, []error) {
+func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.Workload) ([]string, []error) {
 	errs := []error{}
 	idMap := make(map[string]interface{})
 	for i := range workloads {
@@ -56,7 +56,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(namespace string, workloads []k8
 		case "Secret":
 			// check if secret type supported
 			// check is shadow secret
-			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, namespace, workloads[i].GetName(), "")] = true
+			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), workloads[i].GetName(), "")] = true
 		default:
 			if wlid := workloads[i].GetWlid(); wlid != "" {
 				idMap[wlid] = true
@@ -66,7 +66,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(namespace string, workloads []k8
 				if err != nil {
 					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
 				}
-				wlid := pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, namespace, kind, name)
+				wlid := pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), kind, name)
 				if wlid != "" {
 					idMap[wlid] = true
 				}

@@ -97,13 +97,13 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.RemoveWlid()
 		workload.RemoveUpdateTime()
 	case apis.UNREGISTERED:
-		workload.RemoveInject()                            // NS/WL DEPRECATED
-		workload.RemoveIgnore()                            // NS/WL DEPRECATED
-		workload.RemoveWlid()                              // WL
-		workload.RemoveUpdateTime()                        // WL
-		workload.RemoveLabel(pkgcautils.ArmoInitialSecret) // secret
-		workload.RemoveLabel(pkgcautils.CAInitialSecret)   // secret
-		workload.RemoveLabel(pkgcautils.CAProtectedSecret) // secret
+		workload.RemoveInject()     // NS/WL DEPRECATED
+		workload.RemoveIgnore()     // NS/WL DEPRECATED
+		workload.RemoveWlid()       // WL
+		workload.RemoveUpdateTime() // WL
+		// workload.RemoveLabel(pkgcautils.ArmoInitialSecret) // secret
+		// workload.RemoveLabel(pkgcautils.CAInitialSecret)   // secret
+		// workload.RemoveLabel(pkgcautils.CAProtectedSecret) // secret
 	}
 }
 func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) error {

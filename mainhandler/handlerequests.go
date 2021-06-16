@@ -215,7 +215,7 @@ func (mainHandler *MainHandler) GetWlids(namespace string, labels map[string]str
 			errs = append(errs, err)
 			continue
 		}
-		w, e := mainHandler.GetResourcesIDs(namespace, workloads)
+		w, e := mainHandler.GetResourcesIDs(workloads)
 		if len(errs) != 0 {
 			errs = append(errs, e...)
 		}
