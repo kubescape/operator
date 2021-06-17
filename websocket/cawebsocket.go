@@ -136,7 +136,7 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", "", 1)
 
 		if c.CommandName == "" {
-			err := fmt.Errorf("command not found. wlid: %s", c.Wlid)
+			err := fmt.Errorf("command not found. id: %s", c.GetID())
 			glog.Error(err)
 			sessionObj.Reporter.SendError(err, true, true)
 			continue

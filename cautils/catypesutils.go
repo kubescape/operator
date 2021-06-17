@@ -8,7 +8,7 @@ import (
 
 func NewSessionObj(command *apis.Command, message, jobID string, actionNumber int) *SessionObj {
 	reporter := reporterlib.NewBaseReport(CA_CUSTOMER_GUID, message)
-	reporter.SetTarget(target(command))
+	reporter.SetTarget(command.GetID())
 	reporter.SetJobID(jobID)
 	reporter.SetActionIDN(actionNumber)
 	reporter.SendAsRoutine(reportutils.EmptyString, true)
@@ -18,11 +18,4 @@ func NewSessionObj(command *apis.Command, message, jobID string, actionNumber in
 		Reporter: reporter,
 	}
 	return &sessionObj
-}
-
-func target(command *apis.Command) string {
-	if command.WildWlid != "" {
-		return command.WildWlid
-	}
-	return command.Wlid
 }

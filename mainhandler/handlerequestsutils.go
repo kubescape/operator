@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,12 +40,12 @@ func ignoreNamespace(command, namespace string) bool {
 	}
 	return false
 }
-func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels map[string]string) ([]k8sinterface.Workload, error) {
+func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels, fields map[string]string) ([]k8sinterface.Workload, error) {
 	groupVersionResource, err := k8sinterface.GetGroupVersionResource(resource)
 	if err != nil {
 		return nil, err
 	}
-	return mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels)
+	return mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels, fields)
 }
 func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.Workload) ([]string, []error) {
 	errs := []error{}
@@ -54,9 +55,8 @@ func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.Workloa
 		case "Namespace":
 			idMap[pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		case "Secret":
-			// check if secret type supported
-			// check is shadow secret
-			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), workloads[i].GetName(), "")] = true
+			secretName := strings.TrimPrefix(workloads[i].GetName(), secrethandling.ArmoShadowSecretPrefix) // remove shadow secret prefix
+			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), secretName, "")] = true
 		default:
 			if wlid := workloads[i].GetWlid(); wlid != "" {
 				idMap[wlid] = true
@@ -108,4 +108,14 @@ func resourceList(command string) []string {
 
 	}
 
+}
+
+func sidFallback(sessionObj *cautils.SessionObj) {
+	if sessionObj.Command.GetID() == "" {
+		sid, err := getSIDFromArgs(sessionObj.Command.Args)
+		if err != nil || sid == "" {
+			return
+		}
+		sessionObj.Command.Sid = sid
+	}
 }

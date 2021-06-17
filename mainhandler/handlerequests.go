@@ -74,10 +74,10 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			continue
 		}
 
-		if sessionObj.Command.WildWlid != "" {
+		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
-		} else if sessionObj.Command.Sid != "" {
-			go mainHandler.HandleSingleRequest(&sessionObj)
+			// } else if sessionObj.Command.Sid != "" {
+			// 	go mainHandler.HandleSingleRequest(&sessionObj)
 		} else {
 			go mainHandler.HandleSingleRequest(&sessionObj)
 		}
@@ -85,8 +85,17 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 }
 
 func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionObj) {
+	// FALLBACK
+	sidFallback(sessionObj)
+
+	if sessionObj.Command.GetID() == "" {
+		glog.Errorf("Received empty id")
+		return
+	}
+
 	status := "SUCCESS"
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
+
 	sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
@@ -95,7 +104,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	} else {
 		sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 	}
-	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.Wlid, status)
+	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.GetID(), status)
 	if err != nil {
 		donePrint += fmt.Sprintf(", reason: %s", err.Error())
 	}
@@ -104,13 +113,14 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
-	if c.Wlid != "" {
-		actionHandler.wlid = c.Wlid
+	if pkgcautils.IsWlid(c.GetID()) {
+		actionHandler.wlid = c.GetID()
+	} else {
+		actionHandler.sid = c.GetID()
 	}
-	logCommandInfo := fmt.Sprintf("Running %s command", c.CommandName)
-	if c.Wlid != "" {
-		logCommandInfo += fmt.Sprintf(", wlid: %s", c.Wlid)
-	}
+
+	logCommandInfo := fmt.Sprintf("Running %s command, id: '%s'", c.CommandName, c.GetID())
+
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
 	case apis.UPDATE, apis.INJECT:
@@ -164,15 +174,20 @@ func (actionHandler *ActionHandler) signWorkload() error {
 
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
 func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
-	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.WildWlid)
+	if sessionObj.Command.GetID() == "" {
+		glog.Errorf("Received empty id")
+		return
+	}
+
+	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.GetID())
 	labels := sessionObj.Command.GetLabels()
+	fields := sessionObj.Command.GetFieldSelector()
 	resources := resourceList(sessionObj.Command.CommandName)
 
-	info := fmt.Sprintf("wildWlid: '%s', namespace: '%s', labels: '%v'", sessionObj.Command.WildWlid, namespace, labels)
+	info := fmt.Sprintf("id: '%s', namespace: '%s', labels: '%v', fieldSelector: '%v'", sessionObj.Command.GetID(), namespace, labels, fields)
 	glog.Infof(info)
 	sessionObj.Reporter.SendAction(info, true)
-
-	ids, errs := mainHandler.GetWlids(namespace, labels, resources)
+	ids, errs := mainHandler.GetIDs(namespace, labels, fields, resources)
 	for i := range errs {
 		glog.Warningf(errs[i].Error())
 		sessionObj.Reporter.SendError(errs[i], true, true)
@@ -184,29 +199,40 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	go func() { // send to goroutine so the channel will be released release the channel
 		for i := range ids {
 			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), sessionObj.Reporter.GetActionIDN())
-			newSessionObj.Command.Wlid = ids[i]
-			// newSessionObj.Command.Sid = ids[i]
-			newSessionObj.Command.WildWlid = ""
 
-			if err := cautils.IsWlidValid(newSessionObj.Command.Wlid); err != nil {
-				err := fmt.Errorf("invalid: %s, wlid: %s", err.Error(), newSessionObj.Command.Wlid)
+			var err error
+			if pkgcautils.IsWlid(ids[i]) {
+				newSessionObj.Command.Wlid = ids[i]
+				err = pkgcautils.IsWlidValid(newSessionObj.Command.Wlid)
+			} else if pkgcautils.IsSid(ids[i]) {
+				newSessionObj.Command.Sid = ids[i]
+			} else {
+				err = fmt.Errorf("Unknown id")
+			}
+
+			newSessionObj.Command.WildWlid = ""
+			newSessionObj.Command.WildSid = ""
+
+			if err != nil {
+				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
 				glog.Error(err)
 				sessionObj.Reporter.SendError(err, true, true)
 				continue
 			}
-			glog.Infof("triggering wlid: '%s'", newSessionObj.Command.Wlid)
-			sessionObj.Reporter.SendAction(fmt.Sprintf("triggering wlid: '%s'", newSessionObj.Command.Wlid), true)
+
+			glog.Infof("triggering id: '%s'", newSessionObj.Command.GetID())
+			sessionObj.Reporter.SendAction(fmt.Sprintf("triggering id: '%s'", newSessionObj.Command.GetID()), true)
 			*mainHandler.sessionObj <- *newSessionObj
 			sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 		}
 	}()
 }
 
-func (mainHandler *MainHandler) GetWlids(namespace string, labels map[string]string, resources []string) ([]string, []error) {
-	wlids := []string{}
+func (mainHandler *MainHandler) GetIDs(namespace string, labels, fields map[string]string, resources []string) ([]string, []error) {
+	ids := []string{}
 	errs := []error{}
 	for _, resource := range resources {
-		workloads, err := mainHandler.listWorkloads(namespace, resource, labels)
+		workloads, err := mainHandler.listWorkloads(namespace, resource, labels, fields)
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -223,8 +249,8 @@ func (mainHandler *MainHandler) GetWlids(namespace string, labels map[string]str
 			err := fmt.Errorf("Resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
 			errs = append(errs, err)
 		}
-		wlids = append(wlids, w...)
+		ids = append(ids, w...)
 	}
 
-	return wlids, errs
+	return ids, errs
 }

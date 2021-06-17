@@ -25,6 +25,7 @@ type SafeMode struct {
 	ProcessExitCode int    `json:"processExitCode"` // 0 +
 	Timestamp       int64  `json:"timestamp"`
 	Message         string `json:"message"` // any string
+	JobID           string `json:"jobID"`   // any string
 }
 
 func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request) {
@@ -62,8 +63,12 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 func (resthandler *HTTPHandler) handlePost(urlVals url.Values, readBuffer []byte) error {
 	message := fmt.Sprintf("%s", readBuffer)
 	safeMode, _ := convertRequest(readBuffer)
-	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "websocket")
+	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "Websocket")
 	reporter.SetTarget(safeMode.Wlid)
+	reporter.SetActionName("SafeMode")
+	if safeMode.JobID == "" {
+		reporter.JobID = safeMode.JobID
+	}
 	reporter.SendError(fmt.Errorf(message), true, true)
 	glog.Infof("SafeMode received: %s", message)
 	// command := apis.Command{
