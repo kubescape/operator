@@ -117,11 +117,11 @@ func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) 
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
-func injectLabel(labels map[string]string, key, val string) {
-	if labels == nil {
-		labels = make(map[string]string)
+func injectLabel(objectMeta *metav1.ObjectMeta, key, val string) {
+	if objectMeta.Labels == nil {
+		objectMeta.Labels = make(map[string]string)
 	}
-	labels[key] = val
+	objectMeta.Labels[key] = val
 }
 
 func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
@@ -132,9 +132,8 @@ func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
 
 // UpdateSecret create secret in k8s
 func (actionHandler *ActionHandler) UpdateSecret(secret *corev1.Secret, command string) error {
-	ctx := context.Background()
 	secretUpdate(&secret.ObjectMeta, command)
-	_, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+	_, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(actionHandler.k8sAPI.Context, secret, metav1.UpdateOptions{})
 	return err
 }
 
@@ -172,7 +171,7 @@ func secretUpdate(objectMeta *metav1.ObjectMeta, command string) {
 		removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
 		removeLabel(objectMeta, pkgcautils.CAInitialSecret)   // DEPRECATED
 		removeLabel(objectMeta, pkgcautils.CAProtectedSecret) // DEPRECATED
-		injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "false")
+		injectLabel(objectMeta, pkgcautils.ArmoAttach, "false")
 	case apis.ENCRYPT:
 		// injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
 		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
