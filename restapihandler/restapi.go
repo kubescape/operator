@@ -35,6 +35,7 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 	}
 	rtr := mux.NewRouter()
 	rtr.HandleFunc("/v1/safeMode", resthandler.SafeMode)
+	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
 	server.Handler = rtr
 
 	// listen

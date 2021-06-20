@@ -46,7 +46,7 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 
 	switch r.Method {
 	case http.MethodPost:
-		err = resthandler.handlePost(r.URL.Query(), readBuffer)
+		err = resthandler.safeModePost(r.URL.Query(), readBuffer)
 	default:
 		httpStatus = http.StatusMethodNotAllowed
 		err = fmt.Errorf("Method %s no allowed", r.Method)
@@ -60,11 +60,11 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 	w.Write(returnValue)
 }
 
-func (resthandler *HTTPHandler) handlePost(urlVals url.Values, readBuffer []byte) error {
+func (resthandler *HTTPHandler) safeModePost(urlVals url.Values, readBuffer []byte) error {
 	message := fmt.Sprintf("%s", readBuffer)
 	glog.Infof("SafeMode received: %s", message)
 
-	safeMode, _ := convertRequest(readBuffer)
+	safeMode, _ := convertSafeModeRequest(readBuffer)
 	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "Websocket")
 	reporter.SetTarget(safeMode.Wlid)
 	reporter.SetActionName("SafeMode")
@@ -88,7 +88,7 @@ func (resthandler *HTTPHandler) handlePost(urlVals url.Values, readBuffer []byte
 	return nil
 }
 
-func convertRequest(bytesRequest []byte) (*SafeMode, error) {
+func convertSafeModeRequest(bytesRequest []byte) (*SafeMode, error) {
 	safeMode := &SafeMode{}
 	if err := json.Unmarshal(bytesRequest, safeMode); err != nil {
 		glog.Error(err)
