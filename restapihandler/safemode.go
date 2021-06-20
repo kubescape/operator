@@ -49,7 +49,7 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 		err = resthandler.safeModePost(r.URL.Query(), readBuffer)
 	default:
 		httpStatus = http.StatusMethodNotAllowed
-		err = fmt.Errorf("Method %s no allowed", r.Method)
+		err = fmt.Errorf("Method '%s' not allowed", r.Method)
 	}
 	if err != nil {
 		returnValue = []byte(err.Error())

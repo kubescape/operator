@@ -133,7 +133,7 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 	}
 	glog.Infof("receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
-		sessionObj := cautils.NewSessionObj(&c, "Websocket", "", 1)
+		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())

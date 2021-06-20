@@ -179,7 +179,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 		return
 	}
 
-	namespace := cautils.GetNamespaceFromWildWlid(sessionObj.Command.GetID())
+	namespace := pkgcautils.GetNamespaceFromWlid(sessionObj.Command.GetID())
 	labels := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
 	resources := resourceList(sessionObj.Command.CommandName)

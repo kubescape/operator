@@ -42,29 +42,41 @@ type SecretHandler struct {
 func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
 
-	sid, err := getSIDFromArgs(c.Args)
-	if err != nil {
+	if actionHandler.sid == "" {
+		sid, err := getSIDFromArgs(c.Args)
+		if err != nil {
+			return err
+		}
+		actionHandler.sid = sid
+	}
+
+	if err := secrethandling.ValidateSecretID(actionHandler.sid); err != nil {
 		return err
 	}
-	actionHandler.sid = sid
-	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(sid)) {
-		glog.Infof("Ignoring sid: '%s'", sid)
+
+	if pkgcautils.IfIgnoreNamespace(secrethandling.GetSIDNamespace(actionHandler.sid)) {
+		glog.Infof("Ignoring sid: '%s'", actionHandler.sid)
 		return nil
 	}
 
 	switch c.CommandName {
 	case apis.ENCRYPT:
-		err = actionHandler.encryptSecret()
-	case apis.DECRYPT, apis.UNREGISTERED:
-		err = actionHandler.decryptSecret()
+		return actionHandler.encryptSecret()
+	case apis.DECRYPT, apis.UNREGISTERED: // todo - support UNREGISTERED
+		return actionHandler.decryptSecret()
 	}
-	return err
+	return nil
 }
 func (actionHandler *ActionHandler) encryptSecret() error {
 	// get secret
 	secret, err := actionHandler.GetSecret(secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid))
 	if err != nil {
 		return err
+	}
+
+	if !secrethandling.IsSecretTypeSupported(secret.Type) {
+		glog.Warningf("secret type '%s' not supported", secret.Type)
+		return nil
 	}
 
 	if secret.Data == nil || len(secret.Data) == 0 {
@@ -112,6 +124,10 @@ func (actionHandler *ActionHandler) decryptSecret() error {
 	secret, err := actionHandler.GetSecret(secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid))
 	if err != nil {
 		return err
+	}
+	if !secrethandling.IsSecretTypeSupported(secret.Type) {
+		glog.Warningf("secret type '%s' not supported", secret.Type)
+		return nil
 	}
 
 	//check if subsecret is in secret

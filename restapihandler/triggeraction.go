@@ -37,7 +37,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) err
 func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			glog.Errorf("recover in SafeMode: %v", err)
+			glog.Errorf("recover in ActionRequest: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			bErr, _ := json.Marshal(err)
 			w.Write(bErr)
@@ -55,7 +55,7 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 		err = resthandler.HandleActionRequest(readBuffer)
 	default:
 		httpStatus = http.StatusMethodNotAllowed
-		err = fmt.Errorf("Method %s no allowed", r.Method)
+		err = fmt.Errorf("Method '%s' not allowed", r.Method)
 	}
 	if err != nil {
 		returnValue = []byte(err.Error())

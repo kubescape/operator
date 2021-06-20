@@ -162,6 +162,7 @@ func RestoreWildWlid(spiffe string) ([]string, error) {
 	if strings.HasPrefix(spiffe, WlidPrefix) {
 		spiffe = spiffe[len(WlidPrefix):]
 	}
+
 	spiffeSlices := strings.Split(spiffe, "/")
 
 	return restoreInnerIdentifiersFromWildWlid(spiffeSlices), nil
