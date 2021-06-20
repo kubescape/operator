@@ -25,7 +25,10 @@ func (actionHandler *ActionHandler) update(command string) error {
 		return err
 	}
 
-	actionHandler.editWorkload(workload, command)
+	if err := actionHandler.editWorkload(workload, command); err != nil {
+		glog.Warningf("%s, wlid: '%s'", err.Error(), actionHandler.wlid)
+		return nil
+	}
 
 	glog.Infof("Command: %s, Updated workload: %s", actionHandler.command.CommandName, workload.Json())
 
@@ -81,9 +84,12 @@ func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) e
 	return err
 }
 
-func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) {
+func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) error {
 	switch command {
 	case apis.UPDATE:
+		if workload.IsAttached() {
+			return fmt.Errorf("workload already attached")
+		}
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
 		workload.SetUpdateTime()
@@ -92,6 +98,9 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	case apis.INJECT:
 		workload.SetInject()
 	case apis.REMOVE:
+		if !workload.IsAttached() {
+			return fmt.Errorf("workload not attached")
+		}
 		workload.RemoveInject() // DEPRECATED
 		workload.SetIgnore()
 		workload.RemoveWlid()
@@ -105,6 +114,7 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		// workload.RemoveLabel(pkgcautils.CAInitialSecret)   // secret
 		// workload.RemoveLabel(pkgcautils.CAProtectedSecret) // secret
 	}
+	return nil
 }
 func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) error {
 	lisOptions := metav1.ListOptions{}
