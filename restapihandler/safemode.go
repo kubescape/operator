@@ -8,25 +8,11 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/armosec/capacketsgo/apis"
+
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 	"github.com/golang/glog"
 )
-
-type SafeMode struct {
-	Reporter        string `json:"reporter"`      // "Agent"
-	Wlid            string `json:"wlid"`          // CAA_WLID
-	PodName         string `json:"podName"`       // CAA_POD_NAME
-	ContainerName   string `json:"containerName"` // CAA_CONTAINER_NAME
-	ProcessName     string `json:"processName"`
-	ProcessID       int    `json:"processID"`
-	ProcessCMD      string `json:"processCMD"`
-	ComponentGUID   string `json:"componentGUID"`   // CAA_GUID
-	StatusCode      int    `json:"statusCode"`      // 0/1/2
-	ProcessExitCode int    `json:"processExitCode"` // 0 +
-	Timestamp       int64  `json:"timestamp"`
-	Message         string `json:"message"` // any string
-	JobID           string `json:"jobID"`   // any string
-}
 
 func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request) {
 	defer func() {
@@ -88,8 +74,8 @@ func (resthandler *HTTPHandler) safeModePost(urlVals url.Values, readBuffer []by
 	return nil
 }
 
-func convertSafeModeRequest(bytesRequest []byte) (*SafeMode, error) {
-	safeMode := &SafeMode{}
+func convertSafeModeRequest(bytesRequest []byte) (*apis.SafeMode, error) {
+	safeMode := &apis.SafeMode{}
 	if err := json.Unmarshal(bytesRequest, safeMode); err != nil {
 		glog.Error(err)
 		return nil, err
