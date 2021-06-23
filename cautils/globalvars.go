@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/golang/glog"
 )
 
 var (
@@ -19,6 +21,7 @@ var (
 	CA_USE_DOCKER                = false
 	CA_DEBUG_SIGNER              = false
 	CA_IGNORE_VERIFY_CACLI       = false
+	NotificationServerURL        = ""
 	SignerSemaphore        int64 = 4
 )
 
@@ -51,6 +54,10 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 	if RestAPIPort, err = testEnvironmentVarible("CA_WEBSOCKET_PORT"); err != nil {
 		RestAPIPort = "4002"
+	}
+	if NotificationServerURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER"); err != nil {
+		// return err
+		glog.Warningf("missing CA_NOTIFICATION_SERVER env")
 	}
 
 	if signerSemaphore, err := testEnvironmentVarible("CA_SIGNER_SEMAPHORE"); err == nil {

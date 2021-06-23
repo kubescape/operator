@@ -1,4 +1,7 @@
 *_tests_go.txt
 *_tests_xunit.xml
-dist/k8s-ca-websocket
+*k8s-ca-websocket*
+*.vscode*
+dist/*
 licenses
+.vscode/launch.json

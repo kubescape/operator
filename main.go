@@ -10,6 +10,7 @@ import (
 	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/restapihandler"
+	"k8s-ca-websocket/safemode"
 	"k8s-ca-websocket/websocket"
 
 	"github.com/armosec/capacketsgo/k8sshared/probes"
@@ -45,6 +46,12 @@ func main() {
 	go func() {
 		websocketHandler := websocket.NewWebsocketHandler(&sessionObj)
 		glog.Fatal(websocketHandler.Websocket())
+	}()
+
+	// Websocket setup
+	go func() {
+		safemode := safemode.NewSafeModeHandler(&sessionObj)
+		glog.Fatal(safemode.WebsocketConnection())
 	}()
 
 	// http listener
