@@ -15,10 +15,10 @@ type SafeModeHandler struct {
 }
 
 func NewSafeModeHandler(sessionObj *chan cautils.SessionObj) *SafeModeHandler {
-	urlObj := initNotificationServerURL()
+	urlStr := initNotificationServerURL()
 
 	return &SafeModeHandler{
-		connector:  NewWebsocketActions(urlObj.String()),
+		connector:  NewWebsocketActions(urlStr),
 		sessionObj: sessionObj,
 	}
 }
@@ -27,12 +27,11 @@ func (smHandler *SafeModeHandler) WebsocketConnection() error {
 	retries := 0
 	for {
 		if err := smHandler.SetupWebsocket(); err != nil {
-			if retries == 3 {
-				return err
-			}
-			time.Sleep(5 * time.Second)
 			retries += 1
+			time.Sleep(time.Duration(retries*2) * time.Second)
 			glog.Errorf("In WebsocketConnection, error: %s, retry: %d", err.Error(), retries)
+		} else {
+			retries = 0
 		}
 	}
 }

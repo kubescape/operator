@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/cronjobs"
 	"k8s-ca-websocket/k8sworkloads"
@@ -31,11 +30,6 @@ func main() {
 	}
 
 	if err := cautils.LoadEnvironmentVaribles(); err != nil {
-		glog.Error(err)
-		return
-	}
-
-	if err := cacli.LoginCacli(); err != nil {
 		glog.Error(err)
 		return
 	}

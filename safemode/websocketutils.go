@@ -20,10 +20,7 @@ func (smHandler *SafeModeHandler) websocketPingMessage() error {
 		time.Sleep(30 * time.Second)
 		if err := smHandler.connector.WritePingMessage(); err != nil {
 			glog.Errorf("PING, %s", err.Error())
-			_, err := smHandler.connector.DefaultDialer(nil)
-			if err != nil {
-				return fmt.Errorf("failed to establish connection, reason: %s", err.Error())
-			}
+			return fmt.Errorf("PING, %s", err.Error())
 		}
 	}
 }
@@ -77,9 +74,12 @@ func convertBsonNotification(bytesNotification []byte) (*apis.SafeMode, error) {
 	return &safeMode, nil
 
 }
-func initNotificationServerURL() *url.URL {
+func initNotificationServerURL() string {
 	urlObj := url.URL{}
 	host := cautils.NotificationServerURL
+	if host == "" {
+		return ""
+	}
 
 	scheme := "ws"
 	if strings.HasPrefix(host, "ws://") {
@@ -102,5 +102,5 @@ func initNotificationServerURL() *url.URL {
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentLoggerValue)
 	urlObj.RawQuery = q.Encode()
 
-	return &urlObj
+	return urlObj.String()
 }
