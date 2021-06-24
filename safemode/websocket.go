@@ -24,6 +24,9 @@ func NewSafeModeHandler(sessionObj *chan cautils.SessionObj) *SafeModeHandler {
 }
 
 func (smHandler *SafeModeHandler) WebsocketConnection() error {
+	if cautils.NotificationServerURL == "" {
+		return nil
+	}
 	retries := 0
 	for {
 		if err := smHandler.SetupWebsocket(); err != nil {

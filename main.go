@@ -45,7 +45,9 @@ func main() {
 	// Websocket setup
 	go func() {
 		safemode := safemode.NewSafeModeHandler(&sessionObj)
-		glog.Fatal(safemode.WebsocketConnection())
+		if err := safemode.WebsocketConnection(); err != nil {
+			glog.Fatal(err)
+		}
 	}()
 
 	// http listener
