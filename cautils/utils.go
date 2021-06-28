@@ -5,10 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"strings"
 	"time"
 
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
 	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -69,10 +67,6 @@ func GetNamespaceFromWorkload(workload interface{}) string {
 	//@DAVID why is that default?
 
 	return ""
-}
-
-func GenarateConfigMapName(wlid string) string {
-	return strings.ToLower(fmt.Sprintf("ca-%s-%s-%s", pkgcautils.GetNamespaceFromWlid(wlid), pkgcautils.GetKindFromWlid(wlid), pkgcautils.GetNameFromWlid(wlid)))
 }
 
 func MapToString(m map[string]interface{}) []string {
