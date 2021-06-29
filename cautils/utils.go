@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/capacketsgo/notificationserver"
 	"github.com/golang/glog"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -75,4 +77,23 @@ func MapToString(m map[string]interface{}) []string {
 		s = append(s, i)
 	}
 	return s
+}
+
+func SendSafeModeReport(sessionObj *SessionObj, message string, code int) {
+	safeMode := apis.SafeMode{}
+
+	safeMode.JobID = sessionObj.Reporter.GetJobID()
+	safeMode.Wlid = sessionObj.Reporter.GetTarget()
+	safeMode.Reporter = "Websocket"
+	safeMode.StatusCode = code
+	safeMode.Message = message
+
+	safeModeURL := fmt.Sprintf("http://%s:%s/v1/sendnotification", CA_NOTIFICATION_SERVER_SERVICE_HOST, CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API)
+	target := map[string]string{notificationserver.TargetComponent: notificationserver.TargetComponentLoggerValue}
+
+	// pushing notification
+	if err := notificationserver.PushNotificationServer(safeModeURL, target, safeMode, true); err != nil {
+		glog.Error(err)
+		return
+	}
 }

@@ -101,6 +101,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	if err != nil {
 		sessionObj.Reporter.SendError(err, true, true)
 		status = "FAIL"
+		cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
 		sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 	}

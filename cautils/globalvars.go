@@ -9,20 +9,22 @@ import (
 )
 
 var (
-	CA_NAMESPACE                 = ""
-	CA_CLUSTER_NAME              = ""
-	CA_POSTMAN                   = ""
-	CA_CUSTOMER_GUID             = ""
-	CA_LOGIN_SECRET_NAME         = ""
-	CA_DASHBOARD_BACKEND         = ""
-	CA_OCIMAGE_URL               = ""
-	CA_VULNSCAN                  = ""
-	RestAPIPort                  = ""
-	CA_USE_DOCKER                = false
-	CA_DEBUG_SIGNER              = false
-	CA_IGNORE_VERIFY_CACLI       = false
-	NotificationServerURL        = ""
-	SignerSemaphore        int64 = 4
+	CA_NAMESPACE                                       = ""
+	CA_CLUSTER_NAME                                    = ""
+	CA_POSTMAN                                         = ""
+	CA_CUSTOMER_GUID                                   = ""
+	CA_LOGIN_SECRET_NAME                               = ""
+	CA_DASHBOARD_BACKEND                               = ""
+	CA_OCIMAGE_URL                                     = ""
+	CA_VULNSCAN                                        = ""
+	RestAPIPort                                        = ""
+	CA_USE_DOCKER                                      = false
+	CA_DEBUG_SIGNER                                    = false
+	CA_IGNORE_VERIFY_CACLI                             = false
+	NotificationServerURL                              = ""
+	CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API       = ""
+	CA_NOTIFICATION_SERVER_SERVICE_HOST                = ""
+	SignerSemaphore                              int64 = 4
 )
 
 // LoadEnvironmentVaribles -
@@ -59,7 +61,12 @@ func LoadEnvironmentVaribles() (err error) {
 		// return err
 		glog.Warningf("missing CA_NOTIFICATION_SERVER env")
 	}
-
+	if CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API"); err != nil {
+		return err
+	}
+	if CA_NOTIFICATION_SERVER_SERVICE_HOST, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_SERVICE_HOST"); err != nil {
+		return err
+	}
 	if signerSemaphore, err := testEnvironmentVarible("CA_SIGNER_SEMAPHORE"); err == nil {
 		i, err := strconv.ParseInt(signerSemaphore, 10, 64)
 		if err != nil {
