@@ -237,8 +237,8 @@ func (mainHandler *MainHandler) GetIDs(namespace string, labels, fields map[stri
 			errs = append(errs, err)
 		}
 		if len(workloads) == 0 {
-			err := fmt.Errorf("Resource: '%s', no workloads found. namespace: '%s', labels: '%v'", resource, namespace, labels)
-			errs = append(errs, err)
+			// err := fmt.Errorf("Resource: '%s', no workloads found. namespace: '%s', labels: '%v'", resource, namespace, labels)
+			// errs = append(errs, err)
 			continue
 		}
 		w, e := mainHandler.GetResourcesIDs(workloads)
