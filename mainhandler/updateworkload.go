@@ -85,18 +85,23 @@ func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) e
 }
 
 func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) error {
+	jobTracking := cautils.NewJobTracking(actionHandler.reporter)
+
 	switch command {
 	case apis.UPDATE:
 		if workload.IsAttached() {
 			return fmt.Errorf("workload already attached")
 		}
+		workload.SetJobID(*jobTracking)
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
 		workload.SetUpdateTime()
 	case apis.RESTART:
 		workload.SetUpdateTime()
+		workload.SetJobID(*jobTracking)
 	case apis.INJECT:
 		workload.SetInject()
+		workload.SetJobID(*jobTracking)
 	case apis.REMOVE:
 		if !workload.IsAttached() {
 			return fmt.Errorf("workload not attached")
@@ -105,11 +110,13 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.SetIgnore()
 		workload.RemoveWlid()
 		workload.RemoveUpdateTime()
+		workload.RemoveJobID()
 	case apis.UNREGISTERED:
 		workload.RemoveInject()     // NS/WL DEPRECATED
 		workload.RemoveIgnore()     // NS/WL DEPRECATED
 		workload.RemoveWlid()       // WL
 		workload.RemoveUpdateTime() // WL
+		workload.RemoveJobID()      // NS/WL
 		// workload.RemoveLabel(pkgcautils.ArmoInitialSecret) // secret
 		// workload.RemoveLabel(pkgcautils.CAInitialSecret)   // secret
 		// workload.RemoveLabel(pkgcautils.CAProtectedSecret) // secret

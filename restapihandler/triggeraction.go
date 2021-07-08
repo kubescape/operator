@@ -20,7 +20,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) err
 	}
 	glog.Infof("restAPI receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
-		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
+		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())

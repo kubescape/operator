@@ -101,7 +101,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	if err != nil {
 		sessionObj.Reporter.SendError(err, true, true)
 		status = "FAIL"
-		cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
+		// cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
 		sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 	}
@@ -199,7 +199,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	glog.Infof("ids found: '%v'", ids)
 	go func() { // send to goroutine so the channel will be released release the channel
 		for i := range ids {
-			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), sessionObj.Reporter.GetActionIDN())
+			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), "", sessionObj.Reporter.GetActionIDN())
 
 			var err error
 			if pkgcautils.IsWlid(ids[i]) {
