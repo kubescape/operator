@@ -1,10 +1,11 @@
 package cautils
 
 import (
-	"github.com/armosec/capacketsgo/apis"
-	"github.com/armosec/capacketsgo/system-reports/datastructures"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 	reportutils "github.com/armosec/capacketsgo/system-reports/utilities"
+
+	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/capacketsgo/system-reports/datastructures"
 )
 
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {

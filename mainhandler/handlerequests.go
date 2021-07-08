@@ -96,14 +96,14 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	status := "SUCCESS"
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
 
-	sessionObj.Reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
+	actionHandler.reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
-		sessionObj.Reporter.SendError(err, true, true)
+		actionHandler.reporter.SendError(err, true, true)
 		status = "FAIL"
 		// cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
-		sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+		actionHandler.reporter.SendStatus(reporterlib.JobSuccess, true)
 	}
 	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.GetID(), status)
 	if err != nil {
@@ -185,7 +185,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	fields := sessionObj.Command.GetFieldSelector()
 	resources := resourceList(sessionObj.Command.CommandName)
 
-	info := fmt.Sprintf("id: '%s', namespace: '%s', labels: '%v', fieldSelector: '%v'", sessionObj.Command.GetID(), namespace, labels, fields)
+	info := fmt.Sprintf("%s: id: '%s', namespace: '%s', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespace, labels, fields)
 	glog.Infof(info)
 	sessionObj.Reporter.SendAction(info, true)
 	ids, errs := mainHandler.GetIDs(namespace, labels, fields, resources)
@@ -199,7 +199,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	glog.Infof("ids found: '%v'", ids)
 	go func() { // send to goroutine so the channel will be released release the channel
 		for i := range ids {
-			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), "", sessionObj.Reporter.GetActionIDN())
+			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 			var err error
 			if pkgcautils.IsWlid(ids[i]) {

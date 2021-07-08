@@ -103,9 +103,6 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.SetInject()
 		workload.SetJobID(*jobTracking)
 	case apis.REMOVE:
-		if !workload.IsAttached() {
-			return fmt.Errorf("workload not attached")
-		}
 		workload.RemoveInject() // DEPRECATED
 		workload.SetIgnore()
 		workload.RemoveWlid()
