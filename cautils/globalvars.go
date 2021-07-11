@@ -24,6 +24,7 @@ var (
 	NotificationServerURL                              = ""
 	CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API       = ""
 	CA_NOTIFICATION_SERVER_SERVICE_HOST                = ""
+	ScanDisabled                                 bool  = false
 	SignerSemaphore                              int64 = 4
 )
 
@@ -53,6 +54,11 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil {
 		// ignore
+	}
+	if skipClair, err := testEnvironmentVarible("SKIP_CLAIR"); err == nil {
+		if skipClair == "true" {
+			ScanDisabled = true
+		}
 	}
 	if RestAPIPort, err = testEnvironmentVarible("CA_WEBSOCKET_PORT"); err != nil {
 		RestAPIPort = "4002"

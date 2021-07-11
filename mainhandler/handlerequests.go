@@ -74,6 +74,14 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			continue
 		}
 
+		// if scan disabled
+		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.SCAN {
+			err := fmt.Errorf("Scan is disabled in cluster")
+			glog.Warningf("Scan is disabled in cluster")
+			sessionObj.Reporter.SendError(err, true, true)
+			continue
+		}
+
 		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 			// } else if sessionObj.Command.Sid != "" {
