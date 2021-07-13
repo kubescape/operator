@@ -39,7 +39,7 @@ func main() {
 	// Websocket
 	go func() {
 		websocketHandler := websocket.NewWebsocketHandler(&sessionObj)
-		glog.Fatal(websocketHandler.Websocket())
+		glog.Fatal(websocketHandler.Websocket(&isReadinessReady))
 	}()
 
 	// Websocket setup
@@ -55,8 +55,6 @@ func main() {
 		restAPIHandler := restapihandler.NewHTTPHandler(&sessionObj)
 		glog.Fatal(restAPIHandler.SetupHTTPListener())
 	}()
-
-	isReadinessReady = true
 
 	mainHandler := mainhandler.NewMainHandler(&sessionObj)
 

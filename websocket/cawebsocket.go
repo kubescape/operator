@@ -51,51 +51,56 @@ func initPostmanURL() url.URL {
 }
 
 // Websocket main function
-func (wsh *WebsocketHandler) Websocket() error {
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Printf("RECOVER Websocket %v", err)
+func (wsh *WebsocketHandler) Websocket(isReadinessReady *bool) error {
+
+	for {
+		conn, err := wsh.ConnectToWebsocket()
+		if err != nil {
+			glog.Errorf("failed to open websocket with Armo backend, reason: %s", err.Error())
+			time.Sleep(3 * time.Second)
+			continue
+
 		}
-	}()
+		*isReadinessReady = true
 
-	conn, err := wsh.ConnectToWebsocket()
-	if err != nil {
-		return err
-	}
-
-	defer conn.Close()
-
-	go func() {
-		for {
-			time.Sleep(30 * time.Second)
-			if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				glog.Errorf("PING, %s", err.Error())
-				c, err := wsh.ConnectToWebsocket()
-				if err != nil {
-					panic("connection closed, restart websocket")
+		go func() {
+			for {
+				time.Sleep(30 * time.Second)
+				if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+					glog.Errorf("PING, %s", err.Error())
+					*isReadinessReady = false
+					conn.Close()
+					return
 				}
-				conn = c
+			}
+		}()
+		for {
+			messageType, bytes, err := conn.ReadMessage()
+			if err != nil {
+				glog.Errorf("error receiving data from websocket. message: %s", err.Error())
+				break
+			}
+			switch messageType {
+			case websocket.TextMessage:
+				wsh.HandlePostmanRequest(bytes)
+			case websocket.CloseMessage:
+				break
+			default:
+				glog.Infof("Unrecognized message received. received: %d", messageType)
 			}
 		}
-	}()
-	for {
-		messageType, bytes, err := conn.ReadMessage()
-		if err != nil {
-			return fmt.Errorf("error receiving data from websocket. message: %s", err.Error())
-		}
-		switch messageType {
-		case websocket.TextMessage:
-			wsh.HandlePostmanRequest(bytes)
-		case websocket.CloseMessage:
-			return fmt.Errorf("websocket closed by server, message: %s", string(bytes))
-		default:
-			glog.Infof("Unrecognized message received. received: %d", messageType)
-		}
+		*isReadinessReady = false
+		conn.Close()
 	}
 }
 
 // ConnectToWebsocket Connect To Websocket with reties
 func (wsh *WebsocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
+	defer func() {
+		if err := recover(); err != nil {
+			glog.Errorf("RECOVER ConnectToWebsocket %v", err)
+		}
+	}()
 	i := 0
 	for {
 		conn, err := wsh.dialWebSocket()
@@ -127,6 +132,12 @@ func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 
 // HandlePostmanRequest Parse received commands and run the command
 func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
+	defer func() {
+		if err := recover(); err != nil {
+			glog.Errorf("RECOVER HandlePostmanRequest %v", err)
+		}
+	}()
+
 	commands := apis.Commands{}
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
 		glog.Error(err)

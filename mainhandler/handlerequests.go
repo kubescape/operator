@@ -60,13 +60,13 @@ func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi
 
 // HandlePostmanRequest Parse received commands and run the command
 func (mainHandler *MainHandler) HandleRequest() []error {
+	// recover
+	defer func() {
+		if err := recover(); err != nil {
+			glog.Errorf("RECOVER in HandleRequest, reason: %v", err)
+		}
+	}()
 	for {
-		// recover
-		defer func() {
-			if err := recover(); err != nil {
-				glog.Errorf("RECOVER in HandleRequest, reason: %v", err)
-			}
-		}()
 		sessionObj := <-*mainHandler.sessionObj
 
 		if ignoreNamespace(sessionObj.Command.CommandName, getCommandNamespace(&sessionObj.Command)) {
@@ -81,7 +81,6 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
-
 		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 			// } else if sessionObj.Command.Sid != "" {
