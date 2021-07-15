@@ -8,10 +8,12 @@ import (
 	"k8s-ca-websocket/cronjobs"
 	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/mainhandler"
+	"k8s-ca-websocket/notificationhandler"
+	"k8s-ca-websocket/notificationhandler/safemode"
 	"k8s-ca-websocket/restapihandler"
-	"k8s-ca-websocket/safemode"
 	"k8s-ca-websocket/websocket"
 
+	"github.com/armosec/capacketsgo/apis"
 	"github.com/armosec/capacketsgo/k8sshared/probes"
 	"github.com/golang/glog"
 )
@@ -35,6 +37,7 @@ func main() {
 	}
 
 	sessionObj := make(chan cautils.SessionObj)
+	safeModeObj := make(chan apis.SafeMode)
 
 	// Websocket
 	go func() {
@@ -42,12 +45,22 @@ func main() {
 		glog.Fatal(websocketHandler.Websocket(&isReadinessReady))
 	}()
 
-	// Websocket setup
+	// notification websocket setup
 	go func() {
-		safemode := safemode.NewSafeModeHandler(&sessionObj)
-		if err := safemode.WebsocketConnection(); err != nil {
+		notificationHandler := notificationhandler.NewNotificationHandler(&sessionObj, &safeModeObj)
+		if err := notificationHandler.WebsocketConnection(); err != nil {
 			glog.Fatal(err)
 		}
+	}()
+
+	// safe mode handler setup
+	go func() {
+		safeModeHandler := safemode.NewSafeModeHandler(&sessionObj, &safeModeObj)
+		if err := safeModeHandler.InitSafeModeHandler(); err != nil {
+			glog.Errorf("failed to initialize safeMode, reason: %s", err.Error())
+			return
+		}
+		safeModeHandler.HandlerSafeModeNotification()
 	}()
 
 	// http listener

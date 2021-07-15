@@ -1,4 +1,4 @@
-package safemode
+package notificationhandler
 
 import (
 	"encoding/json"
@@ -15,36 +15,36 @@ import (
 	"github.com/golang/glog"
 )
 
-func (smHandler *SafeModeHandler) websocketPingMessage() error {
+func (notification *NotificationHandler) websocketPingMessage() error {
 	for {
 		time.Sleep(30 * time.Second)
-		if err := smHandler.connector.WritePingMessage(); err != nil {
+		if err := notification.connector.WritePingMessage(); err != nil {
 			glog.Errorf("PING, %s", err.Error())
 			return fmt.Errorf("PING, %s", err.Error())
 		}
 	}
 }
 
-func convertJsonNotification(bytesNotification []byte) (*apis.SafeMode, error) {
-	notification := &notificationserver.Notification{}
-	if err := json.Unmarshal(bytesNotification, notification); err != nil {
+func (notification *NotificationHandler) handleJsonNotification(bytesNotification []byte) error {
+	notif := &notificationserver.Notification{}
+	if err := json.Unmarshal(bytesNotification, notif); err != nil {
 		glog.Error(err)
-		return nil, err
+		return err
 	}
 
-	safeMode := &apis.SafeMode{}
-	notificationBytes, err := json.Marshal(notification.Notification)
-	if err != nil {
-		return safeMode, err
+	dst := notif.Target["dest"]
+	switch dst {
+	case "", "safeMode":
+		safeMode, e := parseSafeModeNotification(notif)
+		if e != nil {
+			return e
+		}
+
+		// send to pipe
+		*notification.safeModeObj <- *safeMode
 	}
 
-	glog.Infof("Notification: %s", string(notificationBytes))
-	if err := json.Unmarshal(notificationBytes, safeMode); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-
-	return safeMode, nil
+	return nil
 
 }
 func convertBsonNotification(bytesNotification []byte) (*apis.SafeMode, error) {
@@ -103,4 +103,23 @@ func initNotificationServerURL() string {
 	urlObj.RawQuery = q.Encode()
 
 	return urlObj.String()
+}
+
+func parseSafeModeNotification(notification interface{}) (*apis.SafeMode, error) {
+	safeMode := &apis.SafeMode{}
+	notificationBytes, err := json.Marshal(notification)
+	if err != nil {
+		return safeMode, err
+	}
+
+	glog.Infof("Notification: %s", string(notificationBytes))
+	if err := json.Unmarshal(notificationBytes, safeMode); err != nil {
+		glog.Error(err)
+		return safeMode, err
+	}
+	if safeMode.InstanceID == "" {
+		safeMode.InstanceID = safeMode.PodName
+	}
+
+	return safeMode, nil
 }

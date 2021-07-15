@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"k8s-ca-websocket/safemode"
 	"net/http"
 	"net/url"
 
@@ -47,11 +46,13 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 
 func (resthandler *HTTPHandler) safeModePost(urlVals url.Values, readBuffer []byte) error {
 	message := fmt.Sprintf("%s", readBuffer)
-	glog.Infof("SafeMode received: %s", message)
+	glog.Infof("REST-API SafeMode received: %s", message)
 
-	safeModeObj, _ := convertSafeModeRequest(readBuffer)
-	sm := safemode.NewSafeModeHandler(resthandler.sessionObj)
-	return sm.HandlerSafeModeNotification(safeModeObj)
+	// TODO
+	// safeModeObj, _ := convertSafeModeRequest(readBuffer)
+	// nh := notificationhandler.NewNotificationHandler(resthandler.sessionObj)
+	// return nh.HandlerSafeModeNotification(safeModeObj)
+	return nil
 }
 
 func convertSafeModeRequest(bytesRequest []byte) (*apis.SafeMode, error) {
@@ -61,6 +62,9 @@ func convertSafeModeRequest(bytesRequest []byte) (*apis.SafeMode, error) {
 		return nil, err
 	}
 	safeMode.InstanceID = safeMode.PodName
+	if safeMode.Action == "" {
+		safeMode.Action = "SafeMode notification"
+	}
 	return safeMode, nil
 
 }
