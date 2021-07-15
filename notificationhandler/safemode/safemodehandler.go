@@ -64,7 +64,7 @@ func (safeModeHandler *SafeModeHandler) InitSafeModeHandler() error {
 	if err := safeModeHandler.wlidCompatibleMap.InitWlidMap(); err != nil {
 		return err
 	}
-	safeModeHandler.snooze()
+	go safeModeHandler.snooze()
 	return nil
 }
 func (safeModeHandler *SafeModeHandler) handlePodStarted(safeMode *apis.SafeMode) error {
@@ -174,6 +174,8 @@ func (safeModeHandler *SafeModeHandler) snooze() error {
 	sleepTime := 2 * time.Minute
 	agentLoadTime := 5 * time.Minute
 	for {
+		time.Sleep(sleepTime)
+
 		workloadStatusMap := safeModeHandler.workloadStatusMap.Copy()
 		for _, v := range workloadStatusMap {
 			if time.Now().UTC().Sub(v.GetTime()) < agentLoadTime { /// if lees 5 minutes
@@ -191,6 +193,5 @@ func (safeModeHandler *SafeModeHandler) snooze() error {
 				safeModeHandler.updateAgentIncompatible(v.GetSafeMode())
 			}
 		}
-		time.Sleep(sleepTime)
 	}
 }
