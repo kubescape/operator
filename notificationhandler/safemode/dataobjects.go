@@ -8,10 +8,11 @@ import (
 
 	"github.com/armosec/capacketsgo/apis"
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
-	"github.com/golang/glog"
 
 	"github.com/armosec/capacketsgo/k8sinterface"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 )
 
 // ================================================================================
@@ -78,26 +79,26 @@ func (wm *WlidCompatibleMap) Get(wlid string) (*bool, error) {
 	return nil, fmt.Errorf("not found")
 }
 
-func (wm *WlidCompatibleMap) InitWlidMap() error {
+func (wm *WlidCompatibleMap) InitWlidMap(k8sApi *k8sinterface.KubernetesApi) error {
 	wm.mutex.Lock()
 	defer wm.mutex.Unlock()
 
-	k8sApi := k8sinterface.NewKubernetesApi()
+	r, _ := labels.NewRequirement(pkgcautils.ArmoCompatibleLabel, selection.In, []string{"true", "false"})
 	configMaps, err := k8sApi.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).List(k8sApi.Context, v1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s", pkgcautils.ArmoCompatibleLabel),
+		LabelSelector: r.String(),
 	})
 	if err != nil {
-		glog.Infof("dwertent, InitWlidMap, error: %s", err.Error())
 		return err
 	}
-	glog.Infof("dwertent, InitWlidMap, len(configMaps), %d", len(configMaps.Items))
 
 	for i := range configMaps.Items {
 		wlid := ""
 		if ann := configMaps.Items[i].GetAnnotations(); ann != nil {
-			wlid = ann[pkgcautils.ArmoWlid] // todo
+			wlid = ann[pkgcautils.ArmoWlid] // todo - remove deprecated
+			if wlid == "" {
+				wlid = ann[pkgcautils.CAWlid] // Deprecated
+			}
 		}
-		glog.Infof("dwertent, InitWlidMap, wlid, %s", wlid)
 		if wlid == "" {
 			continue
 		}
@@ -115,8 +116,6 @@ func (wm *WlidCompatibleMap) InitWlidMap() error {
 			}
 		}
 	}
-	glog.Infof("dwertent, InitWlidMap, len(wm.compatibleMap), %d", len(wm.compatibleMap))
-
 	return nil
 }
 
@@ -162,11 +161,20 @@ func (wsm *WorkloadStatusMap) Update(safeModeReport *apis.SafeMode, status bool)
 	if safeModeReport == nil || safeModeReport.InstanceID == "" {
 		return
 	}
+
+	wsm.mutex.RLock()
+	if _, ok := wsm.workloadStatusMap[safeModeReport.InstanceID]; !ok {
+		wsm.mutex.RUnlock()
+		return
+	}
+	wsm.mutex.RUnlock()
+
 	wsm.mutex.Lock()
 	defer wsm.mutex.Unlock()
 	if ws, ok := wsm.workloadStatusMap[safeModeReport.InstanceID]; ok {
 		ws.SetStatus(&status)
 		ws.SetSafeMode(safeModeReport)
+		wsm.workloadStatusMap[safeModeReport.InstanceID] = ws
 	}
 }
 
@@ -188,9 +196,29 @@ func (wsm *WorkloadStatusMap) Copy() map[string]WorkloadStatus {
 
 	workloadStatusMap := make(map[string]WorkloadStatus, len(wsm.workloadStatusMap))
 	for k, v := range wsm.workloadStatusMap {
-		workloadStatusMap[k] = v
+		ws := WorkloadStatus{
+			updateTime: v.GetTime(),
+		}
+		if ws.GetStatus() != nil {
+			ws.SetStatus(&(*v.GetStatus()))
+		}
+		if ws.GetSafeMode() != nil {
+			ws.SetSafeMode(&(*v.GetSafeMode()))
+		}
+
+		workloadStatusMap[k] = ws
 	}
 	return workloadStatusMap
+}
+
+func (wsm *WorkloadStatusMap) GetKeys() []string {
+	wsm.mutex.RLock()
+	defer wsm.mutex.RUnlock()
+	keys := []string{}
+	for k, _ := range wsm.workloadStatusMap {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // ================================================================================

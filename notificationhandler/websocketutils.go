@@ -35,7 +35,7 @@ func (notification *NotificationHandler) handleJsonNotification(bytesNotificatio
 	dst := notif.Target["dest"]
 	switch dst {
 	case "", "safeMode":
-		safeMode, e := parseSafeModeNotification(notif)
+		safeMode, e := parseSafeModeNotification(notif.Notification)
 		if e != nil {
 			return e
 		}

@@ -28,6 +28,7 @@ func NewSafeModeHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan a
 	return &SafeModeHandler{
 		sessionObj:        sessionObj,
 		safeModeObj:       safeModeObj,
+		k8sApi:            k8sinterface.NewKubernetesApi(),
 		wlidCompatibleMap: *NewWlidCompatibleMap(),
 		workloadStatusMap: *NewWorkloadStatusMap(),
 	}
@@ -37,6 +38,7 @@ func (safeModeHandler *SafeModeHandler) HandlerSafeModeNotification() {
 
 	for {
 		safeMode := <-*safeModeHandler.safeModeObj
+
 		if err := safeModeHandler.HandlerSafeMode(&safeMode); err != nil {
 			glog.Error(err)
 		}
@@ -47,12 +49,12 @@ func (safeModeHandler *SafeModeHandler) HandlerSafeMode(safeMode *apis.SafeMode)
 
 	var err error
 	switch safeMode.Reporter {
-	case "agent":
+	case "agnet", "agent":
 		// update podMap status
 		err = safeModeHandler.handleAgentReport(safeMode)
 	case "webhook":
 		// update compatibleMap
-	case "init-container": // pod started
+	case "Init-container": // pod started
 		// update podMap status
 		err = safeModeHandler.handlePodStarted(safeMode)
 	}
@@ -61,21 +63,23 @@ func (safeModeHandler *SafeModeHandler) HandlerSafeMode(safeMode *apis.SafeMode)
 }
 
 func (safeModeHandler *SafeModeHandler) InitSafeModeHandler() error {
-	if err := safeModeHandler.wlidCompatibleMap.InitWlidMap(); err != nil {
+	if err := safeModeHandler.wlidCompatibleMap.InitWlidMap(safeModeHandler.k8sApi); err != nil {
 		return err
 	}
 	go safeModeHandler.snooze()
 	return nil
 }
 func (safeModeHandler *SafeModeHandler) handlePodStarted(safeMode *apis.SafeMode) error {
-	glog.Infof("dwertent, handlePodStarted, safeMode.InstanceID, %s", safeMode.InstanceID)
+	if safeMode.StatusCode != 0 {
+		return nil // ignore errors in init container
+	}
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
-		glog.Infof("dwertent, handlePodStarted, compatible!!, safeMode.InstanceID, %s", safeMode.InstanceID)
+		glog.Infof("agent reported compatible, instanceID: %s", safeMode.InstanceID)
 		return nil
 	}
-	glog.Infof("dwertent, handlePodStarted, adding to list!!, safeMode.InstanceID, %s", safeMode.InstanceID)
+	glog.Infof("waiting for agent to report, instanceID: %s", safeMode.InstanceID)
 	safeModeHandler.workloadStatusMap.Add(safeMode)
-	safeModeHandler.reportJobSuccess(safeMode)
+	safeModeHandler.reportJobSuccess(safeMode) // ?
 	return nil
 }
 
@@ -91,12 +95,14 @@ func (safeModeHandler *SafeModeHandler) handleAgentReport(safeMode *apis.SafeMod
 	return nil
 }
 func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.SafeMode) error {
-	if _, err := safeModeHandler.workloadStatusMap.Get(safeMode.InstanceID); err == nil {
-		glog.Errorf("received safeMode notification but instance is not in list to watch. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
-		return nil
-	}
+
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
 		glog.Errorf("received safeMode notification but instance is reported as compatible. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
+		return nil
+	}
+
+	if _, err := safeModeHandler.workloadStatusMap.Get(safeMode.InstanceID); err != nil {
+		glog.Errorf("received safeMode notification but instance is not in list to watch. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
 	}
 
@@ -108,29 +114,32 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 		glog.Errorf(err.Error())
 	}
 
+	safeModeHandler.reportSafeModeIncompatible(safeMode)
+
 	// trigger detach
 	safeModeHandler.triggerDetachCommand(safeMode)
 
 	// remove pod from list
 	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
-
 	return nil
 }
 func (safeModeHandler *SafeModeHandler) updateAgentCompatible(safeMode *apis.SafeMode) error {
-	safeModeHandler.wlidCompatibleMap.Update(safeMode.Wlid, true)
+	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
 
 	// update config map
 	if err := safeModeHandler.updateConfigMap(safeMode, true); err != nil {
 		glog.Errorf(err.Error())
 	}
+	safeModeHandler.wlidCompatibleMap.Update(safeMode.Wlid, true)
+
 	return nil
 }
 
 func (safeModeHandler *SafeModeHandler) reportSafeModeIncompatible(safeMode *apis.SafeMode) {
-	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, safeMode.Reporter)
+	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "Websocket")
 	reporter.SetTarget(safeMode.Wlid)
 	reporter.SetJobID(safeMode.JobID)
-	reporter.SetActionName("agent incompatible")
+	reporter.SetActionName("Agent incompatible - detaching")
 	reporter.SendError(fmt.Errorf(safeMode.Message), true, true)
 }
 
@@ -138,7 +147,7 @@ func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode
 	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, safeMode.Reporter)
 	reporter.SetTarget(safeMode.Wlid)
 	reporter.SetJobID(safeMode.JobID)
-	reporter.SetActionName(safeMode.Action)
+	reporter.SetActionName("Attach armo agent")
 	reporter.SetStatus(reporterlib.JobDone)
 	reporter.SendStatus(reporterlib.JobDone, true)
 }
@@ -150,7 +159,7 @@ func (safeModeHandler *SafeModeHandler) triggerDetachCommand(safeMode *apis.Safe
 	}
 
 	// message := fmt.Sprintf("agent incompatible, detaching wlid '%s'. agent log: %v", safeMode.Wlid, safeMode.Message)
-	sessionObj := cautils.NewSessionObj(&command, "agent incompatible", "", safeMode.JobID, 1)
+	sessionObj := cautils.NewSessionObj(&command, "Websocket", "", safeMode.JobID, 1)
 	*safeModeHandler.sessionObj <- *sessionObj
 }
 
@@ -171,26 +180,31 @@ func (safeModeHandler *SafeModeHandler) updateConfigMap(safeMode *apis.SafeMode,
 }
 
 func (safeModeHandler *SafeModeHandler) snooze() error {
-	sleepTime := 2 * time.Minute
-	agentLoadTime := 5 * time.Minute
+	sleepTime := 2 * time.Minute     // TODO get from env ?
+	agentLoadTime := 5 * time.Minute // TODO get from env
 	for {
 		time.Sleep(sleepTime)
 
-		workloadStatusMap := safeModeHandler.workloadStatusMap.Copy()
-		for _, v := range workloadStatusMap {
-			if time.Now().UTC().Sub(v.GetTime()) < agentLoadTime { /// if lees 5 minutes
+		workloadStatusMap := safeModeHandler.workloadStatusMap.GetKeys()
+		for _, k := range workloadStatusMap {
+			ws, err := safeModeHandler.workloadStatusMap.Get(k)
+			if err != nil {
+				continue
+			}
+			if time.Now().UTC().Sub(ws.GetTime()) < agentLoadTime { /// if lees 5 minutes
 				continue // ignore
 			}
-			status := v.GetStatus()
+			if status, err := safeModeHandler.wlidCompatibleMap.Get(ws.GetSafeMode().InstanceID); err == nil && status != nil {
+				continue
+			}
+			status := ws.GetStatus()
 			if status == nil {
-				safeModeHandler.updateAgentIncompatible(v.GetSafeMode())
-			}
-			if *status {
-				safeModeHandler.updateAgentCompatible(v.GetSafeMode())
-			}
-			if !*status {
+				safeModeHandler.updateAgentIncompatible(ws.GetSafeMode())
+			} else if *status {
+				safeModeHandler.updateAgentCompatible(ws.GetSafeMode())
+			} else if !*status {
 				// we should not have such a case
-				safeModeHandler.updateAgentIncompatible(v.GetSafeMode())
+				safeModeHandler.updateAgentIncompatible(ws.GetSafeMode())
 			}
 		}
 	}

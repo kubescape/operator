@@ -22,8 +22,9 @@ func NewNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *ch
 	urlStr := initNotificationServerURL()
 
 	return &NotificationHandler{
-		connector:  NewWebsocketActions(urlStr),
-		sessionObj: sessionObj,
+		connector:   NewWebsocketActions(urlStr),
+		sessionObj:  sessionObj,
+		safeModeObj: safeModeObj,
 	}
 }
 
