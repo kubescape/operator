@@ -94,8 +94,17 @@ func (safeModeHandler *SafeModeHandler) handleAgentReport(safeMode *apis.SafeMod
 	}
 	return nil
 }
-func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.SafeMode) error {
+func (safeModeHandler *SafeModeHandler) agentIncompatibleUnknown(safeMode *apis.SafeMode) error {
+	// remove pod from list
+	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
 
+	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil {
+		return nil
+	}
+	glog.Warningf("agent compatible unknown. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
+	return nil
+}
+func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.SafeMode) error {
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
 		glog.Errorf("received safeMode notification but instance is reported as compatible. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
@@ -105,6 +114,7 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 		glog.Errorf("received safeMode notification but instance is not in list to watch. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
 	}
+	glog.Warningf("INCOMPATIBLE. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
 
 	// update wlid list
 	safeModeHandler.wlidCompatibleMap.Update(safeMode.InstanceID, false)
@@ -114,7 +124,8 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 		glog.Errorf(err.Error())
 	}
 
-	safeModeHandler.reportSafeModeIncompatible(safeMode)
+	message := "ARMO guard failed to initialize correctly, please report to ARMO team"
+	safeModeHandler.reportSafeModeIncompatible(safeMode, message)
 
 	// trigger detach
 	safeModeHandler.triggerDetachCommand(safeMode)
@@ -125,6 +136,11 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 }
 func (safeModeHandler *SafeModeHandler) updateAgentCompatible(safeMode *apis.SafeMode) error {
 	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
+	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil {
+		return nil
+	}
+
+	glog.Infof("agent compatible. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
 
 	// update config map
 	if err := safeModeHandler.updateConfigMap(safeMode, true); err != nil {
@@ -135,11 +151,13 @@ func (safeModeHandler *SafeModeHandler) updateAgentCompatible(safeMode *apis.Saf
 	return nil
 }
 
-func (safeModeHandler *SafeModeHandler) reportSafeModeIncompatible(safeMode *apis.SafeMode) {
+func (safeModeHandler *SafeModeHandler) reportSafeModeIncompatible(safeMode *apis.SafeMode, message string) {
 	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "Websocket")
 	reporter.SetTarget(safeMode.Wlid)
 	reporter.SetJobID(safeMode.JobID)
 	reporter.SetActionName("Agent incompatible - detaching")
+	reporter.SetDetails(message)
+	reporter.SetStatus(reporterlib.JobFailed)
 	reporter.SendError(fmt.Errorf(safeMode.Message), true, true)
 }
 
@@ -154,8 +172,11 @@ func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode
 
 func (safeModeHandler *SafeModeHandler) triggerDetachCommand(safeMode *apis.SafeMode) {
 	command := apis.Command{
-		CommandName: apis.REMOVE,
+		CommandName: apis.DETACH,
 		Wlid:        safeMode.Wlid,
+		Args: map[string]interface{}{
+			"removeConfig": false, // do not remove the configMap
+		},
 	}
 
 	// message := fmt.Sprintf("agent incompatible, detaching wlid '%s'. agent log: %v", safeMode.Wlid, safeMode.Message)
@@ -199,7 +220,9 @@ func (safeModeHandler *SafeModeHandler) snooze() error {
 			}
 			status := ws.GetStatus()
 			if status == nil {
-				safeModeHandler.updateAgentIncompatible(ws.GetSafeMode())
+				// unknown
+				safeModeHandler.agentIncompatibleUnknown(ws.GetSafeMode())
+				// safeModeHandler.updateAgentIncompatible(ws.GetSafeMode())
 			} else if *status {
 				safeModeHandler.updateAgentCompatible(ws.GetSafeMode())
 			} else if !*status {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"k8s-ca-websocket/cautils"
 
+	"github.com/armosec/capacketsgo/apis"
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
 
 	"github.com/armosec/capacketsgo/k8sinterface"
@@ -20,7 +21,10 @@ func isForceDelete(args map[string]interface{}) bool {
 	return false
 }
 
-func (actionHandler *ActionHandler) deleteConfigMaps() error {
+func (actionHandler *ActionHandler) deleteConfigMaps(c apis.Command) error {
+	if RemoveConfigMap(c.Args) {
+		return nil
+	}
 	confName := pkgcautils.GenarateConfigMapName(actionHandler.wlid)
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), confName, metav1.DeleteOptions{})
 }
@@ -40,4 +44,15 @@ func persistentVolumeFound(workload *k8sinterface.Workload) bool {
 		}
 	}
 	return false
+}
+
+func RemoveConfigMap(args map[string]interface{}) bool {
+	defaultBehavior := true
+	if args == nil {
+		return defaultBehavior
+	}
+	if removeConfig, ok := args["removeConfig"]; ok {
+		return removeConfig.(bool)
+	}
+	return defaultBehavior
 }

@@ -88,7 +88,7 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	jobTracking := cautils.NewJobTracking(actionHandler.reporter)
 
 	switch command {
-	case apis.UPDATE:
+	case apis.UPDATE, apis.ATTACH:
 		if workload.IsAttached() {
 			return fmt.Errorf("workload already attached")
 		}
@@ -102,7 +102,7 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	case apis.INJECT:
 		workload.SetInject()
 		workload.SetJobID(*jobTracking)
-	case apis.REMOVE:
+	case apis.REMOVE, apis.DETACH:
 		workload.RemoveInject() // DEPRECATED
 		workload.SetIgnore()
 		workload.RemoveWlid()

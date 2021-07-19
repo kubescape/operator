@@ -131,12 +131,12 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
-	case apis.UPDATE, apis.INJECT:
+	case apis.UPDATE, apis.INJECT, apis.ATTACH:
 		return actionHandler.update(c.CommandName)
 	case apis.RESTART:
 		return actionHandler.update(c.CommandName)
-	case apis.REMOVE:
-		actionHandler.deleteConfigMaps()
+	case apis.REMOVE, apis.DETACH:
+		actionHandler.deleteConfigMaps(c)
 		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupDiscovery()
 		return err
