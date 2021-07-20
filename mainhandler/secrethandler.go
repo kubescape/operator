@@ -4,9 +4,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
-	"k8s-ca-websocket/cacli"
+
 	"k8s-ca-websocket/cautils"
 	"math/rand"
+
 	"os"
 
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
@@ -15,29 +16,6 @@ import (
 	"github.com/armosec/capacketsgo/secrethandling"
 	"github.com/golang/glog"
 )
-
-// SecretHandler -
-type SecretHandler struct {
-	cacli         cacli.ICacli
-	sid           string
-	cluster       string
-	namespace     string
-	secretName    string
-	subsecretName string
-}
-
-//NewSecretHandler -
-// func NewSecretHandler(sid string) *SecretHandler {
-// 	return &SecretHandler{
-// 		cacli:         cacli.NewCacli(),
-// 		sid:           sid,
-// 		cluster:       secrethandling.GetSIDCluster(sid),
-// 		namespace:     secrethandling.GetSIDNamespace(sid),
-// 		secretName:    secrethandling.GetSIDName(sid),
-// 		subsecretName: secrethandling.GetSIDSubsecret(sid),
-// 	}
-
-// }
 
 func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command

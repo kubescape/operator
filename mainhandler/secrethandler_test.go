@@ -2,7 +2,8 @@ package mainhandler
 
 import (
 	"encoding/json"
-	"k8s-ca-websocket/cacli"
+	// "k8s-ca-websocket/cacli"
+
 	"testing"
 
 	"github.com/armosec/capacketsgo/secrethandling"
@@ -50,18 +51,6 @@ func GetEncryptedSecretMock() *corev1.Secret {
 	return secret
 }
 
-//NewSecretHandler -
-func NewSecretHandlerMock(sid string) *SecretHandler {
-	return &SecretHandler{
-		cacli:         cacli.NewCacliMock(),
-		sid:           sid,
-		cluster:       secrethandling.GetSIDCluster(sid),
-		namespace:     secrethandling.GetSIDNamespace(sid),
-		secretName:    secrethandling.GetSIDName(sid),
-		subsecretName: secrethandling.GetSIDSubsecret(sid),
-	}
-
-}
 func TestGetFieldsToEncrypt(t *testing.T) {
 	// sid := "sid://cluster-david-v1/namespace-default/secret-encrypted-credentials-1"
 	// sech := NewSecretHandlerMock(sid)

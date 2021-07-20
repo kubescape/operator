@@ -2,11 +2,11 @@ package sign
 
 import (
 	"fmt"
-	"k8s-ca-websocket/cacli"
+	// "k8s-ca-websocket/cacli"
 	"k8s-ca-websocket/cautils"
 	"strings"
 
-	icacli "github.com/armosec/capacketsgo/cacli"
+	cacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 	corev1 "k8s.io/api/core/v1"
@@ -19,14 +19,14 @@ import (
 type Sign struct {
 	wlid         string
 	debug        bool
-	cacli        icacli.ICacli
+	cacli        cacli.ICacli
 	k8sAPI       *k8sinterface.KubernetesApi
 	reporter     reporterlib.IReporter
 	dockerClient DockerClient
 }
 
 //NewSigner -
-func NewSigner(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, reporter reporterlib.IReporter, wlid string) *Sign {
+func NewSigner(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, reporter reporterlib.IReporter, wlid string) *Sign {
 	return &Sign{
 		cacli:    cacliObj,
 		k8sAPI:   k8sAPI,
@@ -39,9 +39,9 @@ func NewSigner(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, repor
 
 func (s *Sign) triggerCacliSign(username, password, ociURL string) error {
 	// is cacli loggedin
-	if !cacli.IsLoggedin() {
+	if !s.IsLoggedIn() {
 		s.reporter.SendAction("Sign in cacli", true)
-		if err := cacli.LoginCacli(); err != nil {
+		if err := s.cacli.Login(); err != nil {
 			return err
 		}
 		s.reporter.SendStatus(reporterlib.JobSuccess, true)
@@ -55,7 +55,7 @@ func (s *Sign) triggerCacliSign(username, password, ociURL string) error {
 
 	if err := s.cacli.WTSign(s.wlid, username, password, ociURL); err != nil {
 		if strings.Contains(err.Error(), "Signature has expired") {
-			if err := cacli.LoginCacli(); err != nil {
+			if err := s.cacli.Login(); err != nil {
 				return err
 			}
 			err = s.cacli.WTSign(s.wlid, username, password, ociURL)
@@ -164,4 +164,13 @@ func (s *Sign) prepareForSign(workload *k8sinterface.Workload) error {
 	}
 
 	return nil
+}
+
+// IsLoggedIn -
+func (s *Sign) IsLoggedIn() bool {
+	status, err := s.cacli.Status()
+	if err != nil {
+		return false
+	}
+	return status.LoggedIn
 }

@@ -75,7 +75,7 @@ func (safeModeHandler *SafeModeHandler) handlePodStarted(safeMode *apis.SafeMode
 		return nil // ignore errors in init container
 	}
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
-		glog.Infof("agent reported compatible, instanceID: %s, wlid: %s", safeMode.InstanceID)
+		glog.Infof("agent reported compatible, instanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
 	}
 	glog.Infof("waiting for agent to report, instanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)

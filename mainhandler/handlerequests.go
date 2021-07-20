@@ -9,7 +9,7 @@ import (
 	"github.com/armosec/capacketsgo/apis"
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
 
-	icacli "github.com/armosec/capacketsgo/cacli"
+	cacli "github.com/armosec/capacketsgo/cacli"
 	"github.com/armosec/capacketsgo/k8sinterface"
 	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 	"github.com/golang/glog"
@@ -20,13 +20,13 @@ var previousReports []string
 
 type MainHandler struct {
 	sessionObj      *chan cautils.SessionObj
-	cacli           icacli.ICacli
+	cacli           cacli.ICacli
 	k8sAPI          *k8sinterface.KubernetesApi
 	signerSemaphore *semaphore.Weighted
 }
 
 type ActionHandler struct {
-	cacli           icacli.ICacli
+	cacli           cacli.ICacli
 	k8sAPI          *k8sinterface.KubernetesApi
 	reporter        reporterlib.IReporter
 	wlid            string
@@ -40,14 +40,14 @@ func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
 	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
 		sessionObj:      sessionObj,
-		cacli:           icacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
+		cacli:           cacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
 		k8sAPI:          k8sinterface.NewKubernetesApi(),
 		signerSemaphore: semaphore.NewWeighted(cautils.SignerSemaphore),
 	}
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(cacliObj icacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj) *ActionHandler {
+func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj) *ActionHandler {
 	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &ActionHandler{
 		reporter:        sessionObj.Reporter,
