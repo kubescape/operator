@@ -53,7 +53,8 @@ func (safeModeHandler *SafeModeHandler) HandlerSafeMode(safeMode *apis.SafeMode)
 		// update podMap status
 		err = safeModeHandler.handleAgentReport(safeMode)
 	case "webhook":
-		// update compatibleMap
+		// cawp.Reporter.SetDetails("Problem accessing container image, make sure you gave ARMO access to your container registry")
+		// err = safeModeHandler.handleWebhookReport(safeMode)
 	case "Init-container": // pod started
 		// update podMap status
 		err = safeModeHandler.handlePodStarted(safeMode)
@@ -74,10 +75,10 @@ func (safeModeHandler *SafeModeHandler) handlePodStarted(safeMode *apis.SafeMode
 		return nil // ignore errors in init container
 	}
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
-		glog.Infof("agent reported compatible, instanceID: %s", safeMode.InstanceID)
+		glog.Infof("agent reported compatible, instanceID: %s, wlid: %s", safeMode.InstanceID)
 		return nil
 	}
-	glog.Infof("waiting for agent to report, instanceID: %s", safeMode.InstanceID)
+	glog.Infof("waiting for agent to report, instanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 	safeModeHandler.workloadStatusMap.Add(safeMode)
 	safeModeHandler.reportJobSuccess(safeMode) // ?
 	return nil
@@ -94,6 +95,16 @@ func (safeModeHandler *SafeModeHandler) handleAgentReport(safeMode *apis.SafeMod
 	}
 	return nil
 }
+
+// func (safeModeHandler *SafeModeHandler) handleWebhookReport(safeMode *apis.SafeMode) error {
+// 	switch safeMode.StatusCode {
+// 	case 100:
+// 		if err := safeModeHandler.updateAgentIncompatible(safeMode); err != nil {
+// 			glog.Errorf(err.Error())
+// 		}
+// 	}
+// 	return nil
+// }
 func (safeModeHandler *SafeModeHandler) agentIncompatibleUnknown(safeMode *apis.SafeMode) error {
 	// remove pod from list
 	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
@@ -199,6 +210,20 @@ func (safeModeHandler *SafeModeHandler) updateConfigMap(safeMode *apis.SafeMode,
 	}
 	return nil
 }
+
+// func (safeModeHandler *SafeModeHandler) createConfigMap(safeMode *apis.SafeMode, status bool) error {
+// 	confName := pkgcautils.GenarateConfigMapName(safeMode.Wlid)
+// 	configMap := corev1.ConfigMap{}
+// 	configMap.SetName(confName)
+// 	configMap.SetLabels(map[string]string{pkgcautils.ArmoCompatibleLabel: "false"})
+// 	configMap.SetAnnotations(map[string]string{pkgcautils.ArmoWlid: safeMode.Wlid})
+// 	_, err := safeModeHandler.k8sApi.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, v1.CreateOptions{})
+// 	if err != nil {
+// 		err = fmt.Errorf("failed to create configMap '%s', reason: %s", confName, safeMode.Wlid)
+// 		return err
+// 	}
+// 	return nil
+// }
 
 func (safeModeHandler *SafeModeHandler) snooze() error {
 	sleepTime := 2 * time.Minute     // TODO get from env ?
