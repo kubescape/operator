@@ -106,21 +106,13 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.SetInject()
 		workload.SetJobID(*jobTracking)
 	case apis.REMOVE, apis.DETACH:
-		workload.RemoveInject() // DEPRECATED
+		workload.RemoveArmoMetadata()
 		workload.SetIgnore()
-		workload.RemoveWlid()
-		workload.RemoveUpdateTime()
-		workload.RemoveJobID()
 	case apis.INCOMPATIBLE:
 		workload.SetIgnore()
 		workload.SetIncompatible()
 	case apis.UNREGISTERED:
-		workload.RemoveInject()     // NS/WL DEPRECATED
-		workload.RemoveIgnore()     // NS/WL DEPRECATED
-		workload.RemoveWlid()       // WL
-		workload.RemoveUpdateTime() // WL
-		workload.RemoveJobID()      // NS/WL
-		workload.RemoveCompatible() // WL
+		workload.RemoveArmoMetadata()
 	}
 	return nil
 }

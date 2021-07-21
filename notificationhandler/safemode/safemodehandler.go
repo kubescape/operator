@@ -74,13 +74,17 @@ func (safeModeHandler *SafeModeHandler) handlePodStarted(safeMode *apis.SafeMode
 	if safeMode.StatusCode != 0 {
 		return nil // ignore errors in init container
 	}
+	safeModeHandler.reportJobSuccess(safeMode) // ?
+
+	if safeMode.Compatible != nil {
+		return nil // ignore if reported as compatible
+	}
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
 		glog.Infof("agent reported compatible, instanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
 	}
 	glog.Infof("waiting for agent to report, instanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 	safeModeHandler.workloadStatusMap.Add(safeMode)
-	safeModeHandler.reportJobSuccess(safeMode) // ?
 	return nil
 }
 
