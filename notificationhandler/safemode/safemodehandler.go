@@ -139,7 +139,7 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 	safeModeHandler.reportSafeModeIncompatible(safeMode, message)
 
 	// trigger detach
-	safeModeHandler.triggerDetachCommand(safeMode)
+	safeModeHandler.triggerIncompatibleCommand(safeMode)
 
 	// remove pod from list
 	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
@@ -181,13 +181,10 @@ func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode
 	reporter.SendStatus(reporterlib.JobDone, true)
 }
 
-func (safeModeHandler *SafeModeHandler) triggerDetachCommand(safeMode *apis.SafeMode) {
+func (safeModeHandler *SafeModeHandler) triggerIncompatibleCommand(safeMode *apis.SafeMode) {
 	command := apis.Command{
-		CommandName: apis.DETACH,
+		CommandName: apis.INCOMPATIBLE,
 		Wlid:        safeMode.Wlid,
-		Args: map[string]interface{}{
-			"removeConfig": false, // do not remove the configMap
-		},
 	}
 
 	// message := fmt.Sprintf("agent incompatible, detaching wlid '%s'. agent log: %v", safeMode.Wlid, safeMode.Message)

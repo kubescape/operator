@@ -92,6 +92,9 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		if workload.IsAttached() {
 			return fmt.Errorf("workload already attached")
 		}
+		if workload.IsIncompatible() {
+			return fmt.Errorf("workload reported incompatible")
+		}
 		workload.SetJobID(*jobTracking)
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
@@ -108,15 +111,16 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 		workload.RemoveWlid()
 		workload.RemoveUpdateTime()
 		workload.RemoveJobID()
+	case apis.INCOMPATIBLE:
+		workload.SetIgnore()
+		workload.SetIncompatible()
 	case apis.UNREGISTERED:
 		workload.RemoveInject()     // NS/WL DEPRECATED
 		workload.RemoveIgnore()     // NS/WL DEPRECATED
 		workload.RemoveWlid()       // WL
 		workload.RemoveUpdateTime() // WL
 		workload.RemoveJobID()      // NS/WL
-		// workload.RemoveLabel(pkgcautils.ArmoInitialSecret) // secret
-		// workload.RemoveLabel(pkgcautils.CAInitialSecret)   // secret
-		// workload.RemoveLabel(pkgcautils.CAProtectedSecret) // secret
+		workload.RemoveCompatible() // WL
 	}
 	return nil
 }

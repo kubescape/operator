@@ -22,9 +22,6 @@ func isForceDelete(args map[string]interface{}) bool {
 }
 
 func (actionHandler *ActionHandler) deleteConfigMaps(c apis.Command) error {
-	if RemoveConfigMap(c.Args) {
-		return nil
-	}
 	confName := pkgcautils.GenarateConfigMapName(actionHandler.wlid)
 	return actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), confName, metav1.DeleteOptions{})
 }
