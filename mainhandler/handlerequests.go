@@ -110,7 +110,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 		status = "FAIL"
 		// cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
-		actionHandler.reporter.SendStatus(reporterlib.JobSuccess, true)
+		actionHandler.reporter.SendStatus(jobStatus(sessionObj.Command.CommandName), true)
 	}
 	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.GetID(), status)
 	if err != nil {

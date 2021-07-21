@@ -5,6 +5,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
+	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/armosec/capacketsgo/apis"
@@ -118,4 +119,11 @@ func sidFallback(sessionObj *cautils.SessionObj) {
 		}
 		sessionObj.Command.Sid = sid
 	}
+}
+
+func jobStatus(commandName string) string {
+	if commandName == apis.UPDATE || commandName == apis.INJECT || commandName == apis.ATTACH || commandName == apis.RESTART {
+		return reporterlib.JobSuccess
+	}
+	return reporterlib.JobDone
 }

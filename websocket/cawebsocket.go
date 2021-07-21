@@ -141,9 +141,12 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 	commands := apis.Commands{}
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
 		glog.Error(err)
+		return
 	}
 	glog.Infof("receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
+		apis.SIDFallback(&c)
+
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
 		if c.CommandName == "" {

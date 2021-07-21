@@ -21,6 +21,7 @@ func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.Session
 	c := sessionObj.Command
 
 	if actionHandler.sid == "" {
+		// fallback
 		sid, err := getSIDFromArgs(c.Args)
 		if err != nil {
 			return err
