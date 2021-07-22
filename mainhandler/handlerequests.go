@@ -77,7 +77,8 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		// if scan disabled
 		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.SCAN {
 			err := fmt.Errorf("Scan is disabled in cluster")
-			glog.Warningf("Scan is disabled in cluster")
+			glog.Warningf(err.Error())
+			sessionObj.Reporter.SetActionName(apis.SCAN)
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
@@ -209,20 +210,22 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	glog.Infof("ids found: '%v'", ids)
 	go func() { // send to goroutine so the channel will be released release the channel
 		for i := range ids {
-			newSessionObj := cautils.NewSessionObj(sessionObj.Command.DeepCopy(), "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+			cmd := sessionObj.Command.DeepCopy()
 
 			var err error
 			if pkgcautils.IsWlid(ids[i]) {
-				newSessionObj.Command.Wlid = ids[i]
-				err = pkgcautils.IsWlidValid(newSessionObj.Command.Wlid)
+				cmd.Wlid = ids[i]
+				err = pkgcautils.IsWlidValid(cmd.Wlid)
 			} else if pkgcautils.IsSid(ids[i]) {
-				newSessionObj.Command.Sid = ids[i]
+				cmd.Sid = ids[i]
+				// TODO - validate sid
 			} else {
 				err = fmt.Errorf("Unknown id")
 			}
 
-			newSessionObj.Command.WildWlid = ""
-			newSessionObj.Command.WildSid = ""
+			cmd.WildWlid = ""
+			cmd.WildSid = ""
+			newSessionObj := cautils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 			if err != nil {
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
@@ -232,9 +235,9 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			}
 
 			glog.Infof("triggering id: '%s'", newSessionObj.Command.GetID())
-			sessionObj.Reporter.SendAction(fmt.Sprintf("triggering id: '%s'", newSessionObj.Command.GetID()), true)
+			// sessionObj.Reporter.SendAction(fmt.Sprintf("triggering id: '%s'", newSessionObj.Command.GetID()), true)
 			*mainHandler.sessionObj <- *newSessionObj
-			sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+			// sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 		}
 	}()
 }

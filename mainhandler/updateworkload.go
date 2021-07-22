@@ -188,6 +188,7 @@ func secretUpdate(objectMeta *metav1.ObjectMeta, command string, jobTracking *ap
 	case apis.DECRYPT:
 		// removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
 		injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.ArmoSecretClearStatus)
+		// injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.BoolToString(false))
 		injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
 		injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
 		injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
@@ -195,6 +196,7 @@ func secretUpdate(objectMeta *metav1.ObjectMeta, command string, jobTracking *ap
 		// injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
 		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 		injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.ArmoSecretProtectStatus)
+		// injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.BoolToString(true))
 		injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
 		injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
 		injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))

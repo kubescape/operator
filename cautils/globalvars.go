@@ -53,7 +53,10 @@ func LoadEnvironmentVaribles() (err error) {
 		return err
 	}
 	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil {
-		// ignore
+		ScanDisabled = true
+	}
+	if CA_VULNSCAN == "" {
+		ScanDisabled = true
 	}
 	if skipClair, err := testEnvironmentVarible("SKIP_CLAIR"); err == nil {
 		if skipClair == "true" {
