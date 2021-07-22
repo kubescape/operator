@@ -184,29 +184,28 @@ func removeLabel(meatdata *metav1.ObjectMeta, key string) {
 	}
 }
 func secretUpdate(objectMeta *metav1.ObjectMeta, command string, jobTracking *apis.JobTracking) {
+	removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 	switch command {
 	case apis.DECRYPT:
 		// removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
 		injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.ArmoSecretClearStatus)
 		// injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.BoolToString(false))
-		injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
-		injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
-		injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
+		// injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
+		// injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
+		// injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
 	case apis.ENCRYPT:
 		// injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
-		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 		injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.ArmoSecretProtectStatus)
 		// injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.BoolToString(true))
-		injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
-		injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
-		injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
+		// injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
+		// injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
+		// injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
 	case apis.UNREGISTERED:
 		removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
 		removeLabel(objectMeta, pkgcautils.ArmoSecretStatus)
 		removeLabel(objectMeta, pkgcautils.CAInitialSecret)   // DEPRECATED
 		removeLabel(objectMeta, pkgcautils.CAProtectedSecret) // DEPRECATED
 		removeLabel(objectMeta, pkgcautils.ArmoAttach)        // DEPRECATED
-		removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 		removeAnnotation(objectMeta, pkgcautils.ArmoJobIDPath)
 		removeAnnotation(objectMeta, pkgcautils.ArmoJobParentPath)
 		removeAnnotation(objectMeta, pkgcautils.ArmoJobActionPath)
