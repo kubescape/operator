@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 
+	pkgcautils "github.com/armosec/capacketsgo/cautils"
+
 	"github.com/golang/glog"
 )
 
@@ -17,7 +19,7 @@ var (
 	CA_DASHBOARD_BACKEND                               = ""
 	CA_OCIMAGE_URL                                     = ""
 	CA_VULNSCAN                                        = ""
-	RestAPIPort                                        = ""
+	RestAPIPort                                        = "4002"
 	CA_USE_DOCKER                                      = false
 	CA_DEBUG_SIGNER                                    = false
 	CA_IGNORE_VERIFY_CACLI                             = false
@@ -28,9 +30,14 @@ var (
 	SignerSemaphore                              int64 = 4
 )
 
+var ClusterConfig = &pkgcautils.ClusterConfig{}
+
 // LoadEnvironmentVaribles -
 func LoadEnvironmentVaribles() (err error) {
-
+	ClusterConfig, err = pkgcautils.LoadConfig("", true)
+	if err != nil {
+		glog.Warning(err.Error())
+	}
 	if CA_NAMESPACE, err = testEnvironmentVarible("CA_NAMESPACE"); err != nil {
 		return err
 	}
@@ -44,13 +51,15 @@ func LoadEnvironmentVaribles() (err error) {
 		return err
 	}
 	if CA_LOGIN_SECRET_NAME, err = testEnvironmentVarible("CA_LOGIN_SECRET_NAME"); err != nil {
-		return err
+		CA_LOGIN_SECRET_NAME = "ca-login"
 	}
 	if CA_DASHBOARD_BACKEND, err = testEnvironmentVarible("CA_DASHBOARD_BACKEND"); err != nil {
 		return err
 	}
 	if CA_OCIMAGE_URL, err = testEnvironmentVarible("CA_OCIMAGE_URL"); err != nil {
 		return err
+	} else {
+		CA_OCIMAGE_URL += "/v1"
 	}
 	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil {
 		ScanDisabled = true
@@ -63,7 +72,7 @@ func LoadEnvironmentVaribles() (err error) {
 			ScanDisabled = true
 		}
 	}
-	if RestAPIPort, err = testEnvironmentVarible("CA_WEBSOCKET_PORT"); err != nil {
+	if RestAPIPort, err = testEnvironmentVarible("CA_PORT"); err != nil || RestAPIPort == "" {
 		RestAPIPort = "4002"
 	}
 	if NotificationServerURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER"); err != nil {

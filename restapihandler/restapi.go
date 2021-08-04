@@ -6,6 +6,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"net/http"
 
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
@@ -37,6 +38,8 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 	rtr.HandleFunc("/v1/safeMode", resthandler.SafeMode)
 	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
 	server.Handler = rtr
+
+	glog.Infof("Waiting for REST API to receive notifications, port: %s", cautils.RestAPIPort)
 
 	// listen
 	if resthandler.keyPair != nil {
