@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	pkgcautils "github.com/armosec/capacketsgo/cautils"
 
@@ -11,23 +12,22 @@ import (
 )
 
 var (
-	CA_NAMESPACE                                       = ""
-	CA_CLUSTER_NAME                                    = ""
-	CA_POSTMAN                                         = ""
-	CA_CUSTOMER_GUID                                   = ""
-	CA_LOGIN_SECRET_NAME                               = ""
-	CA_DASHBOARD_BACKEND                               = ""
-	CA_OCIMAGE_URL                                     = ""
-	CA_VULNSCAN                                        = ""
-	RestAPIPort                                        = "4002"
-	CA_USE_DOCKER                                      = false
-	CA_DEBUG_SIGNER                                    = false
-	CA_IGNORE_VERIFY_CACLI                             = false
-	NotificationServerURL                              = ""
-	CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API       = ""
-	CA_NOTIFICATION_SERVER_SERVICE_HOST                = ""
-	ScanDisabled                                 bool  = false
-	SignerSemaphore                              int64 = 4
+	CA_NAMESPACE                    = ""
+	CA_CLUSTER_NAME                 = ""
+	CA_POSTMAN                      = ""
+	CA_CUSTOMER_GUID                = ""
+	CA_LOGIN_SECRET_NAME            = ""
+	CA_DASHBOARD_BACKEND            = ""
+	CA_OCIMAGE_URL                  = ""
+	CA_VULNSCAN                     = ""
+	RestAPIPort                     = "4002"
+	CA_USE_DOCKER                   = false
+	CA_DEBUG_SIGNER                 = false
+	CA_IGNORE_VERIFY_CACLI          = false
+	NotificationServerWSURL         = ""
+	NotificationServerRESTURL       = ""
+	ScanDisabled              bool  = false
+	SignerSemaphore           int64 = 4
 )
 
 var ClusterConfig = &pkgcautils.ClusterConfig{}
@@ -59,14 +59,18 @@ func LoadEnvironmentVaribles() (err error) {
 	if CA_OCIMAGE_URL, err = testEnvironmentVarible("CA_OCIMAGE_URL"); err != nil {
 		return err
 	} else {
-		CA_OCIMAGE_URL += "/v1"
+		if !strings.HasPrefix(CA_OCIMAGE_URL, "http") {
+			CA_OCIMAGE_URL = fmt.Sprintf("http://%s/v1", CA_OCIMAGE_URL)
+		}
 	}
-	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil {
+	if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil || CA_VULNSCAN == "" {
 		ScanDisabled = true
+	} else {
+		if !strings.HasPrefix(CA_VULNSCAN, "http") {
+			CA_VULNSCAN = fmt.Sprintf("http://%s", CA_VULNSCAN)
+		}
 	}
-	if CA_VULNSCAN == "" {
-		ScanDisabled = true
-	}
+
 	if skipClair, err := testEnvironmentVarible("SKIP_CLAIR"); err == nil {
 		if skipClair == "true" {
 			ScanDisabled = true
@@ -75,16 +79,14 @@ func LoadEnvironmentVaribles() (err error) {
 	if RestAPIPort, err = testEnvironmentVarible("CA_PORT"); err != nil || RestAPIPort == "" {
 		RestAPIPort = "4002"
 	}
-	if NotificationServerURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER"); err != nil {
+	if NotificationServerWSURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_WS"); err != nil {
 		// return err
-		glog.Warningf("missing CA_NOTIFICATION_SERVER env")
+		glog.Warningf("missing CA_NOTIFICATION_SERVER_REST env")
 	}
-	if CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API"); err != nil {
+	if NotificationServerRESTURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_REST"); err != nil {
 		return err
 	}
-	if CA_NOTIFICATION_SERVER_SERVICE_HOST, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_SERVICE_HOST"); err != nil {
-		return err
-	}
+
 	if signerSemaphore, err := testEnvironmentVarible("CA_SIGNER_SEMAPHORE"); err == nil {
 		i, err := strconv.ParseInt(signerSemaphore, 10, 64)
 		if err != nil {

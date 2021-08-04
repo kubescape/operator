@@ -29,7 +29,7 @@ func NewNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *ch
 }
 
 func (notification *NotificationHandler) WebsocketConnection() error {
-	if cautils.NotificationServerURL == "" {
+	if cautils.NotificationServerWSURL == "" {
 		return nil
 	}
 	retries := 0

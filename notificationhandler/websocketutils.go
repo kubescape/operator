@@ -76,7 +76,7 @@ func convertBsonNotification(bytesNotification []byte) (*apis.SafeMode, error) {
 }
 func initNotificationServerURL() string {
 	urlObj := url.URL{}
-	host := cautils.NotificationServerURL
+	host := cautils.NotificationServerWSURL
 	if host == "" {
 		return ""
 	}

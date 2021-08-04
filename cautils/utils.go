@@ -88,7 +88,7 @@ func SendSafeModeReport(sessionObj *SessionObj, message string, code int) {
 	safeMode.StatusCode = code
 	safeMode.Message = message
 
-	safeModeURL := fmt.Sprintf("http://%s:%s/v1/sendnotification", CA_NOTIFICATION_SERVER_SERVICE_HOST, CA_NOTIFICATION_SERVER_SERVICE_PORT_REST_API)
+	safeModeURL := fmt.Sprintf("http://%s/v1/sendnotification", NotificationServerRESTURL)
 	target := map[string]string{notificationserver.TargetComponent: notificationserver.TargetComponentLoggerValue}
 
 	// pushing notification
