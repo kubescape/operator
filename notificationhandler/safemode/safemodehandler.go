@@ -88,6 +88,19 @@ func (safeModeHandler *SafeModeHandler) handlePodStarted(safeMode *apis.SafeMode
 	return nil
 }
 
+func (safeModeHandler *SafeModeHandler) handleWebhookReport(safeMode *apis.SafeMode) error {
+	switch safeMode.StatusCode {
+	case 0:
+		// ignore status ok
+	default:
+		if err := safeModeHandler.updateImageUnreachable(safeMode); err != nil {
+			glog.Errorf(err.Error())
+		}
+	}
+
+	return nil
+}
+
 func (safeModeHandler *SafeModeHandler) handleAgentReport(safeMode *apis.SafeMode) error {
 	switch safeMode.StatusCode {
 	case 0:
@@ -121,12 +134,12 @@ func (safeModeHandler *SafeModeHandler) agentIncompatibleUnknown(safeMode *apis.
 }
 func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.SafeMode) error {
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
-		glog.Errorf("received safeMode notification but instance is reported as compatible. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
+		glog.Errorf("In updateAgentIncompatible, received safeMode notification but instance is reported as compatible. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
 	}
 
 	if _, err := safeModeHandler.workloadStatusMap.Get(safeMode.InstanceID); err != nil {
-		glog.Errorf("received safeMode notification but instance is not in list to watch. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
+		glog.Errorf("In updateAgentIncompatible, received safeMode notification but instance is not in list to watch. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
 		return nil
 	}
 	glog.Warningf("INCOMPATIBLE. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
@@ -143,7 +156,7 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 	safeModeHandler.reportSafeModeIncompatible(safeMode, message)
 
 	// trigger detach
-	safeModeHandler.triggerIncompatibleCommand(safeMode)
+	safeModeHandler.triggerCommand(safeMode, apis.INCOMPATIBLE)
 
 	// remove pod from list
 	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
@@ -165,9 +178,33 @@ func (safeModeHandler *SafeModeHandler) updateAgentCompatible(safeMode *apis.Saf
 
 	return nil
 }
+func (safeModeHandler *SafeModeHandler) updateImageUnreachable(safeMode *apis.SafeMode) error {
+	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
+		glog.Errorf("In updateImageUnreachable, received safeMode notification but instance is reported as compatible. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
+		return nil
+	}
+
+	glog.Warningf("ImageUnreachable. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
+
+	message := "ARMO failed to configure workload, please report to ARMO team"
+	safeModeHandler.reportSafeModeImageUnreachable(safeMode, message)
+
+	// trigger detach
+	safeModeHandler.triggerCommand(safeMode, apis.IMAGE_UNREACHABLE)
+
+	return nil
+}
 
 func (safeModeHandler *SafeModeHandler) reportSafeModeIncompatible(safeMode *apis.SafeMode, message string) {
-	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "Websocket")
+	safeModeHandler.reportSafeMode(safeMode, "Agent incompatible - detaching", message)
+}
+
+func (safeModeHandler *SafeModeHandler) reportSafeModeImageUnreachable(safeMode *apis.SafeMode, message string) {
+	safeModeHandler.reportSafeMode(safeMode, "Image Unreachable - detaching", message)
+}
+
+func (safeModeHandler *SafeModeHandler) reportSafeMode(safeMode *apis.SafeMode, action, message string) {
+	reporter := reporterlib.NewBaseReport(cautils.CA_CUSTOMER_GUID, "SafeMode")
 	reporter.SetTarget(safeMode.Wlid)
 	reporter.SetJobID(safeMode.JobID)
 	reporter.SetActionName("Agent incompatible - detaching")
@@ -185,9 +222,9 @@ func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode
 	reporter.SendStatus(reporterlib.JobDone, true)
 }
 
-func (safeModeHandler *SafeModeHandler) triggerIncompatibleCommand(safeMode *apis.SafeMode) {
+func (safeModeHandler *SafeModeHandler) triggerCommand(safeMode *apis.SafeMode, commandName string) {
 	command := apis.Command{
-		CommandName: apis.INCOMPATIBLE,
+		CommandName: commandName,
 		Wlid:        safeMode.Wlid,
 	}
 

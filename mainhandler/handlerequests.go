@@ -141,8 +141,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupDiscovery()
 		return err
-	case apis.INCOMPATIBLE:
-		// update configMap ?
+	case apis.INCOMPATIBLE, apis.IMAGE_UNREACHABLE:
 		return actionHandler.update(c.CommandName)
 	case apis.UNREGISTERED:
 		err := actionHandler.update(c.CommandName)

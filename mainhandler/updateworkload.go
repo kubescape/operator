@@ -111,6 +111,8 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	case apis.INCOMPATIBLE:
 		workload.SetIgnore()
 		workload.SetIncompatible()
+	case apis.IMAGE_UNREACHABLE:
+		workload.SetIgnore()
 	case apis.UNREGISTERED:
 		workload.RemoveArmoMetadata()
 	}
