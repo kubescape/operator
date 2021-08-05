@@ -54,7 +54,7 @@ func (safeModeHandler *SafeModeHandler) HandlerSafeMode(safeMode *apis.SafeMode)
 		err = safeModeHandler.handleAgentReport(safeMode)
 	case "webhook":
 		// cawp.Reporter.SetDetails("Problem accessing container image, make sure you gave ARMO access to your container registry")
-		// err = safeModeHandler.handleWebhookReport(safeMode)
+		err = safeModeHandler.handleWebhookReport(safeMode)
 	case "Init-container": // pod started
 		// update podMap status
 		err = safeModeHandler.handlePodStarted(safeMode)
@@ -105,6 +105,10 @@ func (safeModeHandler *SafeModeHandler) handleAgentReport(safeMode *apis.SafeMod
 	switch safeMode.StatusCode {
 	case 0:
 		safeModeHandler.workloadStatusMap.Update(safeMode, true)
+	case 101: // LD_PRELOAD bit
+		if err := safeModeHandler.updateReplaceHeaders(safeMode); err != nil {
+			glog.Errorf(err.Error())
+		}
 	default:
 		if err := safeModeHandler.updateAgentIncompatible(safeMode); err != nil {
 			glog.Errorf(err.Error())
@@ -132,6 +136,23 @@ func (safeModeHandler *SafeModeHandler) agentIncompatibleUnknown(safeMode *apis.
 	glog.Warningf("agent compatible unknown. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
 	return nil
 }
+
+func (safeModeHandler *SafeModeHandler) updateReplaceHeaders(safeMode *apis.SafeMode) error {
+	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
+
+	glog.Infof("REPLACE_HEADERS. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
+
+	// // update config map
+	// if err := safeModeHandler.updateConfigMap(safeMode, false); err != nil {
+	// 	glog.Errorf(err.Error())
+	// }
+
+	// trigger detach
+	safeModeHandler.triggerCommand(safeMode, apis.REPLACE_HEADERS)
+
+	return nil
+}
+
 func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.SafeMode) error {
 	if compatible, err := safeModeHandler.wlidCompatibleMap.Get(safeMode.Wlid); err == nil && compatible != nil && *compatible {
 		glog.Errorf("In updateAgentIncompatible, received safeMode notification but instance is reported as compatible. InstanceID: %s, wlid: %s", safeMode.InstanceID, safeMode.Wlid)
@@ -152,8 +173,7 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 		glog.Errorf(err.Error())
 	}
 
-	message := "ARMO guard failed to initialize correctly, please report to ARMO team"
-	safeModeHandler.reportSafeModeIncompatible(safeMode, message)
+	safeModeHandler.reportSafeModeIncompatible(safeMode)
 
 	// trigger detach
 	safeModeHandler.triggerCommand(safeMode, apis.INCOMPATIBLE)
@@ -186,8 +206,7 @@ func (safeModeHandler *SafeModeHandler) updateImageUnreachable(safeMode *apis.Sa
 
 	glog.Warningf("ImageUnreachable. instacneID: '%s', wlid: '%s'", safeMode.InstanceID, safeMode.Wlid)
 
-	message := "ARMO failed to configure workload, please report to ARMO team"
-	safeModeHandler.reportSafeModeImageUnreachable(safeMode, message)
+	safeModeHandler.reportSafeModeImageUnreachable(safeMode)
 
 	// trigger detach
 	safeModeHandler.triggerCommand(safeMode, apis.IMAGE_UNREACHABLE)
@@ -195,11 +214,13 @@ func (safeModeHandler *SafeModeHandler) updateImageUnreachable(safeMode *apis.Sa
 	return nil
 }
 
-func (safeModeHandler *SafeModeHandler) reportSafeModeIncompatible(safeMode *apis.SafeMode, message string) {
+func (safeModeHandler *SafeModeHandler) reportSafeModeIncompatible(safeMode *apis.SafeMode) {
+	message := "ARMO guard failed to initialize correctly, please report to ARMO team"
 	safeModeHandler.reportSafeMode(safeMode, "Agent incompatible - detaching", message)
 }
 
-func (safeModeHandler *SafeModeHandler) reportSafeModeImageUnreachable(safeMode *apis.SafeMode, message string) {
+func (safeModeHandler *SafeModeHandler) reportSafeModeImageUnreachable(safeMode *apis.SafeMode) {
+	message := "ARMO failed to configure workload, please report to ARMO team"
 	safeModeHandler.reportSafeMode(safeMode, "Image Unreachable - detaching", message)
 }
 

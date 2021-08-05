@@ -102,6 +102,9 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	case apis.RESTART:
 		workload.SetUpdateTime()
 		workload.SetJobID(*jobTracking)
+	case apis.REPLACE_HEADERS:
+		workload.SetReplaceheaders()
+		workload.SetJobID(*jobTracking)
 	case apis.INJECT:
 		workload.SetInject()
 		workload.SetJobID(*jobTracking)

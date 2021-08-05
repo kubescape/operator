@@ -134,14 +134,12 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	switch c.CommandName {
 	case apis.UPDATE, apis.INJECT, apis.ATTACH:
 		return actionHandler.update(c.CommandName)
-	case apis.RESTART:
-		return actionHandler.update(c.CommandName)
 	case apis.REMOVE, apis.DETACH:
 		actionHandler.deleteConfigMaps(c)
 		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupDiscovery()
 		return err
-	case apis.INCOMPATIBLE, apis.IMAGE_UNREACHABLE:
+	case apis.RESTART, apis.INCOMPATIBLE, apis.IMAGE_UNREACHABLE, apis.REPLACE_HEADERS:
 		return actionHandler.update(c.CommandName)
 	case apis.UNREGISTERED:
 		err := actionHandler.update(c.CommandName)
