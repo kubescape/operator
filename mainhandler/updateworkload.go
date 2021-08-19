@@ -41,7 +41,7 @@ func (actionHandler *ActionHandler) update(command string) error {
 		return actionHandler.updateWorkload(workload)
 	}
 }
-func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Workload) error {
+func (actionHandler *ActionHandler) updateWorkload(workload k8sinterface.IWorkload) error {
 	deletePods := isForceDelete(actionHandler.command.Args)
 
 	if persistentVolumeFound(workload) {
@@ -56,7 +56,7 @@ func (actionHandler *ActionHandler) updateWorkload(workload *k8sinterface.Worklo
 	return err
 }
 
-func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) error {
+func (actionHandler *ActionHandler) updatePod(workload k8sinterface.IWorkload) error {
 	glog.Infof("in updatePod")
 	var err error
 	maxTime := float64(360) // wait for 3 minutes
@@ -84,7 +84,7 @@ func (actionHandler *ActionHandler) updatePod(workload *k8sinterface.Workload) e
 	return err
 }
 
-func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload, command string) error {
+func (actionHandler *ActionHandler) editWorkload(workload k8sinterface.IWorkload, command string) error {
 	jobTracking := cautils.NewJobTracking(actionHandler.reporter)
 
 	switch command {
@@ -121,7 +121,7 @@ func (actionHandler *ActionHandler) editWorkload(workload *k8sinterface.Workload
 	}
 	return nil
 }
-func (actionHandler *ActionHandler) deletePods(workload *k8sinterface.Workload) error {
+func (actionHandler *ActionHandler) deletePods(workload k8sinterface.IWorkload) error {
 	lisOptions := metav1.ListOptions{}
 
 	selector, err := workload.GetSelector()

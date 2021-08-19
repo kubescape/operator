@@ -33,7 +33,7 @@ func NewDockerClient() (*DockerClient, error) {
 type DockerConfigJsonstructure map[string]map[string]types.AuthConfig
 
 // setDockerClient -
-func (s *Sign) setDockerClient(workload *k8sinterface.Workload, imageName string) error {
+func (s *Sign) setDockerClient(workload k8sinterface.IWorkload, imageName string) error {
 	dc, err := NewDockerClient()
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func (s *Sign) setDockerClient(workload *k8sinterface.Workload, imageName string
 	return nil
 }
 
-func (s *Sign) pullImage(workload *k8sinterface.Workload, imageName string) (out io.ReadCloser, err error) {
+func (s *Sign) pullImage(workload k8sinterface.IWorkload, imageName string) (out io.ReadCloser, err error) {
 
 	// image pull without docker registry credentials
 	out, clearErr := s.dockerClient.cli.ImagePull(s.dockerClient.ctx, imageName, types.ImagePullOptions{})

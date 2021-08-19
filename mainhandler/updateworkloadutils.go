@@ -33,7 +33,7 @@ func (actionHandler *ActionHandler) workloadCleanupDiscovery() error {
 	return actionHandler.cacli.UTILSCleanup(actionHandler.wlid, true)
 }
 
-func persistentVolumeFound(workload *k8sinterface.Workload) bool {
+func persistentVolumeFound(workload k8sinterface.IWorkload) bool {
 	volumes, _ := workload.GetVolumes()
 	for _, vol := range volumes {
 		if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName != "" {

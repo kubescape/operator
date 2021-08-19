@@ -41,14 +41,14 @@ func ignoreNamespace(command, namespace string) bool {
 	}
 	return false
 }
-func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels, fields map[string]string) ([]k8sinterface.Workload, error) {
+func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels, fields map[string]string) ([]k8sinterface.IWorkload, error) {
 	groupVersionResource, err := k8sinterface.GetGroupVersionResource(resource)
 	if err != nil {
 		return nil, err
 	}
 	return mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels, fields)
 }
-func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.Workload) ([]string, []error) {
+func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
 	errs := []error{}
 	idMap := make(map[string]interface{})
 	for i := range workloads {
@@ -63,7 +63,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.Workloa
 				idMap[wlid] = true
 			} else {
 				// find wlid
-				kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(&workloads[i])
+				kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(workloads[i])
 				if err != nil {
 					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
 				}

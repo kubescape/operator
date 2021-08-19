@@ -71,7 +71,7 @@ func (s *Sign) triggerCacliSign(username, password, ociURL string) error {
 // **************************************************************************************************
 
 // SignImageOcimage sign image usin cacli - ocimage
-func (s *Sign) SignImageOcimage(workload *k8sinterface.Workload) error {
+func (s *Sign) SignImageOcimage(workload k8sinterface.IWorkload) error {
 	podSpec, err := workload.GetPodSpec()
 	if err != nil {
 		glog.Errorf("In pullImage failed to GetPodSpec: %v", err)
@@ -128,7 +128,7 @@ func (s *Sign) triggerOCImageSign(wlid string, credentials map[string]types.Auth
 // **************************************************************************************************
 
 // SignImageDocker sign image usin cacli - docker
-func (s *Sign) SignImageDocker(workload *k8sinterface.Workload) error {
+func (s *Sign) SignImageDocker(workload k8sinterface.IWorkload) error {
 
 	// pull images
 	if err := s.prepareForSign(workload); err != nil {
@@ -144,7 +144,7 @@ func (s *Sign) SignImageDocker(workload *k8sinterface.Workload) error {
 	return nil
 }
 
-func (s *Sign) prepareForSign(workload *k8sinterface.Workload) error {
+func (s *Sign) prepareForSign(workload k8sinterface.IWorkload) error {
 	// get wt
 	wt, err := s.cacli.WTGet(s.wlid)
 	if err != nil {
