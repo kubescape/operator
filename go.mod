@@ -1,12 +1,12 @@
 module k8s-ca-websocket
 
-go 1.13
+go 1.16
 
-replace github.com/armosec/capacketsgo => ./vendor/github.com/armosec/capacketsgo
+// replace github.com/armosec/capacketsgo => ./vendor/github.com/armosec/capacketsgo
 
 require (
 	github.com/Microsoft/go-winio v0.5.0 // indirect
-	github.com/armosec/capacketsgo v0.0.30
+	github.com/armosec/capacketsgo v0.0.41
 	github.com/containerd/containerd v1.5.5 // indirect
 	github.com/docker/docker v20.10.8+incompatible
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529

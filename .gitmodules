@@ -2,6 +2,3 @@
 	path = jenkinstools
 	url = git@asterix.cyberarmor.io:cyberarmor/jenkinstools.git
 	branch = master
-[submodule "vendor/github.com/armosec/capacketsgo"]
-	path = vendor/github.com/armosec/capacketsgo
-	url = git@github.com:armosec/capacketsgo.git

@@ -68,29 +68,35 @@ func (wsh *WebsocketHandler) Websocket(isReadinessReady *bool) error {
 				time.Sleep(30 * time.Second)
 				if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					glog.Errorf("PING, %s", err.Error())
-					*isReadinessReady = false
+					// *isReadinessReady = false
 					conn.Close()
 					return
 				}
 			}
 		}()
-		for {
-			messageType, bytes, err := conn.ReadMessage()
-			if err != nil {
-				glog.Errorf("error receiving data from websocket. message: %s", err.Error())
-				break
-			}
-			switch messageType {
-			case websocket.TextMessage:
-				wsh.HandlePostmanRequest(bytes)
-			case websocket.CloseMessage:
-				break
-			default:
-				glog.Infof("Unrecognized message received. received: %d", messageType)
-			}
+		if err := wsh.readMessage(conn); err != nil {
+			glog.Error(err)
 		}
+
 		*isReadinessReady = false
 		conn.Close()
+	}
+}
+
+func (wsh *WebsocketHandler) readMessage(conn *websocket.Conn) error {
+	for {
+		messageType, bytes, err := conn.ReadMessage()
+		if err != nil {
+			return fmt.Errorf("error receiving data from websocket. message: %s", err.Error())
+		}
+		switch messageType {
+		case websocket.TextMessage:
+			wsh.HandlePostmanRequest(bytes)
+		case websocket.CloseMessage:
+			return fmt.Errorf("websocket received close message")
+		default:
+			glog.Infof("Unrecognized message received. received: %d", messageType)
+		}
 	}
 }
 
