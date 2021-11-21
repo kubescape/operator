@@ -72,6 +72,13 @@ func (s *Sign) triggerCacliSign(username, password, ociURL string) error {
 
 // SignImageOcimage sign image usin cacli - ocimage
 func (s *Sign) SignImageOcimage(workload k8sinterface.IWorkload) error {
+	if cautils.CA_OCIMAGE_URL == "" {
+
+		err := fmt.Errorf("SignImageOcimage unable to use oci for signing -oci url is missing")
+		glog.Error(err)
+
+		return err
+	}
 	podSpec, err := workload.GetPodSpec()
 	if err != nil {
 		glog.Errorf("In pullImage failed to GetPodSpec: %v", err)

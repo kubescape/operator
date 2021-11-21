@@ -12,6 +12,7 @@ import (
 	"k8s-ca-websocket/notificationhandler/safemode"
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
+	"strings"
 
 	"github.com/armosec/capacketsgo/apis"
 	"github.com/armosec/capacketsgo/k8sshared/probes"
@@ -33,7 +34,12 @@ func main() {
 
 	if err := cautils.LoadEnvironmentVaribles(); err != nil {
 		glog.Error(err)
-		return
+
+		//just disable ocimage signing if ocimage is missing
+		if !strings.Contains(err.Error(), "CA_OCIMAGE_URL") {
+			return
+		}
+
 	}
 
 	sessionObj := make(chan cautils.SessionObj)
