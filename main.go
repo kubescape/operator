@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"k8s-ca-websocket/cautils"
-	"k8s-ca-websocket/cronjobs"
 	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/notificationhandler"
 	"k8s-ca-websocket/notificationhandler/safemode"
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
-	"strings"
 
 	"github.com/armosec/capacketsgo/apis"
 	"github.com/armosec/capacketsgo/k8sshared/probes"
@@ -34,12 +32,7 @@ func main() {
 
 	if err := cautils.LoadEnvironmentVaribles(); err != nil {
 		glog.Error(err)
-
-		//just disable ocimage signing if ocimage is missing
-		if !strings.Contains(err.Error(), "CA_OCIMAGE_URL") {
-			return
-		}
-
+		return
 	}
 
 	sessionObj := make(chan cautils.SessionObj)
@@ -78,9 +71,9 @@ func main() {
 	mainHandler := mainhandler.NewMainHandler(&sessionObj)
 
 	//cronjobs - add these so websocket can trigger various jobs
-	go func() {
-		cronjobs.StartCronJob()
-	}()
+	// go func() {
+	// 	cronjobs.StartCronJob()
+	// }()
 
 	mainHandler.HandleRequest()
 

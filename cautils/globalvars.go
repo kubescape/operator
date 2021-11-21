@@ -57,7 +57,8 @@ func LoadEnvironmentVaribles() (err error) {
 		return err
 	}
 	if CA_OCIMAGE_URL, err = testEnvironmentVarible("CA_OCIMAGE_URL"); err != nil {
-		return err
+		CA_USE_DOCKER = true
+		// return err
 	} else {
 		if !strings.HasPrefix(CA_OCIMAGE_URL, "http") {
 			CA_OCIMAGE_URL = fmt.Sprintf("http://%s/v1", CA_OCIMAGE_URL)
@@ -90,7 +91,7 @@ func LoadEnvironmentVaribles() (err error) {
 	if signerSemaphore, err := testEnvironmentVarible("CA_SIGNER_SEMAPHORE"); err == nil {
 		i, err := strconv.ParseInt(signerSemaphore, 10, 64)
 		if err != nil {
-			return fmt.Errorf("Failed to convert '%s' from 'CA_SIGNER_SEMAPHORE' to int64, reason: %s", signerSemaphore, err.Error())
+			return fmt.Errorf("failed to convert '%s' from 'CA_SIGNER_SEMAPHORE' to int64, reason: %s", signerSemaphore, err.Error())
 		}
 		SignerSemaphore = i
 	}
