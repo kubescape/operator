@@ -83,7 +83,7 @@ func getCommandNamespace(command *apis.Command) string {
 		return pkgwlid.GetNamespaceFromWlid(command.Wlid)
 	}
 	if command.WildWlid != "" {
-		return cautils.GetNamespaceFromWildWlid(command.WildWlid)
+		return pkgwlid.GetNamespaceFromWlid(command.WildWlid)
 	}
 	return ""
 }

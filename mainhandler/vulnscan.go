@@ -7,8 +7,10 @@ import (
 	"k8s-ca-websocket/cautils"
 	"net/http"
 
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -39,7 +41,7 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 		websocketScanCommand.ImageTag = containers[i].image
 		websocketScanCommand.ContainerName = containers[i].container
 		if pod != nil {
-			secrets, err := k8sinterface.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
+			secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
 			if err != nil {
 				glog.Error(err)
 			} else if len(secrets) > 0 {
@@ -113,7 +115,7 @@ func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, erro
 		return nil, err
 	}
 	podObj := &corev1.Pod{Spec: *podspec}
-	podObj.ObjectMeta.Namespace = cautils.GetNamespaceFromWlid(wlid)
+	podObj.ObjectMeta.Namespace = pkgwlid.GetNamespaceFromWlid(wlid)
 	return podObj, nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"k8s-ca-websocket/websocket"
 
 	"github.com/armosec/armoapi-go/apis"
+
 	"github.com/armosec/utils-k8s-go/probes"
 	"github.com/golang/glog"
 )
@@ -63,7 +64,7 @@ func main() {
 		glog.Fatal(restAPIHandler.SetupHTTPListener())
 	}()
 
-	mainHandler := mainhandler.NewMainHandler(&sessionObj)
+	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj())
 
 	//cronjobs - add these so websocket can trigger various jobs
 	// go func() {

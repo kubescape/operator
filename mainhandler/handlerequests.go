@@ -40,11 +40,11 @@ type ActionHandler struct {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
+func NewMainHandler(sessionObj *chan cautils.SessionObj, cacliRef cacli.ICacli) *MainHandler {
 	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
 		sessionObj:      sessionObj,
-		cacli:           cacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
+		cacli:           cacliRef,
 		k8sAPI:          k8sinterface.NewKubernetesApi(),
 		signerSemaphore: semaphore.NewWeighted(cautils.SignerSemaphore),
 	}

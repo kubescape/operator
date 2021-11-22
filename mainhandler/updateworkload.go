@@ -8,6 +8,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	pkgcautils "github.com/armosec/utils-k8s-go/armometadata"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 
 	"github.com/armosec/k8s-interface/k8sinterface"
 
@@ -33,7 +34,7 @@ func (actionHandler *ActionHandler) update(command string) error {
 
 	glog.Infof("Command: %s, Updated workload: %s", actionHandler.command.CommandName, workload.Json())
 
-	switch cautils.GetKindFromWlid(actionHandler.wlid) {
+	switch pkgwlid.GetKindFromWlid(actionHandler.wlid) {
 	case "Pod":
 		glog.Infof("updating pod: '%s'", workload.GetName())
 		return actionHandler.updatePod(workload)
@@ -130,7 +131,7 @@ func (actionHandler *ActionHandler) deletePods(workload k8sinterface.IWorkload) 
 		lisOptions.LabelSelector = labels.Set(selector.MatchLabels).AsSelector().String()
 	}
 
-	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(cautils.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
+	return actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(pkgwlid.GetNamespaceFromWlid(actionHandler.wlid)).DeleteCollection(context.Background(), metav1.DeleteOptions{}, lisOptions)
 }
 
 func injectLabel(objectMeta *metav1.ObjectMeta, key, val string) {
