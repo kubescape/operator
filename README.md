@@ -14,3 +14,18 @@ CA_VULN_SCAN_SCHEDULE
 | Environment |  value | default |
 | :=== | :===:  | :===:  |
 | `CA_SYSTEM_MODE` | `ALL`/`SCAN` | `ALL`  |
+
+
+## Trigger action
+
+```
+curl -X POST http://<websocket-url>/v1/triggerAction
+   -H 'Content-Type: application/json'
+   -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-dwertent-v1"}]}'
+```
+
+
+```
+curl -X POST http://127.0.0.1:4002/v1/triggerAction -H 'Content-Type: application/json' -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-dwertent-v1"}]}'
+```
+   

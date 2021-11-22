@@ -48,18 +48,19 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 	returnValue := []byte("ok")
 
 	httpStatus := http.StatusOK
-	readBuffer, _ := ioutil.ReadAll(r.Body)
-
-	switch r.Method {
-	case http.MethodPost:
-		err = resthandler.HandleActionRequest(readBuffer)
-	default:
-		httpStatus = http.StatusMethodNotAllowed
-		err = fmt.Errorf("Method '%s' not allowed", r.Method)
+	readBuffer, err := ioutil.ReadAll(r.Body)
+	if err == nil {
+		switch r.Method {
+		case http.MethodPost:
+			err = resthandler.HandleActionRequest(readBuffer)
+		default:
+			httpStatus = http.StatusMethodNotAllowed
+			err = fmt.Errorf("method '%s' not allowed", r.Method)
+		}
 	}
 	if err != nil {
 		returnValue = []byte(err.Error())
-		httpStatus = http.StatusBadRequest
+		httpStatus = http.StatusInternalServerError
 	}
 
 	w.WriteHeader(httpStatus)
