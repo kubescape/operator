@@ -5,13 +5,14 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
-	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/armosec/capacketsgo/apis"
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
-	"github.com/armosec/capacketsgo/k8sinterface"
-	"github.com/armosec/capacketsgo/secrethandling"
+	"github.com/armosec/armoapi-go/apis"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+
+	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/armosec/utils-k8s-go/secrethandling"
 )
 
 var IgnoreCommandInNamespace = map[string][]string{}
@@ -54,7 +55,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorklo
 	for i := range workloads {
 		switch workloads[i].GetKind() {
 		case "Namespace":
-			idMap[pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
+			idMap[pkgwlid.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		case "Secret":
 			secretName := strings.TrimPrefix(workloads[i].GetName(), secrethandling.ArmoShadowSecretPrefix) // remove shadow secret prefix
 			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), secretName, "")] = true
@@ -67,7 +68,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorklo
 				if err != nil {
 					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
 				}
-				wlid := pkgcautils.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), kind, name)
+				wlid := pkgwlid.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), kind, name)
 				if wlid != "" {
 					idMap[wlid] = true
 				}
@@ -79,7 +80,7 @@ func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorklo
 
 func getCommandNamespace(command *apis.Command) string {
 	if command.Wlid != "" {
-		return pkgcautils.GetNamespaceFromWlid(command.Wlid)
+		return pkgwlid.GetNamespaceFromWlid(command.Wlid)
 	}
 	if command.WildWlid != "" {
 		return cautils.GetNamespaceFromWildWlid(command.WildWlid)

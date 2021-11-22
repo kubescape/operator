@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
+	"github.com/armosec/utils-k8s-go/armometadata"
 
 	"github.com/golang/glog"
 )
@@ -30,11 +30,11 @@ var (
 	SignerSemaphore           int64 = 4
 )
 
-var ClusterConfig = &pkgcautils.ClusterConfig{}
+var ClusterConfig = &armometadata.ClusterConfig{}
 
 // LoadEnvironmentVaribles -
 func LoadEnvironmentVaribles() (err error) {
-	ClusterConfig, err = pkgcautils.LoadConfig("", true)
+	ClusterConfig, err = armometadata.LoadConfig("", true)
 	if err != nil {
 		glog.Warning(err.Error())
 	}
@@ -82,10 +82,10 @@ func LoadEnvironmentVaribles() (err error) {
 	}
 	if NotificationServerWSURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_WS"); err != nil {
 		// return err
-		glog.Warningf("missing CA_NOTIFICATION_SERVER_REST env")
+		glog.Warningf("missing CA_NOTIFICATION_SERVER_WS env")
 	}
 	if NotificationServerRESTURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_REST"); err != nil {
-		return err
+		glog.Warningf("missing CA_NOTIFICATION_SERVER_REST env")
 	}
 
 	if signerSemaphore, err := testEnvironmentVarible("CA_SIGNER_SEMAPHORE"); err == nil {

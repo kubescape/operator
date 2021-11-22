@@ -7,8 +7,8 @@ import (
 	"k8s-ca-websocket/cautils"
 	"net/http"
 
-	"github.com/armosec/capacketsgo/apis"
-	"github.com/armosec/capacketsgo/k8sinterface"
+	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -21,7 +21,7 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 	// get all images of workload
 	errs := ""
 	glog.Infof("in scanWorkload")
-	containers, err := getWorkloadImages(actionHandler.wlid, apis.SCAN)
+	containers, err := getWorkloadImages(actionHandler.k8sAPI, actionHandler.wlid)
 	if err != nil {
 		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}

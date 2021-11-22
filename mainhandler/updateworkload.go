@@ -6,9 +6,10 @@ import (
 	"k8s-ca-websocket/cautils"
 	"time"
 
-	"github.com/armosec/capacketsgo/apis"
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
-	"github.com/armosec/capacketsgo/k8sinterface"
+	"github.com/armosec/armoapi-go/apis"
+	pkgcautils "github.com/armosec/utils-k8s-go/armometadata"
+
+	"github.com/armosec/k8s-interface/k8sinterface"
 
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"

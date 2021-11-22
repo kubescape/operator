@@ -3,7 +3,7 @@ package cronjobs
 import (
 	"k8s-ca-websocket/cautils"
 
-	icacli "github.com/armosec/capacketsgo/cacli"
+	icacli "github.com/armosec/cacli-wrapper-go/cacli"
 
 	"github.com/golang/glog"
 )

@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"k8s-ca-websocket/cautils"
-	"k8s-ca-websocket/k8sworkloads"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/notificationhandler"
 	"k8s-ca-websocket/notificationhandler/safemode"
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
 
-	"github.com/armosec/capacketsgo/apis"
-	"github.com/armosec/capacketsgo/k8sshared/probes"
+	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/utils-k8s-go/probes"
 	"github.com/golang/glog"
 )
 
@@ -25,10 +24,6 @@ func main() {
 	go probes.InitReadinessV1(&isReadinessReady)
 
 	displayBuildTag()
-	if err := k8sworkloads.SetupKubernetesClient(); err != nil {
-		glog.Error(err)
-		return
-	}
 
 	if err := cautils.LoadEnvironmentVaribles(); err != nil {
 		glog.Error(err)

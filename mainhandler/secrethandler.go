@@ -10,10 +10,10 @@ import (
 
 	"os"
 
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
+	pkgcautils "github.com/armosec/utils-k8s-go/armometadata"
 
-	"github.com/armosec/capacketsgo/apis"
-	"github.com/armosec/capacketsgo/secrethandling"
+	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/utils-k8s-go/secrethandling"
 	"github.com/golang/glog"
 )
 

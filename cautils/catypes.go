@@ -1,8 +1,8 @@
 package cautils
 
 import (
-	"github.com/armosec/capacketsgo/apis"
-	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	"github.com/armosec/armoapi-go/apis"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 )
 
 // Commands list of commands received from websocket

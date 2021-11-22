@@ -6,12 +6,16 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 
-	"github.com/armosec/capacketsgo/apis"
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
+	"github.com/armosec/armoapi-go/apis"
 
-	cacli "github.com/armosec/capacketsgo/cacli"
-	"github.com/armosec/capacketsgo/k8sinterface"
-	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	"github.com/armosec/utils-k8s-go/armometadata"
+
+	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
+	cacli "github.com/armosec/cacli-wrapper-go/cacli"
+	"github.com/armosec/k8s-interface/k8sinterface"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/golang/glog"
 	"golang.org/x/sync/semaphore"
 )
@@ -37,7 +41,7 @@ type ActionHandler struct {
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
-	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
 		sessionObj:      sessionObj,
 		cacli:           cacli.NewCacli(cautils.CA_DASHBOARD_BACKEND, false),
@@ -48,7 +52,7 @@ func NewMainHandler(sessionObj *chan cautils.SessionObj) *MainHandler {
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj) *ActionHandler {
-	pkgcautils.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &ActionHandler{
 		reporter:        sessionObj.Reporter,
 		command:         sessionObj.Command,
@@ -122,7 +126,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
 	c := sessionObj.Command
-	if pkgcautils.IsWlid(c.GetID()) {
+	if pkgwlid.IsWlid(c.GetID()) {
 		actionHandler.wlid = c.GetID()
 	} else {
 		actionHandler.sid = c.GetID()
@@ -188,7 +192,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 		return
 	}
 
-	namespace := pkgcautils.GetNamespaceFromWlid(sessionObj.Command.GetID())
+	namespace := pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID())
 	labels := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
 	resources := resourceList(sessionObj.Command.CommandName)
@@ -210,10 +214,10 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			cmd := sessionObj.Command.DeepCopy()
 
 			var err error
-			if pkgcautils.IsWlid(ids[i]) {
+			if pkgwlid.IsWlid(ids[i]) {
 				cmd.Wlid = ids[i]
-				err = pkgcautils.IsWlidValid(cmd.Wlid)
-			} else if pkgcautils.IsSid(ids[i]) {
+				err = pkgwlid.IsWlidValid(cmd.Wlid)
+			} else if pkgwlid.IsSid(ids[i]) {
 				cmd.Sid = ids[i]
 				// TODO - validate sid
 			} else {

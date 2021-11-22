@@ -1,11 +1,10 @@
 package cautils
 
 import (
-	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
-	reportutils "github.com/armosec/capacketsgo/system-reports/utilities"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
+	reportutils "github.com/armosec/logger-go/system-reports/utilities"
 
-	"github.com/armosec/capacketsgo/apis"
-	"github.com/armosec/capacketsgo/system-reports/datastructures"
+	"github.com/armosec/armoapi-go/apis"
 )
 
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
@@ -23,7 +22,7 @@ func NewSessionObj(command *apis.Command, message, parentID, jobID string, actio
 	return &sessionObj
 }
 
-func NewJobTracking(reporter datastructures.IReporter) *apis.JobTracking {
+func NewJobTracking(reporter reporterlib.IReporter) *apis.JobTracking {
 	return &apis.JobTracking{
 		JobID:            reporter.GetJobID(),
 		ParentID:         reporter.GetParentAction(),

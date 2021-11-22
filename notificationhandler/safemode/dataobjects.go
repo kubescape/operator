@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/armosec/capacketsgo/apis"
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
+	"github.com/armosec/armoapi-go/apis"
+	pkgcautils "github.com/armosec/utils-k8s-go/armometadata"
 
-	"github.com/armosec/capacketsgo/k8sinterface"
+	"github.com/armosec/k8s-interface/k8sinterface"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"

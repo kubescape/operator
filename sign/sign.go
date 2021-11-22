@@ -6,9 +6,12 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
-	cacli "github.com/armosec/capacketsgo/cacli"
-	"github.com/armosec/capacketsgo/k8sinterface"
-	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	cacli "github.com/armosec/cacli-wrapper-go/cacli"
+
+	"github.com/armosec/k8s-interface/cloudsupport"
+	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/armosec/k8s-interface/workloadinterface"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/docker/docker/api/types"
@@ -71,7 +74,7 @@ func (s *Sign) triggerCacliSign(username, password, ociURL string) error {
 // **************************************************************************************************
 
 // SignImageOcimage sign image usin cacli - ocimage
-func (s *Sign) SignImageOcimage(workload k8sinterface.IWorkload) error {
+func (s *Sign) SignImageOcimage(workload workloadinterface.IWorkload) error {
 
 	podSpec, err := workload.GetPodSpec()
 	if err != nil {
@@ -81,7 +84,7 @@ func (s *Sign) SignImageOcimage(workload k8sinterface.IWorkload) error {
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
 
 	glog.Infof("pulling image using secret")
-	credentials, err := k8sinterface.GetImageRegistryCredentials("", podObj)
+	credentials, err := cloudsupport.GetImageRegistryCredentials("", podObj)
 	if err != nil {
 		return err
 	}

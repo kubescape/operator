@@ -5,7 +5,7 @@ package cronjobs
 // 	"testing"
 // 	"time"
 
-// 	icacli "github.com/armosec/capacketsgo/cacli"
+// 	icacli "github.com/armosec/cacli-wrapper-go/cacli"
 // 	"github.com/golang/glog"
 // 	"github.com/robfig/cron"
 // )

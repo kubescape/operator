@@ -6,14 +6,14 @@ import (
 	"k8s-ca-websocket/cautils"
 	"time"
 
-	pkgcautils "github.com/armosec/capacketsgo/cautils"
+	pkgcautils "github.com/armosec/utils-k8s-go/armometadata"
 
-	"github.com/armosec/capacketsgo/k8sinterface"
-	reporterlib "github.com/armosec/capacketsgo/system-reports/datastructures"
+	"github.com/armosec/k8s-interface/k8sinterface"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/golang/glog"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/armoapi-go/apis"
 )
 
 type SafeModeHandler struct {

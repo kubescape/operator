@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )

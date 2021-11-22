@@ -7,7 +7,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"net/http"
 
-	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/golang/glog"
 )
 

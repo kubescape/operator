@@ -7,7 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/armosec/capacketsgo/k8sinterface"
+	"github.com/armosec/k8s-interface/cloudsupport"
+	"github.com/armosec/k8s-interface/workloadinterface"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -33,7 +34,7 @@ func NewDockerClient() (*DockerClient, error) {
 type DockerConfigJsonstructure map[string]map[string]types.AuthConfig
 
 // setDockerClient -
-func (s *Sign) setDockerClient(workload k8sinterface.IWorkload, imageName string) error {
+func (s *Sign) setDockerClient(workload workloadinterface.IWorkload, imageName string) error {
 	dc, err := NewDockerClient()
 	if err != nil {
 		return err
@@ -65,7 +66,7 @@ func (s *Sign) setDockerClient(workload k8sinterface.IWorkload, imageName string
 	return nil
 }
 
-func (s *Sign) pullImage(workload k8sinterface.IWorkload, imageName string) (out io.ReadCloser, err error) {
+func (s *Sign) pullImage(workload workloadinterface.IWorkload, imageName string) (out io.ReadCloser, err error) {
 
 	// image pull without docker registry credentials
 	out, clearErr := s.dockerClient.cli.ImagePull(s.dockerClient.ctx, imageName, types.ImagePullOptions{})
@@ -79,7 +80,7 @@ func (s *Sign) pullImage(workload k8sinterface.IWorkload, imageName string) (out
 	podObj := &corev1.Pod{Spec: *podSpec}
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
 	glog.Infof("pulling image using secret")
-	secrets, err := k8sinterface.GetImageRegistryCredentials(imageName, podObj)
+	secrets, err := cloudsupport.GetImageRegistryCredentials(imageName, podObj)
 	if err != nil {
 		glog.Errorf("In pullImage failed to GetImageRegistryCredentials: %v", err)
 	}

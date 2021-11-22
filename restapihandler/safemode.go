@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/armosec/capacketsgo/apis"
+	"github.com/armosec/armoapi-go/apis"
 
 	"github.com/golang/glog"
 )

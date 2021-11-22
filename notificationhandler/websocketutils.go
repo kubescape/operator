@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/armosec/capacketsgo/apis"
-	"github.com/armosec/capacketsgo/notificationserver"
+	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/golang/glog"
