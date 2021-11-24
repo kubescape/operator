@@ -64,12 +64,8 @@ func main() {
 		glog.Fatal(restAPIHandler.SetupHTTPListener())
 	}()
 
-	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj())
-
-	//cronjobs - add these so websocket can trigger various jobs
-	// go func() {
-	// 	cronjobs.StartCronJob()
-	// }()
+	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj(cautils.SystemMode))
+	mainHandler.StartupTriggerActions(cautils.GetStartupActins())
 
 	mainHandler.HandleRequest()
 

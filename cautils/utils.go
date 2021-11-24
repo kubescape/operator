@@ -7,6 +7,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 
 	"github.com/golang/glog"
 )
@@ -42,9 +43,21 @@ func SendSafeModeReport(sessionObj *SessionObj, message string, code int) {
 	}
 }
 
-func NewCacliObj() icacli.ICacli {
-	if SystemMode == SystemModeScan {
+func NewCacliObj(systemModeRunner SystemModeRunner) icacli.ICacli {
+	if systemModeRunner == SystemModeScan {
 		return icacli.NewCacliWithoutLogin()
 	}
 	return icacli.NewCacli(CA_DASHBOARD_BACKEND, false)
+}
+
+func GetStartupActins() []apis.Command {
+	if SystemMode == SystemModeScan {
+		return []apis.Command{
+			{
+				CommandName: apis.SCAN,
+				WildWlid:    pkgwlid.GetK8sWLID(CA_CLUSTER_NAME, "", "", ""),
+			},
+		}
+	}
+	return []apis.Command{}
 }

@@ -261,11 +261,20 @@ func (mainHandler *MainHandler) GetIDs(namespace string, labels, fields map[stri
 			errs = append(errs, e...)
 		}
 		if len(w) == 0 {
-			err := fmt.Errorf("Resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
+			err := fmt.Errorf("resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
 			errs = append(errs, err)
 		}
 		ids = append(ids, w...)
 	}
 
 	return ids, errs
+}
+
+// HandlePostmanRequest Parse received commands and run the command
+func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
+
+	for i := range actions {
+		sessionObj := cautils.NewSessionObj(&actions[i], "Websocket", "", "", 1)
+		*mainHandler.sessionObj <- *sessionObj
+	}
 }
