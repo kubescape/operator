@@ -65,7 +65,7 @@ func main() {
 	}()
 
 	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj(cautils.SystemMode))
-	mainHandler.StartupTriggerActions(cautils.GetStartupActins())
+	go mainHandler.StartupTriggerActions(cautils.GetStartupActins())
 
 	mainHandler.HandleRequest()
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
+	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 
@@ -80,7 +81,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 
 		// if scan disabled
 		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.SCAN {
-			err := fmt.Errorf("Scan is disabled in cluster")
+			err := fmt.Errorf("scan is disabled in cluster")
 			glog.Warningf(err.Error())
 			sessionObj.Reporter.SetActionName(apis.SCAN)
 			sessionObj.Reporter.SendError(err, true, true)
@@ -108,7 +109,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	status := "SUCCESS"
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
 
-	actionHandler.reporter.SendAction(fmt.Sprintf("%s", sessionObj.Command.CommandName), true)
+	actionHandler.reporter.SendAction(sessionObj.Command.CommandName, true)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
 		actionHandler.reporter.SendError(err, true, true)
@@ -221,7 +222,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 				cmd.Sid = ids[i]
 				// TODO - validate sid
 			} else {
-				err = fmt.Errorf("Unknown id")
+				err = fmt.Errorf("unknown id")
 			}
 
 			cmd.WildWlid = ""
@@ -272,6 +273,8 @@ func (mainHandler *MainHandler) GetIDs(namespace string, labels, fields map[stri
 
 // HandlePostmanRequest Parse received commands and run the command
 func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
+
+	time.Sleep(2 * time.Second) // wait for master to start listenning to the channel
 
 	for i := range actions {
 		sessionObj := cautils.NewSessionObj(&actions[i], "Websocket", "", "", 1)
