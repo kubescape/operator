@@ -45,13 +45,18 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 			if err != nil {
 				glog.Error(err)
 			} else if len(secrets) > 0 {
-				if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk {
-					glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
-					websocketScanCommand.Credentials = &secret
-				} else {
-					glog.Errorf("couldn't find image: %v secret", websocketScanCommand.ImageTag)
+				glog.Infof("secrets %v", secrets)
+				for secretName, _ := range secrets {
+					websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
 				}
+				glog.Infof("websocketScanCommand %v", websocketScanCommand)
 
+				/*
+					the websocketScanCommand.Credentials is depracated, still use it for backward compstability
+				*/
+				if len(websocketScanCommand.Credentialslist) != 0 {
+					websocketScanCommand.Credentials = &websocketScanCommand.Credentialslist[0]
+				}
 			}
 		}
 		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
