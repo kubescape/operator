@@ -5,11 +5,16 @@ import (
 	reportutils "github.com/armosec/logger-go/system-reports/utilities"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 )
 
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
 	reporter := reporterlib.NewBaseReport(CA_CUSTOMER_GUID, message)
-	reporter.SetTarget(command.GetID())
+	target := command.GetID()
+	if target == armotypes.DesignatorsToken {
+		target = CA_CLUSTER_NAME
+	}
+	reporter.SetTarget(target)
 	reporter.SetParentAction(parentID)
 	reporter.SetJobID(jobID)
 	reporter.SetActionIDN(actionNumber)
