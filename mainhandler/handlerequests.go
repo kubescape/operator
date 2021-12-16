@@ -205,7 +205,9 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			}
 		}
 	}
-
+	if len(namespaces) == 0 {
+		namespaces = append(namespaces, "")
+	}
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	glog.Infof(info)
 	sessionObj.Reporter.SendAction(info, true)
