@@ -86,7 +86,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
-		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || sessionObj.Command.Args["designators"] != nil {
+		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0 {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 			// } else if sessionObj.Command.Sid != "" {
 			// 	go mainHandler.HandleSingleRequest(&sessionObj)
