@@ -45,11 +45,9 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 			if err != nil {
 				glog.Error(err)
 			} else if len(secrets) > 0 {
-				glog.Infof("secrets %v", secrets)
 				for secretName, _ := range secrets {
 					websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
 				}
-				glog.Infof("websocketScanCommand %v", websocketScanCommand)
 
 				/*
 					the websocketScanCommand.Credentials is depracated, still use it for backward compstability
