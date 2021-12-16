@@ -1,6 +1,8 @@
 package cautils
 
 import (
+	"fmt"
+
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	reportutils "github.com/armosec/logger-go/system-reports/utilities"
 
@@ -12,7 +14,7 @@ func NewSessionObj(command *apis.Command, message, parentID, jobID string, actio
 	reporter := reporterlib.NewBaseReport(CA_CUSTOMER_GUID, message)
 	target := command.GetID()
 	if target == armotypes.DesignatorsToken {
-		target = CA_CLUSTER_NAME
+		target = fmt.Sprintf("wlid://cluster-%s/", CA_CLUSTER_NAME)
 	}
 	reporter.SetTarget(target)
 	reporter.SetParentAction(parentID)
