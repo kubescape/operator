@@ -93,9 +93,11 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	if err != nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 	}
-	defer resp.Body.Close()
 	if resp == nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", websocketScanCommand.ImageTag)
+	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 203 {

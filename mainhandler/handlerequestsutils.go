@@ -42,12 +42,20 @@ func ignoreNamespace(command, namespace string) bool {
 	}
 	return false
 }
-func (mainHandler *MainHandler) listWorkloads(namespace, resource string, labels, fields map[string]string) ([]k8sinterface.IWorkload, error) {
+func (mainHandler *MainHandler) listWorkloads(namespaces []string, resource string, labels, fields map[string]string) ([]k8sinterface.IWorkload, error) {
 	groupVersionResource, err := k8sinterface.GetGroupVersionResource(resource)
 	if err != nil {
 		return nil, err
 	}
-	return mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels, fields)
+	res := make([]k8sinterface.IWorkload, 0, 1)
+	for nsIdx := range namespaces {
+		iwls, err := mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespaces[nsIdx], labels, fields)
+		if err != nil {
+			return res, err
+		}
+		res = append(res, iwls...)
+	}
+	return res, nil
 }
 func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
 	errs := []error{}
