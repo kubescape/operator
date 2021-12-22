@@ -3,7 +3,7 @@ module k8s-ca-websocket
 go 1.17
 
 require (
-	github.com/armosec/armoapi-go v0.0.39
+	github.com/armosec/armoapi-go v0.0.40
 	github.com/armosec/cacli-wrapper-go v0.0.1
 	github.com/armosec/cluster-notifier-api-go v0.0.1
 	github.com/armosec/k8s-interface v0.0.13
@@ -14,6 +14,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/robfig/cron v1.2.0
+	github.com/satori/go.uuid v1.2.0
 	golang.org/x/net v0.0.0-20211118161319-6a13c67c3ce4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
@@ -63,7 +64,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
-	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect

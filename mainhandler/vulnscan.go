@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/cloudsupport"
@@ -27,25 +28,40 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 	if err != nil {
 		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
-	websocketScanCommand := &apis.WebsocketScanCommand{
-		Wlid: actionHandler.wlid,
-	}
-	if actionHandler.reporter != nil {
-		websocketScanCommand.JobID = actionHandler.reporter.GetJobID()
-		websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-	}
+
+	// websocketScanCommand := &apis.WebsocketScanCommand{
+	// 	Wlid: actionHandler.wlid,
+	// }
+	// if actionHandler.reporter != nil {
+	// 	websocketScanCommand.JobID = actionHandler.reporter.GetJobID()
+	// 	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
+	// }
 
 	glog.Infof("iterating over containers")
 
 	for i := range containers {
-		websocketScanCommand.ImageTag = containers[i].image
-		websocketScanCommand.ContainerName = containers[i].container
+
+		websocketScanCommand := &apis.WebsocketScanCommand{
+			Wlid:          actionHandler.wlid,
+			ImageTag:      containers[i].image,
+			ContainerName: containers[i].container,
+		}
+		if actionHandler.reporter != nil {
+			websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
+			websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
+			websocketScanCommand.JobID = uuid.NewV4().String()
+		}
+		for contIdx := range pod.Status.ContainerStatuses {
+			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
+				websocketScanCommand.ImageHash = pod.Status.ContainerStatuses[contIdx].ImageID
+			}
+		}
 		if pod != nil {
 			secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
 			if err != nil {
 				glog.Error(err)
 			} else if len(secrets) > 0 {
-				for secretName, _ := range secrets {
+				for secretName := range secrets {
 					websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
 				}
 
