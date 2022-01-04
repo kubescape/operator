@@ -75,7 +75,7 @@ func (actionHandler *ActionHandler) updatePod(workload k8sinterface.IWorkload) e
 				break
 			}
 			if maxTime <= timer {
-				return fmt.Errorf("Failed to restart pod, time: %v seconds, workloadID: %s", maxTime, actionHandler.wlid)
+				return fmt.Errorf("failed to restart pod, time: %v seconds, workloadID: %s", maxTime, actionHandler.wlid)
 			}
 			time.Sleep(sleepTime)
 			timer += sleepTime.Seconds()

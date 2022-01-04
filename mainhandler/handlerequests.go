@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 
 	"github.com/armosec/utils-k8s-go/armometadata"
 
@@ -20,8 +21,6 @@ import (
 	"github.com/golang/glog"
 	"golang.org/x/sync/semaphore"
 )
-
-var previousReports []string
 
 type MainHandler struct {
 	sessionObj      *chan cautils.SessionObj
@@ -41,12 +40,12 @@ type ActionHandler struct {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(sessionObj *chan cautils.SessionObj, cacliRef cacli.ICacli) *MainHandler {
+func NewMainHandler(sessionObj *chan cautils.SessionObj, cacliRef cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &MainHandler{
 		sessionObj:      sessionObj,
 		cacli:           cacliRef,
-		k8sAPI:          k8sinterface.NewKubernetesApi(),
+		k8sAPI:          k8sAPI,
 		signerSemaphore: semaphore.NewWeighted(cautils.SignerSemaphore),
 	}
 }
@@ -87,7 +86,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
-		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" {
+		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0 {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 			// } else if sessionObj.Command.Sid != "" {
 			// 	go mainHandler.HandleSingleRequest(&sessionObj)
@@ -193,15 +192,26 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 		return
 	}
 
-	namespace := pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID())
+	namespaces := make([]string, 0, 1)
+	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
 	labels := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
 	resources := resourceList(sessionObj.Command.CommandName)
-
-	info := fmt.Sprintf("%s: id: '%s', namespace: '%s', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespace, labels, fields)
+	if len(sessionObj.Command.Designators) > 0 {
+		namespaces = make([]string, 0, 3)
+		for desiIdx := range sessionObj.Command.Designators {
+			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[armotypes.AttributeNamespace]; ok {
+				namespaces = append(namespaces, ns)
+			}
+		}
+	}
+	if len(namespaces) == 0 {
+		namespaces = append(namespaces, "")
+	}
+	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	glog.Infof(info)
 	sessionObj.Reporter.SendAction(info, true)
-	ids, errs := mainHandler.GetIDs(namespace, labels, fields, resources)
+	ids, errs := mainHandler.GetIDs(namespaces, labels, fields, resources)
 	for i := range errs {
 		glog.Warningf(errs[i].Error())
 		sessionObj.Reporter.SendError(errs[i], true, true)
@@ -225,8 +235,11 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 				err = fmt.Errorf("unknown id")
 			}
 
+			// clean all scope request parameters
 			cmd.WildWlid = ""
 			cmd.WildSid = ""
+			cmd.Designators = make([]armotypes.PortalDesignator, 0)
+			// send specific command to ourselve
 			newSessionObj := cautils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 			if err != nil {
@@ -244,11 +257,11 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	}()
 }
 
-func (mainHandler *MainHandler) GetIDs(namespace string, labels, fields map[string]string, resources []string) ([]string, []error) {
+func (mainHandler *MainHandler) GetIDs(namespaces []string, labels, fields map[string]string, resources []string) ([]string, []error) {
 	ids := []string{}
 	errs := []error{}
 	for _, resource := range resources {
-		workloads, err := mainHandler.listWorkloads(namespace, resource, labels, fields)
+		workloads, err := mainHandler.listWorkloads(namespaces, resource, labels, fields)
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -262,7 +275,7 @@ func (mainHandler *MainHandler) GetIDs(namespace string, labels, fields map[stri
 			errs = append(errs, e...)
 		}
 		if len(w) == 0 {
-			err := fmt.Errorf("resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
+			err := fmt.Errorf("resource: '%s', failed to calculate workloadIDs. namespaces: '%v', labels: '%v'", resource, namespaces, labels)
 			errs = append(errs, err)
 		}
 		ids = append(ids, w...)

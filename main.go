@@ -12,6 +12,7 @@ import (
 	"k8s-ca-websocket/websocket"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/k8s-interface/k8sinterface"
 
 	"github.com/armosec/utils-k8s-go/probes"
 	"github.com/golang/glog"
@@ -33,6 +34,7 @@ func main() {
 
 	sessionObj := make(chan cautils.SessionObj)
 	safeModeObj := make(chan apis.SafeMode)
+	k8sApi := k8sinterface.NewKubernetesApi()
 
 	// Websocket
 	go func() {
@@ -50,7 +52,7 @@ func main() {
 
 	// safe mode handler setup
 	go func() {
-		safeModeHandler := safemode.NewSafeModeHandler(&sessionObj, &safeModeObj)
+		safeModeHandler := safemode.NewSafeModeHandler(&sessionObj, &safeModeObj, k8sApi)
 		if err := safeModeHandler.InitSafeModeHandler(); err != nil {
 			glog.Errorf("failed to initialize safeMode, reason: %s", err.Error())
 			return
@@ -64,7 +66,7 @@ func main() {
 		glog.Fatal(restAPIHandler.SetupHTTPListener())
 	}()
 
-	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj(cautils.SystemMode))
+	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj(cautils.SystemMode), k8sApi)
 	go mainHandler.StartupTriggerActions(cautils.GetStartupActins())
 
 	mainHandler.HandleRequest()

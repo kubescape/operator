@@ -24,11 +24,11 @@ type SafeModeHandler struct {
 	workloadStatusMap WorkloadStatusMap
 }
 
-func NewSafeModeHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *SafeModeHandler {
+func NewSafeModeHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode, k8sApi *k8sinterface.KubernetesApi) *SafeModeHandler {
 	return &SafeModeHandler{
 		sessionObj:        sessionObj,
 		safeModeObj:       safeModeObj,
-		k8sApi:            k8sinterface.NewKubernetesApi(),
+		k8sApi:            k8sApi,
 		wlidCompatibleMap: *NewWlidCompatibleMap(),
 		workloadStatusMap: *NewWorkloadStatusMap(),
 	}

@@ -9,9 +9,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/cloudsupport"
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/golang/glog"
 )
 
@@ -27,31 +30,43 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 	if err != nil {
 		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
-	websocketScanCommand := &apis.WebsocketScanCommand{
-		Wlid: actionHandler.wlid,
-	}
-	if actionHandler.reporter != nil {
-		websocketScanCommand.JobID = actionHandler.reporter.GetJobID()
-		websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-	}
+	// we want running pod in order to have the image hash
+	actionHandler.getRunningPodDescription(pod)
 
 	glog.Infof("iterating over containers")
 
 	for i := range containers {
-		websocketScanCommand.ImageTag = containers[i].image
-		websocketScanCommand.ContainerName = containers[i].container
+
+		websocketScanCommand := &apis.WebsocketScanCommand{
+			Wlid:          actionHandler.wlid,
+			ImageTag:      containers[i].image,
+			ContainerName: containers[i].container,
+		}
+		if actionHandler.reporter != nil {
+			websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
+			websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
+			websocketScanCommand.JobID = uuid.NewV4().String()
+		}
+		for contIdx := range pod.Status.ContainerStatuses {
+			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
+				websocketScanCommand.ImageHash = pod.Status.ContainerStatuses[contIdx].ImageID
+			}
+		}
 		if pod != nil {
 			secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
 			if err != nil {
 				glog.Error(err)
 			} else if len(secrets) > 0 {
-				if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk {
-					glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
-					websocketScanCommand.Credentials = &secret
-				} else {
-					glog.Errorf("couldn't find image: %v secret", websocketScanCommand.ImageTag)
+				for secretName := range secrets {
+					websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
 				}
 
+				/*
+					the websocketScanCommand.Credentials is depracated, still use it for backward compstability
+				*/
+				if len(websocketScanCommand.Credentialslist) != 0 {
+					websocketScanCommand.Credentials = &websocketScanCommand.Credentialslist[0]
+				}
 			}
 		}
 		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
@@ -114,6 +129,34 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 // 	}
 // 	return nil
 // }
+func (actionHandler *ActionHandler) getRunningPodDescription(pod *corev1.Pod) {
+	if workloadObj, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid); err == nil {
+		if selectors, err := workloadObj.GetSelector(); err == nil {
+			gvr, _ := k8sinterface.GetGroupVersionResource("Pod")
+			podList, err := actionHandler.k8sAPI.ListWorkloads(&gvr, workloadObj.GetNamespace(), selectors.MatchLabels, map[string]string{"status.phase": "Running"})
+			if err == nil {
+				if len(podList) > 0 {
+					wlidKind := pkgwlid.GetKindFromWlid(actionHandler.wlid)
+					wlidName := pkgwlid.GetNameFromWlid(actionHandler.wlid)
+					for podIdx := range podList {
+						parentKind, parentName, err := actionHandler.k8sAPI.CalculateWorkloadParentRecursive(podList[podIdx])
+						if err == nil && parentKind == wlidKind && wlidName == parentName {
+							podBts, err := json.Marshal(podList[podIdx].GetObject())
+							if err != nil {
+								continue
+							}
+							err = json.Unmarshal(podBts, pod)
+							if err != nil {
+								continue
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+}
 
 func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScanCommand) error {
 
@@ -141,9 +184,11 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	if err != nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 	}
-	defer resp.Body.Close()
 	if resp == nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", websocketScanCommand.ImageTag)
+	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 203 {

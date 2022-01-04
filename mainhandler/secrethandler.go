@@ -150,7 +150,9 @@ func (actionHandler *ActionHandler) encryptSubsecret(secretDate map[string][]byt
 	glog.Infof("Encrypting subsecret '%s', sid: '%s'", subsecret, actionHandler.sid)
 
 	tmpFileName := fmt.Sprintf("/tmp/enc-%s.%s.%s.%d", secrethandling.GetSIDNamespace(actionHandler.sid), secrethandling.GetSIDName(actionHandler.sid), subsecret, rand.Int())
-	_, err := actionHandler.cacli.SECPEncrypt(string(secretDate[subsecret]), "", tmpFileName, keyID, false)
+	if _, err := actionHandler.cacli.SECPEncrypt(string(secretDate[subsecret]), "", tmpFileName, keyID, false); err != nil {
+		glog.Errorf("Encrypting subsecret '%s', sid: '%s' - error: %v", subsecret, actionHandler.sid, err)
+	}
 
 	encryptedData, err := ioutil.ReadFile(tmpFileName)
 	if err != nil {
