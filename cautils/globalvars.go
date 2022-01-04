@@ -122,13 +122,20 @@ func LoadEnvironmentVaribles() (err error) {
 	return nil
 }
 
+func AdoptClusterName(clusterName string) string {
+	return strings.ReplaceAll(clusterName, "/", "-")
+}
+
 func loadMandatoryVariables() (err error) {
 	if CA_NAMESPACE, err = testEnvironmentVarible("CA_NAMESPACE"); err != nil {
 		return err
 	}
 	if CA_CLUSTER_NAME, err = testEnvironmentVarible("CA_CLUSTER_NAME"); err != nil {
+
 		return err
 	}
+	CA_CLUSTER_NAME = AdoptClusterName(CA_CLUSTER_NAME)
+
 	if CA_POSTMAN, err = testEnvironmentVarible("CA_POSTMAN"); err != nil {
 		return err
 	}
