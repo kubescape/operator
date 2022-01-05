@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/http"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -49,7 +50,12 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 		}
 		for contIdx := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
-				websocketScanCommand.ImageHash = pod.Status.ContainerStatuses[contIdx].ImageID
+				const dockerPullableURN string = "docker-pullable://"
+				imageNameWithHash := pod.Status.ContainerStatuses[contIdx].ImageID
+				if strings.HasPrefix(imageNameWithHash, dockerPullableURN) {
+					imageNameWithHash = imageNameWithHash[len(dockerPullableURN):]
+				}
+				websocketScanCommand.ImageHash = imageNameWithHash
 			}
 		}
 		if pod != nil {
