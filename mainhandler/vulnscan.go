@@ -19,6 +19,8 @@ import (
 	"github.com/golang/glog"
 )
 
+const dockerPullableURN = "docker-pullable://"
+
 func (actionHandler *ActionHandler) scanWorkload() error {
 	pod, err := actionHandler.getPodByWLID(actionHandler.wlid)
 	if err != nil {
@@ -50,7 +52,6 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 		}
 		for contIdx := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
-				const dockerPullableURN string = "docker-pullable://"
 				imageNameWithHash := pod.Status.ContainerStatuses[contIdx].ImageID
 				if strings.HasPrefix(imageNameWithHash, dockerPullableURN) {
 					imageNameWithHash = imageNameWithHash[len(dockerPullableURN):]
