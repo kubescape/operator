@@ -195,10 +195,14 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		if ruleName == "" {
 			ruleName = "all"
 		}
-		jobTemplateObj.Name = fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
+		jobTemplateObj.Name = fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName)
 		firstArgs := []string{"scan", "framework", ruleName}
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args...)
 		jobTemplateObj.Spec.Schedule = actionHandler.command.Designators[0].Attributes["cronTabSchedule"]
+		if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
+			jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
+		}
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = actionHandler.command.JobTracking.JobID
 		_, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespaceName).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{})
 		if err != nil {
 			return err
