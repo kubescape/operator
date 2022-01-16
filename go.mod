@@ -3,12 +3,13 @@ module k8s-ca-websocket
 go 1.17
 
 require (
-	github.com/armosec/armoapi-go v0.0.40
+	github.com/armosec/armoapi-go v0.0.41
 	github.com/armosec/cacli-wrapper-go v0.0.1
-	github.com/armosec/cluster-notifier-api-go v0.0.1
+	github.com/armosec/cluster-notifier-api-go v0.0.2
 	github.com/armosec/k8s-interface v0.0.51
 	github.com/armosec/logger-go v0.0.5
-	github.com/armosec/utils-k8s-go v0.0.2
+	github.com/armosec/opa-utils v0.0.95
+	github.com/armosec/utils-k8s-go v0.0.3
 	github.com/docker/docker v20.10.11+incompatible
 	github.com/golang/glog v1.0.0
 	github.com/gorilla/mux v1.8.0
@@ -32,9 +33,10 @@ require (
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/armosec/opa-utils v0.0.13 // indirect
+	github.com/armosec/armo-interfaces v0.0.3 // indirect
+	github.com/armosec/rbac-utils v0.0.1 // indirect
 	github.com/armosec/utils-go v0.0.3 // indirect
-	github.com/aws/aws-sdk-go v1.41.1 // indirect
+	github.com/aws/aws-sdk-go v1.41.11 // indirect
 	github.com/containerd/containerd v1.5.8 // indirect
 	github.com/coreos/go-oidc v2.2.1+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -46,7 +48,7 @@ require (
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-logr/logr v0.4.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gofrs/uuid v4.0.0+incompatible // indirect
+	github.com/gofrs/uuid v4.1.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

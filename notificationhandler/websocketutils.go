@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
+	opapolicy "github.com/armosec/opa-utils/reporthandling"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/golang/glog"
@@ -34,6 +36,21 @@ func (notification *NotificationHandler) handleJsonNotification(bytesNotificatio
 
 	dst := notif.Target["dest"]
 	switch dst {
+	case "kubescape":
+		// sent by this function in dash BE: KubescapeInClusterHandler
+		// in file: httphandlerv2/posturehandler.go
+		kubescapeNotification, err := convertJsonNotification(bytesNotification)
+		if err != nil {
+			return fmt.Errorf("handleJsonNotification")
+		}
+
+		sessionOnj := cautils.NewSessionObj(&apis.Command{
+			CommandName: string(kubescapeNotification.NotificationType),
+			Designators: []armotypes.PortalDesignator{kubescapeNotification.Designators},
+			JobTracking: apis.JobTracking{JobID: kubescapeNotification.JobID},
+			Args:        map[string]interface{}{"rules": kubescapeNotification.Rules},
+		}, "WebSocket", "", kubescapeNotification.JobID, 1)
+		*notification.sessionObj <- *sessionOnj
 	case "", "safeMode":
 		safeMode, e := parseSafeModeNotification(notif.Notification)
 		if e != nil {
@@ -100,6 +117,7 @@ func initNotificationServerURL() string {
 	// q.Add(notificationserver.TargetCustomer, customerGUID)
 	// q.Add(notificationserver.TargetCluster, cautils.ClusterName)
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentLoggerValue)
+	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
 	urlObj.RawQuery = q.Encode()
 
 	return urlObj.String()
@@ -122,4 +140,26 @@ func parseSafeModeNotification(notification interface{}) (*apis.SafeMode, error)
 	}
 
 	return safeMode, nil
+}
+
+func convertJsonNotification(bytesNotification []byte) (*opapolicy.PolicyNotification, error) {
+	notification := &notificationserver.Notification{}
+	if err := json.Unmarshal(bytesNotification, notification); err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	policyNotificationBytes, ok := notification.Notification.([]byte)
+	if !ok {
+		err := fmt.Errorf("Failed converting notification to []byte")
+		glog.Error(err)
+		return nil, err
+	}
+	glog.Infof("Notification: %s", string(policyNotificationBytes))
+	policyNotification := &opapolicy.PolicyNotification{}
+	if err := json.Unmarshal(policyNotificationBytes, policyNotification); err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	return policyNotification, nil
+
 }

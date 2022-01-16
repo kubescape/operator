@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )
@@ -15,7 +14,6 @@ type NotificationHandler struct {
 	connector   IWebsocketActions
 	sessionObj  *chan cautils.SessionObj
 	safeModeObj *chan apis.SafeMode
-	k8sApi      *k8sinterface.KubernetesApi
 }
 
 func NewNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
@@ -79,7 +77,7 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 		case websocket.TextMessage, websocket.BinaryMessage:
 			err := notification.handleJsonNotification(messageBytes)
 			if err != nil {
-				break
+				glog.Errorf("failed to handle notification: %s", messageBytes)
 				// return err
 			}
 

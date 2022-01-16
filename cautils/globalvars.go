@@ -52,6 +52,11 @@ func LoadEnvironmentVaribles() (err error) {
 
 	loadMandatoryVariables()
 
+	// armo components helm chart
+	// if SystemMode == SystemModeScan {
+
+	// }
+
 	if SystemMode == SystemModeAll || SystemMode == SystemModeScan {
 		// vuln
 		if CA_VULNSCAN, err = testEnvironmentVarible("CA_VULNSCAN"); err != nil || CA_VULNSCAN == "" {
@@ -60,6 +65,11 @@ func LoadEnvironmentVaribles() (err error) {
 		} else {
 			if !strings.HasPrefix(CA_VULNSCAN, "http") {
 				CA_VULNSCAN = fmt.Sprintf("http://%s", CA_VULNSCAN)
+			}
+			if NotificationServerWSURL, err = testEnvironmentVarible("CA_NOTIFICATION_SERVER_WS"); err != nil {
+				// TODO - set default
+				glog.Errorf("CA_NOTIFICATION_SERVER_WS not set. Won't be able to run on-demand commands")
+				// return err
 			}
 		}
 	}

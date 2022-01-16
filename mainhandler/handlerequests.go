@@ -1,23 +1,30 @@
 package mainhandler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
+	"os"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
-
 	"github.com/armosec/utils-k8s-go/armometadata"
+	v1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
 	cacli "github.com/armosec/cacli-wrapper-go/cacli"
 	"github.com/armosec/k8s-interface/k8sinterface"
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
+	opapolicy "github.com/armosec/opa-utils/reporthandling"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/golang/glog"
 	"golang.org/x/sync/semaphore"
 )
@@ -157,8 +164,138 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
 		return actionHandler.scanWorkload()
+	case string(opapolicy.TypeRunKubescapeJob):
+		return actionHandler.runKubescapeJob()
+	case string(opapolicy.TypeSetKubescapeCronJob):
+		return actionHandler.setKubescapeCronJob()
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
+	}
+	return nil
+}
+
+func (actionHandler *ActionHandler) setKubescapeCronJob() error {
+	rulesList, ok := actionHandler.command.Args["rules"].([]opapolicy.PolicyIdentifier)
+	if !ok {
+		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
+	}
+	namespaceName := os.Getenv("CA_NAMESPACE")
+	configMap, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespaceName).Get(context.Background(), "kubescape-cronjob-template", metav1.GetOptions{})
+	if err != nil {
+		return err
+
+	}
+	jobTemplateBytes := configMap.BinaryData["cronjobTemplate"]
+	for ruleIdx := range rulesList {
+		jobTemplateObj := &v1.CronJob{}
+		if err := json.NewDecoder(bytes.NewReader(jobTemplateBytes)).Decode(jobTemplateObj); err != nil {
+			return err
+		}
+		ruleName := rulesList[ruleIdx].Name
+		if ruleName == "" {
+			ruleName = "all"
+		}
+		jobTemplateObj.Name = fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
+		firstArgs := []string{"scan", "framework", ruleName}
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args...)
+		jobTemplateObj.Spec.Schedule = actionHandler.command.Designators[0].Attributes["cronTabSchedule"]
+		_, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespaceName).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (actionHandler *ActionHandler) runKubescapeJob() error {
+	rulesList, ok := actionHandler.command.Args["rules"].([]opapolicy.PolicyIdentifier)
+	if !ok {
+		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
+	}
+	namespaceName := os.Getenv("CA_NAMESPACE")
+	configMap, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespaceName).Get(context.Background(), "kubescape-job-template", metav1.GetOptions{})
+	if err != nil {
+		return err
+
+	}
+	jobTemplateBytes := configMap.BinaryData["jobTemplate"]
+	for ruleIdx := range rulesList {
+		jobTemplateObj := &v1.Job{}
+		if err := json.NewDecoder(bytes.NewReader(jobTemplateBytes)).Decode(jobTemplateObj); err != nil {
+			return err
+		}
+		// inject kubescape CLI parameters into pod spec
+		ruleName := rulesList[ruleIdx].Name
+		if ruleName == "" {
+			ruleName = "all"
+		}
+		jobTemplateObj.Name = fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
+		firstArgs := []string{"scan", "framework", ruleName}
+		jobTemplateObj.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.Template.Spec.Containers[0].Args...)
+		_, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+		// watch job status
+		watchHand, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Watch(
+			context.Background(), metav1.ListOptions{FieldSelector: fmt.Sprintf("name=%s", jobTemplateObj.Name)})
+		if err != nil {
+			return err
+		}
+		timerForError := time.NewTimer(1 * time.Minute)
+		defer func() {
+			if !timerForError.Stop() {
+				<-timerForError.C
+			}
+		}()
+		watchChan := watchHand.ResultChan()
+		for {
+			var event watch.Event
+			select {
+			case event = <-watchChan:
+			case <-timerForError.C:
+				glog.Errorf("New job watch - timer signal")
+				return fmt.Errorf("timer out signal")
+			}
+			if event.Type == watch.Error {
+				glog.Errorf("New job watch chan loop error: %v", event.Object)
+				watchHand.Stop()
+				return fmt.Errorf("new job watch chan loop error: %v", event.Object)
+			}
+
+			jobTemplateObjReal, ok := event.Object.(*v1.Job)
+			if !ok {
+				glog.Errorf("New job watch - failed to convert job: %v", event)
+				continue
+			}
+			if jobTemplateObjReal.Status.Succeeded > 0 {
+				glog.Infof("job %s succeeded", jobTemplateObj.Name)
+				break
+			}
+			if jobTemplateObj.Status.Failed > 0 {
+				glog.Errorf("job %s failed", jobTemplateObj.Name)
+				// reading logs of pod
+				podList, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).List(
+					context.Background(), metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobTemplateObjReal.Name)})
+				if err != nil {
+					return fmt.Errorf("new job watch -failed to get pods: %v", err)
+				}
+				if len(podList.Items) != 1 {
+					return fmt.Errorf("new job watch - wrong number of pods: %v", len(podList.Items))
+				}
+				podLogOpts := corev1.PodLogOptions{Timestamps: true, Container: jobTemplateObjReal.Spec.Template.Spec.Containers[0].Name}
+				logsObj := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).GetLogs(podList.Items[0].Name, &podLogOpts)
+				readerObj, err := logsObj.Stream(actionHandler.k8sAPI.Context)
+				if err != nil {
+					return fmt.Errorf("failed to get pod logs stream: %v", err)
+				}
+				logs, err := io.ReadAll(readerObj)
+				if err != nil {
+					return fmt.Errorf("failed to read pod logs stream: %v", err)
+				}
+				return fmt.Errorf("job %s failed, error logs: %s", jobTemplateObjReal.Name, string(logs))
+			}
+		}
 	}
 	return nil
 }
