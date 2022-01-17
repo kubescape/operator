@@ -16,6 +16,16 @@ type NotificationHandler struct {
 	safeModeObj *chan apis.SafeMode
 }
 
+func NewTriggerHandlerNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
+	urlStr := initARMOHelmNotificationServiceURL()
+
+	return &NotificationHandler{
+		connector:   NewWebsocketActions(urlStr),
+		sessionObj:  sessionObj,
+		safeModeObj: safeModeObj,
+	}
+}
+
 func NewNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
 	urlStr := initNotificationServerURL()
 

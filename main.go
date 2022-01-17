@@ -43,9 +43,16 @@ func main() {
 	}()
 
 	// notification websocket setup
-	go func() {
+	go func() { // need to be deprecated
 		notificationHandler := notificationhandler.NewNotificationHandler(&sessionObj, &safeModeObj)
 		if err := notificationHandler.WebsocketConnection(); err != nil {
+			glog.Fatal(err)
+		}
+	}()
+
+	go func() {
+		triggerNotificationHandler := notificationhandler.NewTriggerHandlerNotificationHandler(&sessionObj, &safeModeObj)
+		if err := triggerNotificationHandler.WebsocketConnection(); err != nil {
 			glog.Fatal(err)
 		}
 	}()

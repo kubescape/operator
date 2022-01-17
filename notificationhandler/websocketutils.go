@@ -91,6 +91,36 @@ func convertBsonNotification(bytesNotification []byte) (*apis.SafeMode, error) {
 	return &safeMode, nil
 
 }
+
+func initARMOHelmNotificationServiceURL() string {
+	urlObj := url.URL{}
+	host := cautils.NotificationServerWSURL
+	if host == "" {
+		return ""
+	}
+
+	scheme := "ws"
+	if strings.HasPrefix(host, "ws://") {
+		host = strings.TrimPrefix(host, "ws://")
+		scheme = "ws"
+	} else if strings.HasPrefix(host, "wss://") {
+		host = strings.TrimPrefix(host, "wss://")
+		scheme = "wss"
+	}
+
+	urlObj.Scheme = scheme
+	urlObj.Host = host
+	urlObj.Path = notificationserver.PathWebsocketV1
+
+	q := urlObj.Query()
+	q.Add(notificationserver.TargetCustomer, cautils.ClusterConfig.CustomerGUID)
+	q.Add(notificationserver.TargetCluster, cautils.ClusterConfig.ClusterName)
+	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
+	urlObj.RawQuery = q.Encode()
+
+	return urlObj.String()
+}
+
 func initNotificationServerURL() string {
 	urlObj := url.URL{}
 	host := cautils.NotificationServerWSURL
