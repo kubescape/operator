@@ -52,7 +52,7 @@ func (wa *WebsocketActions) DefaultDialer(requestHeader http.Header) (*http.Resp
 	defer wa.mutex.Unlock()
 	conn, res, err := websocket.DefaultDialer.Dial(wa.host, nil)
 	if err != nil {
-		err = fmt.Errorf("Failed dialing to: '%s', reason: '%s'", wa.host, err.Error())
+		err = fmt.Errorf("failed dialing to: '%s', reason: '%s'", wa.host, err.Error())
 	} else {
 		wa.conn = conn
 		glog.Infof("Successfully connected websocket to '%s'", wa.host)

@@ -1,14 +1,13 @@
 package mainhandler
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -18,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/yaml"
 
 	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
 	cacli "github.com/armosec/cacli-wrapper-go/cacli"
@@ -93,7 +93,12 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
-		if sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0 {
+		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
+		switch sessionObj.Command.CommandName {
+		case string(opapolicy.TypeRunKubescapeJob), string(opapolicy.TypeSetKubescapeCronJob):
+			isToItemizeScopeCommand = false
+		}
+		if isToItemizeScopeCommand {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 			// } else if sessionObj.Command.Sid != "" {
 			// 	go mainHandler.HandleSingleRequest(&sessionObj)
@@ -163,6 +168,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.ENCRYPT, apis.DECRYPT:
 		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
+		// return nil
 		return actionHandler.scanWorkload()
 	case string(opapolicy.TypeRunKubescapeJob):
 		return actionHandler.runKubescapeJob()
@@ -185,24 +191,32 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		return err
 
 	}
-	jobTemplateBytes := configMap.BinaryData["cronjobTemplate"]
+	jobTemplateStr := configMap.Data["cronjobTemplate"]
 	for ruleIdx := range rulesList {
 		jobTemplateObj := &v1.CronJob{}
-		if err := json.NewDecoder(bytes.NewReader(jobTemplateBytes)).Decode(jobTemplateObj); err != nil {
+		if err := yaml.Unmarshal([]byte(jobTemplateStr), jobTemplateObj); err != nil {
 			return err
 		}
 		ruleName := rulesList[ruleIdx].Name
-		if ruleName == "" {
-			ruleName = "all"
+		firstArgs := []string{"scan"}
+		if ruleName != "" {
+			firstArgs = []string{"scan", "framework", ruleName}
+
 		}
-		jobTemplateObj.Name = fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName)
-		firstArgs := []string{"scan", "framework", ruleName}
+		jobTemplateObj.Name = strings.ToLower(fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName))
+		if len(jobTemplateObj.Name) > 63 {
+			jobTemplateObj.Name = jobTemplateObj.Name[:63]
+			if jobTemplateObj.Name[62] == '-' {
+				jobTemplateObj.Name = jobTemplateObj.Name[:62]
+			}
+		}
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args...)
 		jobTemplateObj.Spec.Schedule = actionHandler.command.Designators[0].Attributes["cronTabSchedule"]
 		if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 			jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 		}
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = actionHandler.command.JobTracking.JobID
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.framework"] = ruleName
 		_, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespaceName).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{})
 		if err != nil {
 			return err
@@ -222,44 +236,66 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 		return err
 
 	}
-	jobTemplateBytes := configMap.BinaryData["jobTemplate"]
+	jobTemplateStr := configMap.Data["jobTemplate"]
 	for ruleIdx := range rulesList {
 		jobTemplateObj := &v1.Job{}
-		if err := json.NewDecoder(bytes.NewReader(jobTemplateBytes)).Decode(jobTemplateObj); err != nil {
+		if err := yaml.Unmarshal([]byte(jobTemplateStr), jobTemplateObj); err != nil {
 			return err
 		}
 		// inject kubescape CLI parameters into pod spec
 		ruleName := rulesList[ruleIdx].Name
-		if ruleName == "" {
-			ruleName = "all"
+		jobTemplateObj.Name = strings.ToLower(fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID))
+		if len(jobTemplateObj.Name) > 63 {
+			jobTemplateObj.Name = jobTemplateObj.Name[:63]
+			if jobTemplateObj.Name[62] == '-' {
+				jobTemplateObj.Name = jobTemplateObj.Name[:62]
+			}
 		}
-		jobTemplateObj.Name = fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
-		firstArgs := []string{"scan", "framework", ruleName}
+		firstArgs := []string{"scan"}
+		if ruleName != "" {
+			firstArgs = []string{"scan", "framework", ruleName}
+		}
 		jobTemplateObj.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.Template.Spec.Containers[0].Args...)
+		if jobTemplateObj.Spec.Template.Annotations == nil {
+			jobTemplateObj.Spec.Template.Annotations = make(map[string]string)
+		}
+		jobTemplateObj.Spec.Template.Annotations["armo.jobid"] = actionHandler.command.JobTracking.JobID
+		jobTemplateObj.Spec.Template.Annotations["armo.framework"] = ruleName
 		_, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
 		// watch job status
 		watchHand, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Watch(
-			context.Background(), metav1.ListOptions{FieldSelector: fmt.Sprintf("name=%s", jobTemplateObj.Name)})
+			context.Background(), metav1.ListOptions{FieldSelector: fmt.Sprintf("metadata.name=%s", jobTemplateObj.Name)})
 		if err != nil {
 			return err
 		}
-		timerForError := time.NewTimer(1 * time.Minute)
+		timerForError := time.NewTimer(4 * time.Minute)
 		defer func() {
 			if !timerForError.Stop() {
 				<-timerForError.C
 			}
 		}()
 		watchChan := watchHand.ResultChan()
+		eventCount := int32(0) // ugly workaround for not reported failures
+		backoffL := int32(6)
+		if jobTemplateObj.Spec.BackoffLimit == nil {
+			jobTemplateObj.Spec.BackoffLimit = &backoffL
+		} else {
+			backoffL = *jobTemplateObj.Spec.BackoffLimit
+		}
 		for {
 			var event watch.Event
 			select {
 			case event = <-watchChan:
 			case <-timerForError.C:
 				glog.Errorf("New job watch - timer signal")
-				return fmt.Errorf("timer out signal")
+				logs, shouldReturn, returnValue := actionHandler.getJobPodLogs(namespaceName, jobTemplateObj)
+				if shouldReturn {
+					return fmt.Errorf("timer out signal, no pod logs: %v", returnValue)
+				}
+				return fmt.Errorf("timer out signal, pod logs: %s", logs)
 			}
 			if event.Type == watch.Error {
 				glog.Errorf("New job watch chan loop error: %v", event.Object)
@@ -272,36 +308,55 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 				glog.Errorf("New job watch - failed to convert job: %v", event)
 				continue
 			}
+			eventCount++
+			if jobTemplateObjReal.Status.Succeeded == 0 && jobTemplateObj.Status.Failed == 0 && jobTemplateObjReal.Status.Active == 0 {
+				jobTemplateObjReal, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Get(context.Background(), jobTemplateObjReal.Name, metav1.GetOptions{})
+				if err != nil {
+					glog.Errorf("New job watch - failed to get job: %s", jobTemplateObj.Name)
+					continue
+				}
+			}
 			if jobTemplateObjReal.Status.Succeeded > 0 {
 				glog.Infof("job %s succeeded", jobTemplateObj.Name)
 				break
-			}
-			if jobTemplateObj.Status.Failed > 0 {
+			} else if jobTemplateObjReal.Status.Failed > backoffL || eventCount > backoffL+1 {
 				glog.Errorf("job %s failed", jobTemplateObj.Name)
 				// reading logs of pod
-				podList, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).List(
-					context.Background(), metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobTemplateObjReal.Name)})
-				if err != nil {
-					return fmt.Errorf("new job watch -failed to get pods: %v", err)
+				logs, shouldReturn, returnValue := actionHandler.getJobPodLogs(namespaceName, jobTemplateObjReal)
+				if shouldReturn {
+					return returnValue
 				}
-				if len(podList.Items) != 1 {
-					return fmt.Errorf("new job watch - wrong number of pods: %v", len(podList.Items))
-				}
-				podLogOpts := corev1.PodLogOptions{Timestamps: true, Container: jobTemplateObjReal.Spec.Template.Spec.Containers[0].Name}
-				logsObj := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).GetLogs(podList.Items[0].Name, &podLogOpts)
-				readerObj, err := logsObj.Stream(actionHandler.k8sAPI.Context)
-				if err != nil {
-					return fmt.Errorf("failed to get pod logs stream: %v", err)
-				}
-				logs, err := io.ReadAll(readerObj)
-				if err != nil {
-					return fmt.Errorf("failed to read pod logs stream: %v", err)
-				}
+				glog.Errorf("job %s failed, error logs: %s", jobTemplateObjReal.Name, string(logs))
+
 				return fmt.Errorf("job %s failed, error logs: %s", jobTemplateObjReal.Name, string(logs))
+			} else {
+				glog.Errorf("job %s status unknown: %+v", jobTemplateObjReal.Name, jobTemplateObjReal.Status)
 			}
 		}
 	}
 	return nil
+}
+
+func (actionHandler *ActionHandler) getJobPodLogs(namespaceName string, jobTemplateObjReal *v1.Job) ([]byte, bool, error) {
+	podList, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).List(
+		context.Background(), metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobTemplateObjReal.Name)})
+	if err != nil {
+		return nil, true, fmt.Errorf("new job watch -failed to get pods: %v", err)
+	}
+	if len(podList.Items) < 1 {
+		return nil, true, fmt.Errorf("new job watch - wrong number of pods: %v", len(podList.Items))
+	}
+	podLogOpts := corev1.PodLogOptions{Timestamps: true, Container: jobTemplateObjReal.Spec.Template.Spec.Containers[0].Name}
+	logsObj := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).GetLogs(podList.Items[0].Name, &podLogOpts)
+	readerObj, err := logsObj.Stream(actionHandler.k8sAPI.Context)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to get pod logs stream: %v", err)
+	}
+	logs, err := io.ReadAll(readerObj)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to read pod logs stream: %v", err)
+	}
+	return logs, false, nil
 }
 
 func (actionHandler *ActionHandler) signWorkload() error {

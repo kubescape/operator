@@ -27,29 +27,44 @@ func (notification *NotificationHandler) websocketPingMessage() error {
 	}
 }
 
-func (notification *NotificationHandler) handleJsonNotification(bytesNotification []byte) error {
+func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
 	notif := &notificationserver.Notification{}
 	if err := json.Unmarshal(bytesNotification, notif); err != nil {
 		glog.Error(err)
-		return err
+		return notif, err
 	}
+	return notif, nil
+}
 
+func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
+	notif := &notificationserver.Notification{}
+	if err := bson.Unmarshal(bytesNotification, notif); err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	return notif, nil
+}
+
+func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"]
 	switch dst {
 	case "kubescape":
 		// sent by this function in dash BE: KubescapeInClusterHandler
-		// in file: httphandlerv2/posturehandler.go
-		kubescapeNotification, err := convertJsonNotification(bytesNotification)
-		if err != nil {
-			return fmt.Errorf("handleJsonNotification")
+		policyNotificationBytes, ok := notif.Notification.([]byte)
+		if !ok {
+			return fmt.Errorf("handleNotification, kubescape, failed to get policyNotificationBytes")
+		}
+		policyNotification := &opapolicy.PolicyNotification{}
+		if err := json.Unmarshal(policyNotificationBytes, policyNotification); err != nil {
+			return fmt.Errorf("handleNotification, kubescape, failed to Unmarshal: %v", err)
 		}
 
 		sessionOnj := cautils.NewSessionObj(&apis.Command{
-			CommandName: string(kubescapeNotification.NotificationType),
-			Designators: []armotypes.PortalDesignator{kubescapeNotification.Designators},
-			JobTracking: apis.JobTracking{JobID: kubescapeNotification.JobID},
-			Args:        map[string]interface{}{"rules": kubescapeNotification.Rules},
-		}, "WebSocket", "", kubescapeNotification.JobID, 1)
+			CommandName: string(policyNotification.NotificationType),
+			Designators: []armotypes.PortalDesignator{policyNotification.Designators},
+			JobTracking: apis.JobTracking{JobID: policyNotification.JobID},
+			Args:        map[string]interface{}{"rules": policyNotification.Rules},
+		}, "WebSocket", "", policyNotification.JobID, 1)
 		*notification.sessionObj <- *sessionOnj
 	case "", "safeMode":
 		safeMode, e := parseSafeModeNotification(notif.Notification)
@@ -62,33 +77,6 @@ func (notification *NotificationHandler) handleJsonNotification(bytesNotificatio
 	}
 
 	return nil
-
-}
-func convertBsonNotification(bytesNotification []byte) (*apis.SafeMode, error) {
-	notification := &notificationserver.Notification{}
-	if err := bson.Unmarshal(bytesNotification, notification); err != nil {
-		if err := json.Unmarshal(bytesNotification, notification); err != nil {
-			glog.Error(err)
-			return nil, err
-		}
-	}
-
-	safeMode := apis.SafeMode{}
-	notificationBytes, ok := notification.Notification.([]byte)
-	if !ok {
-		var err error
-		notificationBytes, err = json.Marshal(notification.Notification)
-		if err != nil {
-			return &safeMode, err
-		}
-	}
-
-	glog.Infof("Notification: %s\n", string(notificationBytes))
-	if err := json.Unmarshal(notificationBytes, &safeMode); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-	return &safeMode, nil
 
 }
 
@@ -170,26 +158,4 @@ func parseSafeModeNotification(notification interface{}) (*apis.SafeMode, error)
 	}
 
 	return safeMode, nil
-}
-
-func convertJsonNotification(bytesNotification []byte) (*opapolicy.PolicyNotification, error) {
-	notification := &notificationserver.Notification{}
-	if err := json.Unmarshal(bytesNotification, notification); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-	policyNotificationBytes, ok := notification.Notification.([]byte)
-	if !ok {
-		err := fmt.Errorf("Failed converting notification to []byte")
-		glog.Error(err)
-		return nil, err
-	}
-	glog.Infof("Notification: %s", string(policyNotificationBytes))
-	policyNotification := &opapolicy.PolicyNotification{}
-	if err := json.Unmarshal(policyNotificationBytes, policyNotification); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-	return policyNotification, nil
-
 }

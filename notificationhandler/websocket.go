@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )
@@ -85,12 +86,23 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 		}
 		switch messageType {
 		case websocket.TextMessage, websocket.BinaryMessage:
-			err := notification.handleJsonNotification(messageBytes)
-			if err != nil {
-				glog.Errorf("failed to handle notification: %s", messageBytes)
-				// return err
+			var notif *notificationserver.Notification
+			switch messageBytes[0] {
+			case '{', '[', '"':
+				notif, err = decodeJsonNotification(messageBytes)
+				if err != nil {
+					glog.Errorf("failed to handle notification as JSON: %s, %v", messageBytes, err)
+				}
+			default:
+				notif, err = decodeBsonNotification(messageBytes)
+				if err != nil {
+					glog.Errorf("failed to handle notification as BSON: %s, %v", messageBytes, err)
+				}
 			}
-
+			err := notification.handleNotification(notif)
+			if err != nil {
+				glog.Errorf("failed to handle notification: %s, %v,\t\t %v", messageBytes, err, notif)
+			}
 		case websocket.CloseMessage:
 			return fmt.Errorf("websocket closed by server, message: %s", string(messageBytes))
 		default:
