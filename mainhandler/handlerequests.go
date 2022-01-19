@@ -168,7 +168,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.ENCRYPT, apis.DECRYPT:
 		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
-		// return nil
+		return nil
 		return actionHandler.scanWorkload()
 	case string(opapolicy.TypeRunKubescapeJob):
 		return actionHandler.runKubescapeJob()
@@ -203,13 +203,9 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			firstArgs = []string{"scan", "framework", ruleName}
 
 		}
-		jobTemplateObj.Name = strings.ToLower(fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName))
-		if len(jobTemplateObj.Name) > 63 {
-			jobTemplateObj.Name = jobTemplateObj.Name[:63]
-			if jobTemplateObj.Name[62] == '-' {
-				jobTemplateObj.Name = jobTemplateObj.Name[:62]
-			}
-		}
+		jobName := fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName)
+		jobName = fixK8sNameLimit(jobName)
+		jobTemplateObj.Name = jobName
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args...)
 		jobTemplateObj.Spec.Schedule = actionHandler.command.Designators[0].Attributes["cronTabSchedule"]
 		if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
@@ -223,6 +219,23 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		}
 	}
 	return nil
+}
+
+// convert to K8s valid name, lower-case, don't end with '-', maximum 63 characters
+// https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+func fixK8sNameLimit(jobName string) string {
+	if len(jobName) > 63 {
+		jobName = jobName[:63]
+	}
+	lastIdx := len(jobName) - 1
+	for lastIdx >= 0 && jobName[lastIdx] == '-' {
+		jobName = jobName[:lastIdx]
+		lastIdx = len(jobName) - 1
+	}
+	if lastIdx == -1 {
+		jobName = "invalid name was given"
+	}
+	return strings.ToLower(jobName)
 }
 
 func (actionHandler *ActionHandler) runKubescapeJob() error {
@@ -244,13 +257,9 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 		}
 		// inject kubescape CLI parameters into pod spec
 		ruleName := rulesList[ruleIdx].Name
-		jobTemplateObj.Name = strings.ToLower(fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID))
-		if len(jobTemplateObj.Name) > 63 {
-			jobTemplateObj.Name = jobTemplateObj.Name[:63]
-			if jobTemplateObj.Name[62] == '-' {
-				jobTemplateObj.Name = jobTemplateObj.Name[:62]
-			}
-		}
+		jobName := fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
+		jobName = fixK8sNameLimit(jobName)
+		jobTemplateObj.Name = jobName
 		firstArgs := []string{"scan"}
 		if ruleName != "" {
 			firstArgs = []string{"scan", "framework", ruleName}
