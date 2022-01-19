@@ -168,7 +168,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.ENCRYPT, apis.DECRYPT:
 		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
-		return nil
+		// return nil
 		return actionHandler.scanWorkload()
 	case string(opapolicy.TypeRunKubescapeJob):
 		return actionHandler.runKubescapeJob()
