@@ -8,7 +8,7 @@ require (
 	github.com/armosec/cluster-notifier-api-go v0.0.2
 	github.com/armosec/k8s-interface v0.0.51
 	github.com/armosec/logger-go v0.0.5
-	github.com/armosec/opa-utils v0.0.95
+	github.com/armosec/opa-utils v0.0.103
 	github.com/armosec/utils-k8s-go v0.0.3
 	github.com/docker/docker v20.10.11+incompatible
 	github.com/golang/glog v1.0.0
@@ -21,6 +21,7 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	k8s.io/api v0.22.4
 	k8s.io/apimachinery v0.22.4
+	sigs.k8s.io/yaml v1.2.0
 )
 
 require (
@@ -97,5 +98,4 @@ require (
 	k8s.io/utils v0.0.0-20210819203725-bdf08cb9a70a // indirect
 	sigs.k8s.io/controller-runtime v0.10.2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
-	sigs.k8s.io/yaml v1.2.0 // indirect
 )

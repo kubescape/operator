@@ -134,8 +134,8 @@ github.com/armosec/k8s-interface v0.0.51/go.mod h1:vHxGWqD/uh6+GQb9Sqv7OGMs+Rvc2
 github.com/armosec/logger-go v0.0.5 h1:qtbbgLSJ+yadZwH1ORc6nXPOcyC5AvPY0gk78Q6xuaQ=
 github.com/armosec/logger-go v0.0.5/go.mod h1:oSoNf11Kklz0kVOezwrJtyOLIMf18cSwkXiv+gEY4hY=
 github.com/armosec/opa-utils v0.0.13/go.mod h1:E0mFTVx+4BYAVvO2hxWnIniv/IZIogRCak8BkKd7KK4=
-github.com/armosec/opa-utils v0.0.95 h1:tGFJQChy8Yn+8HhLbQHUfa6HmbrtBFBOlIgkO/9IFY8=
-github.com/armosec/opa-utils v0.0.95/go.mod h1:BNTjeianyXlflJMz3bZM0GimBWqmzirUf1whWR6Os04=
+github.com/armosec/opa-utils v0.0.103 h1:f8JI84A5+G5owk8uVewHEIBpugIEF+1LmtHvX8Dr2uk=
+github.com/armosec/opa-utils v0.0.103/go.mod h1:BNTjeianyXlflJMz3bZM0GimBWqmzirUf1whWR6Os04=
 github.com/armosec/rbac-utils v0.0.1 h1:N2MI98F/0zbDjmRZ29CNElU1AXkFLk5csd/qAHOBdXY=
 github.com/armosec/rbac-utils v0.0.1/go.mod h1:pQ8CBiij8kSKV7aeZm9FMvtZN28VgA7LZcYyTWimq40=
 github.com/armosec/utils-go v0.0.2/go.mod h1:itWmRLzRdsnwjpEOomL0mBWGnVNNIxSjDAdyc+b0iUo=

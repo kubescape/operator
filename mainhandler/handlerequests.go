@@ -95,7 +95,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		}
 		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
 		switch sessionObj.Command.CommandName {
-		case string(opapolicy.TypeRunKubescapeJob), string(opapolicy.TypeSetKubescapeCronJob):
+		case string(opapolicy.TypeRunKubescapeJob), string(opapolicy.TypeSetKubescapeCronJob), string(opapolicy.TypeDeleteKubescapeCronJob), string(opapolicy.TypeUpdateKubescapeCronJob):
 			isToItemizeScopeCommand = false
 		}
 		if isToItemizeScopeCommand {
@@ -174,13 +174,57 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.runKubescapeJob()
 	case string(opapolicy.TypeSetKubescapeCronJob):
 		return actionHandler.setKubescapeCronJob()
+	case string(opapolicy.TypeUpdateKubescapeCronJob):
+		return actionHandler.updateKubescapeCronJob()
+	case string(opapolicy.TypeDeleteKubescapeCronJob):
+		return actionHandler.deleteKubescapeCronJob()
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
 	return nil
 }
 
+func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
+	kubescapeJobParams, ok := actionHandler.command.Args["kubescapeJobParams"].(opapolicy.KubescapeJobParams)
+	if !ok {
+		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
+	}
+	namespaceName := os.Getenv("CA_NAMESPACE")
+	err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespaceName).Delete(context.Background(), kubescapeJobParams.Name, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
+	kubescapeJobParams, ok := actionHandler.command.Args["kubescapeJobParams"].(opapolicy.KubescapeJobParams)
+	if !ok {
+		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
+	}
+	namespaceName := os.Getenv("CA_NAMESPACE")
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespaceName).Get(context.Background(), kubescapeJobParams.Name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	jobName := kubescapeJobParams.Name
+	jobName = fixK8sNameLimit(jobName)
+	jobTemplateObj.Name = jobName
+	jobTemplateObj.Spec.Schedule = kubescapeJobParams.CronTabSchedule
+	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
+	}
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.updatejobid"] = actionHandler.command.JobTracking.JobID
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespaceName).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (actionHandler *ActionHandler) setKubescapeCronJob() error {
+	// TODO: use "kubescapeJobParams" instead of "rules"
 	rulesList, ok := actionHandler.command.Args["rules"].([]opapolicy.PolicyIdentifier)
 	if !ok {
 		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
@@ -239,6 +283,7 @@ func fixK8sNameLimit(jobName string) string {
 }
 
 func (actionHandler *ActionHandler) runKubescapeJob() error {
+	// TODO: use "kubescapeJobParams" instead of "rules"
 	rulesList, ok := actionHandler.command.Args["rules"].([]opapolicy.PolicyIdentifier)
 	if !ok {
 		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")

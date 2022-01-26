@@ -63,7 +63,9 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 			CommandName: string(policyNotification.NotificationType),
 			Designators: []armotypes.PortalDesignator{policyNotification.Designators},
 			JobTracking: apis.JobTracking{JobID: policyNotification.JobID},
-			Args:        map[string]interface{}{"rules": policyNotification.Rules},
+			Args: map[string]interface{}{
+				"kubescapeJobParams": policyNotification.KubescapeJobParams,
+				"rules":              policyNotification.Rules},
 		}, "WebSocket", "", policyNotification.JobID, 1)
 		*notification.sessionObj <- *sessionOnj
 	case "", "safeMode":

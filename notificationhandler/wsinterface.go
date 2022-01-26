@@ -3,6 +3,7 @@ package notificationhandler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/golang/glog"
@@ -52,10 +53,20 @@ func (wa *WebsocketActions) DefaultDialer(requestHeader http.Header) (*http.Resp
 	defer wa.mutex.Unlock()
 	conn, res, err := websocket.DefaultDialer.Dial(wa.host, nil)
 	if err != nil {
-		err = fmt.Errorf("failed dialing to: '%s', reason: '%s'", wa.host, err.Error())
-	} else {
+		if strings.Contains(err.Error(), "bad handshake") {
+			if strings.HasPrefix(wa.host, "ws://") {
+				wa.host = strings.Replace(wa.host, "ws://", "wss://", 1)
+			} else if strings.HasPrefix(wa.host, "wss://") {
+				wa.host = strings.Replace(wa.host, "wss://", "ws://", 1)
+			}
+			conn, res, err = websocket.DefaultDialer.Dial(wa.host, nil)
+		}
+	}
+	if err == nil {
 		wa.conn = conn
 		glog.Infof("Successfully connected websocket to '%s'", wa.host)
+	} else {
+		err = fmt.Errorf("failed dialing to: '%s', reason: '%s'", wa.host, err.Error())
 	}
 	return res, err
 }
