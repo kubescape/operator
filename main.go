@@ -13,6 +13,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
+	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
 	"github.com/golang/glog"
@@ -35,7 +36,7 @@ func main() {
 	sessionObj := make(chan cautils.SessionObj)
 	safeModeObj := make(chan apis.SafeMode)
 	k8sApi := k8sinterface.NewKubernetesApi()
-
+	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 	// Websocket
 	go func() {
 		websocketHandler := websocket.NewWebsocketHandler(&sessionObj)
