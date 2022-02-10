@@ -242,15 +242,11 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 		ruleName := rulesList[ruleIdx].Name
-		firstArgs := []string{"scan"}
-		if ruleName != "" {
-			firstArgs = []string{"scan", "framework", ruleName}
 
-		}
 		jobName := fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName)
 		jobName = fixK8sNameLimit(jobName)
 		jobTemplateObj.Name = jobName
-		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args...)
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = combineKubescapeCMDArgsWithFrameworkName(ruleName, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args)
 		jobTemplateObj.Spec.Schedule = actionHandler.command.Designators[0].Attributes["cronTabSchedule"]
 		if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 			jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
@@ -263,6 +259,19 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		}
 	}
 	return nil
+}
+
+func combineKubescapeCMDArgsWithFrameworkName(frameworkName string, currentArgs []string) []string {
+	kubescapeScanCMDToken := "scan"
+	kubescapeFrameworkCMDToken := "framework"
+	for len(currentArgs) > 0 && !strings.HasPrefix(currentArgs[0], "-") {
+		currentArgs = currentArgs[1:]
+	}
+	firstArgs := []string{kubescapeScanCMDToken}
+	if frameworkName != "" {
+		firstArgs = []string{kubescapeScanCMDToken, kubescapeFrameworkCMDToken, frameworkName}
+	}
+	return append(firstArgs, currentArgs...)
 }
 
 // convert to K8s valid name, lower-case, don't end with '-', maximum 63 characters
@@ -305,11 +314,8 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 		jobName := fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
 		jobName = fixK8sNameLimit(jobName)
 		jobTemplateObj.Name = jobName
-		firstArgs := []string{"scan"}
-		if ruleName != "" {
-			firstArgs = []string{"scan", "framework", ruleName}
-		}
-		jobTemplateObj.Spec.Template.Spec.Containers[0].Args = append(firstArgs, jobTemplateObj.Spec.Template.Spec.Containers[0].Args...)
+
+		jobTemplateObj.Spec.Template.Spec.Containers[0].Args = combineKubescapeCMDArgsWithFrameworkName(ruleName, jobTemplateObj.Spec.Template.Spec.Containers[0].Args)
 		if jobTemplateObj.Spec.Template.Annotations == nil {
 			jobTemplateObj.Spec.Template.Annotations = make(map[string]string)
 		}
