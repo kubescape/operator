@@ -170,7 +170,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.runSecretCommand(sessionObj)
 	case apis.SCAN:
 		// return nil
-		return actionHandler.scanWorkload()
+		return actionHandler.scanWorkload(sessionObj)
 	case string(opapolicy.TypeRunKubescapeJob):
 		return actionHandler.runKubescapeJob()
 	case string(opapolicy.TypeSetKubescapeCronJob):

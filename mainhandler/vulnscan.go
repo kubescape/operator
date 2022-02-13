@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/strings/slices"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	uuid "github.com/satori/go.uuid"
@@ -21,7 +22,8 @@ import (
 
 const dockerPullableURN = "docker-pullable://"
 
-func (actionHandler *ActionHandler) scanWorkload() error {
+func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj) error {
+
 	pod, err := actionHandler.getPodByWLID(actionHandler.wlid)
 	if err != nil {
 		glog.Errorf("scanning might fail if some images require credentials")
@@ -33,6 +35,7 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 	if err != nil {
 		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
+
 	// we want running pod in order to have the image hash
 	actionHandler.getRunningPodDescription(pod)
 
@@ -44,12 +47,15 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 			Wlid:          actionHandler.wlid,
 			ImageTag:      containers[i].image,
 			ContainerName: containers[i].container,
+			Session:       apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 		}
 		if actionHandler.reporter != nil {
-			websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
-			websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-			websocketScanCommand.JobID = uuid.NewV4().String()
+
+			prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
+
 			glog.Infof("wlid: %s  container: %s image: %s jobids: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID)
+
+			glog.Infof("wlid: %s  container: %s image: %s session: %v", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, websocketScanCommand.Session)
 
 			if websocketScanCommand.ParentJobID != actionHandler.command.JobTracking.ParentID {
 				glog.Errorf("websocket command parent: %v child: %v VS actionhandler.command parent: %v child %v\n", websocketScanCommand.ParentJobID, websocketScanCommand.JobID, actionHandler.command.JobTracking.ParentID, actionHandler.command.JobTracking.JobID)
@@ -92,6 +98,32 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 		return fmt.Errorf(errs)
 	}
 	return nil
+}
+
+func prepareSessionChain(sessionObj *cautils.SessionObj, websocketScanCommand *apis.WebsocketScanCommand, actionHandler *ActionHandler) {
+	sessParentJobId := sessionObj.Reporter.GetParentAction()
+	if sessParentJobId != "" {
+		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, sessParentJobId)
+		websocketScanCommand.Session.RootJobID = sessParentJobId
+	}
+	sessJobID := sessionObj.Reporter.GetJobID()
+	if websocketScanCommand.Session.RootJobID == "" {
+		websocketScanCommand.Session.RootJobID = sessJobID
+	}
+	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, sessJobID)
+
+	if actionHandler.reporter.GetParentAction() != "" && !slices.Contains(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetParentAction()) {
+		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetParentAction())
+	}
+
+	if actionHandler.reporter.GetJobID() != "" && !slices.Contains(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetJobID()) {
+		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetJobID())
+	}
+
+	websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
+	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
+	websocketScanCommand.JobID = uuid.NewV4().String()
+	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
 }
 
 // func (actionHandler *ActionHandler) scanWorkload() error {
