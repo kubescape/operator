@@ -92,6 +92,10 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 				notif, err = decodeJsonNotification(messageBytes)
 				if err != nil {
 					glog.Errorf("failed to handle notification as JSON: %s, %v", messageBytes, err)
+					notif, err = decodeBsonNotification(messageBytes)
+					if err != nil {
+						glog.Errorf("failed to handle notification as BSON: %s, %v", messageBytes, err)
+					}
 				}
 			default:
 				notif, err = decodeBsonNotification(messageBytes)
