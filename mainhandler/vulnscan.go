@@ -49,6 +49,11 @@ func (actionHandler *ActionHandler) scanWorkload() error {
 			websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
 			websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
 			websocketScanCommand.JobID = uuid.NewV4().String()
+			glog.Infof("wlid: %s  container: %s image: %s jobids: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID)
+
+			if websocketScanCommand.ParentJobID != actionHandler.command.JobTracking.ParentID {
+				glog.Errorf("websocket command parent: %v child: %v VS actionhandler.command parent: %v child %v\n", websocketScanCommand.ParentJobID, websocketScanCommand.JobID, actionHandler.command.JobTracking.ParentID, actionHandler.command.JobTracking.JobID)
+			}
 		}
 		for contIdx := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {

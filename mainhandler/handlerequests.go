@@ -118,8 +118,9 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	}
 
 	status := "SUCCESS"
-	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
 
+	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
+	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
 	actionHandler.reporter.SendAction(sessionObj.Command.CommandName, true)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
@@ -441,6 +442,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 		glog.Errorf("Received empty id")
 		return
 	}
+	fmt.Printf("HandleScopedRequest: %v\n", sessionObj.Command.JobTracking)
 
 	namespaces := make([]string, 0, 1)
 	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
@@ -521,7 +523,7 @@ func (mainHandler *MainHandler) GetIDs(namespaces []string, labels, fields map[s
 			continue
 		}
 		w, e := mainHandler.GetResourcesIDs(workloads)
-		if len(errs) != 0 {
+		if len(e) != 0 {
 			errs = append(errs, e...)
 		}
 		if len(w) == 0 {
