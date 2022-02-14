@@ -6,7 +6,9 @@ import (
 	"io"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
+	"math/rand"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -44,6 +46,16 @@ type ActionHandler struct {
 	sid             string
 	command         apis.Command
 	signerSemaphore *semaphore.Weighted
+}
+
+var k8sNamesRegex *regexp.Regexp
+
+func init() {
+	var err error
+	k8sNamesRegex, err = regexp.Compile("[^A-Za-z0-9-]+")
+	if err != nil {
+		glog.Fatal(err)
+	}
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -209,7 +221,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	}
 
 	jobName := kubescapeJobParams.Name
-	jobName = fixK8sNameLimit(jobName)
+	jobName = fixK8sCronJobNameLimit(jobName)
 	jobTemplateObj.Name = jobName
 	jobTemplateObj.Spec.Schedule = kubescapeJobParams.CronTabSchedule
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
@@ -244,7 +256,12 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		ruleName := rulesList[ruleIdx].Name
 
 		jobName := fmt.Sprintf("%s-%s", jobTemplateObj.Name, ruleName)
-		jobName = fixK8sNameLimit(jobName)
+		jobName = fixK8sCronJobNameLimit(jobName)
+		if !strings.Contains(jobName, ruleName) {
+			rndInt := rand.NewSource(time.Now().UnixNano()).Int63()
+			jobName = fmt.Sprintf("%s-%d-%s", jobTemplateObj.Name, rndInt, ruleName)
+			jobName = fixK8sCronJobNameLimit(jobName)
+		}
 		jobTemplateObj.Name = jobName
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args = combineKubescapeCMDArgsWithFrameworkName(ruleName, jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args)
 		jobTemplateObj.Spec.Schedule = actionHandler.command.Designators[0].Attributes["cronTabSchedule"]
@@ -274,11 +291,19 @@ func combineKubescapeCMDArgsWithFrameworkName(frameworkName string, currentArgs 
 	return append(firstArgs, currentArgs...)
 }
 
-// convert to K8s valid name, lower-case, don't end with '-', maximum 63 characters
+func fixK8sCronJobNameLimit(jobName string) string {
+	return fixK8sNameLimit(jobName, 52)
+}
+
+func fixK8sJobNameLimit(jobName string) string {
+	return fixK8sNameLimit(jobName, 63)
+}
+
+// convert to K8s valid name, lower-case, don't end with '-', maximum X characters
 // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
-func fixK8sNameLimit(jobName string) string {
-	if len(jobName) > 63 {
-		jobName = jobName[:63]
+func fixK8sNameLimit(jobName string, nameLimit int) string {
+	if len(jobName) > nameLimit {
+		jobName = jobName[:nameLimit]
 	}
 	lastIdx := len(jobName) - 1
 	for lastIdx >= 0 && jobName[lastIdx] == '-' {
@@ -288,6 +313,7 @@ func fixK8sNameLimit(jobName string) string {
 	if lastIdx == -1 {
 		jobName = "invalid name was given"
 	}
+	jobName = k8sNamesRegex.ReplaceAllString(jobName, "-")
 	return strings.ToLower(jobName)
 }
 
@@ -312,7 +338,12 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 		// inject kubescape CLI parameters into pod spec
 		ruleName := rulesList[ruleIdx].Name
 		jobName := fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
-		jobName = fixK8sNameLimit(jobName)
+		jobName = fixK8sJobNameLimit(jobName)
+		if !strings.Contains(jobName, ruleName) {
+			rndInt := rand.NewSource(time.Now().UnixNano()).Int63()
+			jobName = fmt.Sprintf("%s-%d-%s", jobTemplateObj.Name, rndInt, ruleName)
+			jobName = fixK8sJobNameLimit(jobName)
+		}
 		jobTemplateObj.Name = jobName
 
 		jobTemplateObj.Spec.Template.Spec.Containers[0].Args = combineKubescapeCMDArgsWithFrameworkName(ruleName, jobTemplateObj.Spec.Template.Spec.Containers[0].Args)
