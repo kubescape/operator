@@ -115,13 +115,13 @@ github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e/go.mod h1:3U/XgcO3hC
 github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5doyWs3UAsr3K4I6qtAmlQcZDesFNEHPZAzj8=
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/armosec/armo-interfaces v0.0.3 h1:kG4mJIPgWBJvQFDDy8JzdqX3ASbyl8t32IuJYqB31Pk=
 github.com/armosec/armo-interfaces v0.0.3/go.mod h1:7XYefhcBCFYoF5LflCZHWuUHu+JrSJbmzk0zoNv2WlU=
 github.com/armosec/armoapi-go v0.0.2/go.mod h1:vIK17yoKbJRQyZXWWLe3AqfqCRITxW8qmSkApyq5xFs=
 github.com/armosec/armoapi-go v0.0.7/go.mod h1:iaVVGyc23QGGzAdv4n+szGQg3Rbpixn9yQTU3qWRpaw=
 github.com/armosec/armoapi-go v0.0.8/go.mod h1:iaVVGyc23QGGzAdv4n+szGQg3Rbpixn9yQTU3qWRpaw=
-github.com/armosec/armoapi-go v0.0.41 h1:iMkaCsME+zhE6vnCOMaqfqc0cp7pste8QFHojeGKfGg=
 github.com/armosec/armoapi-go v0.0.41/go.mod h1:exk1O3rK6V+X8SSyxc06lwb0j9ILQuKAoIdz9hs6Ndw=
+github.com/armosec/armoapi-go v0.0.53 h1:tsyPwOKRN+Z/1ya+pcFXWqkcIgeZyz5ijheCmnsPM18=
+github.com/armosec/armoapi-go v0.0.53/go.mod h1:iaVVGyc23QGGzAdv4n+szGQg3Rbpixn9yQTU3qWRpaw=
 github.com/armosec/cacli-wrapper-go v0.0.1 h1:8SiMhiBO/CULE+46ArQdK1dYqxa0JnfDqj9bs9Rrp3Q=
 github.com/armosec/cacli-wrapper-go v0.0.1/go.mod h1:PqVYpN55eZuG6Wu2ymr0jlTUlJGlXaZQv1WxulgZrqY=
 github.com/armosec/cluster-notifier-api-go v0.0.2 h1:ZTykqRNV4yt8JPXwLLU/hlkAeruzdff9Y4U6bxy+GGc=
