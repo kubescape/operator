@@ -41,6 +41,13 @@ func getWorkloadImages(k8sAPI *k8sinterface.KubernetesApi, wlid string) ([]Conta
 	for i := range containers {
 		containersData = append(containersData, ContainerData{image: containers[i].Image, container: containers[i].Name})
 	}
+	initContainers, err := workload.GetInitContainers()
+	if err != nil {
+		return containersData, err
+	}
+	for i := range initContainers {
+		containersData = append(containersData, ContainerData{image: initContainers[i].Image, container: initContainers[i].Name})
+	}
 
 	return containersData, nil
 
