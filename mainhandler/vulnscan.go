@@ -12,7 +12,7 @@ import (
 	"k8s.io/utils/strings/slices"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-	uuid "github.com/satori/go.uuid"
+	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/cloudsupport"
@@ -122,7 +122,7 @@ func prepareSessionChain(sessionObj *cautils.SessionObj, websocketScanCommand *a
 
 	websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
 	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-	websocketScanCommand.JobID = uuid.NewV4().String()
+	websocketScanCommand.JobID = uuid.NewString()
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
 }
 
