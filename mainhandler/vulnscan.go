@@ -7,6 +7,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"net/http"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
@@ -225,6 +226,12 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
+	refusedNum := 0
+	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = client.Do(req) {
+		glog.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
+		time.Sleep(5 * time.Second)
+		refusedNum++
+	}
 	if err != nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 	}
