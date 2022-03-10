@@ -1,18 +1,17 @@
-FROM alpine:3.15
 # FROM python:3.8.0-alpine
+FROM alpine:3.15
 
-RUN apk update
-RUN apk add ca-certificates 
+FROM scratch
 
-# RUN pip3 install --upgrade pip
-# RUN pip3 install -U cacli --index-url https://carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
-
-RUN mkdir .ca && chmod -R 777 .ca
+COPY --from=0 /etc/ssl/certs /etc/ssl/certs
+ 
+# RUN mkdir .ca && chmod -R 777 .ca
 
 # COPY ./dist /.
 COPY ./k8s-ca-websocket . 
+COPY ./build_date.txt . 
 
 COPY ./build_number.txt /
 
-RUN echo $(date -u) > ./build_date.txt
+# RUN echo $(date -u) > ./build_date.txt
 ENTRYPOINT ["./k8s-ca-websocket"]

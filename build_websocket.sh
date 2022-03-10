@@ -2,13 +2,15 @@
 set -ex
 
 # export ITAG=latest
-export WTAG=test
+export WTAG=v0.0.0
 
 # dep ensure
 CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o k8s-ca-websocket .
 chmod +x k8s-ca-websocket
- 
-docker build --no-cache -f Dockerfile.test -t quay.io/armosec/k8s-ca-websocket-ubi:$WTAG .
+
+echo $(date -u) > ./build_date.txt
+
+docker build --no-cache -f Dockerfile -t quay.io/armosec/k8s-ca-websocket-ubi:$WTAG .
 rm -rf k8s-ca-websocket
 # docker push quay.io/armosec/k8s-ca-websocket-ubi:$WTAG
  

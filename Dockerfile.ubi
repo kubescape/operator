@@ -1,0 +1,17 @@
+FROM registry.access.redhat.com/ubi8/ubi
+
+LABEL description="Armo control panel connector image - this image is part of the CyberArmor operator deployment and it is not meant to be used alone"
+LABEL name="Armo control panel connector"
+LABEL summary="Armo control panel connector image"
+LABEL vendor="Armo Ltd."
+
+RUN yum update -y && yum install -y python3 && pip3 install --upgrade pip
+RUN pip3 install -U cacli --index-url https://carepo.system.cyberarmorsoft.com/repository/cyberarmor-pypi-dev.group/simple
+
+RUN mkdir .ca && chmod -R 777 .ca
+
+COPY ./dist /.
+COPY ./build_number.txt /
+
+RUN echo $(date -u) > /tmp/build_date.txt
+ENTRYPOINT ["./k8s-ca-websocket"]
