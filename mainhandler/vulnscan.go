@@ -46,7 +46,7 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 			websocketScanCommand := &apis.WebsocketScanCommand{
 				ImageTag: repository + ":" + tag,
 				Session:  apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
-				Args:     map[string]interface{}{"registryName": 0},
+				Args:     map[string]interface{}{"registryName": sessionObj.Command.Args["registryName"]},
 			}
 			if auth != nil {
 				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, *auth)
