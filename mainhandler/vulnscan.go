@@ -7,13 +7,14 @@ import (
 	"k8s-ca-websocket/cautils"
 	"net/http"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
 
-	pkgwlid "github.com/armosec/utils-k8s-go/wid"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/docker/docker/api/types"
-	uuid "github.com/satori/go.uuid"
+	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/cloudsupport"
@@ -243,7 +244,7 @@ func prepareSessionChain(sessionObj *cautils.SessionObj, websocketScanCommand *a
 
 	websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
 	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-	websocketScanCommand.JobID = uuid.NewV4().String()
+	websocketScanCommand.JobID = uuid.NewString()
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
 }
 
@@ -349,6 +350,12 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
+	refusedNum := 0
+	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = client.Do(req) {
+		glog.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
+		time.Sleep(5 * time.Second)
+		refusedNum++
+	}
 	if err != nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 	}
