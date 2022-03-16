@@ -124,7 +124,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	// FALLBACK
 	sidFallback(sessionObj)
 
-	if sessionObj.Command.GetID() == "" {
+	if sessionObj.Command.CommandName != apis.SCAN_REGISTRY && sessionObj.Command.GetID() == "" {
 		glog.Errorf("Received empty id")
 		return
 	}
@@ -183,6 +183,9 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.SCAN:
 		// return nil
 		return actionHandler.scanWorkload(sessionObj)
+	case apis.SCAN_REGISTRY:
+		// return nil
+		return actionHandler.scanRegistry(sessionObj)
 	case string(opapolicy.TypeRunKubescapeJob):
 		return actionHandler.runKubescapeJob()
 	case string(opapolicy.TypeSetKubescapeCronJob):

@@ -11,7 +11,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
 
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	pkgwlid "github.com/armosec/utils-k8s-go/wid"
+	"github.com/docker/docker/api/types"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -21,6 +22,126 @@ import (
 )
 
 const dockerPullableURN = "docker-pullable://"
+
+func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) error {
+
+	var err error
+	for _, webSocketScanCMD := range webSocketScanCMDList {
+		err = sendWorkloadToVulnerabilityScanner(webSocketScanCMD)
+		if err != nil {
+			glog.Infof("sendWorkloadToVulnerabilityScanner failed with err %v", err)
+		}
+	}
+	return nil
+}
+
+func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, auth *types.AuthConfig) ([]*apis.WebsocketScanCommand, error) {
+
+	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
+
+	for repository, tags := range images {
+		for _, tag := range tags {
+			glog.Info("image ", repository+":"+tag)
+			websocketScanCommand := &apis.WebsocketScanCommand{
+				ImageTag: repository + ":" + tag,
+				Session:  apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+				Args:     map[string]interface{}{"registryName": 0},
+			}
+			if auth != nil {
+				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, *auth)
+			}
+			webSocketScanCMDList = append(webSocketScanCMDList, websocketScanCommand)
+		}
+	}
+
+	return webSocketScanCMDList, nil
+}
+
+func decryptAuth(auth types.AuthConfig) types.AuthConfig {
+	return auth
+}
+
+func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
+
+	username := ""
+	password := ""
+	innerAuth := ""
+	identityToken := ""
+	registryToken := ""
+
+	if _, ok := Args["username"]; ok {
+		username = Args["username"].(string)
+	}
+	if _, ok := Args["password"]; ok {
+		password = Args["password"].(string)
+	}
+	if _, ok := Args["auth"]; ok {
+		innerAuth = Args["auth"].(string)
+	}
+	if _, ok := Args["identityToken"]; ok {
+		identityToken = Args["identityToken"].(string)
+	}
+	if _, ok := Args["registryToken"]; ok {
+		registryToken = Args["registryToken"].(string)
+	}
+
+	auth := types.AuthConfig{
+		Username:      username,
+		Password:      password,
+		Auth:          innerAuth,
+		IdentityToken: identityToken,
+		RegistryToken: registryToken,
+	}
+
+	decrypt_auth := decryptAuth(auth)
+	return decrypt_auth, nil
+}
+
+func (actionHandler *ActionHandler) scanRegistry(sessionObj *cautils.SessionObj) error {
+
+	/*
+		1. collect input
+		2. get images list from the registry
+		3. convert image list to vuln scan data command
+		4. iterate over list and send to vuln scan by ram max size
+	*/
+
+	//// 1. collect input
+	var err error
+	if _, ok := sessionObj.Command.Args["registryName"]; !ok {
+		glog.Infof("no registry supplied for scan")
+		return fmt.Errorf("no registry supplied for scan")
+	}
+	glog.Infof("in scanRegistry %v", sessionObj.Command.Args["registryName"])
+	auth, err := decryptSecretsData(sessionObj.Command.Args)
+	if err != nil {
+		glog.Infof("decryptSecretsData failed with err %v", err)
+		return err
+	}
+
+	//// 2. get images list from the registry
+	images, err := ListImagesInRegistry(sessionObj.Command.Args["registryName"].(string), &auth)
+	if err != nil {
+		glog.Infof("ListImagesInRegistry failed with err %v", err)
+		return err
+	}
+
+	//// 3. convert image list to vuln scan data command
+	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(images, sessionObj, &auth)
+	if err != nil {
+		glog.Infof("convertImagesToWebsocketScanCommand failed with err %v", err)
+		return err
+	}
+
+	//// 4. iterate over list and send to vuln scan by ram max size
+	err = sendAllImagesToVulnScan(webSocketScanCMDList)
+	if err != nil {
+		glog.Infof("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
+		return err
+	}
+
+	return nil
+}
 
 func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj) error {
 
@@ -209,7 +330,10 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 		return err
 	}
 	pathScan := fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
-	hasCreds := websocketScanCommand.Credentials != nil && len(websocketScanCommand.Credentials.Username) > 0 && len(websocketScanCommand.Credentials.Password) > 0
+
+	creds := websocketScanCommand.Credentials
+	credsList := websocketScanCommand.Credentialslist
+	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
 	glog.Infof("requesting scan. url: %s wlid: %s image: %s with credentials: %v", pathScan, websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds)
 
 	req, err := http.NewRequest("POST", pathScan, bytes.NewBuffer(jsonScannerC))

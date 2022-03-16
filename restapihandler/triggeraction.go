@@ -11,6 +11,25 @@ import (
 	"github.com/golang/glog"
 )
 
+/*args may contain credantials*/
+func displayRecieveCommand(receivedCommands []byte) {
+
+	var err error
+	var receivedCommandsWithNoArgs []byte
+	commands := apis.Commands{}
+	if err = json.Unmarshal(receivedCommands, &commands); err != nil {
+		return
+	}
+	for i, _ := range commands.Commands {
+		commands.Commands[i].Args = map[string]interface{}{}
+	}
+
+	if receivedCommandsWithNoArgs, err = json.Marshal(commands); err != nil {
+		return
+	}
+	glog.Infof("restAPI receivedCommands: %s", receivedCommandsWithNoArgs)
+}
+
 // HandlePostmanRequest Parse received commands and run the command
 func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) error {
 	commands := apis.Commands{}
@@ -18,7 +37,8 @@ func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) err
 		glog.Error(err)
 		return err
 	}
-	glog.Infof("restAPI receivedCommands: %s", receivedCommands)
+
+	displayRecieveCommand(receivedCommands)
 	for _, c := range commands.Commands {
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
