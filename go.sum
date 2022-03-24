@@ -160,8 +160,8 @@ github.com/armosec/cluster-notifier-api-go v0.0.2/go.mod h1:7J+XboqvPNAPABtkH2ec
 github.com/armosec/k8s-interface v0.0.5/go.mod h1:xxS+V5QT3gVQTwZyAMMDrYLWGrfKOpiJ7Jfhfa0w9sM=
 github.com/armosec/k8s-interface v0.0.8/go.mod h1:xxS+V5QT3gVQTwZyAMMDrYLWGrfKOpiJ7Jfhfa0w9sM=
 github.com/armosec/k8s-interface v0.0.50/go.mod h1:vHxGWqD/uh6+GQb9Sqv7OGMs+Rvc2dsFVc0XtgRh1ZU=
-github.com/armosec/k8s-interface v0.0.66 h1:weHbg9AIOZxOzWdkeBZHV6hjORiKmr8K5tsaoT01JFI=
-github.com/armosec/k8s-interface v0.0.66/go.mod h1:vwprS8qn/iowd5yf0JHpqDsLA5I8W2muqX9AxKhkb0Q=
+github.com/armosec/k8s-interface v0.0.68 h1:6CtSakISiI47YHkxh+Va9FzZQIBkWa6g9sbiNxq1Zkk=
+github.com/armosec/k8s-interface v0.0.68/go.mod h1:PeWn41C2uenZi+xfZdyFF/zG5wXACA00htQyknDUWDE=
 github.com/armosec/logger-go v0.0.5 h1:qtbbgLSJ+yadZwH1ORc6nXPOcyC5AvPY0gk78Q6xuaQ=
 github.com/armosec/logger-go v0.0.5/go.mod h1:oSoNf11Kklz0kVOezwrJtyOLIMf18cSwkXiv+gEY4hY=
 github.com/armosec/opa-utils v0.0.13/go.mod h1:E0mFTVx+4BYAVvO2hxWnIniv/IZIogRCak8BkKd7KK4=
