@@ -17,9 +17,7 @@ WORKDIR /home/ws/
 
 COPY --from=0 /etc/ssl/certs /etc/ssl/certs
 COPY --from=0 /tmp /tmp
-
-# COPY ./k8s-ca-websocket . 
-
+COPY ./dist /.
 COPY ./build_number.txt /
 
 ENTRYPOINT ["./k8s-ca-websocket"]
