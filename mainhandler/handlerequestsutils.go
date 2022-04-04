@@ -3,12 +3,16 @@ package mainhandler
 import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
+	"net/http"
 	"strings"
+	"time"
 
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
+	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/utils-k8s-go/probes"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 
 	"github.com/armosec/k8s-interface/k8sinterface"
@@ -135,4 +139,42 @@ func jobStatus(commandName string) string {
 		return reporterlib.JobSuccess
 	}
 	return reporterlib.JobDone
+}
+
+func notWaitAtAll() {
+	return
+}
+
+func isActionNeedToWait(action apis.Command) WaitFunc {
+	if f, ok := actionNeedToBeWaitOnStartUp[action.CommandName]; ok {
+		return f
+	}
+	return notWaitAtAll
+}
+
+func waitTillVulnScanReady() {
+	var client = http.Client{}
+
+	for {
+		timer := time.NewTimer(time.Duration(1) * time.Minute)
+		<-timer.C
+		glog.Info("waitTillVulnScanReady: wait for vuln scan to be ready")
+		url := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
+		req, err := http.NewRequest("HEAD", url, nil)
+		if err != nil {
+			glog.Warning("waitTillVulnScanReady: failed to create http req with err %v", err)
+			continue
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			glog.Info("waitTillVulnScanReady: return responce with err %v", err)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
+			glog.Info("waitTillVulnScanReady: vuln scan is ready")
+			break
+		}
+
+	}
 }

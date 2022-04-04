@@ -48,7 +48,10 @@ type ActionHandler struct {
 	signerSemaphore *semaphore.Weighted
 }
 
+type WaitFunc func()
+
 var k8sNamesRegex *regexp.Regexp
+var actionNeedToBeWaitOnStartUp = map[string]WaitFunc{}
 
 func init() {
 	var err error
@@ -56,6 +59,8 @@ func init() {
 	if err != nil {
 		glog.Fatal(err)
 	}
+
+	actionNeedToBeWaitOnStartUp[apis.SCAN] = waitTillVulnScanReady
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -582,7 +587,11 @@ func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
 	time.Sleep(2 * time.Second) // wait for master to start listenning to the channel
 
 	for i := range actions {
-		sessionObj := cautils.NewSessionObj(&actions[i], "Websocket", "", "", 1)
-		*mainHandler.sessionObj <- *sessionObj
+		waitFunc := isActionNeedToWait(actions[i])
+		go func() {
+			waitFunc()
+			sessionObj := cautils.NewSessionObj(&actions[i], "Websocket", "", "", 1)
+			*mainHandler.sessionObj <- *sessionObj
+		}()
 	}
 }
