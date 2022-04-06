@@ -20,6 +20,12 @@ import (
 )
 
 var IgnoreCommandInNamespace = map[string][]string{}
+var vulnScanProbeDefaultClient = http.DefaultClient
+var vulnScanProbeTriggerTimer *time.Timer
+
+func init() {
+	vulnScanProbeTriggerTimer = time.NewTimer(time.Duration(1) * time.Minute)
+}
 
 func InitIgnoreCommandInNamespace() {
 	if len(IgnoreCommandInNamespace) != 0 {
@@ -153,11 +159,9 @@ func isActionNeedToWait(action apis.Command) WaitFunc {
 }
 
 func waitTillVulnScanReady() {
-	var client = http.Client{}
-
 	for {
-		timer := time.NewTimer(time.Duration(1) * time.Minute)
-		<-timer.C
+		vulnScanProbeTriggerTimer.Reset(time.Duration(1) * time.Second)
+		<-vulnScanProbeTriggerTimer.C
 		glog.Info("waitTillVulnScanReady: wait for vuln scan to be ready")
 		url := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
 		req, err := http.NewRequest("HEAD", url, nil)
@@ -165,7 +169,7 @@ func waitTillVulnScanReady() {
 			glog.Warning("waitTillVulnScanReady: failed to create http req with err %v", err)
 			continue
 		}
-		resp, err := client.Do(req)
+		resp, err := vulnScanProbeDefaultClient.Do(req)
 		if err != nil {
 			glog.Info("waitTillVulnScanReady: return responce with err %v", err)
 			continue
