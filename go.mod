@@ -2,6 +2,8 @@ module k8s-ca-websocket
 
 go 1.17
 
+replace github.com/armosec/armoapi-go => /home/raziel/cyberarmor/caaprojs/go/src/armoapi-go
+
 require (
 	github.com/armosec/armoapi-go v0.0.60
 	github.com/armosec/cacli-wrapper-go v0.0.1
@@ -16,6 +18,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
+	github.com/mitchellh/mapstructure v1.4.3
 	github.com/robfig/cron v1.2.0
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
