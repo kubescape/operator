@@ -59,7 +59,6 @@ func (actionHandler *ActionHandler) updateWorkload(workload k8sinterface.IWorklo
 }
 
 func (actionHandler *ActionHandler) updatePod(workload k8sinterface.IWorkload) error {
-	glog.Infof("in updatePod")
 	var err error
 	maxTime := float64(360) // wait for 3 minutes
 	timer := float64(0)

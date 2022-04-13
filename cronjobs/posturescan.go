@@ -23,7 +23,6 @@ func PostureScanCronJob() {
 		}
 	}
 
-	glog.Infof("starting to run posture scans")
 	for _, framework := range frameworks {
 		go func(framework string) {
 			glog.Infof("running %v framework posture scan on cluster", framework)

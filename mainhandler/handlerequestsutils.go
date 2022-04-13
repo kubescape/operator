@@ -162,21 +162,20 @@ func waitTillVulnScanReady() {
 	for {
 		vulnScanProbeTriggerTimer.Reset(time.Duration(1) * time.Second)
 		<-vulnScanProbeTriggerTimer.C
-		glog.Info("waitTillVulnScanReady: wait for vuln scan to be ready")
 		url := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
 		req, err := http.NewRequest("HEAD", url, nil)
 		if err != nil {
-			glog.Warning("waitTillVulnScanReady: failed to create http req with err %v", err)
+			glog.Warning("failed to create http req with err %v", err)
 			continue
 		}
 		resp, err := vulnScanProbeDefaultClient.Do(req)
 		if err != nil {
-			glog.Info("waitTillVulnScanReady: return responce with err %v", err)
+			glog.Info("return response with err %v", err)
 			continue
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
-			glog.Info("waitTillVulnScanReady: vuln scan is ready")
+			glog.Info("vuln scan is ready")
 			break
 		}
 

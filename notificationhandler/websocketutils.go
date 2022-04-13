@@ -86,7 +86,6 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 		*notification.sessionObj <- *sessionOnj
 
 	case "trigger":
-		glog.Errorf("recived new trigger notification %v", notif.Notification)
 		cmds, err := parseNotificationCommand(notif.Notification)
 		if err != nil {
 			return err

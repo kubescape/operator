@@ -161,8 +161,6 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	// we want running pod in order to have the image hash
 	actionHandler.getRunningPodDescription(pod)
 
-	glog.Infof("iterating over containers")
-
 	for i := range containers {
 
 		websocketScanCommand := &apis.WebsocketScanCommand{
@@ -175,12 +173,10 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 
 			prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
 
-			glog.Infof("wlid: %s  container: %s image: %s jobids: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID)
-
-			glog.Infof("wlid: %s  container: %s image: %s session: %v", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, websocketScanCommand.Session)
+			glog.Infof("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID)
 
 			if websocketScanCommand.ParentJobID != actionHandler.command.JobTracking.ParentID {
-				glog.Errorf("websocket command parent: %v child: %v VS actionhandler.command parent: %v child %v\n", websocketScanCommand.ParentJobID, websocketScanCommand.JobID, actionHandler.command.JobTracking.ParentID, actionHandler.command.JobTracking.JobID)
+				glog.Errorf("websocket command parent: %v, child: %v, VS actionhandler.command parent: %v child %v", websocketScanCommand.ParentJobID, websocketScanCommand.JobID, actionHandler.command.JobTracking.ParentID, actionHandler.command.JobTracking.JobID)
 			}
 		}
 		for contIdx := range pod.Status.ContainerStatuses {
