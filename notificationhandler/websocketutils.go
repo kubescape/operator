@@ -12,6 +12,7 @@ import (
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	opapolicy "github.com/armosec/opa-utils/reporthandling"
+	"github.com/mitchellh/mapstructure"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/golang/glog"
@@ -45,6 +46,21 @@ func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notif
 	return notif, nil
 }
 
+func NewCommands() interface{} {
+	cmds := apis.Commands{Commands: []apis.Command{apis.Command{CommandName: "1234", ResponseID: "1234567"}}}
+	fmt.Println(cmds)
+	return &cmds
+}
+
+func parseNotificationCommand(notification interface{}) (*apis.Commands, error) {
+	cmds := &apis.Commands{}
+	if err := mapstructure.Decode(notification, cmds); err != nil {
+		return nil, fmt.Errorf("parseNotificationCommand: failed to convert notification payload to commands structure")
+	}
+
+	return cmds, nil
+}
+
 func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"]
 	switch dst {
@@ -68,6 +84,18 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 				"rules":              policyNotification.Rules},
 		}, "WebSocket", "", policyNotification.JobID, 1)
 		*notification.sessionObj <- *sessionOnj
+
+	case "trigger":
+		glog.Errorf("recived new trigger notification %v", notif.Notification)
+		cmds, err := parseNotificationCommand(notif.Notification)
+		if err != nil {
+			return err
+		}
+		for _, cmd := range cmds.Commands {
+			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", "", "", 1)
+			*notification.sessionObj <- *sessionObj
+		}
+
 	case "", "safeMode":
 		safeMode, e := parseSafeModeNotification(notif.Notification)
 		if e != nil {
