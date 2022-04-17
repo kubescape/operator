@@ -11,8 +11,8 @@ import (
 	"github.com/golang/glog"
 )
 
-/*args may contain credantials*/
-func displayRecieveCommand(receivedCommands []byte) {
+/*args may contain credentials*/
+func displayReceivedCommand(receivedCommands []byte) {
 
 	var err error
 	var receivedCommandsWithNoArgs []byte
@@ -38,7 +38,8 @@ func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) err
 		return err
 	}
 
-	displayRecieveCommand(receivedCommands)
+	displayReceivedCommand(receivedCommands)
+
 	for _, c := range commands.Commands {
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 

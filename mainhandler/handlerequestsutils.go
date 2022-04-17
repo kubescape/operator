@@ -67,7 +67,7 @@ func (mainHandler *MainHandler) listWorkloads(namespaces []string, resource stri
 	}
 	return res, nil
 }
-func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
+func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
 	errs := []error{}
 	idMap := make(map[string]interface{})
 	for i := range workloads {
@@ -165,12 +165,12 @@ func waitTillVulnScanReady() {
 		url := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
 		req, err := http.NewRequest("HEAD", url, nil)
 		if err != nil {
-			glog.Warning("failed to create http req with err %v", err)
+			glog.Warningf("failed to create http req with err %s", err.Error())
 			continue
 		}
 		resp, err := vulnScanProbeDefaultClient.Do(req)
 		if err != nil {
-			glog.Info("return response with err %v", err)
+			glog.Infof("return response with err %s", err.Error())
 			continue
 		}
 		defer resp.Body.Close()

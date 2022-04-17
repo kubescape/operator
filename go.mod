@@ -3,13 +3,14 @@ module k8s-ca-websocket
 go 1.17
 
 require (
-	github.com/armosec/armoapi-go v0.0.60
+	github.com/armosec/armoapi-go v0.0.68
 	github.com/armosec/cacli-wrapper-go v0.0.1
 	github.com/armosec/cluster-notifier-api-go v0.0.2
-	github.com/armosec/k8s-interface v0.0.68
+	github.com/armosec/k8s-interface v0.0.70
 	github.com/armosec/logger-go v0.0.5
-	github.com/armosec/opa-utils v0.0.112
-	github.com/armosec/utils-k8s-go v0.0.3
+	github.com/armosec/opa-utils v0.0.135
+	github.com/armosec/utils-go v0.0.5
+	github.com/armosec/utils-k8s-go v0.0.6
 	github.com/docker/docker v20.10.12+incompatible
 	github.com/golang/glog v1.0.0
 	github.com/google/go-containerregistry v0.8.0
@@ -18,6 +19,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/mitchellh/mapstructure v1.4.3
 	github.com/robfig/cron v1.2.0
+	github.com/stretchr/testify v1.7.0
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
@@ -31,16 +33,20 @@ require (
 require (
 	cloud.google.com/go/compute v1.3.0 // indirect
 	cloud.google.com/go/container v1.2.0 // indirect
+	github.com/Azure/azure-sdk-for-go v63.0.0+incompatible // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.18 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.13 // indirect
+	github.com/Azure/go-autorest/autorest v0.11.24 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.18 // indirect
+	github.com/Azure/go-autorest/autorest/azure/auth v0.5.11 // indirect
+	github.com/Azure/go-autorest/autorest/azure/cli v0.4.5 // indirect
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
+	github.com/Azure/go-autorest/autorest/to v0.4.0 // indirect
+	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/armosec/rbac-utils v0.0.1 // indirect
-	github.com/armosec/utils-go v0.0.3 // indirect
+	github.com/armosec/rbac-utils v0.0.14 // indirect
 	github.com/aws/aws-sdk-go v1.41.11 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.12.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.12.0 // indirect
@@ -57,17 +63,18 @@ require (
 	github.com/containerd/containerd v1.6.1 // indirect
 	github.com/coreos/go-oidc v2.2.1+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/docker/cli v20.10.12+incompatible // indirect
 	github.com/docker/distribution v2.8.0+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.6.4 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-logr/logr v1.2.2 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
@@ -80,10 +87,11 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/open-policy-agent/opa v0.33.1 // indirect
+	github.com/open-policy-agent/opa v0.38.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
@@ -94,8 +102,8 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	go.uber.org/zap v1.19.1 // indirect
-	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
+	go.uber.org/zap v1.21.0 // indirect
+	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3 // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
