@@ -92,7 +92,7 @@ func updateCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID str
 
 	// update volume name
 	for i, v := range jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
-		if v.Name == "" {
+		if v.Name == "request-body-volume" {
 			jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].Name = name
 		}
 	}
