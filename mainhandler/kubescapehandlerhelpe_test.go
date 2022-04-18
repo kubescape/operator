@@ -21,7 +21,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				},
 			},
 		}
-		req, err := actionHandler.getKubescapeV1ScanRequest()
+		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
 		assert.NotEqual(t, 0, len(req))
 	}
@@ -29,7 +29,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		actionHandler := ActionHandler{
 			command: apis.Command{Args: map[string]interface{}{"v1/scan": map[string]interface{}{"format": "json"}}},
 		}
-		req, err := actionHandler.getKubescapeV1ScanRequest()
+		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
 		assert.NotEqual(t, 0, len(req))
 	}
