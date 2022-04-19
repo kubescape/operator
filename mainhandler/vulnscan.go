@@ -152,7 +152,6 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	}
 	// get all images of workload
 	errs := ""
-	glog.Infof("in scanWorkload")
 	containers, err := getWorkloadImages(actionHandler.k8sAPI, actionHandler.wlid)
 	if err != nil {
 		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
@@ -244,53 +243,6 @@ func prepareSessionChain(sessionObj *cautils.SessionObj, websocketScanCommand *a
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
 }
 
-// func (actionHandler *ActionHandler) scanWorkload() error {
-// 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-// 	if err != nil {
-// 		glog.Errorf("scanning might fail if some images require credentials")
-// 	}
-// 	// get all images of workload
-// 	errs := ""
-// 	glog.Infof("in scanWorkload")
-// 	containers, err := getWorkloadcontainers(workload)
-// 	if err != nil {
-// 		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
-// 	}
-// 	websocketScanCommand := &apis.WebsocketScanCommand{
-// 		Wlid: actionHandler.wlid,
-// 	}
-// 	if actionHandler.reporter != nil {
-// 		websocketScanCommand.JobID = actionHandler.reporter.GetJobID()
-// 		websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-// 	}
-
-// 	for i := range containers {
-// 		websocketScanCommand.ImageTag = containers[i].image
-// 		websocketScanCommand.ContainerName = containers[i].container
-// 		secrets, err := cloudsupport.GetWorkloadImageRegistryCredentials(websocketScanCommand.ImageTag, workload)
-// 		if err != nil {
-// 			glog.Error(err)
-// 		} else if len(secrets) > 0 {
-// 			if secret, isOk := secrets[websocketScanCommand.ImageTag]; isOk {
-// 				glog.Infof("found relevant secret for: %v", websocketScanCommand.ImageTag)
-// 				websocketScanCommand.Credentials = &secret
-// 			} else {
-// 				glog.Errorf("could not find image: %s secret", websocketScanCommand.ImageTag)
-// 			}
-
-// 		}
-// 		if err := sendWorkloadToVulnerabilityScanner(websocketScanCommand); err != nil {
-// 			glog.Errorf("scanning %v failed due to: %v", websocketScanCommand.ImageTag, err.Error())
-// 			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", actionHandler.wlid, containers[i].image, containers[i].container, err.Error())
-
-// 		}
-
-// 	}
-// 	if errs != "" {
-// 		return fmt.Errorf(errs)
-// 	}
-// 	return nil
-// }
 func (actionHandler *ActionHandler) getRunningPodDescription(pod *corev1.Pod) {
 	if workloadObj, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid); err == nil {
 		if selectors, err := workloadObj.GetSelector(); err == nil {

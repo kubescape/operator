@@ -20,12 +20,6 @@ import (
 )
 
 var IgnoreCommandInNamespace = map[string][]string{}
-var vulnScanProbeDefaultClient = http.DefaultClient
-var vulnScanProbeTriggerTimer *time.Timer
-
-func init() {
-	vulnScanProbeTriggerTimer = time.NewTimer(time.Duration(1) * time.Minute)
-}
 
 func InitIgnoreCommandInNamespace() {
 	if len(IgnoreCommandInNamespace) != 0 {
@@ -67,7 +61,7 @@ func (mainHandler *MainHandler) listWorkloads(namespaces []string, resource stri
 	}
 	return res, nil
 }
-func (mainHandler *MainHandler) GetResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
+func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
 	errs := []error{}
 	idMap := make(map[string]interface{})
 	for i := range workloads {
@@ -148,34 +142,62 @@ func jobStatus(commandName string) string {
 }
 
 func notWaitAtAll() {
-	return
 }
 
-func isActionNeedToWait(action apis.Command) WaitFunc {
+func isActionNeedToWait(action apis.Command) waitFunc {
 	if f, ok := actionNeedToBeWaitOnStartUp[action.CommandName]; ok {
 		return f
 	}
 	return notWaitAtAll
 }
 
-func waitTillVulnScanReady() {
+func waitForVulnScanReady() {
+	fullURL := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
+	timer := time.NewTimer(time.Duration(1) * time.Minute)
+
 	for {
-		vulnScanProbeTriggerTimer.Reset(time.Duration(1) * time.Second)
-		<-vulnScanProbeTriggerTimer.C
-		url := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
-		req, err := http.NewRequest("HEAD", url, nil)
+		timer.Reset(time.Duration(1) * time.Second)
+		<-timer.C
+		req, err := http.NewRequest("HEAD", fullURL, nil)
 		if err != nil {
-			glog.Warning("failed to create http req with err %v", err)
+			glog.Warningf("failed to create http req with err %s", err.Error())
 			continue
 		}
-		resp, err := vulnScanProbeDefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			glog.Info("return response with err %v", err)
+			glog.Infof("return response with err %s", err.Error())
 			continue
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
 			glog.Info("vuln scan is ready")
+			break
+		}
+
+	}
+}
+
+func waitForKubescapeReady() {
+	fullURL := getKubescapeV1ScanURL()
+	fullURL.Path = "readyz"
+	timer := time.NewTimer(time.Duration(1) * time.Minute)
+
+	for {
+		timer.Reset(time.Duration(1) * time.Second)
+		<-timer.C
+		req, err := http.NewRequest("HEAD", fullURL.String(), nil)
+		if err != nil {
+			glog.Warningf("failed to create http req with err %s", err.Error())
+			continue
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			glog.Infof("return response with err %s", err.Error())
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
+			glog.Info("kubescape service is ready")
 			break
 		}
 
