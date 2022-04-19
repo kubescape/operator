@@ -10,7 +10,7 @@ require (
 	github.com/armosec/logger-go v0.0.5
 	github.com/armosec/opa-utils v0.0.135
 	github.com/armosec/utils-go v0.0.5
-	github.com/armosec/utils-k8s-go v0.0.6
+	github.com/armosec/utils-k8s-go v0.0.7
 	github.com/docker/docker v20.10.12+incompatible
 	github.com/golang/glog v1.0.0
 	github.com/google/go-containerregistry v0.8.0
@@ -18,7 +18,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/mitchellh/mapstructure v1.4.3
-	github.com/robfig/cron v1.2.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c

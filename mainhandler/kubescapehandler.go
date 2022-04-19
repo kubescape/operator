@@ -18,8 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
-	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
-
 	opapolicy "github.com/armosec/opa-utils/reporthandling"
 	"github.com/golang/glog"
 )
@@ -50,7 +48,6 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	if err != nil {
 		return err
 	}
-
 	jobName := kubescapeJobParams.Name
 	jobName = fixK8sCronJobNameLimit(jobName)
 	jobTemplateObj.Name = jobName
@@ -68,7 +65,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 
 func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 
-	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "scheduled-ks-scan", rand.NewSource(time.Now().UnixNano()).Int63()))
+	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "kubescape-scheduled-scan", rand.NewSource(time.Now().UnixNano()).Int63()))
 
 	req, err := getKubescapeRequestFromArgs(actionHandler.command.Args)
 	if err != nil {
@@ -102,11 +99,11 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 		return err
 	}
 
-	resp, err := httputils.HttpPost(http.DefaultClient, kubescapeV1ScanURL().String(), nil, request)
+	resp, err := httputils.HttpPost(http.DefaultClient, getKubescapeV1ScanURL().String(), nil, request)
 	if err != nil {
 		return err
 	}
-	response, err := getKubescapeV1ScanResponse(resp)
+	response, err := readKubescapeV1ScanResponse(resp)
 	if err != nil {
 		return err
 	}
@@ -261,10 +258,15 @@ func (actionHandler *ActionHandler) getJobPodLogs(namespaceName string, jobTempl
 }
 
 func (actionHandler *ActionHandler) getCronTabSchedule() string {
+	if schedule, ok := actionHandler.command.Args["cronTabSchedule"]; ok {
+		if s, k := schedule.(string); k {
+			return s
+		}
+	}
 	if len(actionHandler.command.Designators) > 0 {
 		if schedule, ok := actionHandler.command.Designators[0].Attributes["cronTabSchedule"]; ok {
 			return schedule
 		}
 	}
-	return "0 0 * * *"
+	return ""
 }

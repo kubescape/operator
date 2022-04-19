@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	"github.com/armosec/utils-go/boolutils"
@@ -22,16 +23,16 @@ import (
 	opapolicy "github.com/armosec/opa-utils/reporthandling"
 )
 
-func kubescapeV1ScanURL() *url.URL {
+func getKubescapeV1ScanURL() *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = "kubescape:8080"
-	ksURL.Path = "v1/scan"
+	ksURL.Host = cautils.ClusterConfig.KubescapeURL
+	ksURL.Path = cautils.KubescapeRequestPathV1
 	return &ksURL
 }
 
 func getKubescapeV1ScanRequest(args map[string]interface{}) ([]byte, error) {
-	scanV1, ok := args["v1/scan"]
+	scanV1, ok := args[cautils.KubescapeRequestPathV1]
 	if !ok {
 		return nil, fmt.Errorf("request not found")
 	}
@@ -49,7 +50,7 @@ func getKubescapeV1ScanRequest(args map[string]interface{}) ([]byte, error) {
 	return scanV1Bytes, nil
 }
 
-func getKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, error) {
+func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, error) {
 	response := &utilsmetav1.Response{}
 	if resp == nil {
 		return response, nil
@@ -65,7 +66,7 @@ func getKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, err
 	}
 
 	if err := json.Unmarshal(bodyBytes, response); err != nil {
-		return nil, fmt.Errorf("failed to convert request to v1/scan object")
+		return nil, fmt.Errorf("failed to convert response object")
 	}
 
 	return response, nil
@@ -87,13 +88,16 @@ func getKubescapeRequestFromArgs(args map[string]interface{}) ([]byte, error) {
 }
 
 func updateCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID string) {
-	jobTemplateObj.Spec.Schedule = schedule
+
 	jobTemplateObj.Name = name
+	if schedule != "" {
+		jobTemplateObj.Spec.Schedule = schedule
+	}
 
 	// update volume name
 	for i, v := range jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
 		if v.Name == "request-body-volume" {
-			jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].Name = name
+			jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].ConfigMap.Name = name
 		}
 	}
 
@@ -125,7 +129,7 @@ func convertRulesToRequest(args map[string]interface{}) error {
 		postScanRequest.TargetNames = append(postScanRequest.TargetNames, rulesList[i].Name)
 
 	}
-	args["v1/scan"] = postScanRequest
+	args[cautils.KubescapeRequestPathV1] = postScanRequest
 	return nil
 }
 
@@ -133,8 +137,20 @@ func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name stri
 	// create config map
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
+	if configMap.Labels == nil {
+		configMap.Labels = make(map[string]string)
+	}
 	configMap.Labels["app"] = name
-	configMap.BinaryData["request-body.json"] = req
+
+	if configMap.Data == nil {
+		configMap.Data = make(map[string]string)
+	}
+	command, err := wrapRequestWithCommand(req)
+	if err != nil {
+		return err
+	}
+
+	configMap.Data["request-body.json"] = string(command)
 	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
@@ -192,4 +208,25 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 	}
 	jobName = k8sNamesRegex.ReplaceAllString(jobName, "-")
 	return strings.ToLower(jobName)
+}
+
+// wrapRequestWithCommand wrap kubescape post request  with command so the websocket can parse the request
+func wrapRequestWithCommand(req []byte) ([]byte, error) {
+	postScanRequest := utilsmetav1.PostScanRequest{}
+	if err := json.Unmarshal(req, &postScanRequest); err != nil {
+		return nil, err
+	}
+
+	c := apis.Commands{
+		Commands: []apis.Command{
+			{
+				CommandName: string(apis.TypeRunKubescape),
+				Args: map[string]interface{}{
+					cautils.KubescapeRequestPathV1: postScanRequest,
+				},
+			},
+		},
+	}
+
+	return json.Marshal(c)
 }

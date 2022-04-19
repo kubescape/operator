@@ -188,8 +188,9 @@ github.com/armosec/utils-go v0.0.4/go.mod h1:itWmRLzRdsnwjpEOomL0mBWGnVNNIxSjDAd
 github.com/armosec/utils-go v0.0.5 h1:+pfZirWrOvfqvVYlL7OG1wMQD4T4YMwC78zzosB+mlQ=
 github.com/armosec/utils-go v0.0.5/go.mod h1:itWmRLzRdsnwjpEOomL0mBWGnVNNIxSjDAdyc+b0iUo=
 github.com/armosec/utils-k8s-go v0.0.1/go.mod h1:qrU4pmY2iZsOb39Eltpm0sTTNM3E4pmeyWx4dgDUC2U=
-github.com/armosec/utils-k8s-go v0.0.6 h1:GriAQZeKsVdlM64lwRnh4EDKlb2R9tK7WXtRYQOrPwk=
 github.com/armosec/utils-k8s-go v0.0.6/go.mod h1:YFdWi3rEQQLbN6mZO21TSdoda8kGQYRV4rs5CRp8Kjs=
+github.com/armosec/utils-k8s-go v0.0.7 h1:g68GQ9Vm5LgVp/czcu2ZV1igm2azYLf9vNapyoXBfYI=
+github.com/armosec/utils-k8s-go v0.0.7/go.mod h1:YFdWi3rEQQLbN6mZO21TSdoda8kGQYRV4rs5CRp8Kjs=
 github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a/go.mod h1:lB+ZfQJz7igIIfQNfa7Ml4HSf2uFQQRzpGGRXenZAgY=
 github.com/aws/aws-sdk-go v1.15.11/go.mod h1:mFuSZ37Z9YOHbQEwBWztmVzqXrEkub65tZoCYDt7FT0=
 github.com/aws/aws-sdk-go v1.41.1/go.mod h1:585smgzpB/KqRA+K3y/NL/oYRqQvpNJYvLm+LY1U59Q=
@@ -1038,8 +1039,6 @@ github.com/prometheus/procfs v0.7.3/go.mod h1:cz+aTbrPOrUb4q7XlbU9ygM+/jj0fzG6c1
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
 github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 h1:MkV+77GLUNo5oJ0jf870itWm3D0Sjh7+Za9gazKc5LQ=
 github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
-github.com/robfig/cron v1.2.0 h1:ZjScXvvxeQ63Dbyxy76Fj3AT3Ut0aKsyd2/tl3DTMuQ=
-github.com/robfig/cron v1.2.0/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfmt2k=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=

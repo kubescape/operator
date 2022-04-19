@@ -39,10 +39,10 @@ type ActionHandler struct {
 	signerSemaphore *semaphore.Weighted
 }
 
-type WaitFunc func()
+type waitFunc func()
 
 var k8sNamesRegex *regexp.Regexp
-var actionNeedToBeWaitOnStartUp = map[string]WaitFunc{}
+var actionNeedToBeWaitOnStartUp = map[string]waitFunc{}
 
 func init() {
 	var err error
@@ -51,7 +51,8 @@ func init() {
 		glog.Fatal(err)
 	}
 
-	actionNeedToBeWaitOnStartUp[apis.SCAN] = waitTillVulnScanReady
+	actionNeedToBeWaitOnStartUp[apis.SCAN] = waitForVulnScanReady
+	actionNeedToBeWaitOnStartUp[string(apis.TypeRunKubescape)] = waitForKubescapeReady
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -325,10 +326,10 @@ func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
 
 	for i := range actions {
 		waitFunc := isActionNeedToWait(actions[i])
-		go func() {
+		go func(index int) {
 			waitFunc()
-			sessionObj := cautils.NewSessionObj(&actions[i], "Websocket", "", "", 1)
+			sessionObj := cautils.NewSessionObj(&actions[index], "Websocket", "", "", 1)
 			*mainHandler.sessionObj <- *sessionObj
-		}()
+		}(i)
 	}
 }

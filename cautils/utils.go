@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	icacli "github.com/armosec/cacli-wrapper-go/cacli"
+	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
+	"github.com/armosec/utils-go/boolutils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
@@ -15,6 +17,8 @@ import (
 var (
 	CAInitContainerName = "ca-init-container"
 )
+
+const KubescapeRequestPathV1 = "v1/scan"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
@@ -33,7 +37,7 @@ func SendSafeModeReport(sessionObj *SessionObj, message string, code int) {
 	safeMode.StatusCode = code
 	safeMode.Message = message
 
-	safeModeURL := fmt.Sprintf("http://%s/v1/sendnotification", NotificationServerRESTURL)
+	safeModeURL := fmt.Sprintf("http://%s/v1/sendnotification", ClusterConfig.NotificationRestURL)
 	target := map[string]string{notificationserver.TargetComponent: notificationserver.TargetComponentLoggerValue}
 
 	// pushing notification
@@ -47,15 +51,23 @@ func NewCacliObj(systemModeRunner SystemModeRunner) icacli.ICacli {
 	if systemModeRunner == SystemModeScan {
 		return icacli.NewCacliWithoutLogin()
 	}
-	return icacli.NewCacli(CA_DASHBOARD_BACKEND, false)
+	return icacli.NewCacli(ClusterConfig.Dashboard, false)
 }
 
 func GetStartupActins() []apis.Command {
 	if SystemMode == SystemModeScan {
 		return []apis.Command{
 			{
+				CommandName: string(apis.TypeRunKubescape),
+				Args: map[string]interface{}{
+					KubescapeRequestPathV1: utilsmetav1.PostScanRequest{
+						Submit: boolutils.BoolPointer(true),
+					},
+				},
+			},
+			{
 				CommandName: apis.SCAN,
-				WildWlid:    pkgwlid.GetK8sWLID(CA_CLUSTER_NAME, "", "", ""),
+				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 			},
 		}
 	}
