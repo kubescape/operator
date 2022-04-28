@@ -152,13 +152,18 @@ func isActionNeedToWait(action apis.Command) waitFunc {
 }
 
 func waitForVulnScanReady() {
-	fullURL := cautils.CA_VULNSCAN + "/v1/" + probes.ReadinessPath
+	fullURL := getVulnScanURL()
+	// replace port
+	fullURL.Host = strings.ReplaceAll(fullURL.Host, fullURL.Port(), probes.ReadinessPort)
+	// replace path
+	fullURL.Path = fmt.Sprintf("v1/%s", probes.ReadinessPath)
+
 	timer := time.NewTimer(time.Duration(1) * time.Minute)
 
 	for {
 		timer.Reset(time.Duration(1) * time.Second)
 		<-timer.C
-		req, err := http.NewRequest("HEAD", fullURL, nil)
+		req, err := http.NewRequest("HEAD", fullURL.String(), nil)
 		if err != nil {
 			glog.Warningf("failed to create http req with err %s", err.Error())
 			continue

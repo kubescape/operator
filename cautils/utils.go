@@ -18,6 +18,7 @@ var (
 	CAInitContainerName = "ca-init-container"
 )
 
+const KubescapeScanV1 = "scanV1"
 const KubescapeRequestPathV1 = "v1/scan"
 
 func MapToString(m map[string]interface{}) []string {
@@ -54,13 +55,15 @@ func NewCacliObj(systemModeRunner SystemModeRunner) icacli.ICacli {
 	return icacli.NewCacli(ClusterConfig.Dashboard, false)
 }
 
-func GetStartupActins() []apis.Command {
+func GetStartupActions() []apis.Command {
+
 	if SystemMode == SystemModeScan {
 		return []apis.Command{
 			{
 				CommandName: string(apis.TypeRunKubescape),
+				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 				Args: map[string]interface{}{
-					KubescapeRequestPathV1: utilsmetav1.PostScanRequest{
+					KubescapeScanV1: utilsmetav1.PostScanRequest{
 						Submit: boolutils.BoolPointer(true),
 					},
 				},

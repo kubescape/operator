@@ -1,4 +1,0 @@
-[submodule "jenkinstools"]
-	path = jenkinstools
-	url = git@github.com:armosec/jenkinstools.git
-	branch = master

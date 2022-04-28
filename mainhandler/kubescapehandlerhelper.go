@@ -23,6 +23,8 @@ import (
 	opapolicy "github.com/armosec/opa-utils/reporthandling"
 )
 
+const VolumeNamePlaceholder = "request-body-volume"
+
 func getKubescapeV1ScanURL() *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
@@ -31,8 +33,9 @@ func getKubescapeV1ScanURL() *url.URL {
 	return &ksURL
 }
 
-func getKubescapeV1ScanRequest(args map[string]interface{}) ([]byte, error) {
-	scanV1, ok := args[cautils.KubescapeRequestPathV1]
+func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
+
+	scanV1, ok := args[cautils.KubescapeScanV1]
 	if !ok {
 		return nil, fmt.Errorf("request not found")
 	}
@@ -47,7 +50,8 @@ func getKubescapeV1ScanRequest(args map[string]interface{}) ([]byte, error) {
 	if err := json.Unmarshal(scanV1Bytes, postScanRequest); err != nil {
 		return nil, fmt.Errorf("failed to convert request to v1/scan object")
 	}
-	return scanV1Bytes, nil
+
+	return postScanRequest, nil
 }
 
 func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, error) {
@@ -72,22 +76,29 @@ func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, er
 	return response, nil
 }
 
-func getKubescapeRequestFromArgs(args map[string]interface{}) ([]byte, error) {
-	req, err := getKubescapeV1ScanRequest(args)
+func getKubescapeRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
+	postScanRequest, err := getKubescapeV1ScanRequest(args)
 	if err != nil {
 		// fallback
 		if e := convertRulesToRequest(args); e == nil {
-			if req, err = getKubescapeV1ScanRequest(args); err != nil {
-				return req, err
+			if postScanRequest, err = getKubescapeV1ScanRequest(args); err != nil {
+				return postScanRequest, err
 			}
 		} else {
-			return req, err
+			return postScanRequest, err
 		}
 	}
-	return req, nil
+
+	// validate request
+	if err := validateKubescapeScanRequest(postScanRequest); err != nil {
+		return postScanRequest, err
+	}
+	setDefaultsKubescapeScanRequest(postScanRequest)
+
+	return postScanRequest, nil
 }
 
-func updateCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID string) {
+func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targetName string, targetType utilsapisv1.NotificationPolicyKind) {
 
 	jobTemplateObj.Name = name
 	if schedule != "" {
@@ -96,7 +107,7 @@ func updateCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID str
 
 	// update volume name
 	for i, v := range jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
-		if v.Name == "request-body-volume" {
+		if v.Name == VolumeNamePlaceholder {
 			jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].ConfigMap.Name = name
 		}
 	}
@@ -105,8 +116,10 @@ func updateCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID str
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = jobID
-	// jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.framework"] =
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = jobID // deprecated
+	if targetType != "" {
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[fmt.Sprintf("armo.%s", targetType)] = targetName
+	}
 
 	// add annotations
 	if jobTemplateObj.ObjectMeta.Labels == nil {
@@ -129,11 +142,11 @@ func convertRulesToRequest(args map[string]interface{}) error {
 		postScanRequest.TargetNames = append(postScanRequest.TargetNames, rulesList[i].Name)
 
 	}
-	args[cautils.KubescapeRequestPathV1] = postScanRequest
+	args[cautils.KubescapeScanV1] = postScanRequest
 	return nil
 }
 
-func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name string, req []byte) error {
+func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name string, req *utilsmetav1.PostScanRequest) error {
 	// create config map
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
@@ -211,22 +224,36 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 }
 
 // wrapRequestWithCommand wrap kubescape post request  with command so the websocket can parse the request
-func wrapRequestWithCommand(req []byte) ([]byte, error) {
-	postScanRequest := utilsmetav1.PostScanRequest{}
-	if err := json.Unmarshal(req, &postScanRequest); err != nil {
-		return nil, err
-	}
+func wrapRequestWithCommand(postScanRequest *utilsmetav1.PostScanRequest) ([]byte, error) {
 
 	c := apis.Commands{
 		Commands: []apis.Command{
 			{
 				CommandName: string(apis.TypeRunKubescape),
 				Args: map[string]interface{}{
-					cautils.KubescapeRequestPathV1: postScanRequest,
+					cautils.KubescapeScanV1: *postScanRequest,
 				},
 			},
 		},
 	}
 
 	return json.Marshal(c)
+}
+
+func validateKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest) error {
+	// validate request
+	if len(postScanRequest.TargetNames) > 0 {
+		if string(postScanRequest.TargetType) == "" {
+			return fmt.Errorf("received targetNames but not target types")
+		}
+	}
+	return nil
+}
+
+func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest) {
+	// set default scan to all
+	if len(postScanRequest.TargetNames) == 0 {
+		postScanRequest.TargetNames = []string{"all"}
+		postScanRequest.TargetType = utilsapisv1.KindFramework
+	}
 }

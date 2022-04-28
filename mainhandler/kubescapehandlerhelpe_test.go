@@ -4,6 +4,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"testing"
 
+	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
 
@@ -15,21 +16,21 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		actionHandler := ActionHandler{
 			command: apis.Command{
 				Args: map[string]interface{}{
-					cautils.KubescapeRequestPathV1: nil,
+					cautils.KubescapeScanV1: nil,
 				},
 			},
 		}
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
-		assert.NotEqual(t, 0, len(req))
+		assert.NotNil(t, 0, req)
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{cautils.KubescapeRequestPathV1: map[string]interface{}{"format": "json"}}},
+			command: apis.Command{Args: map[string]interface{}{cautils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
 		}
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
-		assert.NotEqual(t, 0, len(req))
+		assert.Equal(t, "json", req.Format)
 	}
 }
 
@@ -37,8 +38,13 @@ func TestUpdateCronJobTemplate(t *testing.T) {
 	{
 		jobTemplateObj := &v1.CronJob{}
 		name := "1234"
+		schedule := "* * * * *"
 		jobID := "5678"
-		updateCronJobTemplate(jobTemplateObj, name, jobID, "")
+		setCronJobTemplate(jobTemplateObj, name, schedule, jobID, "nsa", utilsapisv1.KindFramework)
+		assert.Equal(t, name, jobTemplateObj.ObjectMeta.Name)
+		assert.Equal(t, schedule, jobTemplateObj.Spec.Schedule)
+		assert.Equal(t, jobID, jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"])
+		assert.Equal(t, "nsa", jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.framework"])
 	}
 }
 

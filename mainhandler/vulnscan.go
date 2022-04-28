@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,6 +25,13 @@ import (
 
 const dockerPullableURN = "docker-pullable://"
 
+func getVulnScanURL() *url.URL {
+	vulnURL := url.URL{}
+	vulnURL.Scheme = "http"
+	vulnURL.Host = cautils.ClusterConfig.VulnScanURL
+	vulnURL.Path = fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
+	return &vulnURL
+}
 func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) error {
 
 	var err error
@@ -278,14 +286,14 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	if err != nil {
 		return err
 	}
-	pathScan := fmt.Sprintf("%s/%s/%s", cautils.CA_VULNSCAN, apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
+	vulnURL := getVulnScanURL()
 
 	creds := websocketScanCommand.Credentials
 	credsList := websocketScanCommand.Credentialslist
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	glog.Infof("requesting scan. url: %s wlid: %s image: %s with credentials: %v", pathScan, websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds)
+	glog.Infof("requesting scan. url: %s wlid: %s image: %s with credentials: %v", vulnURL.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds)
 
-	req, err := http.NewRequest("POST", pathScan, bytes.NewBuffer(jsonScannerC))
+	req, err := http.NewRequest("POST", vulnURL.String(), bytes.NewBuffer(jsonScannerC))
 	if err != nil {
 		return err
 	}

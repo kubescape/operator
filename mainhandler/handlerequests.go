@@ -6,24 +6,23 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 	"regexp"
-	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-k8s-go/armometadata"
+	uuid "github.com/google/uuid"
 
 	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
 	cacli "github.com/armosec/cacli-wrapper-go/cacli"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
-	opapolicy "github.com/armosec/opa-utils/reporthandling"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/golang/glog"
 	"golang.org/x/sync/semaphore"
 )
 
 type MainHandler struct {
-	sessionObj      *chan cautils.SessionObj
+	sessionObj      *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
 	cacli           cacli.ICacli
 	k8sAPI          *k8sinterface.KubernetesApi
 	signerSemaphore *semaphore.Weighted
@@ -104,7 +103,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		}
 		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
 		switch sessionObj.Command.CommandName {
-		case string(opapolicy.TypeRunKubescapeJob), string(opapolicy.TypeSetKubescapeCronJob), string(opapolicy.TypeDeleteKubescapeCronJob), string(opapolicy.TypeUpdateKubescapeCronJob):
+		case string(apis.TypeRunKubescape), string(apis.TypeRunKubescapeJob), string(apis.TypeSetKubescapeCronJob), string(apis.TypeDeleteKubescapeCronJob), string(apis.TypeUpdateKubescapeCronJob):
 			isToItemizeScopeCommand = false
 		}
 		if isToItemizeScopeCommand {
@@ -112,7 +111,8 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			// } else if sessionObj.Command.Sid != "" {
 			// 	go mainHandler.HandleSingleRequest(&sessionObj)
 		} else {
-			go mainHandler.HandleSingleRequest(&sessionObj)
+			// handle requests
+			mainHandler.HandleSingleRequest(&sessionObj)
 		}
 	}
 }
@@ -322,13 +322,11 @@ func (mainHandler *MainHandler) getIDs(namespaces []string, labels, fields map[s
 // HandlePostmanRequest Parse received commands and run the command
 func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
 
-	time.Sleep(2 * time.Second) // wait for master to start listenning to the channel
-
 	for i := range actions {
-		waitFunc := isActionNeedToWait(actions[i])
 		go func(index int) {
+			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc()
-			sessionObj := cautils.NewSessionObj(&actions[index], "Websocket", "", "", 1)
+			sessionObj := cautils.NewSessionObj(&actions[index], "Websocket", "", uuid.NewString(), 1)
 			*mainHandler.sessionObj <- *sessionObj
 		}(i)
 	}

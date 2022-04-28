@@ -75,7 +75,7 @@ func main() {
 	}()
 
 	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj(cautils.SystemMode), k8sApi)
-	go mainHandler.StartupTriggerActions(cautils.GetStartupActins())
+	go mainHandler.StartupTriggerActions(cautils.GetStartupActions())
 
 	mainHandler.HandleRequest()
 
