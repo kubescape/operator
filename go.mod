@@ -3,11 +3,11 @@ module k8s-ca-websocket
 go 1.17
 
 require (
-	github.com/armosec/armoapi-go v0.0.68
-	github.com/armosec/cacli-wrapper-go v0.0.1
+	github.com/armosec/armoapi-go v0.0.69
+	github.com/armosec/cacli-wrapper-go v0.0.2
 	github.com/armosec/cluster-notifier-api-go v0.0.2
 	github.com/armosec/k8s-interface v0.0.70
-	github.com/armosec/logger-go v0.0.5
+	github.com/armosec/logger-go v0.0.6
 	github.com/armosec/opa-utils v0.0.135
 	github.com/armosec/utils-go v0.0.5
 	github.com/armosec/utils-k8s-go v0.0.7

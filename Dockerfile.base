@@ -1,8 +1,0 @@
-FROM alpine:3.11
-
-RUN apk update
-RUN apk add ca-certificates && apk add python3 
-
-RUN pip3 install --upgrade pip
-
-RUN mkdir .ca && chmod -R 777 .ca

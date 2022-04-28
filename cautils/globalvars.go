@@ -41,7 +41,8 @@ var ClusterConfig = &armometadata.ClusterConfig{}
 
 // LoadEnvironmentVaribles -
 func LoadEnvironmentVaribles() (err error) {
-	ClusterConfig, err = armometadata.LoadConfig("", true)
+	pathToConfig := os.Getenv("CA_CONFIG") // if empty, will load config from default path
+	ClusterConfig, err = armometadata.LoadConfig(pathToConfig, true)
 	if err != nil {
 		glog.Warning(err.Error())
 	}

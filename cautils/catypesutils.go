@@ -17,8 +17,9 @@ func NewSessionObj(command *apis.Command, message, parentID, jobID string, actio
 		target = fmt.Sprintf("wlid://cluster-%s/", CA_CLUSTER_NAME)
 	}
 	reporter.SetTarget(target)
-	reporter.SetParentAction(parentID)
+
 	reporter.SetJobID(jobID)
+	reporter.SetParentAction(parentID)
 	reporter.SetActionIDN(actionNumber)
 	reporter.SendAsRoutine(reportutils.EmptyString, true)
 
