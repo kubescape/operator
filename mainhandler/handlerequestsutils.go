@@ -153,7 +153,10 @@ func isActionNeedToWait(action apis.Command) waitFunc {
 
 func waitForVulnScanReady() {
 	fullURL := getVulnScanURL()
-	fullURL.Path = probes.ReadinessPath
+	// replace port
+	fullURL.Host = strings.ReplaceAll(fullURL.Host, fullURL.Port(), probes.ReadinessPort)
+	// replace path
+	fullURL.Path = fmt.Sprintf("v1/%s", probes.ReadinessPath)
 
 	timer := time.NewTimer(time.Duration(1) * time.Minute)
 
