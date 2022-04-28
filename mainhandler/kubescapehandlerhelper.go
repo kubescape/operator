@@ -118,7 +118,7 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 	}
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = jobID // deprecated
 	if targetType != "" {
-		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[fmt.Sprintf("armo.%s", targetType)] = targetName
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[strings.ToLower(fmt.Sprintf("armo.%s", targetType))] = targetName
 	}
 
 	// add annotations
