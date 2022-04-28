@@ -69,7 +69,7 @@ jobs:
 
       - name: Set image name
         id: image-name
-        run: echo '::set-output name=IMAGE_NAME::quay.io/${{ github.repository_owner }}/cluster-trigger'
+        run: echo '::set-output name=IMAGE_NAME::quay.io/${{ github.repository_owner }}/action-trigger'
 
       - name: Build the Docker image
         run: docker build . --file build/Dockerfile --tag ${{ steps.image-name.outputs.IMAGE_NAME }}:${{ steps.image-version.outputs.IMAGE_VERSION }} --build-arg image_version=${{ steps.image-version.outputs.IMAGE_VERSION }}
