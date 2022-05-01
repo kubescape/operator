@@ -13,7 +13,6 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
-	"github.com/armosec/utils-go/boolutils"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +47,7 @@ func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostSc
 	// validate
 	postScanRequest := &utilsmetav1.PostScanRequest{}
 	if err := json.Unmarshal(scanV1Bytes, postScanRequest); err != nil {
-		return nil, fmt.Errorf("failed to convert request to v1/scan object")
+		return nil, fmt.Errorf("failed to convert request to v1/scan object, reason: %s", err.Error())
 	}
 
 	return postScanRequest, nil
@@ -70,7 +69,7 @@ func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, er
 	}
 
 	if err := json.Unmarshal(bodyBytes, response); err != nil {
-		return nil, fmt.Errorf("failed to convert response object")
+		return nil, fmt.Errorf("failed to convert response object, reason: %s", err.Error())
 	}
 
 	return response, nil
@@ -136,11 +135,9 @@ func convertRulesToRequest(args map[string]interface{}) error {
 	}
 
 	postScanRequest := &utilsmetav1.PostScanRequest{}
-	postScanRequest.Submit = boolutils.BoolPointer(true)
 	for i := range rulesList {
 		postScanRequest.TargetType = utilsapisv1.NotificationPolicyKind(rulesList[i].Kind)
 		postScanRequest.TargetNames = append(postScanRequest.TargetNames, rulesList[i].Name)
-
 	}
 	args[cautils.KubescapeScanV1] = postScanRequest
 	return nil

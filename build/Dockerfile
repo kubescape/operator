@@ -1,7 +1,5 @@
 FROM golang:1.18-alpine as builder
 
-ENV RELEASE=$image_version
-
 ENV GO111MODULE=
 
 ENV CGO_ENABLED=0
@@ -21,5 +19,8 @@ USER armo
 WORKDIR /home/armo/
 
 COPY --from=builder /work/build/trigger /usr/bin/trigger
+
+ARG image_version
+ENV RELEASE=$image_version
 
 ENTRYPOINT ["trigger"]

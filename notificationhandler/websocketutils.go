@@ -9,10 +9,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
-	opapolicy "github.com/armosec/opa-utils/reporthandling"
-	"github.com/mitchellh/mapstructure"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/golang/glog"
@@ -54,48 +51,57 @@ func NewCommands() interface{} {
 
 func parseNotificationCommand(notification interface{}) (*apis.Commands, error) {
 	cmds := &apis.Commands{}
-	if err := mapstructure.Decode(notification, cmds); err != nil {
-		return nil, fmt.Errorf("parseNotificationCommand: failed to convert notification payload to commands structure")
+
+	var notificationBytes []byte
+	var err error
+	switch b := notification.(type) {
+	case []byte:
+		notificationBytes = b
+	default:
+		if notificationBytes, err = json.Marshal(notification); err != nil {
+			return nil, fmt.Errorf("failed to marshal notification payload from command, reason: %s", err.Error())
+		}
 	}
-
-	return cmds, nil
+	if err = json.Unmarshal(notificationBytes, cmds); err != nil {
+		return nil, fmt.Errorf("failed to convert notification payload to commands structure, reason: %s", err.Error())
+	}
+	return cmds, err
 }
-
 func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"]
 	switch dst {
-	case "kubescape":
-		// sent by this function in dash BE: KubescapeInClusterHandler
-		policyNotificationBytes, ok := notif.Notification.([]byte)
-		if !ok {
-			return fmt.Errorf("handleNotification, kubescape, failed to get policyNotificationBytes")
-		}
-		policyNotification := &opapolicy.PolicyNotification{}
-		if err := json.Unmarshal(policyNotificationBytes, policyNotification); err != nil {
-			return fmt.Errorf("handleNotification, kubescape, failed to Unmarshal: %v", err)
-		}
+	// case "kubescape":
+	// 	// sent by this function in dash BE: KubescapeInClusterHandler
+	// 	policyNotificationBytes, ok := notif.Notification.([]byte)
+	// 	if !ok {
+	// 		return fmt.Errorf("handleNotification, kubescape, failed to get policyNotificationBytes")
+	// 	}
+	// 	policyNotification := &opapolicy.PolicyNotification{}
+	// 	if err := json.Unmarshal(policyNotificationBytes, policyNotification); err != nil {
+	// 		return fmt.Errorf("handleNotification, kubescape, failed to Unmarshal: %v", err)
+	// 	}
 
-		sessionOnj := cautils.NewSessionObj(&apis.Command{
-			CommandName: string(policyNotification.NotificationType),
-			Designators: []armotypes.PortalDesignator{policyNotification.Designators},
-			JobTracking: apis.JobTracking{JobID: policyNotification.JobID},
-			Args: map[string]interface{}{
-				"kubescapeJobParams": policyNotification.KubescapeJobParams,
-				"rules":              policyNotification.Rules},
-		}, "WebSocket", "", policyNotification.JobID, 1)
-		*notification.sessionObj <- *sessionOnj
+	// 	sessionOnj := cautils.NewSessionObj(&apis.Command{
+	// 		CommandName: string(policyNotification.NotificationType),
+	// 		Designators: []armotypes.PortalDesignator{policyNotification.Designators},
+	// 		JobTracking: apis.JobTracking{JobID: policyNotification.JobID},
+	// 		Args: map[string]interface{}{
+	// 			"kubescapeJobParams": policyNotification.KubescapeJobParams,
+	// 			"rules":              policyNotification.Rules},
+	// 	}, "WebSocket", "", policyNotification.JobID, 1)
+	// 	*notification.sessionObj <- *sessionOnj
 
-	case "trigger":
+	case "trigger", "kubescape":
 		cmds, err := parseNotificationCommand(notif.Notification)
 		if err != nil {
 			return err
 		}
 		for _, cmd := range cmds.Commands {
-			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", "", "", 1)
+			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			*notification.sessionObj <- *sessionObj
 		}
 
-	case "", "safeMode":
+	case "safeMode":
 		safeMode, e := parseSafeModeNotification(notif.Notification)
 		if e != nil {
 			return e

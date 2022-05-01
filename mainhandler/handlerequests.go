@@ -181,10 +181,8 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.scanWorkload(sessionObj)
 	case apis.SCAN_REGISTRY:
 		return actionHandler.scanRegistry(sessionObj)
-	case string(apis.TypeRunKubescape):
+	case string(apis.TypeRunKubescape), string(apis.TypeRunKubescapeJob):
 		return actionHandler.kubescapeScan()
-	case string(apis.TypeRunKubescapeJob): // deprecated
-		return actionHandler.runKubescapeJob()
 	case string(apis.TypeSetKubescapeCronJob):
 		return actionHandler.setKubescapeCronJob()
 	case string(apis.TypeUpdateKubescapeCronJob):

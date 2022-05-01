@@ -2,10 +2,10 @@ package mainhandler
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/docker/docker/api/types"
-	"github.com/golang/glog"
 	"github.com/google/go-containerregistry/pkg/authn"
 	containerregistry "github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -39,26 +39,22 @@ func (regCreds *registryCreds) Authorization() (*authn.AuthConfig, error) {
 	if cloudsupport.CheckIsECRImage(regCreds.RegistryName) {
 		username, password, err = cloudsupport.GetLoginDetailsForECR(regCreds.RegistryName)
 		if err != nil {
-			glog.Infof("ECR get Authorization failed with err %v", err)
-			return nil, err
+			return nil, fmt.Errorf("ECR get Authorization failed with err %v", err.Error())
 		}
 		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
 	} else if cloudsupport.CheckIsGCRImage(regCreds.RegistryName + "/") {
 		username, password, err = cloudsupport.GetLoginDetailsForGCR(regCreds.RegistryName)
 		if err != nil {
-			glog.Infof("GCR get Authorization failed with err %v", err)
-			return nil, err
+			return nil, fmt.Errorf("GCR get Authorization failed with err %v", err.Error())
 		}
 		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
 	} else if cloudsupport.CheckIsACRImage(regCreds.RegistryName + "/") {
 		username, password, err = cloudsupport.GetLoginDetailsForAzurCR(regCreds.RegistryName)
 		if err != nil {
-			glog.Infof("GCR get Authorization failed with err %v", err)
-			return nil, err
+			return nil, fmt.Errorf("ACR get Authorization failed with err %v", err.Error())
 		}
 		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
 	} else {
-		glog.Infof("try to get images with no creds from regustry %v", regCreds.RegistryName)
 		return &authn.AuthConfig{}, nil
 	}
 

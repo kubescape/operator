@@ -105,7 +105,7 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 			}
 			err := notification.handleNotification(notif)
 			if err != nil {
-				glog.Errorf("failed to handle notification: %s, %v,\t\t %v", messageBytes, err, notif)
+				glog.Errorf("failed to handle notification: %s, reason: %s", messageBytes, err.Error())
 			}
 		case websocket.CloseMessage:
 			return fmt.Errorf("websocket closed by server, message: %s", string(messageBytes))

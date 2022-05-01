@@ -2,14 +2,13 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"io/ioutil"
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/notificationhandler"
 	"k8s-ca-websocket/notificationhandler/safemode"
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/websocket"
+	"os"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
@@ -82,15 +81,5 @@ func main() {
 }
 
 func displayBuildTag() {
-	imageVersion := "local build"
-	dat, err := ioutil.ReadFile("./build_number.txt")
-	if err == nil {
-		imageVersion = string(dat)
-	} else {
-		dat, err = ioutil.ReadFile("./build_date.txt")
-		if err == nil {
-			imageVersion = fmt.Sprintf("%s, date: %s", imageVersion, string(dat))
-		}
-	}
-	glog.Infof("Image version: %s", imageVersion)
+	glog.Infof("Image version: %s", os.Getenv("RELEASE"))
 }

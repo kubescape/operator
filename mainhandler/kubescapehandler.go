@@ -104,7 +104,6 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	if err != nil {
 		return err
 	}
-
 	resp, err := httputils.HttpPost(http.DefaultClient, getKubescapeV1ScanURL().String(), nil, body)
 	if err != nil {
 		return err

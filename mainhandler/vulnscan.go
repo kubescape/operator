@@ -162,7 +162,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	errs := ""
 	containers, err := getWorkloadImages(actionHandler.k8sAPI, actionHandler.wlid)
 	if err != nil {
-		return fmt.Errorf("cant get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
+		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
 
 	// we want running pod in order to have the image hash
@@ -182,9 +182,9 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 
 			glog.Infof("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID)
 
-			if websocketScanCommand.ParentJobID != actionHandler.command.JobTracking.ParentID {
-				glog.Errorf("websocket command parent: %v, child: %v, VS actionhandler.command parent: %v child %v", websocketScanCommand.ParentJobID, websocketScanCommand.JobID, actionHandler.command.JobTracking.ParentID, actionHandler.command.JobTracking.JobID)
-			}
+			// if websocketScanCommand.ParentJobID != actionHandler.command.JobTracking.ParentID {
+			// 	glog.Errorf("websocket command parent: %v, child: %v, VS actionhandler.command parent: %v child %v", websocketScanCommand.ParentJobID, websocketScanCommand.JobID, actionHandler.command.JobTracking.ParentID, actionHandler.command.JobTracking.JobID)
+			// }
 		}
 		for contIdx := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
