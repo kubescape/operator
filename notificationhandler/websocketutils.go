@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -67,6 +68,12 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 	}
 	return cmds, err
 }
+
+func triggerScanNewImageEnabled() bool {
+	envValue := os.Getenv("SCAN_TRIGGER_ON_NEW_IMAGE")
+	return envValue == "enable"
+}
+
 func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"]
 	switch dst {
@@ -97,6 +104,9 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 			return err
 		}
 		for _, cmd := range cmds.Commands {
+			if cmd.CommandName == apis.SCAN && !triggerScanNewImageEnabled() {
+				continue
+			}
 			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			*notification.sessionObj <- *sessionObj
 		}
