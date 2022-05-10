@@ -13,6 +13,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
+	"github.com/armosec/utils-go/boolutils"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,7 +98,7 @@ func getKubescapeRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequ
 	return postScanRequest, nil
 }
 
-func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targetName string, targetType utilsapisv1.NotificationPolicyKind) {
+func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targetName string, targetType utilsapisv1.NotificationPolicyKind, hostScanner *bool) {
 
 	jobTemplateObj.Name = name
 	if schedule != "" {
@@ -118,6 +119,9 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = jobID // deprecated
 	if targetType != "" {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[strings.ToLower(fmt.Sprintf("armo.%s", targetType))] = targetName
+	}
+	if hostScanner != nil {
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"] = boolutils.BoolPointerToString(hostScanner)
 	}
 
 	// add annotations
@@ -166,6 +170,7 @@ func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name stri
 	}
 	return nil
 }
+
 func getCronJonTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
 	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {

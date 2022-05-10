@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
+
 	"github.com/armosec/utils-go/httputils"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,6 +47,10 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	if kubescapeJobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
+	// req, err := getKubescapeRequest(actionHandler.command.Args)
+	// if err != nil {
+	// 	return err
+	// }
 	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), kubescapeJobParams.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -55,6 +61,12 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.updatejobid"] = actionHandler.command.JobTracking.JobID
+
+	// editing host scanner is not enabled
+	// if req.HostScanner != nil {
+	// 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"] = boolutils.BoolPointerToString(req.HostScanner)
+	// }
+
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
@@ -82,7 +94,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 
-		setCronJobTemplate(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType)
+		setCronJobTemplate(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
 		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
@@ -112,8 +124,11 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	if err != nil {
 		return err
 	}
-
 	info := fmt.Sprintf("triggered successfully, scan ID: '%s'", response.ID)
+
+	if response.Type == utilsapisv1.ErrorScanResponseType {
+		info = fmt.Sprintf("Kubescape scanID '%s' returned an error: %s", response.ID, response.Response)
+	}
 	actionHandler.reporter.SendStatus(info, true)
 	glog.Infof(info)
 
