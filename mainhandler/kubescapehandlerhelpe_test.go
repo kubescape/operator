@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
+	"github.com/armosec/utils-go/boolutils"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
 
@@ -40,11 +41,12 @@ func TestUpdateCronJobTemplate(t *testing.T) {
 		name := "1234"
 		schedule := "* * * * *"
 		jobID := "5678"
-		setCronJobTemplate(jobTemplateObj, name, schedule, jobID, "nsa", utilsapisv1.KindFramework)
+		setCronJobTemplate(jobTemplateObj, name, schedule, jobID, "nsa", utilsapisv1.KindFramework, boolutils.BoolPointer(true))
 		assert.Equal(t, name, jobTemplateObj.ObjectMeta.Name)
 		assert.Equal(t, schedule, jobTemplateObj.Spec.Schedule)
 		assert.Equal(t, jobID, jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"])
 		assert.Equal(t, "nsa", jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.framework"])
+		assert.Equal(t, "true", jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"])
 	}
 }
 
