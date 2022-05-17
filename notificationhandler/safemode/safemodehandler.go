@@ -148,7 +148,7 @@ func (safeModeHandler *SafeModeHandler) updateReplaceHeaders(safeMode *apis.Safe
 	// }
 
 	// trigger detach
-	safeModeHandler.triggerCommand(safeMode, apis.REPLACE_HEADERS)
+	safeModeHandler.triggerCommand(safeMode, apis.TypeReplaceHeadersInWorkload)
 
 	return nil
 }
@@ -176,7 +176,7 @@ func (safeModeHandler *SafeModeHandler) updateAgentIncompatible(safeMode *apis.S
 	safeModeHandler.reportSafeModeIncompatible(safeMode)
 
 	// trigger detach
-	safeModeHandler.triggerCommand(safeMode, apis.INCOMPATIBLE)
+	safeModeHandler.triggerCommand(safeMode, apis.TypeWorkloadIncompatible)
 
 	// remove pod from list
 	safeModeHandler.workloadStatusMap.Remove(safeMode.InstanceID)
@@ -209,7 +209,7 @@ func (safeModeHandler *SafeModeHandler) updateImageUnreachable(safeMode *apis.Sa
 	safeModeHandler.reportSafeModeImageUnreachable(safeMode)
 
 	// trigger detach
-	safeModeHandler.triggerCommand(safeMode, apis.IMAGE_UNREACHABLE)
+	safeModeHandler.triggerCommand(safeMode, apis.TypeImageUnreachableInWorkload)
 
 	return nil
 }
@@ -243,7 +243,7 @@ func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode
 	reporter.SendStatus(reporterlib.JobDone, true)
 }
 
-func (safeModeHandler *SafeModeHandler) triggerCommand(safeMode *apis.SafeMode, commandName string) {
+func (safeModeHandler *SafeModeHandler) triggerCommand(safeMode *apis.SafeMode, commandName apis.NotificationPolicyType) {
 	command := apis.Command{
 		CommandName: commandName,
 		Wlid:        safeMode.Wlid,

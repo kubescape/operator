@@ -59,14 +59,14 @@ func GetStartupActions() []apis.Command {
 	if SystemMode == SystemModeScan {
 		return []apis.Command{
 			{
-				CommandName: string(apis.TypeRunKubescape),
+				CommandName: apis.TypeRunKubescape,
 				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 				Args: map[string]interface{}{
 					KubescapeScanV1: utilsmetav1.PostScanRequest{},
 				},
 			},
 			{
-				CommandName: apis.SCAN,
+				CommandName: apis.TypeScanImages,
 				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 			},
 		}

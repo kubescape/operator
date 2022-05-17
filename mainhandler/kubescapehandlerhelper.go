@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
-	opapolicy "github.com/armosec/opa-utils/reporthandling"
 )
 
 const VolumeNamePlaceholder = "request-body-volume"
@@ -84,14 +83,7 @@ func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, er
 func getKubescapeRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
 	postScanRequest, err := getKubescapeV1ScanRequest(args)
 	if err != nil {
-		// fallback
-		if e := convertRulesToRequest(args); e == nil {
-			if postScanRequest, err = getKubescapeV1ScanRequest(args); err != nil {
-				return postScanRequest, err
-			}
-		} else {
-			return postScanRequest, err
-		}
+		return postScanRequest, err
 	}
 
 	// validate request
@@ -136,21 +128,22 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 	jobTemplateObj.ObjectMeta.Labels["app"] = name
 
 }
-func convertRulesToRequest(args map[string]interface{}) error {
-	// TODO: use "kubescapeJobParams" instead of "rules"
-	rulesList, ok := args["rules"].([]opapolicy.PolicyIdentifier)
-	if !ok {
-		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
-	}
 
-	postScanRequest := &utilsmetav1.PostScanRequest{}
-	for i := range rulesList {
-		postScanRequest.TargetType = utilsapisv1.NotificationPolicyKind(rulesList[i].Kind)
-		postScanRequest.TargetNames = append(postScanRequest.TargetNames, rulesList[i].Name)
-	}
-	args[cautils.KubescapeScanV1] = postScanRequest
-	return nil
-}
+// func convertRulesToRequest(args map[string]interface{}) error {
+// 	// TODO: use "kubescapeJobParams" instead of "rules"
+// 	rulesList, ok := args["rules"].([]opapolicy.PolicyIdentifier)
+// 	if !ok {
+// 		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
+// 	}
+
+// 	postScanRequest := &utilsmetav1.PostScanRequest{}
+// 	for i := range rulesList {
+// 		postScanRequest.TargetType = utilsapisv1.NotificationPolicyKind(rulesList[i].Kind)
+// 		postScanRequest.TargetNames = append(postScanRequest.TargetNames, rulesList[i].Name)
+// 	}
+// 	args[cautils.KubescapeScanV1] = postScanRequest
+// 	return nil
+// }
 
 func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name string, req *utilsmetav1.PostScanRequest) error {
 	// create config map
@@ -236,7 +229,7 @@ func wrapRequestWithCommand(postScanRequest *utilsmetav1.PostScanRequest) ([]byt
 	c := apis.Commands{
 		Commands: []apis.Command{
 			{
-				CommandName: string(apis.TypeRunKubescape),
+				CommandName: apis.TypeRunKubescape,
 				Args: map[string]interface{}{
 					cautils.KubescapeScanV1: *postScanRequest,
 				},

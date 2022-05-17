@@ -41,7 +41,7 @@ type ActionHandler struct {
 type waitFunc func()
 
 var k8sNamesRegex *regexp.Regexp
-var actionNeedToBeWaitOnStartUp = map[string]waitFunc{}
+var actionNeedToBeWaitOnStartUp = map[apis.NotificationPolicyType]waitFunc{}
 
 func init() {
 	var err error
@@ -50,8 +50,8 @@ func init() {
 		glog.Fatal(err)
 	}
 
-	actionNeedToBeWaitOnStartUp[apis.SCAN] = waitForVulnScanReady
-	actionNeedToBeWaitOnStartUp[string(apis.TypeRunKubescape)] = waitForKubescapeReady
+	actionNeedToBeWaitOnStartUp[apis.TypeScanImages] = waitForVulnScanReady
+	actionNeedToBeWaitOnStartUp[apis.TypeRunKubescape] = waitForKubescapeReady
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -94,16 +94,16 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		}
 
 		// if scan disabled
-		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.SCAN {
+		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.TypeScanImages {
 			err := fmt.Errorf("scan is disabled in cluster")
 			glog.Warningf(err.Error())
-			sessionObj.Reporter.SetActionName(apis.SCAN)
+			sessionObj.Reporter.SetActionName(string(apis.TypeScanImages))
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
 		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
 		switch sessionObj.Command.CommandName {
-		case string(apis.TypeRunKubescape), string(apis.TypeRunKubescapeJob), string(apis.TypeSetKubescapeCronJob), string(apis.TypeDeleteKubescapeCronJob), string(apis.TypeUpdateKubescapeCronJob):
+		case apis.TypeRunKubescape, apis.TypeRunKubescapeJob, apis.TypeSetKubescapeCronJob, apis.TypeDeleteKubescapeCronJob, apis.TypeUpdateKubescapeCronJob:
 			isToItemizeScopeCommand = false
 		}
 		if isToItemizeScopeCommand {
@@ -130,7 +130,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
 	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
-	actionHandler.reporter.SendAction(sessionObj.Command.CommandName, true)
+	actionHandler.reporter.SendAction(string(sessionObj.Command.CommandName), true)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
 		actionHandler.reporter.SendError(err, true, true)
@@ -158,36 +158,36 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
-	case apis.UPDATE, apis.INJECT, apis.ATTACH:
+	case apis.TypeUpdateWorkload, apis.TypeInjectToWorkload, apis.TypeAttachWorkload:
 		return actionHandler.update(c.CommandName)
-	case apis.REMOVE, apis.DETACH:
+	case apis.TypeRemoveWorkload, apis.TypeDetachWorkload:
 		actionHandler.deleteConfigMaps(c)
 		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupDiscovery()
 		return err
-	case apis.RESTART, apis.INCOMPATIBLE, apis.IMAGE_UNREACHABLE, apis.REPLACE_HEADERS:
+	case apis.TypeRestartWorkload, apis.TypeWorkloadIncompatible, apis.TypeImageUnreachableInWorkload, apis.TypeReplaceHeadersInWorkload:
 		return actionHandler.update(c.CommandName)
-	case apis.UNREGISTERED:
+	case apis.TypeClusterUnregistered:
 		err := actionHandler.update(c.CommandName)
 		go actionHandler.workloadCleanupAll()
 		return err
-	case apis.SIGN:
+	case apis.TypeSignWorkload:
 		actionHandler.signerSemaphore.Acquire(context.Background(), 1)
 		defer actionHandler.signerSemaphore.Release(1)
 		return actionHandler.signWorkload()
-	case apis.ENCRYPT, apis.DECRYPT:
+	case apis.TypeEncryptSecret, apis.TypeDecryptSecret:
 		return actionHandler.runSecretCommand(sessionObj)
-	case apis.SCAN:
+	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(sessionObj)
-	case apis.SCAN_REGISTRY:
+	case apis.TypeScanRegistry:
 		return actionHandler.scanRegistry(sessionObj)
-	case string(apis.TypeRunKubescape), string(apis.TypeRunKubescapeJob):
+	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan()
-	case string(apis.TypeSetKubescapeCronJob):
+	case apis.TypeSetKubescapeCronJob:
 		return actionHandler.setKubescapeCronJob()
-	case string(apis.TypeUpdateKubescapeCronJob):
+	case apis.TypeUpdateKubescapeCronJob:
 		return actionHandler.updateKubescapeCronJob()
-	case string(apis.TypeDeleteKubescapeCronJob):
+	case apis.TypeDeleteKubescapeCronJob:
 		return actionHandler.deleteKubescapeCronJob()
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
@@ -214,7 +214,7 @@ func (actionHandler *ActionHandler) signWorkload() error {
 
 	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
 
-	return actionHandler.update(apis.RESTART)
+	return actionHandler.update(apis.TypeRestartWorkload)
 }
 
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
