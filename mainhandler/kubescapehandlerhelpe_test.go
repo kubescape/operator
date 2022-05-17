@@ -62,3 +62,9 @@ func TestFixK8sNameLimit(t *testing.T) {
 	}
 
 }
+
+func TestGetKubescapeV1ScanURL(t *testing.T) {
+	cautils.ClusterConfig.KubescapeURL = "kubescape"
+	u := getKubescapeV1ScanURL()
+	assert.Equal(t, "http://kubescape/v1/scan?keep=true", u.String())
+}

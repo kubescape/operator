@@ -5,7 +5,6 @@ import (
 
 	icacli "github.com/armosec/cacli-wrapper-go/cacli"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
-	"github.com/armosec/utils-go/boolutils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
@@ -63,9 +62,7 @@ func GetStartupActions() []apis.Command {
 				CommandName: string(apis.TypeRunKubescape),
 				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 				Args: map[string]interface{}{
-					KubescapeScanV1: utilsmetav1.PostScanRequest{
-						Submit: boolutils.BoolPointer(true),
-					},
+					KubescapeScanV1: utilsmetav1.PostScanRequest{},
 				},
 			},
 			{

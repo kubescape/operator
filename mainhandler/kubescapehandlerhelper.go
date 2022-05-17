@@ -30,6 +30,11 @@ func getKubescapeV1ScanURL() *url.URL {
 	ksURL.Scheme = "http"
 	ksURL.Host = cautils.ClusterConfig.KubescapeURL
 	ksURL.Path = cautils.KubescapeRequestPathV1
+
+	q := ksURL.Query()
+	q.Set("keep", "true")
+	ksURL.RawQuery = q.Encode()
+
 	return &ksURL
 }
 
