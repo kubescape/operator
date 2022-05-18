@@ -19,23 +19,23 @@ import (
 	"github.com/armosec/utils-k8s-go/secrethandling"
 )
 
-var IgnoreCommandInNamespace = map[string][]string{}
+var IgnoreCommandInNamespace = map[apis.NotificationPolicyType][]string{}
 
 func InitIgnoreCommandInNamespace() {
 	if len(IgnoreCommandInNamespace) != 0 {
 		return
 	}
-	IgnoreCommandInNamespace[apis.UPDATE] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.INJECT] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.DECRYPT] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.ENCRYPT] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.REMOVE] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.RESTART] = []string{metav1.NamespaceSystem, metav1.NamespacePublic}
-	IgnoreCommandInNamespace[apis.SCAN] = []string{}
+	IgnoreCommandInNamespace[apis.TypeUpdateWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
+	IgnoreCommandInNamespace[apis.TypeInjectToWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
+	IgnoreCommandInNamespace[apis.TypeDecryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
+	IgnoreCommandInNamespace[apis.TypeEncryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
+	IgnoreCommandInNamespace[apis.TypeRemoveWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
+	IgnoreCommandInNamespace[apis.TypeRestartWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic}
+	IgnoreCommandInNamespace[apis.TypeScanImages] = []string{}
 	// apis.SCAN:    {metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE},
 }
 
-func ignoreNamespace(command, namespace string) bool {
+func ignoreNamespace(command apis.NotificationPolicyType, namespace string) bool {
 	InitIgnoreCommandInNamespace()
 	if s, ok := IgnoreCommandInNamespace[command]; ok {
 		for i := range s {
@@ -110,12 +110,12 @@ func getCommandID(command *apis.Command) string {
 	return ""
 }
 
-func resourceList(command string) []string {
+func resourceList(command apis.NotificationPolicyType) []string {
 	switch command {
-	case apis.UNREGISTERED:
+	case apis.TypeClusterUnregistered:
 		return []string{"namespaces", "pods"}
 		// return []string{"namespaces", "secrets", "pods"}
-	case apis.DECRYPT, apis.ENCRYPT:
+	case apis.TypeDecryptSecret, apis.TypeEncryptSecret:
 		return []string{"secrets"}
 	default:
 		return []string{"pods"}
@@ -134,8 +134,8 @@ func sidFallback(sessionObj *cautils.SessionObj) {
 	}
 }
 
-func jobStatus(commandName string) string {
-	if commandName == apis.UPDATE || commandName == apis.INJECT || commandName == apis.ATTACH || commandName == apis.RESTART {
+func jobStatus(commandName apis.NotificationPolicyType) string {
+	if commandName == apis.TypeUpdateWorkload || commandName == apis.TypeInjectToWorkload || commandName == apis.TypeAttachWorkload || commandName == apis.TypeRestartWorkload {
 		return reporterlib.JobSuccess
 	}
 	return reporterlib.JobDone

@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func (actionHandler *ActionHandler) update(command string) error {
+func (actionHandler *ActionHandler) update(command apis.NotificationPolicyType) error {
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		glog.Error(err)
@@ -85,11 +85,11 @@ func (actionHandler *ActionHandler) updatePod(workload k8sinterface.IWorkload) e
 	return err
 }
 
-func (actionHandler *ActionHandler) editWorkload(workload k8sinterface.IWorkload, command string) error {
+func (actionHandler *ActionHandler) editWorkload(workload k8sinterface.IWorkload, command apis.NotificationPolicyType) error {
 	jobTracking := cautils.NewJobTracking(actionHandler.reporter)
 
 	switch command {
-	case apis.UPDATE, apis.ATTACH:
+	case apis.TypeUpdateWorkload, apis.TypeAttachWorkload:
 		if workload.IsAttached() {
 			return fmt.Errorf("workload already attached")
 		}
@@ -100,24 +100,24 @@ func (actionHandler *ActionHandler) editWorkload(workload k8sinterface.IWorkload
 		workload.SetInject()
 		workload.SetWlid(actionHandler.wlid)
 		workload.SetUpdateTime()
-	case apis.RESTART:
+	case apis.TypeRestartWorkload:
 		workload.SetUpdateTime()
 		workload.SetJobID(*jobTracking)
-	case apis.REPLACE_HEADERS:
+	case apis.TypeReplaceHeadersInWorkload:
 		workload.SetReplaceheaders()
 		workload.SetJobID(*jobTracking)
-	case apis.INJECT:
+	case apis.TypeInjectToWorkload:
 		workload.SetInject()
 		workload.SetJobID(*jobTracking)
-	case apis.REMOVE, apis.DETACH:
+	case apis.TypeRemoveWorkload, apis.TypeDetachWorkload:
 		workload.RemoveArmoMetadata()
 		workload.SetIgnore()
-	case apis.INCOMPATIBLE:
+	case apis.TypeWorkloadIncompatible:
 		workload.SetIgnore()
 		workload.SetIncompatible()
-	case apis.IMAGE_UNREACHABLE:
+	case apis.TypeImageUnreachableInWorkload:
 		workload.SetIgnore()
-	case apis.UNREGISTERED:
+	case apis.TypeClusterUnregistered:
 		workload.RemoveArmoMetadata()
 	}
 	return nil
@@ -154,7 +154,7 @@ func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
 }
 
 // UpdateSecret create secret in k8s
-func (actionHandler *ActionHandler) UpdateSecret(secret *corev1.Secret, command string) error {
+func (actionHandler *ActionHandler) UpdateSecret(secret *corev1.Secret, command apis.NotificationPolicyType) error {
 	jobTracking := cautils.NewJobTracking(actionHandler.reporter)
 	secretUpdate(&secret.ObjectMeta, command, jobTracking)
 	_, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(secret.Namespace).Update(actionHandler.k8sAPI.Context, secret, metav1.UpdateOptions{})
@@ -189,24 +189,24 @@ func removeLabel(meatdata *metav1.ObjectMeta, key string) {
 		delete(meatdata.Labels, key)
 	}
 }
-func secretUpdate(objectMeta *metav1.ObjectMeta, command string, jobTracking *apis.JobTracking) {
+func secretUpdate(objectMeta *metav1.ObjectMeta, command apis.NotificationPolicyType, jobTracking *apis.JobTracking) {
 	removeAnnotation(objectMeta, "kubectl.kubernetes.io/last-applied-configuration")
 	switch command {
-	case apis.DECRYPT:
+	case apis.TypeDecryptSecret:
 		// removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
 		injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.ArmoSecretClearStatus)
 		// injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.BoolToString(false))
 		// injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
 		// injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
 		// injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
-	case apis.ENCRYPT:
+	case apis.TypeEncryptSecret:
 		// injectLabel(objectMeta.Labels, pkgcautils.ArmoAttach, "true")
 		injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.ArmoSecretProtectStatus)
 		// injectLabel(objectMeta, pkgcautils.ArmoSecretStatus, pkgcautils.BoolToString(true))
 		// injectAnnotation(objectMeta, pkgcautils.ArmoJobIDPath, jobTracking.JobID)
 		// injectAnnotation(objectMeta, pkgcautils.ArmoJobParentPath, jobTracking.ParentID)
 		// injectAnnotation(objectMeta, pkgcautils.ArmoJobActionPath, fmt.Sprintf("%d", jobTracking.LastActionNumber))
-	case apis.UNREGISTERED:
+	case apis.TypeClusterUnregistered:
 		removeLabel(objectMeta, pkgcautils.ArmoInitialSecret)
 		removeLabel(objectMeta, pkgcautils.ArmoSecretStatus)
 		removeLabel(objectMeta, pkgcautils.CAInitialSecret)   // DEPRECATED
