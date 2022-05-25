@@ -30,7 +30,7 @@ func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notif
 	notif := &notificationserver.Notification{}
 	if err := json.Unmarshal(bytesNotification, notif); err != nil {
 		glog.Error(err)
-		return notif, err
+		return nil, err
 	}
 	return notif, nil
 }
@@ -45,7 +45,7 @@ func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notif
 }
 
 func NewCommands() interface{} {
-	cmds := apis.Commands{Commands: []apis.Command{apis.Command{CommandName: "1234", ResponseID: "1234567"}}}
+	cmds := apis.Commands{Commands: []apis.Command{{CommandName: "1234", ResponseID: "1234567"}}}
 	fmt.Println(cmds)
 	return &cmds
 }

@@ -39,9 +39,9 @@ func (actionHandler *ActionHandler) runSecretCommand(sessionObj *cautils.Session
 	}
 
 	switch c.CommandName {
-	case apis.ENCRYPT:
+	case apis.TypeEncryptSecret:
 		return actionHandler.encryptSecret()
-	case apis.DECRYPT, apis.UNREGISTERED: // todo - support UNREGISTERED
+	case apis.TypeDecryptSecret, apis.TypeClusterUnregistered: // todo - support UNREGISTERED
 		return actionHandler.decryptSecret()
 	}
 	return nil
@@ -90,7 +90,7 @@ func (actionHandler *ActionHandler) encryptSecret() error {
 	// update secret
 	if updateSecret {
 		glog.Infof("updating secret: %s", actionHandler.sid)
-		if err := actionHandler.UpdateSecret(secret, apis.ENCRYPT); err != nil {
+		if err := actionHandler.UpdateSecret(secret, apis.TypeEncryptSecret); err != nil {
 			return err
 		}
 	}
@@ -132,7 +132,7 @@ func (actionHandler *ActionHandler) decryptSecret() error {
 	// update secret
 	if updateSecret {
 		glog.Infof("updating secret: %s", actionHandler.sid)
-		if err := actionHandler.UpdateSecret(secret, apis.DECRYPT); err != nil {
+		if err := actionHandler.UpdateSecret(secret, apis.TypeDecryptSecret); err != nil {
 			return err
 		}
 	}

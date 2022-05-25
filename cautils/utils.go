@@ -5,7 +5,6 @@ import (
 
 	icacli "github.com/armosec/cacli-wrapper-go/cacli"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
-	"github.com/armosec/utils-go/boolutils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
@@ -20,6 +19,7 @@ var (
 
 const KubescapeScanV1 = "scanV1"
 const KubescapeRequestPathV1 = "v1/scan"
+const VulnScan = "scan"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
@@ -60,16 +60,14 @@ func GetStartupActions() []apis.Command {
 	if SystemMode == SystemModeScan {
 		return []apis.Command{
 			{
-				CommandName: string(apis.TypeRunKubescape),
+				CommandName: apis.TypeRunKubescape,
 				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 				Args: map[string]interface{}{
-					KubescapeScanV1: utilsmetav1.PostScanRequest{
-						Submit: boolutils.BoolPointer(true),
-					},
+					KubescapeScanV1: utilsmetav1.PostScanRequest{},
 				},
 			},
 			{
-				CommandName: apis.SCAN,
+				CommandName: apis.TypeScanImages,
 				WildWlid:    pkgwlid.GetK8sWLID(ClusterConfig.ClusterName, "", "", ""),
 			},
 		}
