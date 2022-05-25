@@ -19,6 +19,7 @@ var (
 
 const KubescapeScanV1 = "scanV1"
 const KubescapeRequestPathV1 = "v1/scan"
+const VulnScan = "scan"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
