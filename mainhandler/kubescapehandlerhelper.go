@@ -12,17 +12,13 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
+	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	"github.com/armosec/utils-go/boolutils"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
-
-	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 )
-
-const VolumeNamePlaceholder = "request-body-volume"
 
 func getKubescapeV1ScanURL() *url.URL {
 	ksURL := url.URL{}
@@ -169,21 +165,6 @@ func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name stri
 	return nil
 }
 
-func getCronJonTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
-	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Get(context.Background(), name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	// create cronJob
-	jobTemplateStr := template.Data["cronjobTemplate"]
-	jobTemplateObj := &v1.CronJob{}
-	if err := yaml.Unmarshal([]byte(jobTemplateStr), jobTemplateObj); err != nil {
-		return nil, err
-	}
-	return jobTemplateObj, nil
-}
-
 func combineKubescapeCMDArgsWithFrameworkName(frameworkName string, currentArgs []string) []string {
 	kubescapeScanCMDToken := "scan"
 	kubescapeFrameworkCMDToken := "framework"
@@ -197,30 +178,8 @@ func combineKubescapeCMDArgsWithFrameworkName(frameworkName string, currentArgs 
 	return append(firstArgs, currentArgs...)
 }
 
-func fixK8sCronJobNameLimit(jobName string) string {
-	return fixK8sNameLimit(jobName, 52)
-}
-
 func fixK8sJobNameLimit(jobName string) string {
 	return fixK8sNameLimit(jobName, 63)
-}
-
-// convert to K8s valid name, lower-case, don't end with '-', maximum X characters
-// https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
-func fixK8sNameLimit(jobName string, nameLimit int) string {
-	if len(jobName) > nameLimit {
-		jobName = jobName[:nameLimit]
-	}
-	lastIdx := len(jobName) - 1
-	for lastIdx >= 0 && jobName[lastIdx] == '-' {
-		jobName = jobName[:lastIdx]
-		lastIdx = len(jobName) - 1
-	}
-	if lastIdx == -1 {
-		jobName = "invalid name was given"
-	}
-	jobName = k8sNamesRegex.ReplaceAllString(jobName, "-")
-	return strings.ToLower(jobName)
 }
 
 // wrapRequestWithCommand wrap kubescape post request  with command so the websocket can parse the request

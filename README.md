@@ -52,3 +52,62 @@ curl -X POST \
 curl -X POST http://127.0.0.1:4002/v1/triggerAction -H 'Content-Type: application/json' -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-dwertent-v1"}]}'
 ```
    
+### Set vuln-scan 
+```
+curl -X POST \
+   -H 'Content-Type: application/json' \
+   -d '{
+         "commands": [
+            {
+                  "CommandName": "setVulnScanCronJob",
+                  "WildWlid": "wlid://cluster-minikube-moshe",
+                  "args": {
+                     "jobParams": {
+                        "cronTabSchedule": "* * * * *"
+                     }
+                  }
+            }
+         ]
+      }' \
+   http://127.0.0.1:4002/v1/triggerAction
+```
+
+### Update vuln-scan 
+```
+curl -X POST \
+   -H 'Content-Type: application/json' \
+   -d '{
+         "commands": [
+            {
+                  "CommandName": "updateVulnScanCronJob",
+                  "args": {
+                     "jobParams": {
+                        "cronTabSchedule": "2 0 * * *",
+                        "name": "vuln-scan-scheduled-2393196145723502557"
+                     }
+                  }
+            }
+         ]
+      }' \
+   http://127.0.0.1:4002/v1/triggerAction
+```
+
+### Delete vuln-scan 
+```
+curl -X POST \
+   -H 'Content-Type: application/json' \
+   -d '{
+         "commands": [
+            {
+                  "CommandName": "deleteVulnScanCronJob",
+                  "args": {
+                     "jobParams": {
+                        "cronTabSchedule": "2 0 * * *",
+                        "name": "vuln-scan-scheduled-605400646375517620"
+                     }
+                  }
+            }
+         ]
+      }' \
+   http://127.0.0.1:4002/v1/triggerAction
+```

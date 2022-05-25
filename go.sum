@@ -136,8 +136,8 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-metrics v0.3.10/go.mod h1:4O98XIr/9W0sxpJ8UaYkvjk10Iff7SnFrb4QAOwNTFc=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/armosec/armoapi-go v0.0.80 h1:wZHOCDlk0G9ychQjw8GaczJy4FczM+MUt2yT/9xD7Tg=
-github.com/armosec/armoapi-go v0.0.80/go.mod h1:7uyqb4VM76AWcrrwBmssdU3MTwRvcWIgSQelNCRaos0=
+github.com/armosec/armoapi-go v0.0.82 h1:oLAEDvozBagSGa3TdT9ZnrN5W1DkpHu0JTdgiqxBmrA=
+github.com/armosec/armoapi-go v0.0.82/go.mod h1:7uyqb4VM76AWcrrwBmssdU3MTwRvcWIgSQelNCRaos0=
 github.com/armosec/cacli-wrapper-go v0.0.2 h1:JxFznjYd9jYVs7ujGOJ2lwpqjukHg7SKAyboOacxinU=
 github.com/armosec/cacli-wrapper-go v0.0.2/go.mod h1:2eGVjByBR5V3DNqHefFKOAea3Fx22dnxpKmbV8Q7DXA=
 github.com/armosec/cluster-notifier-api-go v0.0.3 h1:noJ6IL/Bnkn2hnNLFvMwIMaZsxY9DJ+3MEQi3i/DAQI=
