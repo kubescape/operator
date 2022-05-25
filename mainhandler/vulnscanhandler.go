@@ -10,6 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const CronjobTemplateName = "vulnscan-cronjob-template"
+
 func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
 	req := getVulnScanRequest(&actionHandler.command)
@@ -20,12 +22,16 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 		return err
 	}
 
-	jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, "vulnscan-cronjob-template")
+	jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, CronjobTemplateName)
 	if err != nil {
 		return err
 	}
 
-	setCronJobForTriggerRequest(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID)
+	scanJobParams := getJobParams(&actionHandler.command)
+	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
+		return fmt.Errorf("setVulnScanCronJob: CronTabSchedule not found")
+	}
+	setCronJobForTriggerRequest(jobTemplateObj, name, scanJobParams.CronTabSchedule, actionHandler.command.JobTracking.JobID)
 
 	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		return err
@@ -36,8 +42,11 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
 func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 	scanJobParams := getJobParams(&actionHandler.command)
-	if scanJobParams == nil {
-		return fmt.Errorf("failed to convert scanJobParams list to scanJobParams")
+	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
+		return fmt.Errorf("updateVulnScanCronJob: CronTabSchedule not found")
+	}
+	if scanJobParams.JobName == "" {
+		return fmt.Errorf("updateVulnScanCronJob: jobName not found")
 	}
 
 	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
@@ -61,8 +70,8 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 func (actionHandler *ActionHandler) deleteVulnScanCronJob() error {
 
 	scanJobParams := getJobParams(&actionHandler.command)
-	if scanJobParams == nil {
-		return fmt.Errorf("failed to convert scanJobParams list to scanJobParams")
+	if scanJobParams == nil || scanJobParams.JobName == "" {
+		return fmt.Errorf("deleteVulnScanCronJob: CronTabSchedule not found")
 	}
 
 	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Delete(context.Background(), scanJobParams.JobName, metav1.DeleteOptions{}); err != nil {

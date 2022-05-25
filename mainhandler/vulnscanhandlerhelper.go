@@ -6,6 +6,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 )
 
+// Extract vuln-scan command from create cronjob command
 func getVulnScanRequest(command *apis.Command) *apis.Command {
 	c := *command
 	c.CommandName = cautils.VulnScan

@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"k8s-ca-websocket/cautils"
 	"strings"
 
@@ -48,7 +49,11 @@ func getCronJonTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.Cr
 	}
 
 	// create cronJob
-	jobTemplateStr := template.Data[CronjobTemplatePlaceholder]
+	jobTemplateStr, ok := template.Data[CronjobTemplatePlaceholder]
+	if !ok {
+		return nil, fmt.Errorf("getCronJonTemplate: jobTemplate not found")
+	}
+
 	jobTemplateObj := &v1.CronJob{}
 	if err := yaml.Unmarshal([]byte(jobTemplateStr), jobTemplateObj); err != nil {
 		return nil, err
