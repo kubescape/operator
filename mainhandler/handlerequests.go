@@ -6,6 +6,7 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 	"regexp"
+	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
@@ -21,21 +22,55 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+/*
+	this function need to return if it finish to handle the command response
+	by true or false, and next time to rehandled
+*/
+type HandleCommandResponseCallBack func(payload interface{}) (bool, *time.Duration)
+
+const (
+	MAX_LIMITATION_INSERT_TO_COMMAND_RESPONSE_CHANNEL_GO_ROUTINE = 10
+)
+
+const (
+	KubascapeResponse string = "KubascapeResponse"
+)
+
+type CommandResponseData struct {
+	commandName                        string
+	isCommandResponseNeedToBeRehandled bool
+	nextHandledTime                    *time.Duration
+	handleCallBack                     HandleCommandResponseCallBack
+	payload                            interface{}
+}
+
+type timerData struct {
+	timer   *time.Timer
+	payload interface{}
+}
+
+type commandResponseChannelData struct {
+	commandResponseChannel                  *chan *CommandResponseData
+	limitedGoRoutinesCommandResponseChannel *chan *timerData
+}
+
 type MainHandler struct {
-	sessionObj      *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
-	cacli           cacli.ICacli
-	k8sAPI          *k8sinterface.KubernetesApi
-	signerSemaphore *semaphore.Weighted
+	sessionObj             *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
+	cacli                  cacli.ICacli
+	k8sAPI                 *k8sinterface.KubernetesApi
+	signerSemaphore        *semaphore.Weighted
+	commandResponseChannel *commandResponseChannelData
 }
 
 type ActionHandler struct {
-	cacli           cacli.ICacli
-	k8sAPI          *k8sinterface.KubernetesApi
-	reporter        reporterlib.IReporter
-	wlid            string
-	sid             string
-	command         apis.Command
-	signerSemaphore *semaphore.Weighted
+	cacli                  cacli.ICacli
+	k8sAPI                 *k8sinterface.KubernetesApi
+	reporter               reporterlib.IReporter
+	wlid                   string
+	sid                    string
+	command                apis.Command
+	signerSemaphore        *semaphore.Weighted
+	commandResponseChannel *commandResponseChannelData
 }
 
 type waitFunc func()
@@ -57,23 +92,84 @@ func init() {
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan cautils.SessionObj, cacliRef cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+
+	commandResponseChannel := make(chan *CommandResponseData, 100)
+	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	return &MainHandler{
-		sessionObj:      sessionObj,
-		cacli:           cacliRef,
-		k8sAPI:          k8sAPI,
-		signerSemaphore: semaphore.NewWeighted(cautils.SignerSemaphore),
+		sessionObj:             sessionObj,
+		cacli:                  cacliRef,
+		k8sAPI:                 k8sAPI,
+		signerSemaphore:        semaphore.NewWeighted(cautils.SignerSemaphore),
+		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 	}
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj) *ActionHandler {
+func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
 	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &ActionHandler{
-		reporter:        sessionObj.Reporter,
-		command:         sessionObj.Command,
-		cacli:           cacliObj,
-		k8sAPI:          k8sAPI,
-		signerSemaphore: signerSemaphore,
+		reporter:               sessionObj.Reporter,
+		command:                sessionObj.Command,
+		cacli:                  cacliObj,
+		k8sAPI:                 k8sAPI,
+		signerSemaphore:        signerSemaphore,
+		commandResponseChannel: commandResponseChannel,
+	}
+}
+
+/*
+	in this function we are waiting for command response to finish in order to get the result
+*/
+func waitBeforeInsertToCommandResponseChannel(channelData *commandResponseChannelData, data *CommandResponseData, estimateReadyTime time.Duration) {
+
+}
+
+func CreateNewCommandResponseData(commandName string, cb HandleCommandResponseCallBack, payload interface{}, nextHandledTime *time.Duration) *CommandResponseData {
+	return &CommandResponseData{
+		commandName:     commandName,
+		handleCallBack:  cb,
+		payload:         payload,
+		nextHandledTime: nextHandledTime,
+	}
+}
+
+func InsertNewCommandResponseData(commandResponseChannel *commandResponseChannelData, data *CommandResponseData) {
+	glog.Infof("insert new data of %s to command response channel", data.commandName)
+	timer := time.NewTimer(*data.nextHandledTime)
+	*commandResponseChannel.limitedGoRoutinesCommandResponseChannel <- &timerData{
+		timer:   timer,
+		payload: data,
+	}
+}
+
+func (mainHandler *MainHandler) waitTimerTofinishAndInsert(data *timerData) {
+	<-data.timer.C
+	*mainHandler.commandResponseChannel.commandResponseChannel <- data.payload.(*CommandResponseData)
+}
+
+func (mainHandler *MainHandler) handleLimitedGoroutineOfCommandsResponse() {
+	for {
+		tData := <-*mainHandler.commandResponseChannel.limitedGoRoutinesCommandResponseChannel
+		mainHandler.waitTimerTofinishAndInsert(tData)
+	}
+}
+
+func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool() {
+	for i := 0; i < MAX_LIMITATION_INSERT_TO_COMMAND_RESPONSE_CHANNEL_GO_ROUTINE; i++ {
+		go mainHandler.handleLimitedGoroutineOfCommandsResponse()
+	}
+}
+
+func (mainHandler *MainHandler) handleCommandResponse() {
+	mainHandler.createInsertCommandsResponseThreadPool()
+	for {
+		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
+		glog.Infof("handle command response %s", data.commandName)
+		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(data.payload)
+		glog.Infof("%s is need to be rehandled: %v", data.commandName, data.isCommandResponseNeedToBeRehandled)
+		if data.isCommandResponseNeedToBeRehandled {
+			InsertNewCommandResponseData(mainHandler.commandResponseChannel, data)
+		}
 	}
 }
 
@@ -85,6 +181,8 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			glog.Errorf("RECOVER in HandleRequest, reason: %v", err)
 		}
 	}()
+
+	go mainHandler.handleCommandResponse()
 	for {
 		sessionObj := <-*mainHandler.sessionObj
 
@@ -132,7 +230,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 	status := "SUCCESS"
 
-	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
+	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj, mainHandler.commandResponseChannel)
 	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
 	actionHandler.reporter.SendAction(string(sessionObj.Command.CommandName), true)
 	err := actionHandler.runCommand(sessionObj)

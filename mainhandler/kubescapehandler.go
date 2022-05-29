@@ -10,6 +10,7 @@ import (
 	"time"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 
@@ -18,6 +19,15 @@ import (
 
 	"github.com/golang/glog"
 )
+
+const (
+	WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE = 40
+)
+
+type kubescapeResponseData struct {
+	reporter reporterlib.IReporter
+	scanID   string
+}
 
 func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 
@@ -99,6 +109,45 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 	return nil
 }
 
+func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
+	data := payload.(*kubescapeResponseData)
+	glog.Infof("handle kubescape response for scan id %s", data.scanID)
+
+	info := fmt.Sprintf("getting kubescape scanID %s job status", data.scanID)
+	data.reporter.SendAction(info, true)
+
+	resp, err := httputils.HttpGet(http.DefaultClient, getKubescapeV1ScanStatusURL(data.scanID).String(), nil)
+	if err != nil {
+		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
+		data.reporter.SendStatus(info, true)
+		data.reporter.SendError(err, true, true)
+		glog.Errorf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
+		return false, nil
+	}
+
+	response, err := readKubescapeV1ScanResponse(resp)
+	if err != nil {
+		info := fmt.Sprintf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
+		data.reporter.SendStatus(info, true)
+		data.reporter.SendError(err, true, true)
+		glog.Errorf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
+		return false, nil
+	}
+
+	if response.Type == utilsapisv1.BusyScanResponseType {
+		nextTimeRehandled := time.Duration(WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE * time.Second)
+		info = fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String())
+		glog.Infof("%s", info)
+		data.reporter.SendStatus(info, true)
+		return true, &nextTimeRehandled
+	}
+
+	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished succussfully", data.scanID)
+	glog.Infof("%s", info)
+	data.reporter.SendStatus(info, true)
+	return false, nil
+}
+
 func (actionHandler *ActionHandler) kubescapeScan() error {
 
 	request, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
@@ -126,8 +175,14 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	actionHandler.reporter.SendStatus(info, true)
 	glog.Infof(info)
 
-	// TODO
-	// wait for scan to complete
+	data := &kubescapeResponseData{
+		reporter: actionHandler.reporter,
+		scanID:   response.ID,
+	}
+
+	nextHandledTime := time.Duration(WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE * time.Second)
+	commandResponseData := CreateNewCommandResponseData(KubascapeResponse, HandleKubascapeResponse, data, &nextHandledTime)
+	InsertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
 
 	return nil
 }
