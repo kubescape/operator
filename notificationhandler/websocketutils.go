@@ -104,9 +104,6 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 			return err
 		}
 		for _, cmd := range cmds.Commands {
-			if cmd.CommandName == apis.SCAN && !triggerScanNewImageEnabled() {
-				continue
-			}
 			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			*notification.sessionObj <- *sessionObj
 		}

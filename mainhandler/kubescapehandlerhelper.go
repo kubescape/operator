@@ -33,6 +33,19 @@ func getKubescapeV1ScanURL() *url.URL {
 	return &ksURL
 }
 
+func getKubescapeV1ScanStatusURL(scanID string) *url.URL {
+	ksURL := url.URL{}
+	ksURL.Scheme = "http"
+	ksURL.Host = cautils.ClusterConfig.KubescapeURL
+	ksURL.Path = cautils.KubescapeRequestStatusV1
+
+	q := ksURL.Query()
+	q.Set("ID", scanID)
+	ksURL.RawQuery = q.Encode()
+
+	return &ksURL
+}
+
 func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
 
 	scanV1, ok := args[cautils.KubescapeScanV1]
