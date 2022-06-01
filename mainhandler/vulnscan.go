@@ -51,14 +51,14 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 
 	for repository, tags := range images {
 		// registry/project/repo --> repo
-		repositoryName := strings.Replace(repository, registry.Registry.Hostname+"/"+registry.Registry.ProjectID+"/", "", -1)
+		repositoryName := strings.Replace(repository, registry.registry.hostname+"/"+registry.registry.projectID+"/", "", -1)
 		for _, tag := range tags {
 			glog.Info("image ", repository+":"+tag)
 			websocketScanCommand := &apis.WebsocketScanCommand{
 				ImageTag: repository + ":" + tag,
 				Session:  apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 				Args: map[string]interface{}{
-					armotypes.AttributeRegistryName: registry.Registry.Hostname + "/" + registry.Registry.ProjectID,
+					armotypes.AttributeRegistryName: registry.registry.hostname + "/" + registry.registry.projectID,
 					armotypes.AttributeRepository:   repositoryName,
 					armotypes.AttributeTag:          tag,
 				},

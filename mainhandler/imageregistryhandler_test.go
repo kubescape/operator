@@ -24,12 +24,12 @@ func TestParseConfigMapData(t *testing.T) {
 	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
 	}
-	assert.Equal(t, registryScanHandler.registryScan[0].Registry.Hostname, "gcr.io")
-	assert.Equal(t, registryScanHandler.registryScan[0].Registry.ProjectID, "blu")
+	assert.Equal(t, registryScanHandler.registryScan[0].registry.hostname, "gcr.io")
+	assert.Equal(t, registryScanHandler.registryScan[0].registry.projectID, "blu")
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[0].registryScanConfig.Include, "armo-vuln"))
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[0].registryScanConfig.Include, "armo-vuln2"))
-	assert.Equal(t, registryScanHandler.registryScan[0].Registry.Hostname, "gcr.io")
-	assert.Equal(t, registryScanHandler.registryScan[0].Registry.ProjectID, "blu")
+	assert.Equal(t, registryScanHandler.registryScan[0].registry.hostname, "gcr.io")
+	assert.Equal(t, registryScanHandler.registryScan[0].registry.projectID, "blu")
 
 	// Test Exclude
 	configDataStr = `
@@ -44,8 +44,8 @@ func TestParseConfigMapData(t *testing.T) {
 	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
 	}
-	assert.Equal(t, registryScanHandler.registryScan[1].Registry.Hostname, "gcr.io")
-	assert.Equal(t, registryScanHandler.registryScan[1].Registry.ProjectID, "blu")
+	assert.Equal(t, registryScanHandler.registryScan[1].registry.hostname, "gcr.io")
+	assert.Equal(t, registryScanHandler.registryScan[1].registry.projectID, "blu")
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[1].registryScanConfig.Exclude, "armo-vuln"))
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[1].registryScanConfig.Exclude, "armo-vuln2"))
 
@@ -62,8 +62,8 @@ func TestParseConfigMapData(t *testing.T) {
 	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
 	}
-	assert.Equal(t, registryScanHandler.registryScan[2].Registry.Hostname, "gcr.io")
-	assert.Equal(t, registryScanHandler.registryScan[2].Registry.ProjectID, "")
+	assert.Equal(t, registryScanHandler.registryScan[2].registry.hostname, "gcr.io")
+	assert.Equal(t, registryScanHandler.registryScan[2].registry.projectID, "")
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[2].registryScanConfig.Exclude, "armo-vuln"))
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[2].registryScanConfig.Exclude, "armo-vuln2"))
 

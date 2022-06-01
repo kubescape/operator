@@ -42,12 +42,12 @@ type registryAuth struct {
 }
 
 type registry struct {
-	Hostname  string
-	ProjectID string
+	hostname  string
+	projectID string
 }
 
 type registryScan struct {
-	Registry           registry
+	registry           registry
 	registryAuth       types.AuthConfig
 	registryScanConfig registryScanConfig
 	mapImageToTags     map[string][]string
@@ -100,9 +100,9 @@ func (registryScanHandler *registryScanHandler) ParseConfigMapData(configData ma
 			registryScan.registryScanConfig = reg
 		}
 		registrySpplited := strings.Split(reg.Registry, "/")
-		registryScan.Registry.Hostname = registrySpplited[0]
+		registryScan.registry.hostname = registrySpplited[0]
 		if len(registrySpplited) > 1 {
-			registryScan.Registry.ProjectID = registrySpplited[1]
+			registryScan.registry.projectID = registrySpplited[1]
 		}
 		registryScanHandler.registryScan = append(registryScanHandler.registryScan, *registryScan)
 	}
@@ -149,7 +149,7 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	imgNameToTags := make(map[string][]string, 0)
 	regCreds := &registryCreds{
 		auth:         &registryScan.registryAuth,
-		RegistryName: registryScan.Registry.Hostname,
+		RegistryName: registryScan.registry.hostname,
 	}
 	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
 	if err != nil {
@@ -166,18 +166,18 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 
 func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
 	if len(registryScan.registryScanConfig.Include) > 0 {
-		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.Registry.ProjectID+"/", "", -1)) {
+		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
 			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 			for i := 0; i < registryScan.registryScanConfig.Depth; i++ {
-				registryScan.mapImageToTags[registryScan.Registry.Hostname+"/"+repo] = tags
+				registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 			}
 
 		}
 	} else if len(registryScan.registryScanConfig.Exclude) > 0 {
-		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.Registry.ProjectID+"/", "", -1)) {
+		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
 			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 			for i := 0; i < registryScan.registryScanConfig.Depth; i++ {
-				registryScan.mapImageToTags[registryScan.Registry.Hostname+"/"+repo] = tags
+				registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 			}
 		}
 	}
@@ -193,7 +193,7 @@ func (registryScanHandler *registryScanHandler) isExceedScanLimit(imgNameToTags 
 }
 
 func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *registryScan) ([]string, error) {
-	registry, err := containerregistry.NewRegistry(registryScan.Registry.Hostname)
+	registry, err := containerregistry.NewRegistry(registryScan.registry.hostname)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *r
 	}
 	var reposInGivenRegistry []string
 	for _, repo := range repos {
-		if strings.Contains(repo, registryScan.Registry.ProjectID+"/") {
+		if strings.Contains(repo, registryScan.registry.projectID+"/") {
 			reposInGivenRegistry = append(reposInGivenRegistry, repo)
 		}
 	}
