@@ -2,6 +2,8 @@ module k8s-ca-websocket
 
 go 1.18
 
+replace github.com/armosec/k8s-interface => /usr/local/go/src/k8s-interface
+
 require (
 	github.com/armosec/armoapi-go v0.0.80
 	github.com/armosec/cacli-wrapper-go v0.0.2

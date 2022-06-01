@@ -142,8 +142,6 @@ github.com/armosec/cacli-wrapper-go v0.0.2 h1:JxFznjYd9jYVs7ujGOJ2lwpqjukHg7SKAy
 github.com/armosec/cacli-wrapper-go v0.0.2/go.mod h1:2eGVjByBR5V3DNqHefFKOAea3Fx22dnxpKmbV8Q7DXA=
 github.com/armosec/cluster-notifier-api-go v0.0.3 h1:noJ6IL/Bnkn2hnNLFvMwIMaZsxY9DJ+3MEQi3i/DAQI=
 github.com/armosec/cluster-notifier-api-go v0.0.3/go.mod h1:7J+XboqvPNAPABtkH2ecITg8/23fP4YXvtAa5wJONQU=
-github.com/armosec/k8s-interface v0.0.70 h1:NU3UIaNl7H3hsRecwggiaQbZXTwXtOKg3GOBjq6/XJw=
-github.com/armosec/k8s-interface v0.0.70/go.mod h1:8NX4xWXh8mwW7QyZdZea1czNdM2azCK9BbUNmiZYXW0=
 github.com/armosec/logger-go v0.0.6 h1:V8iMCC/XQ7Af88F/k3uWuDQskgLHUY5MXI5L1fMoPU8=
 github.com/armosec/logger-go v0.0.6/go.mod h1:ZnocpQc+z6phNJSLVfXgHcOW4rg4NCO70ApmF0Y7W6w=
 github.com/armosec/opa-utils v0.0.138 h1:y8D2/1FNraumZm8CrRVJAF/xVSKg4rgqFe4NW5Bo6DM=

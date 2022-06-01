@@ -44,20 +44,24 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 	return nil
 }
 
-func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, auth *types.AuthConfig) ([]*apis.WebsocketScanCommand, error) {
+func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *RegistryScan) ([]*apis.WebsocketScanCommand, error) {
 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
 
 	for repository, tags := range images {
+		repositoryName := strings.Replace(repository, registry.Registry.Hostname+"/"+registry.Registry.ProjectID+"/", "", -1)
 		for _, tag := range tags {
 			glog.Info("image ", repository+":"+tag)
 			websocketScanCommand := &apis.WebsocketScanCommand{
 				ImageTag: repository + ":" + tag,
 				Session:  apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
-				Args:     map[string]interface{}{"registryName": sessionObj.Command.Args["registryName"]},
+				Args: map[string]interface{}{
+					"registryName": registry.Registry.Hostname + "/" + registry.Registry.ProjectID,
+					"repository":   repositoryName,
+				},
 			}
-			if auth != nil {
-				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, *auth)
+			if registry.RegistryAuth != (types.AuthConfig{}) {
+				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, registry.RegistryAuth)
 			}
 			webSocketScanCMDList = append(webSocketScanCMDList, websocketScanCommand)
 		}
@@ -106,50 +110,73 @@ func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
 	return decrypt_auth, nil
 }
 
-func (actionHandler *ActionHandler) scanRegistry(sessionObj *cautils.SessionObj) error {
+func (actionHandler *ActionHandler) parseSecret(registryScanHandler *RegistryScanHandler) error {
+	secret, err := actionHandler.getRegistryScanSecret()
+	if err != nil {
+		return err
+	}
+	secretData := secret.GetData()
+	err = registryScanHandler.ParseSecretsData(secretData)
+
+	return err
+}
+
+func (actionHandler *ActionHandler) parseConfigMap(registryScanHandler *RegistryScanHandler) error {
+	configMap, err := actionHandler.k8sAPI.GetWorkload(ARMO_NAMESPACE, "ConfigMap", REGISTRY_SCAN_CONFIGMAP)
+	if err != nil {
+		return err
+	}
+	configData := configMap.GetData()
+	err = registryScanHandler.ParseConfigMapData(configData)
+	return err
+
+}
+
+func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
+	secret, err := actionHandler.k8sAPI.GetWorkload(ARMO_NAMESPACE, "Secret", REGISTRY_SCAN_SECRET)
+	return secret, err
+
+}
+
+func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionObj) error {
 
 	/*
-		1. collect input
-		2. get images list from the registry
-		3. convert image list to vuln scan data command
-		4. iterate over list and send to vuln scan by ram max size
+		Auth data must be stored in kubescape-registry-scan secret
+		Config data must be stored in kubescape-registry-scan
 	*/
 
-	//// 1. collect input
-	var err error
-	if _, ok := sessionObj.Command.Args["registryName"]; !ok {
-		glog.Infof("no registry supplied for scan")
-		return fmt.Errorf("no registry supplied for scan")
-	}
-	glog.Infof("in scanRegistry %v", sessionObj.Command.Args["registryName"])
-	auth, err := decryptSecretsData(sessionObj.Command.Args)
+	registryScanHandler := NewRegistryHandler()
+
+	err := actionHandler.parseSecret(registryScanHandler)
 	if err != nil {
-		glog.Infof("decryptSecretsData failed with err %v", err)
+		return err
+	}
+	err = actionHandler.parseConfigMap(registryScanHandler)
+	if err != nil {
 		return err
 	}
 
-	//// 2. get images list from the registry
-	images, err := ListImagesInRegistry(sessionObj.Command.Args["registryName"].(string), &auth)
-	if err != nil {
-		glog.Infof("ListImagesInRegistry failed with err %v", err)
-		return err
+	for _, reg := range registryScanHandler.registryScan {
+		err = actionHandler.scanRegistry(&reg, sessionObj, registryScanHandler)
 	}
 
-	//// 3. convert image list to vuln scan data command
-	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(images, sessionObj, &auth)
+	return err
+}
+
+func (actionHandler *ActionHandler) scanRegistry(registry *RegistryScan, sessionObj *cautils.SessionObj, registryScanHandler *RegistryScanHandler) error {
+	images, err := registryScanHandler.GetImagesForScanning(*registry)
 	if err != nil {
-		glog.Infof("convertImagesToWebsocketScanCommand failed with err %v", err)
 		return err
 	}
-
-	//// 4. iterate over list and send to vuln scan by ram max size
+	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(images, sessionObj, registry)
+	if err != nil {
+		return err
+	}
 	err = sendAllImagesToVulnScan(webSocketScanCMDList)
 	if err != nil {
 		glog.Infof("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
-		return err
 	}
-
-	return nil
+	return err
 }
 
 func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj) error {
