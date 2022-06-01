@@ -105,7 +105,11 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		switch sessionObj.Command.CommandName {
 		case apis.TypeRunKubescape, apis.TypeRunKubescapeJob, apis.TypeSetKubescapeCronJob, apis.TypeDeleteKubescapeCronJob, apis.TypeUpdateKubescapeCronJob:
 			isToItemizeScopeCommand = false
+
+		case apis.TypeSetVulnScanCronJob, apis.TypeDeleteVulnScanCronJob, apis.TypeUpdateVulnScanCronJob:
+			isToItemizeScopeCommand = false
 		}
+
 		if isToItemizeScopeCommand {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
 			// } else if sessionObj.Command.Sid != "" {
@@ -189,6 +193,12 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.updateKubescapeCronJob()
 	case apis.TypeDeleteKubescapeCronJob:
 		return actionHandler.deleteKubescapeCronJob()
+	case apis.TypeSetVulnScanCronJob:
+		return actionHandler.setVulnScanCronJob()
+	case apis.TypeUpdateVulnScanCronJob:
+		return actionHandler.updateVulnScanCronJob()
+	case apis.TypeDeleteVulnScanCronJob:
+		return actionHandler.deleteVulnScanCronJob()
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}
