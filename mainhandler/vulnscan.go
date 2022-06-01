@@ -45,7 +45,7 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 	return nil
 }
 
-func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *RegistryScan) ([]*apis.WebsocketScanCommand, error) {
+func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *registryScan) ([]*apis.WebsocketScanCommand, error) {
 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
 
@@ -63,8 +63,9 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 					armotypes.AttributeTag:          tag,
 				},
 			}
-			if registry.RegistryAuth != (types.AuthConfig{}) {
-				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, registry.RegistryAuth)
+			// Check if auth is empty (used for public registries)
+			if registry.registryAuth != (types.AuthConfig{}) {
+				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, registry.registryAuth)
 			}
 			webSocketScanCMDList = append(webSocketScanCMDList, websocketScanCommand)
 		}
@@ -113,7 +114,7 @@ func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
 	return decrypt_auth, nil
 }
 
-func (actionHandler *ActionHandler) parseSecret(registryScanHandler *RegistryScanHandler, registryName string) error {
+func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHandler *registryScanHandler, registryName string) error {
 	secret, err := actionHandler.getRegistryScanSecret()
 	if err != nil {
 		return err
@@ -124,8 +125,8 @@ func (actionHandler *ActionHandler) parseSecret(registryScanHandler *RegistrySca
 	return err
 }
 
-func (actionHandler *ActionHandler) parseConfigMap(registryScanHandler *RegistryScanHandler) error {
-	configMap, err := actionHandler.k8sAPI.GetWorkload(ARMO_NAMESPACE, "ConfigMap", REGISTRY_SCAN_CONFIGMAP)
+func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registryScanHandler *registryScanHandler) error {
+	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
 	if err != nil {
 		return err
 	}
@@ -136,7 +137,7 @@ func (actionHandler *ActionHandler) parseConfigMap(registryScanHandler *Registry
 }
 
 func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
-	secret, err := actionHandler.k8sAPI.GetWorkload(ARMO_NAMESPACE, "Secret", REGISTRY_SCAN_SECRET)
+	secret, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "Secret", registryScanSecret)
 	return secret, err
 
 }
@@ -145,20 +146,20 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	/*
 		Auth data must be stored in kubescape-registry-scan secret
-		Config data must be stored in kubescape-registry-scan
+		Config data must be stored in "kubescape-registry-scan" config map
 	*/
 
-	registryScanHandler := NewRegistryHandler()
+	registryScanHandler := NewRegistryScanHandler()
 
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
 	if err != nil {
 		return err
 	}
-	err = actionHandler.parseSecret(registryScanHandler, registryName)
+	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
 	if err != nil {
 		return err
 	}
-	err = actionHandler.parseConfigMap(registryScanHandler)
+	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
 		return err
 	}
@@ -171,18 +172,18 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 }
 
 func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.SessionObj) (string, error) {
-	registryInfo, ok := sessionObj.Command.Args[REGISTRY_INFO_V1].(map[string]interface{})
+	registryInfo, ok := sessionObj.Command.Args[registryInfoV1].(map[string]interface{})
 	if !ok {
 		return "", fmt.Errorf("could not parse registry info")
 	}
-	registryName, ok := registryInfo[REGISTRY_NAME].(string)
+	registryName, ok := registryInfo[registryName].(string)
 	if !ok {
 		return "", fmt.Errorf("could not parse registry name")
 	}
 	return registryName, nil
 }
 
-func (actionHandler *ActionHandler) scanRegistry(registry *RegistryScan, sessionObj *cautils.SessionObj, registryScanHandler *RegistryScanHandler) error {
+func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
 	images, err := registryScanHandler.GetImagesForScanning(*registry)
 	if err != nil {
 		return err

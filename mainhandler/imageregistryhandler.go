@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types"
-	"github.com/golang/glog"
 	containerregistry "github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"k8s.io/utils/strings/slices"
@@ -17,44 +16,45 @@ import (
 type AuthMethods string
 
 const (
-	REGISTRY_SCAN_SECRET                        = "kubescape-registry-scan"
-	REGISTRY_SCAN_CONFIGMAP                     = "kubescape-registry-scan"
-	REGISTRY_INFO_V1                            = "registryInfo-v1"
-	REGISTRY_NAME                               = "registryName"
-	IMAGES_TO_SCAN_LIMIT                        = 500
-	DEFAULT_DEPTH                               = 1
-	REGISTRIES_AUTH_FIELD_IN_SECRET             = "registriesAuth"
-	ARMO_NAMESPACE                              = "armo-system"
-	IPS_AUTH                        AuthMethods = "ips"
+	registryScanSecret                      = "kubescape-registry-scan"
+	registryScanConfigmap                   = "kubescape-registry-scan"
+	registryInfoV1                          = "registryInfo-v1"
+	registryName                            = "registryName"
+	imagesToScanLimit                       = 500
+	defaultDepth                            = 1
+	registriesAuthFieldInSecret             = "registriesAuth"
+	armoNamespace                           = "armo-system"
+	ipsAuth                     AuthMethods = "ips"
 )
 
-type RegistryScanConfig struct {
+type registryScanConfig struct {
 	Registry string   `json:"registry"`
 	Depth    int      `json:"depth"`
 	Include  []string `json:"include,omitempty"`
 	Exclude  []string `json:"exclude,omitempty"`
 }
 
-type RegistryAuth struct {
+type registryAuth struct {
 	Registry   string `json:"registry"`
 	AuthMethod string `json:"auth_method"`
 	Username   string `json:"username"`
 	Password   string `json:"password"`
 }
 
-type Registry struct {
+type registry struct {
 	Hostname  string
 	ProjectID string
 }
 
-type RegistryScan struct {
-	Registry           Registry
-	RegistryAuth       types.AuthConfig
-	RegistryScanConfig RegistryScanConfig
+type registryScan struct {
+	Registry           registry
+	registryAuth       types.AuthConfig
+	registryScanConfig registryScanConfig
+	mapImageToTags     map[string][]string
 }
 
-type RegistryScanHandler struct {
-	registryScan      []RegistryScan
+type registryScanHandler struct {
+	registryScan      []registryScan
 	mapRegistryToAuth map[string]types.AuthConfig
 }
 
@@ -63,16 +63,22 @@ type registryCreds struct {
 	auth         *types.AuthConfig
 }
 
-func NewRegistryHandler() *RegistryScanHandler {
-	return &RegistryScanHandler{
-		registryScan:      make([]RegistryScan, 0),
+func NewRegistryScanHandler() *registryScanHandler {
+	return &registryScanHandler{
+		registryScan:      make([]registryScan, 0),
 		mapRegistryToAuth: make(map[string]types.AuthConfig),
 	}
 }
 
-func (registryScanHandler *RegistryScanHandler) ParseConfigMapData(configData map[string]interface{}) error {
-	var registries []RegistryScanConfig
-	var registryScan RegistryScan
+func NewRegistryScan() *registryScan {
+	return &registryScan{
+		mapImageToTags: make(map[string][]string, 0),
+	}
+}
+
+func (registryScanHandler *registryScanHandler) ParseConfigMapData(configData map[string]interface{}) error {
+	var registries []registryScanConfig
+	registryScan := NewRegistryScan()
 	registriesStr := configData["registries"].(string)
 	registriesStr = strings.Replace(registriesStr, "\n", "", -1)
 	err := json.Unmarshal([]byte(registriesStr), &registries)
@@ -81,38 +87,34 @@ func (registryScanHandler *RegistryScanHandler) ParseConfigMapData(configData ma
 	}
 	for _, reg := range registries {
 		if len(reg.Include) > 0 && len(reg.Exclude) > 0 {
-			glog.Errorf("configMap should contain either 'Include' or 'Exclude', not both. In registry: %v", reg.Registry)
-			continue
+			return fmt.Errorf("configMap should contain either 'Include' or 'Exclude', not both. In registry: %v", reg.Registry)
 		}
 		if auth, ok := registryScanHandler.mapRegistryToAuth[reg.Registry]; ok {
 			if reg.Depth == 0 {
-				reg.Depth = DEFAULT_DEPTH
+				reg.Depth = defaultDepth
 			}
-			registryScan = RegistryScan{
-				RegistryScanConfig: reg,
-				RegistryAuth:       auth,
-			}
+			registryScan.registryAuth = auth
+			registryScan.registryScanConfig = reg
 		} else { // public registry
-			registryScan = RegistryScan{
-				RegistryScanConfig: reg,
-				RegistryAuth:       types.AuthConfig{},
-			}
+			registryScan.registryAuth = types.AuthConfig{}
+			registryScan.registryScanConfig = reg
 		}
-		if registrySpplited := strings.Split(reg.Registry, "/"); len(registrySpplited) > 1 {
-			registryScan.Registry.Hostname = registrySpplited[0]
+		registrySpplited := strings.Split(reg.Registry, "/")
+		registryScan.Registry.Hostname = registrySpplited[0]
+		if len(registrySpplited) > 1 {
 			registryScan.Registry.ProjectID = registrySpplited[1]
 		}
-		registryScanHandler.registryScan = append(registryScanHandler.registryScan, registryScan)
+		registryScanHandler.registryScan = append(registryScanHandler.registryScan, *registryScan)
 	}
 	return nil
 }
 
 // parse secret data according to convention
-func (registryScanHandler *RegistryScanHandler) ParseSecretsData(secretData map[string]interface{}, registryName string) error {
-	var registriesAuth []RegistryAuth
-	registriesStr, ok := secretData[REGISTRIES_AUTH_FIELD_IN_SECRET].(string)
+func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[string]interface{}, registryName string) error {
+	var registriesAuth []registryAuth
+	registriesStr, ok := secretData[registriesAuthFieldInSecret].(string)
 	if !ok {
-		return fmt.Errorf("error parsing Secret: %s field must be a string", REGISTRIES_AUTH_FIELD_IN_SECRET)
+		return fmt.Errorf("error parsing Secret: %s field must be a string", registriesAuthFieldInSecret)
 	}
 	data, err := base64.StdEncoding.DecodeString(registriesStr)
 	if err != nil {
@@ -121,12 +123,12 @@ func (registryScanHandler *RegistryScanHandler) ParseSecretsData(secretData map[
 	registriesStr = strings.Replace(string(data), "\n", "", -1)
 	err = json.Unmarshal([]byte(registriesStr), &registriesAuth)
 	if err != nil {
-		err = fmt.Errorf("error parsing Secret: %s", err.Error())
+		return fmt.Errorf("error parsing Secret: %s", err.Error())
 	}
 
 	for _, reg := range registriesAuth {
 		switch AuthMethods(reg.AuthMethod) {
-		case IPS_AUTH:
+		case ipsAuth:
 			if registryName == reg.Registry {
 				if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
 					registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
@@ -143,10 +145,10 @@ func (registryScanHandler *RegistryScanHandler) ParseSecretsData(secretData map[
 	return err
 }
 
-func (registryScanHandler *RegistryScanHandler) GetImagesForScanning(registryScan RegistryScan) (map[string][]string, error) {
+func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan) (map[string][]string, error) {
 	imgNameToTags := make(map[string][]string, 0)
 	regCreds := &registryCreds{
-		auth:         &registryScan.RegistryAuth,
+		auth:         &registryScan.registryAuth,
 		RegistryName: registryScan.Registry.Hostname,
 	}
 	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
@@ -154,39 +156,43 @@ func (registryScanHandler *RegistryScanHandler) GetImagesForScanning(registrySca
 		return imgNameToTags, err
 	}
 	for _, repo := range repoes {
-		if len(registryScan.RegistryScanConfig.Include) > 0 {
-			if slices.Contains(registryScan.RegistryScanConfig.Include, strings.Replace(repo, registryScan.Registry.ProjectID+"/", "", -1)) {
-				tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-				for i := 0; i < registryScan.RegistryScanConfig.Depth; i++ {
-					imgNameToTags[registryScan.Registry.Hostname+"/"+repo] = tags
-				}
-
-			}
-		} else if len(registryScan.RegistryScanConfig.Exclude) > 0 {
-			if !slices.Contains(registryScan.RegistryScanConfig.Exclude, strings.Replace(repo, registryScan.Registry.ProjectID+"/", "", -1)) {
-				tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-				for i := 0; i < registryScan.RegistryScanConfig.Depth; i++ {
-					imgNameToTags[registryScan.Registry.Hostname+"/"+repo] = tags
-				}
-			}
-		}
+		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
 	if registryScanHandler.isExceedScanLimit(imgNameToTags) {
-		return nil, fmt.Errorf("limit of images to scan exceeded. Limits: %d", IMAGES_TO_SCAN_LIMIT)
+		return nil, fmt.Errorf("limit of images to scan exceeded. Limits: %d", imagesToScanLimit)
 	}
 	return imgNameToTags, nil
 }
 
+func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
+	if len(registryScan.registryScanConfig.Include) > 0 {
+		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.Registry.ProjectID+"/", "", -1)) {
+			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+			for i := 0; i < registryScan.registryScanConfig.Depth; i++ {
+				registryScan.mapImageToTags[registryScan.Registry.Hostname+"/"+repo] = tags
+			}
+
+		}
+	} else if len(registryScan.registryScanConfig.Exclude) > 0 {
+		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.Registry.ProjectID+"/", "", -1)) {
+			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+			for i := 0; i < registryScan.registryScanConfig.Depth; i++ {
+				registryScan.mapImageToTags[registryScan.Registry.Hostname+"/"+repo] = tags
+			}
+		}
+	}
+}
+
 // Check if number of images (not repoes) to scan is more than limit
-func (registryScanHandler *RegistryScanHandler) isExceedScanLimit(imgNameToTags map[string][]string) bool {
+func (registryScanHandler *registryScanHandler) isExceedScanLimit(imgNameToTags map[string][]string) bool {
 	numOfImgs := 0
 	for _, v := range imgNameToTags {
 		numOfImgs += len(v)
 	}
-	return numOfImgs > IMAGES_TO_SCAN_LIMIT
+	return numOfImgs > imagesToScanLimit
 }
 
-func (registryScanHandler *RegistryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *RegistryScan) ([]string, error) {
+func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *registryScan) ([]string, error) {
 	registry, err := containerregistry.NewRegistry(registryScan.Registry.Hostname)
 	if err != nil {
 		return nil, err
@@ -206,7 +212,7 @@ func (registryScanHandler *RegistryScanHandler) ListRepoesInRegistry(regCreds *r
 	return reposInGivenRegistry, nil
 }
 
-func (registryScanHandler *RegistryScanHandler) ListImageTagsInRepo(repo string, regCreds *registryCreds) ([]string, error) {
+func (registryScanHandler *registryScanHandler) ListImageTagsInRepo(repo string, regCreds *registryCreds) ([]string, error) {
 	fullRepoName := regCreds.RegistryName + "/" + repo
 	repo_data, err := containerregistry.NewRepository(fullRepoName)
 	if err != nil {
