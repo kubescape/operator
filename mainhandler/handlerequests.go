@@ -184,7 +184,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(sessionObj)
 	case apis.TypeScanRegistry:
-		return actionHandler.scanRegistry(sessionObj)
+		return actionHandler.scanRegistries(sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan()
 	case apis.TypeSetKubescapeCronJob:

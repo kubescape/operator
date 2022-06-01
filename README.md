@@ -33,7 +33,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 
-### Set kubescpae cronJob Kubescape scan
+### Set kubescape cronJob Kubescape scan
 
 ```
 curl -X POST \
