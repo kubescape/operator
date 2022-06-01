@@ -181,8 +181,8 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	}
 
 	nextHandledTime := time.Duration(WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE * time.Second)
-	commandResponseData := CreateNewCommandResponseData(KubascapeResponse, HandleKubascapeResponse, data, &nextHandledTime)
-	InsertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
+	commandResponseData := createNewCommandResponseData(KubascapeResponse, HandleKubascapeResponse, data, &nextHandledTime)
+	insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
 
 	return nil
 }

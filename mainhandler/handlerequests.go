@@ -6,7 +6,6 @@ import (
 	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/sign"
 	"regexp"
-	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
@@ -26,33 +25,6 @@ import (
 	this function need to return if it finish to handle the command response
 	by true or false, and next time to rehandled
 */
-type HandleCommandResponseCallBack func(payload interface{}) (bool, *time.Duration)
-
-const (
-	MAX_LIMITATION_INSERT_TO_COMMAND_RESPONSE_CHANNEL_GO_ROUTINE = 10
-)
-
-const (
-	KubascapeResponse string = "KubascapeResponse"
-)
-
-type CommandResponseData struct {
-	commandName                        string
-	isCommandResponseNeedToBeRehandled bool
-	nextHandledTime                    *time.Duration
-	handleCallBack                     HandleCommandResponseCallBack
-	payload                            interface{}
-}
-
-type timerData struct {
-	timer   *time.Timer
-	payload interface{}
-}
-
-type commandResponseChannelData struct {
-	commandResponseChannel                  *chan *CommandResponseData
-	limitedGoRoutinesCommandResponseChannel *chan *timerData
-}
 
 type MainHandler struct {
 	sessionObj             *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
@@ -114,62 +86,6 @@ func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi,
 		k8sAPI:                 k8sAPI,
 		signerSemaphore:        signerSemaphore,
 		commandResponseChannel: commandResponseChannel,
-	}
-}
-
-/*
-	in this function we are waiting for command response to finish in order to get the result
-*/
-func waitBeforeInsertToCommandResponseChannel(channelData *commandResponseChannelData, data *CommandResponseData, estimateReadyTime time.Duration) {
-
-}
-
-func CreateNewCommandResponseData(commandName string, cb HandleCommandResponseCallBack, payload interface{}, nextHandledTime *time.Duration) *CommandResponseData {
-	return &CommandResponseData{
-		commandName:     commandName,
-		handleCallBack:  cb,
-		payload:         payload,
-		nextHandledTime: nextHandledTime,
-	}
-}
-
-func InsertNewCommandResponseData(commandResponseChannel *commandResponseChannelData, data *CommandResponseData) {
-	glog.Infof("insert new data of %s to command response channel", data.commandName)
-	timer := time.NewTimer(*data.nextHandledTime)
-	*commandResponseChannel.limitedGoRoutinesCommandResponseChannel <- &timerData{
-		timer:   timer,
-		payload: data,
-	}
-}
-
-func (mainHandler *MainHandler) waitTimerTofinishAndInsert(data *timerData) {
-	<-data.timer.C
-	*mainHandler.commandResponseChannel.commandResponseChannel <- data.payload.(*CommandResponseData)
-}
-
-func (mainHandler *MainHandler) handleLimitedGoroutineOfCommandsResponse() {
-	for {
-		tData := <-*mainHandler.commandResponseChannel.limitedGoRoutinesCommandResponseChannel
-		mainHandler.waitTimerTofinishAndInsert(tData)
-	}
-}
-
-func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool() {
-	for i := 0; i < MAX_LIMITATION_INSERT_TO_COMMAND_RESPONSE_CHANNEL_GO_ROUTINE; i++ {
-		go mainHandler.handleLimitedGoroutineOfCommandsResponse()
-	}
-}
-
-func (mainHandler *MainHandler) handleCommandResponse() {
-	mainHandler.createInsertCommandsResponseThreadPool()
-	for {
-		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
-		glog.Infof("handle command response %s", data.commandName)
-		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(data.payload)
-		glog.Infof("%s is need to be rehandled: %v", data.commandName, data.isCommandResponseNeedToBeRehandled)
-		if data.isCommandResponseNeedToBeRehandled {
-			InsertNewCommandResponseData(mainHandler.commandResponseChannel, data)
-		}
 	}
 }
 
