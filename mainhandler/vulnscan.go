@@ -18,6 +18,7 @@ import (
 	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/golang/glog"
@@ -49,6 +50,7 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
 
 	for repository, tags := range images {
+		// registry/project/repo --> repo
 		repositoryName := strings.Replace(repository, registry.Registry.Hostname+"/"+registry.Registry.ProjectID+"/", "", -1)
 		for _, tag := range tags {
 			glog.Info("image ", repository+":"+tag)
@@ -56,8 +58,9 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 				ImageTag: repository + ":" + tag,
 				Session:  apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 				Args: map[string]interface{}{
-					"registryName": registry.Registry.Hostname + "/" + registry.Registry.ProjectID,
-					"repository":   repositoryName,
+					armotypes.AttributeRegistryName: registry.Registry.Hostname + "/" + registry.Registry.ProjectID,
+					armotypes.AttributeRepository:   repositoryName,
+					armotypes.AttributeTag:          tag,
 				},
 			}
 			if registry.RegistryAuth != (types.AuthConfig{}) {
@@ -110,13 +113,13 @@ func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
 	return decrypt_auth, nil
 }
 
-func (actionHandler *ActionHandler) parseSecret(registryScanHandler *RegistryScanHandler) error {
+func (actionHandler *ActionHandler) parseSecret(registryScanHandler *RegistryScanHandler, registryName string) error {
 	secret, err := actionHandler.getRegistryScanSecret()
 	if err != nil {
 		return err
 	}
 	secretData := secret.GetData()
-	err = registryScanHandler.ParseSecretsData(secretData)
+	err = registryScanHandler.ParseSecretsData(secretData, registryName)
 
 	return err
 }
@@ -147,7 +150,11 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	registryScanHandler := NewRegistryHandler()
 
-	err := actionHandler.parseSecret(registryScanHandler)
+	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
+	if err != nil {
+		return err
+	}
+	err = actionHandler.parseSecret(registryScanHandler, registryName)
 	if err != nil {
 		return err
 	}
@@ -161,6 +168,18 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 	}
 
 	return err
+}
+
+func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.SessionObj) (string, error) {
+	registryInfo, ok := sessionObj.Command.Args[REGISTRY_INFO_V1].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("could not parse registry info")
+	}
+	registryName, ok := registryInfo[REGISTRY_NAME].(string)
+	if !ok {
+		return "", fmt.Errorf("could not parse registry name")
+	}
+	return registryName, nil
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *RegistryScan, sessionObj *cautils.SessionObj, registryScanHandler *RegistryScanHandler) error {

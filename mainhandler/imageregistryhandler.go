@@ -19,6 +19,8 @@ type AuthMethods string
 const (
 	REGISTRY_SCAN_SECRET                        = "kubescape-registry-scan"
 	REGISTRY_SCAN_CONFIGMAP                     = "kubescape-registry-scan"
+	REGISTRY_INFO_V1                            = "registryInfo-v1"
+	REGISTRY_NAME                               = "registryName"
 	IMAGES_TO_SCAN_LIMIT                        = 500
 	DEFAULT_DEPTH                               = 1
 	REGISTRIES_AUTH_FIELD_IN_SECRET             = "registriesAuth"
@@ -106,7 +108,7 @@ func (registryScanHandler *RegistryScanHandler) ParseConfigMapData(configData ma
 }
 
 // parse secret data according to convention
-func (registryScanHandler *RegistryScanHandler) ParseSecretsData(secretData map[string]interface{}) error {
+func (registryScanHandler *RegistryScanHandler) ParseSecretsData(secretData map[string]interface{}, registryName string) error {
 	var registriesAuth []RegistryAuth
 	registriesStr, ok := secretData[REGISTRIES_AUTH_FIELD_IN_SECRET].(string)
 	if !ok {
@@ -125,10 +127,12 @@ func (registryScanHandler *RegistryScanHandler) ParseSecretsData(secretData map[
 	for _, reg := range registriesAuth {
 		switch AuthMethods(reg.AuthMethod) {
 		case IPS_AUTH:
-			if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
-				registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
-					Username: reg.Username,
-					Password: reg.Password,
+			if registryName == reg.Registry {
+				if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
+					registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
+						Username: reg.Username,
+						Password: reg.Password,
+					}
 				}
 			}
 
@@ -167,10 +171,19 @@ func (registryScanHandler *RegistryScanHandler) GetImagesForScanning(registrySca
 			}
 		}
 	}
-	if len(imgNameToTags) > IMAGES_TO_SCAN_LIMIT {
+	if registryScanHandler.isExceedScanLimit(imgNameToTags) {
 		return nil, fmt.Errorf("limit of images to scan exceeded. Limits: %d", IMAGES_TO_SCAN_LIMIT)
 	}
 	return imgNameToTags, nil
+}
+
+// Check if number of images (not repoes) to scan is more than limit
+func (registryScanHandler *RegistryScanHandler) isExceedScanLimit(imgNameToTags map[string][]string) bool {
+	numOfImgs := 0
+	for _, v := range imgNameToTags {
+		numOfImgs += len(v)
+	}
+	return numOfImgs > IMAGES_TO_SCAN_LIMIT
 }
 
 func (registryScanHandler *RegistryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *RegistryScan) ([]string, error) {
