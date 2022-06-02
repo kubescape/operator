@@ -9,7 +9,7 @@ import (
 type HandleCommandResponseCallBack func(payload interface{}) (bool, *time.Duration)
 
 const (
-	MAX_LIMITATION_INSERT_TO_COMMAND_RESPONSE_CHANNEL_GO_ROUTINE = 10
+	MaxLimitationInsertToCommandResponseChannelGoRoutine = 10
 )
 
 const (
@@ -65,7 +65,7 @@ func (mainHandler *MainHandler) handleLimitedGoroutineOfCommandsResponse() {
 }
 
 func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool() {
-	for i := 0; i < MAX_LIMITATION_INSERT_TO_COMMAND_RESPONSE_CHANNEL_GO_ROUTINE; i++ {
+	for i := 0; i < MaxLimitationInsertToCommandResponseChannelGoRoutine; i++ {
 		go mainHandler.handleLimitedGoroutineOfCommandsResponse()
 	}
 }

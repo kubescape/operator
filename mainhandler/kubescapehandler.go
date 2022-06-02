@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE = 40
+	WaitTimeForKubescapeScanResponse = 40
 )
 
 type kubescapeResponseData struct {
@@ -135,7 +135,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 	}
 
 	if response.Type == utilsapisv1.BusyScanResponseType {
-		nextTimeRehandled := time.Duration(WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE * time.Second)
+		nextTimeRehandled := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
 		info = fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String())
 		glog.Infof("%s", info)
 		data.reporter.SendStatus(info, true)
@@ -180,7 +180,7 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 		scanID:   response.ID,
 	}
 
-	nextHandledTime := time.Duration(WAIT_TIME_FOR_KUBESCAPE_SCAN_RESPONSE * time.Second)
+	nextHandledTime := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
 	commandResponseData := createNewCommandResponseData(KubascapeResponse, HandleKubascapeResponse, data, &nextHandledTime)
 	insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
 
