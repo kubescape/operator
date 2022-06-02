@@ -67,6 +67,7 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 	}
 	return cmds, err
 }
+
 func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"]
 	switch dst {

@@ -21,21 +21,28 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+/*
+	this function need to return if it finish to handle the command response
+	by true or false, and next time to rehandled
+*/
+
 type MainHandler struct {
-	sessionObj      *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
-	cacli           cacli.ICacli
-	k8sAPI          *k8sinterface.KubernetesApi
-	signerSemaphore *semaphore.Weighted
+	sessionObj             *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
+	cacli                  cacli.ICacli
+	k8sAPI                 *k8sinterface.KubernetesApi
+	signerSemaphore        *semaphore.Weighted
+	commandResponseChannel *commandResponseChannelData
 }
 
 type ActionHandler struct {
-	cacli           cacli.ICacli
-	k8sAPI          *k8sinterface.KubernetesApi
-	reporter        reporterlib.IReporter
-	wlid            string
-	sid             string
-	command         apis.Command
-	signerSemaphore *semaphore.Weighted
+	cacli                  cacli.ICacli
+	k8sAPI                 *k8sinterface.KubernetesApi
+	reporter               reporterlib.IReporter
+	wlid                   string
+	sid                    string
+	command                apis.Command
+	signerSemaphore        *semaphore.Weighted
+	commandResponseChannel *commandResponseChannelData
 }
 
 type waitFunc func()
@@ -57,23 +64,28 @@ func init() {
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan cautils.SessionObj, cacliRef cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+
+	commandResponseChannel := make(chan *CommandResponseData, 100)
+	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	return &MainHandler{
-		sessionObj:      sessionObj,
-		cacli:           cacliRef,
-		k8sAPI:          k8sAPI,
-		signerSemaphore: semaphore.NewWeighted(cautils.SignerSemaphore),
+		sessionObj:             sessionObj,
+		cacli:                  cacliRef,
+		k8sAPI:                 k8sAPI,
+		signerSemaphore:        semaphore.NewWeighted(cautils.SignerSemaphore),
+		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 	}
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj) *ActionHandler {
+func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
 	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
 	return &ActionHandler{
-		reporter:        sessionObj.Reporter,
-		command:         sessionObj.Command,
-		cacli:           cacliObj,
-		k8sAPI:          k8sAPI,
-		signerSemaphore: signerSemaphore,
+		reporter:               sessionObj.Reporter,
+		command:                sessionObj.Command,
+		cacli:                  cacliObj,
+		k8sAPI:                 k8sAPI,
+		signerSemaphore:        signerSemaphore,
+		commandResponseChannel: commandResponseChannel,
 	}
 }
 
@@ -85,6 +97,8 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			glog.Errorf("RECOVER in HandleRequest, reason: %v", err)
 		}
 	}()
+
+	go mainHandler.handleCommandResponse()
 	for {
 		sessionObj := <-*mainHandler.sessionObj
 
@@ -132,7 +146,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 	status := "SUCCESS"
 
-	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj)
+	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj, mainHandler.commandResponseChannel)
 	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
 	actionHandler.reporter.SendAction(string(sessionObj.Command.CommandName), true)
 	err := actionHandler.runCommand(sessionObj)

@@ -68,3 +68,9 @@ func TestGetKubescapeV1ScanURL(t *testing.T) {
 	u := getKubescapeV1ScanURL()
 	assert.Equal(t, "http://kubescape/v1/scan?keep=true", u.String())
 }
+
+func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
+	cautils.ClusterConfig.KubescapeURL = "armo-kubescape:8080"
+	url := getKubescapeV1ScanStatusURL("123").String()
+	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed unitest")
+}
