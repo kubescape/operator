@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"k8s-ca-websocket/cautils"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -67,11 +66,6 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 		return nil, fmt.Errorf("failed to convert notification payload to commands structure, reason: %s", err.Error())
 	}
 	return cmds, err
-}
-
-func triggerScanNewImageEnabled() bool {
-	envValue := os.Getenv("SCAN_TRIGGER_ON_NEW_IMAGE")
-	return envValue == "enable"
 }
 
 func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
