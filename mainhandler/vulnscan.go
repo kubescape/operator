@@ -184,11 +184,11 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	images, err := registryScanHandler.GetImagesForScanning(*registry)
+	err := registryScanHandler.GetImagesForScanning(*registry)
 	if err != nil {
 		return err
 	}
-	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(images, sessionObj, registry)
+	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry.mapImageToTags, sessionObj, registry)
 	if err != nil {
 		return err
 	}

@@ -145,7 +145,7 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 	return err
 }
 
-func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan) (map[string][]string, error) {
+func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan) error {
 	imgNameToTags := make(map[string][]string, 0)
 	regCreds := &registryCreds{
 		auth:         &registryScan.registryAuth,
@@ -153,15 +153,15 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	}
 	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
 	if err != nil {
-		return imgNameToTags, err
+		return err
 	}
 	for _, repo := range repoes {
 		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
 	if registryScanHandler.isExceedScanLimit(imgNameToTags) {
-		return nil, fmt.Errorf("limit of images to scan exceeded. Limits: %d", imagesToScanLimit)
+		return fmt.Errorf("limit of images to scan exceeded. Limits: %d", imagesToScanLimit)
 	}
-	return imgNameToTags, nil
+	return nil
 }
 
 func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
