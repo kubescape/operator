@@ -34,7 +34,6 @@ func getVulnScanURL() *url.URL {
 	return &vulnURL
 }
 func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) error {
-
 	var err error
 	for _, webSocketScanCMD := range webSocketScanCMDList {
 		err = sendWorkloadToVulnerabilityScanner(webSocketScanCMD)
@@ -48,7 +47,6 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *registryScan) ([]*apis.WebsocketScanCommand, error) {
 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
-
 	for repository, tags := range images {
 		// registry/project/repo --> repo
 		repositoryName := strings.Replace(repository, registry.registry.hostname+"/"+registry.registry.projectID+"/", "", -1)
@@ -153,16 +151,20 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
 	if err != nil {
+		glog.Infof("parseRegistryNameArg failed with err %v", err)
 		return err
 	}
 	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
 	if err != nil {
+		glog.Infof("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
+		glog.Infof("loadConfigMapRegistryScanHandler failed with err %v", err)
 		return err
 	}
+	glog.Infof("scanRegistries: %s secret and %s configmap parsing successful", registryScanSecret, registryScanConfigmap)
 
 	for _, reg := range registryScanHandler.registryScan {
 		err = actionHandler.scanRegistry(&reg, sessionObj, registryScanHandler)
@@ -184,12 +186,14 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	images, err := registryScanHandler.GetImagesForScanning(*registry)
+	err := registryScanHandler.GetImagesForScanning(*registry)
 	if err != nil {
+		glog.Infof("GetImagesForScanning failed with err %v", err)
 		return err
 	}
-	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(images, sessionObj, registry)
+	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry.mapImageToTags, sessionObj, registry)
 	if err != nil {
+		glog.Infof("convertImagesToWebsocketScanCommand failed with err %v", err)
 		return err
 	}
 	err = sendAllImagesToVulnScan(webSocketScanCMDList)

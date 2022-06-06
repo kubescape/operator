@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types"
+	"github.com/golang/glog"
 	containerregistry "github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"k8s.io/utils/strings/slices"
@@ -145,23 +146,26 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 	return err
 }
 
-func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan) (map[string][]string, error) {
+func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan) error {
 	imgNameToTags := make(map[string][]string, 0)
 	regCreds := &registryCreds{
 		auth:         &registryScan.registryAuth,
 		RegistryName: registryScan.registry.hostname,
 	}
+	glog.Infof("GetImagesForScanning: enumerating repoes...")
 	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
 	if err != nil {
-		return imgNameToTags, err
+		glog.Infof("ListRepoesInRegistry failed with err %v", err)
+		return err
 	}
+	glog.Infof("GetImagesForScanning: enumerating repoes successfully")
 	for _, repo := range repoes {
 		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
 	if registryScanHandler.isExceedScanLimit(imgNameToTags) {
-		return nil, fmt.Errorf("limit of images to scan exceeded. Limits: %d", imagesToScanLimit)
+		return fmt.Errorf("limit of images to scan exceeded. Limits: %d", imagesToScanLimit)
 	}
-	return imgNameToTags, nil
+	return nil
 }
 
 func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
