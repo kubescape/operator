@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types"
+	"github.com/golang/glog"
 	containerregistry "github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"k8s.io/utils/strings/slices"
@@ -151,10 +152,13 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 		auth:         &registryScan.registryAuth,
 		RegistryName: registryScan.registry.hostname,
 	}
+	glog.Infof("GetImagesForScanning: enumerating repoes...")
 	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
 	if err != nil {
+		glog.Infof("ListRepoesInRegistry failed with err %v", err)
 		return err
 	}
+	glog.Infof("GetImagesForScanning: enumerating repoes successfully")
 	for _, repo := range repoes {
 		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
