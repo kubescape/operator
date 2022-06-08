@@ -29,7 +29,7 @@ func (registryScanHandler *registryScanHandler) getRegistryScanV1ScanCommand(reg
 		        "CommandName": "scanRegistry",
 		        "args": {
 		            "registryInfo-v1": {
-		                "registryName": "gcr.io/elated-pottery-310110"
+		                "registryName": "gcr.io/project"
 		            }
 		        }
 		    }]
@@ -37,10 +37,9 @@ func (registryScanHandler *registryScanHandler) getRegistryScanV1ScanCommand(reg
 	*/
 	scanRegistryCommand := apis.Command{}
 	scanRegistryCommand.CommandName = apis.TypeScanRegistry
-	registryInfo := make(map[string]string, 0)
-	registryInfo[registryNameField] = registryName
+	registryInfo := map[string]string{registryNameField: registryName}
 
-	scanRegistryCommand.Args = make(map[string]interface{}, 0)
+	scanRegistryCommand.Args = map[string]interface{}{registryInfoV1: registryInfo}
 	scanRegistryCommand.Args[registryInfoV1] = registryInfo
 
 	scanRegistryCommands := apis.Commands{}
