@@ -11,13 +11,11 @@ import (
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
-
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
-
 	"github.com/armosec/utils-go/httputils"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/golang/glog"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -46,16 +44,37 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 	return nil
 }
 
+func getRegistryScanJobParams(command *armoapi.Command) *armoapi.CronJobParams {
+
+	if jobParams := command.GetCronJobParams(); jobParams != nil {
+		return jobParams
+	}
+
+	// fallback
+	if jobParams, ok := command.Args["jobParams"]; ok {
+		if jobParams, ok := jobParams.(armoapi.CronJobParams); ok {
+			return &jobParams
+		}
+		b, err := json.Marshal(jobParams)
+		if err != nil {
+			return nil
+		}
+		jobParams := &armoapi.CronJobParams{}
+		if err = json.Unmarshal(b, jobParams); err != nil {
+			return nil
+		}
+		return jobParams
+	}
+	return nil
+}
+
 func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
-	kubescapeJobParams := getKubescapeJobParams(&actionHandler.command)
-	if kubescapeJobParams == nil {
+	jobParams := getRegistryScanJobParams(&actionHandler.command)
+	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
-	// req, err := getKubescapeRequest(actionHandler.command.Args)
-	// if err != nil {
-	// 	return err
-	// }
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), kubescapeJobParams.JobName, metav1.GetOptions{})
+
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -64,12 +83,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.updatejobid"] = actionHandler.command.JobTracking.JobID
-
-	// editing host scanner is not enabled
-	// if req.HostScanner != nil {
-	// 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"] = boolutils.BoolPointerToString(req.HostScanner)
-	// }
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {

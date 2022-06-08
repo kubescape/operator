@@ -20,7 +20,7 @@ const (
 	registryScanSecret                      = "kubescape-registry-scan"
 	registryScanConfigmap                   = "kubescape-registry-scan"
 	registryInfoV1                          = "registryInfo-v1"
-	registryName                            = "registryName"
+	registryNameField                       = "registryName"
 	imagesToScanLimit                       = 500
 	defaultDepth                            = 1
 	registriesAuthFieldInSecret             = "registriesAuth"
