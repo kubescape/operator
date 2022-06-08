@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
 )
 
@@ -158,5 +161,50 @@ func TestParseSecretsDataAndConfigMap(t *testing.T) {
 	assert.Equal(t, registryScanHandler.registryScan[0].registryAuth.Password, "pass")
 	assert.Equal(t, registryScanHandler.registryScan[0].registryScanConfig.Registry, "blu")
 	assert.True(t, slices.Contains(registryScanHandler.registryScan[0].registryScanConfig.Exclude, "armo-vuln"))
+
+}
+
+func TestGetRegistryScanV1ScanCommand(t *testing.T) {
+	registryScanHandler := NewRegistryScanHandler()
+	c, err := registryScanHandler.getRegistryScanV1ScanCommand("blue")
+	assert.NoError(t, err)
+
+	var command apis.Commands
+
+	if err = json.Unmarshal([]byte(c), &command); err != nil {
+		t.Errorf("error unmarshalling resitry scan command error = %v", err)
+	}
+
+	assert.Equal(t, len(command.Commands), 1)
+	assert.Equal(t, command.Commands[0].CommandName, apis.TypeScanRegistry)
+
+	name := command.Commands[0].Args[registryInfoV1].(map[string]interface{})
+	assert.Equal(t, name[registryNameField], "blue")
+
+}
+
+func TestSetCronJobTemplate(t *testing.T) {
+	registryScanHandler := NewRegistryScanHandler()
+
+	cronjob := v1.CronJob{}
+
+	v := corev1.Volume{Name: requestVolumeName}
+	cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes = []corev1.Volume{v}
+	v.ConfigMap = &corev1.ConfigMapVolumeSource{}
+
+	registryScanHandler.setCronJobTemplate(&cronjob, "blu", "* 0 * * *", "10", "registry")
+
+	assert.Equal(t, cronjob.Name, "blu")
+	assert.Equal(t, cronjob.Labels["app"], "blu")
+	assert.Equal(t, cronjob.Spec.Schedule, "* 0 * * *")
+	assert.Equal(t, cronjob.Spec.JobTemplate.Spec.Template.Annotations[registryNameAnnotation], "registry")
+	assert.Equal(t, len(cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes), 1)
+	assert.Equal(t, cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes[0].Name, requestVolumeName)
+
+	cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes = nil
+	assert.Equal(t, cronjob.Name, "blu")
+	assert.Equal(t, cronjob.Labels["app"], "blu")
+	assert.Equal(t, cronjob.Spec.Schedule, "* 0 * * *")
+	assert.Equal(t, cronjob.Spec.JobTemplate.Spec.Template.Annotations[registryNameAnnotation], "registry")
 
 }

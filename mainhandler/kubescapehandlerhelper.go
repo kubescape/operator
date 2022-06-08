@@ -113,7 +113,7 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 
 	// update volume name
 	for i, v := range jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
-		if v.Name == VolumeNamePlaceholder {
+		if v.Name == requestVolumeName {
 			jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].ConfigMap.Name = name
 		}
 	}

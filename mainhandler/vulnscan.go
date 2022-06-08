@@ -178,7 +178,7 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 	if !ok {
 		return "", fmt.Errorf("could not parse registry info")
 	}
-	registryName, ok := registryInfo[registryName].(string)
+	registryName, ok := registryInfo[registryNameField].(string)
 	if !ok {
 		return "", fmt.Errorf("could not parse registry name")
 	}

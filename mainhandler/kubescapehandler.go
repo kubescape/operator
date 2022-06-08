@@ -11,13 +11,11 @@ import (
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
-
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
-
 	"github.com/armosec/utils-go/httputils"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/golang/glog"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -47,29 +45,21 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 }
 
 func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
-	kubescapeJobParams := getKubescapeJobParams(&actionHandler.command)
-	if kubescapeJobParams == nil {
+	jobParams := getKubescapeJobParams(&actionHandler.command)
+	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
-	// req, err := getKubescapeRequest(actionHandler.command.Args)
-	// if err != nil {
-	// 	return err
-	// }
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), kubescapeJobParams.JobName, metav1.GetOptions{})
+
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	jobTemplateObj.Spec.Schedule = actionHandler.getCronTabSchedule()
+	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.command)
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.updatejobid"] = actionHandler.command.JobTracking.JobID
-
-	// editing host scanner is not enabled
-	// if req.HostScanner != nil {
-	// 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"] = boolutils.BoolPointerToString(req.HostScanner)
-	// }
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
@@ -93,12 +83,12 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
 		if err != nil {
 			return err
 		}
 
-		setCronJobTemplate(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
+		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
 		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
@@ -323,17 +313,17 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 	// 	return logs, false, nil
 }
 
-func (actionHandler *ActionHandler) getCronTabSchedule() string {
-	if kubescapeJobParams := getKubescapeJobParams(&actionHandler.command); kubescapeJobParams != nil {
+func getCronTabSchedule(command armoapi.Command) string {
+	if kubescapeJobParams := getKubescapeJobParams(&command); kubescapeJobParams != nil {
 		return kubescapeJobParams.CronTabSchedule
 	}
-	if schedule, ok := actionHandler.command.Args["cronTabSchedule"]; ok {
+	if schedule, ok := command.Args["cronTabSchedule"]; ok {
 		if s, k := schedule.(string); k {
 			return s
 		}
 	}
-	if len(actionHandler.command.Designators) > 0 {
-		if schedule, ok := actionHandler.command.Designators[0].Attributes["cronTabSchedule"]; ok {
+	if len(command.Designators) > 0 {
+		if schedule, ok := command.Designators[0].Attributes["cronTabSchedule"]; ok {
 			return schedule
 		}
 	}
