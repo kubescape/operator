@@ -51,7 +51,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.S
 	}
 
 	// name is registryScanConfigmap name + random string - configmap and cronjob
-	name := fixK8sCronJobNameLimit(fmt.Sprintf("%d-%s", rand.NewSource(time.Now().UnixNano()).Int63(), registryScanConfigmap))
+	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", registryScanConfigmap, rand.NewSource(time.Now().UnixNano()).Int63()))
 
 	// create configmap with POST data to trigger websocket
 	err = registryScanHandler.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
