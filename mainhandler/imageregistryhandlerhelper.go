@@ -24,7 +24,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 		return err
 	}
 
-	jobTemplateObj.Spec.Schedule = actionHandler.getCronTabSchedule()
+	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.command)
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
@@ -51,7 +51,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.S
 	}
 
 	// name is registryScanConfigmap name + random string - configmap and cronjob
-	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", registryScanConfigmap, rand.NewSource(time.Now().UnixNano()).Int63()))
+	name := fixK8sCronJobNameLimit(fmt.Sprintf("%d-%s", rand.NewSource(time.Now().UnixNano()).Int63(), registryScanConfigmap))
 
 	// create configmap with POST data to trigger websocket
 	err = registryScanHandler.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
@@ -60,20 +60,12 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.S
 		return err
 	}
 
-	// cronjob template is stored as configmap in cluster
-	jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, registryCronjobTemplate)
+	err = registryScanHandler.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
 	if err != nil {
-		glog.Infof("setRegistryScanCronJob: error retrieving cronjob template : %s", err.Error())
+		glog.Infof("setRegistryScanCronJob: error creating conjob : %s", err.Error())
 		return err
 	}
 
-	registryScanHandler.setCronJobTemplate(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID, registryName)
-
-	// create cronJob
-	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
-		glog.Infof("setRegistryScanCronJob: cronjob: %s creation failed. err: %s", name, err.Error())
-		return err
-	}
 	glog.Infof("setRegistryScanCronJob: cronjob: %s created successfully", name)
 	return err
 }

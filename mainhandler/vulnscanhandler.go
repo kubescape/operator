@@ -22,7 +22,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 		return err
 	}
 
-	jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, CronjobTemplateName)
+	jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, CronjobTemplateName)
 	if err != nil {
 		return err
 	}

@@ -44,32 +44,8 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 	return nil
 }
 
-func getRegistryScanJobParams(command *armoapi.Command) *armoapi.CronJobParams {
-
-	if jobParams := command.GetCronJobParams(); jobParams != nil {
-		return jobParams
-	}
-
-	// fallback
-	if jobParams, ok := command.Args["jobParams"]; ok {
-		if jobParams, ok := jobParams.(armoapi.CronJobParams); ok {
-			return &jobParams
-		}
-		b, err := json.Marshal(jobParams)
-		if err != nil {
-			return nil
-		}
-		jobParams := &armoapi.CronJobParams{}
-		if err = json.Unmarshal(b, jobParams); err != nil {
-			return nil
-		}
-		return jobParams
-	}
-	return nil
-}
-
 func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
-	jobParams := getRegistryScanJobParams(&actionHandler.command)
+	jobParams := getKubescapeJobParams(&actionHandler.command)
 	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
@@ -79,7 +55,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 		return err
 	}
 
-	jobTemplateObj.Spec.Schedule = actionHandler.getCronTabSchedule()
+	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.command)
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
@@ -107,12 +83,12 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
 		if err != nil {
 			return err
 		}
 
-		setCronJobTemplate(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
+		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
 		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
@@ -337,17 +313,17 @@ func (actionHandler *ActionHandler) runKubescapeJob() error {
 	// 	return logs, false, nil
 }
 
-func (actionHandler *ActionHandler) getCronTabSchedule() string {
-	if kubescapeJobParams := getKubescapeJobParams(&actionHandler.command); kubescapeJobParams != nil {
+func getCronTabSchedule(command armoapi.Command) string {
+	if kubescapeJobParams := getKubescapeJobParams(&command); kubescapeJobParams != nil {
 		return kubescapeJobParams.CronTabSchedule
 	}
-	if schedule, ok := actionHandler.command.Args["cronTabSchedule"]; ok {
+	if schedule, ok := command.Args["cronTabSchedule"]; ok {
 		if s, k := schedule.(string); k {
 			return s
 		}
 	}
-	if len(actionHandler.command.Designators) > 0 {
-		if schedule, ok := actionHandler.command.Designators[0].Attributes["cronTabSchedule"]; ok {
+	if len(command.Designators) > 0 {
+		if schedule, ok := command.Designators[0].Attributes["cronTabSchedule"]; ok {
 			return schedule
 		}
 	}

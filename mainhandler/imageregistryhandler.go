@@ -31,7 +31,7 @@ const (
 	defaultDepth                            = 1
 	registriesAuthFieldInSecret             = "registriesAuth"
 	armoNamespace                           = "armo-system"
-	ipsAuth                     AuthMethods = "ips"
+	accessTokenAuth             AuthMethods = "accesstoken"
 	registryCronjobTemplate                 = "registry-scan-cronjob-template"
 	registryNameAnnotation                  = "armo.cloud/registryname"
 )
@@ -165,7 +165,7 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 
 	for _, reg := range registriesAuth {
 		switch AuthMethods(reg.AuthMethod) {
-		case ipsAuth:
+		case accessTokenAuth:
 			if registryName == reg.Registry {
 				if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
 					registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
@@ -267,12 +267,13 @@ func (registryScanHandler *registryScanHandler) ListImageTagsInRepo(repo string,
 	return imagestags, nil
 }
 
-func (registryScanHandler *registryScanHandler) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, registryName string) {
+func (registryScanHandler *registryScanHandler) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, registryName string) error {
 
 	jobTemplateObj.Name = name
-	if schedule != "" {
-		jobTemplateObj.Spec.Schedule = schedule
+	if schedule == "" {
+		return fmt.Errorf("schedule cannot be empty")
 	}
+	jobTemplateObj.Spec.Schedule = schedule
 
 	// update volume name
 	for i, v := range jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
@@ -296,6 +297,7 @@ func (registryScanHandler *registryScanHandler) setCronJobTemplate(jobTemplateOb
 	}
 	jobTemplateObj.ObjectMeta.Labels["app"] = name
 
+	return nil
 }
 
 func (registryScanHandler *registryScanHandler) getRegistryScanV1ScanCommand(registryName string) (string, error) {
@@ -328,4 +330,26 @@ func (registryScanHandler *registryScanHandler) getRegistryScanV1ScanCommand(reg
 	}
 
 	return string(scanV1Bytes), nil
+}
+
+func (registryScanHandler *registryScanHandler) createTriggerRequestCronJob(k8sAPI *k8sinterface.KubernetesApi, name, registryName string, command apis.Command) error {
+
+	// cronjob template is stored as configmap in cluster
+	jobTemplateObj, err := getCronJobTemplate(k8sAPI, registryCronjobTemplate)
+	if err != nil {
+		glog.Infof("setRegistryScanCronJob: error retrieving cronjob template : %s", err.Error())
+		return err
+	}
+
+	err = registryScanHandler.setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(command), command.JobTracking.JobID, registryName)
+	if err != nil {
+		return err
+	}
+
+	// create cronJob
+	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+		glog.Infof("setRegistryScanCronJob: cronjob: %s creation failed. err: %s", name, err.Error())
+		return err
+	}
+	return nil
 }

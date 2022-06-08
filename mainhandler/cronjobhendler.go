@@ -45,7 +45,7 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 	return strings.ToLower(jobName)
 }
 
-func getCronJonTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
+func getCronJobTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
 	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func getCronJonTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.Cr
 	// create cronJob
 	jobTemplateStr, ok := template.Data[cronjobTemplateName]
 	if !ok {
-		return nil, fmt.Errorf("getCronJonTemplate: jobTemplate not found")
+		return nil, fmt.Errorf("getCronJobTemplate: jobTemplate not found")
 	}
 
 	jobTemplateObj := &v1.CronJob{}
