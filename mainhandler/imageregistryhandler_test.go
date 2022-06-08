@@ -91,7 +91,7 @@ func TestPParseSecretsData(t *testing.T) {
 	secretDataStr := `
 	{
 		"registriesAuth":
-	"[{\"registry\": \"mock\",\"auth_method\": \"ips\",\"username\": \"username\",\"password\": \"pass\"} ]"
+	"[{\"registry\": \"mock\",\"auth_method\": \"accesstoken\",\"username\": \"username\",\"password\": \"pass\"} ]"
 	}
 		`
 	err := json.Unmarshal([]byte(secretDataStr), &secretData)
@@ -99,7 +99,7 @@ func TestPParseSecretsData(t *testing.T) {
 	assert.Error(t, err)
 
 	secretDataStr = `
-	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJpcHMiLAogICAgICAgICAidXNlcm5hbWUiOiAib2F1dGgyYWNjZXNzdG9rZW4iLAogICAgICAgICAicGFzc3dvcmQiOiAicGFzcyIKICAgICB9CiAgIF0K"}
+	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJ1c2VybmFtZSI6ICJvYXV0aDJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJwYXNzd29yZCI6ICJwYXNzIgogICAgIH0KICAgXQo="}
 		`
 	err = json.Unmarshal([]byte(secretDataStr), &secretData)
 	assert.NoError(t, err)
@@ -110,10 +110,10 @@ func TestPParseSecretsData(t *testing.T) {
 	assert.Equal(t, registryScanHandler.mapRegistryToAuth[registryName].Password, "pass")
 
 	secretDataStr = `
-	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJpcHMiLAogICAgICAgICAidXNlcm5hbWUiOiAib2F1dGgyYWNjZXNzdG9rZW4iLAogICAgICAgICAicGFzc3dvcmQiOiAicGFzcyIKICAgICB9LAogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsYSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJpcHMiLAogICAgICAgICAidXNlcm5hbWUiOiAib2F1dGgyYWNjZXNzdG9rZW4iLAogICAgICAgICAicGFzc3dvcmQiOiAicGFzcyIKICAgICB9LAogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogIm5vYXV0aCIKICAgICB9CiAgIF0K"}
+	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJhY2Vzc3Rva2VuIiwKICAgICAgICAgInVzZXJuYW1lIjogIm9hdXRoMmFjY2Vzc3Rva2VuIiwKICAgICAgICAgInBhc3N3b3JkIjogInBhc3MiCiAgICAgfSwKICAgICB7CiAgICAgICAgICJyZWdpc3RyeSI6ICJibGEiLAogICAgICAgICAiYXV0aF9tZXRob2QiOiAiYWNlc3N0b2tlbiIsCiAgICAgICAgICJ1c2VybmFtZSI6ICJvYXV0aDJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJwYXNzd29yZCI6ICJwYXNzIgogICAgIH0sCiAgICAgewogICAgICAgICAicmVnaXN0cnkiOiAibm9hdXRoIgogICAgIH0KICAgXQo="}
 	`
 	err = json.Unmarshal([]byte(secretDataStr), &secretData)
-	registryName = "bla"
+	registryName = "blu"
 	assert.NoError(t, err)
 	if err := registryScanHandler.ParseSecretsData(secretData, registryName); err != nil {
 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
@@ -123,10 +123,10 @@ func TestPParseSecretsData(t *testing.T) {
 	assert.Equal(t, registryScanHandler.mapRegistryToAuth[registryName].Password, "pass")
 
 	secretDataStr = `
-	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJpcHMiLAogICAgICAgICAidXNlcm5hbWUiOiAib2F1dGgyYWNjZXNzdG9rZW4iLAogICAgICAgICAicGFzc3dvcmQiOiAicGFzcyIKICAgICB9LAogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogWyJibGEiXSwKICAgICAgICAgImF1dGhfbWV0aG9kIjogImlwcyIsCiAgICAgICAgICJ1c2VybmFtZSI6ICJvYXV0aDJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJwYXNzd29yZCI6ICJwYXNzIgogICAgIH0sCiAgICAgewogICAgICAgICAicmVnaXN0cnkiOiAibm9hdXRoIgogICAgIH0KICAgXQo="}
+	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJ1c2VybmFtZSI6ICJvYXV0aDJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJwYXNzd29yZCI6ICJwYXNzIgogICAgIH0sCiAgICAgewogICAgICAgICAicmVnaXN0cnkiOiBbImJsYSJdLAogICAgICAgICAiYXV0aF9tZXRob2QiOiAiYWNjZXNzdG9rZW4iLAogICAgICAgICAidXNlcm5hbWUiOiAib2F1dGgyYWNjZXNzdG9rZW4iLAogICAgICAgICAicGFzc3dvcmQiOiAicGFzcyIKICAgICB9LAogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogIm5vYXV0aCIKICAgICB9CiAgIF0K"}
  `
 	err = json.Unmarshal([]byte(secretDataStr), &secretData)
-	registryName = "bla"
+	registryName = "blu"
 	assert.NoError(t, err)
 	assert.Error(t, registryScanHandler.ParseSecretsData(secretData, registryName))
 }
@@ -137,7 +137,7 @@ func TestParseSecretsDataAndConfigMap(t *testing.T) {
 	var configData map[string]interface{}
 	registryName := "blu"
 	secretDataStr := `
-	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJpcHMiLAogICAgICAgICAidXNlcm5hbWUiOiAib2F1dGgyYWNjZXNzdG9rZW4iLAogICAgICAgICAicGFzc3dvcmQiOiAicGFzcyIKICAgICB9CiAgIF0K"}
+	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJ1c2VybmFtZSI6ICJvYXV0aDJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJwYXNzd29yZCI6ICJwYXNzIgogICAgIH0KICAgXQo="}
 		`
 	err := json.Unmarshal([]byte(secretDataStr), &secretData)
 	assert.NoError(t, err)
