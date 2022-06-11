@@ -45,9 +45,9 @@ type registryScanConfig struct {
 
 type registryAuth struct {
 	Registry   string `json:"registry"`
-	AuthMethod string `json:"auth_method"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
+	AuthMethod string `json:"auth_method,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Password   string `json:"password,omitempty"`
 }
 
 type registry struct {
@@ -72,6 +72,15 @@ type registryCreds struct {
 	auth         *types.AuthConfig
 }
 
+func NewRegistryScanConfig() *registryScanConfig {
+	return &registryScanConfig{
+		Depth:   1,
+		Include: make([]string, 0),
+		Exclude: make([]string, 0),
+	}
+
+}
+
 func NewRegistryScanHandler() *registryScanHandler {
 	return &registryScanHandler{
 		registryScan:      make([]registryScan, 0),
@@ -87,13 +96,21 @@ func NewRegistryScan() *registryScan {
 
 func (registryScanHandler *registryScanHandler) ParseConfigMapData(configData map[string]interface{}) error {
 	var registries []registryScanConfig
-	registryScan := NewRegistryScan()
-	registriesStr := configData["registries"].(string)
+	registriesStr, ok := configData["registries"].(string)
+	if !ok {
+		return fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
+	}
 	registriesStr = strings.Replace(registriesStr, "\n", "", -1)
 	err := json.Unmarshal([]byte(registriesStr), &registries)
 	if err != nil {
 		return fmt.Errorf("error parsing ConfigMap: %s", err.Error())
 	}
+	return registryScanHandler.insertRegistryToScan(registries)
+}
+
+func (registryScanHandler *registryScanHandler) insertRegistryToScan(registries []registryScanConfig) error {
+	registryScan := NewRegistryScan()
+
 	for _, reg := range registries {
 		if len(reg.Include) > 0 && len(reg.Exclude) > 0 {
 			return fmt.Errorf("configMap should contain either 'Include' or 'Exclude', not both. In registry: %v", reg.Registry)
@@ -115,6 +132,7 @@ func (registryScanHandler *registryScanHandler) ParseConfigMapData(configData ma
 		}
 		registryScanHandler.registryScan = append(registryScanHandler.registryScan, *registryScan)
 	}
+
 	return nil
 }
 
@@ -172,8 +190,12 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 						Username: reg.Username,
 						Password: reg.Password,
 					}
+				} else {
+					return fmt.Errorf("must provide both username and password for secret: %v", registryScanSecret)
 				}
 			}
+		default:
+			registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{}
 
 		}
 
@@ -199,12 +221,21 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
 	if registryScanHandler.isExceedScanLimit(imgNameToTags) {
-		return fmt.Errorf("limit of images to scan exceeded. Limits: %d", imagesToScanLimit)
+		registryScanHandler.filterScanLimit(&registryScan)
+		glog.Warning("GetImagesForScanning: more than 500 images provided. scanning only first 500 images")
 	}
 	return nil
 }
 
 func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
+	// if configmap not set, include maximum number of images from repo
+	if len(registryScan.registryScanConfig.Include) == 0 && len(registryScan.registryScanConfig.Exclude) == 0 {
+		tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+		for i := 0; i < registryScan.registryScanConfig.Depth && i < len(tags); i++ {
+			registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		}
+	}
+
 	if len(registryScan.registryScanConfig.Include) > 0 {
 		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
 			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
@@ -225,11 +256,23 @@ func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *regi
 
 // Check if number of images (not repoes) to scan is more than limit
 func (registryScanHandler *registryScanHandler) isExceedScanLimit(imgNameToTags map[string][]string) bool {
+	return registryScanHandler.getNumOfImagesToScan(imgNameToTags) > imagesToScanLimit
+}
+
+func (registryScanHandler *registryScanHandler) getNumOfImagesToScan(imgNameToTags map[string][]string) int {
 	numOfImgs := 0
 	for _, v := range imgNameToTags {
 		numOfImgs += len(v)
 	}
-	return numOfImgs > imagesToScanLimit
+	return numOfImgs
+}
+
+func (registryScanHandler *registryScanHandler) filterScanLimit(registryScan *registryScan) {
+	filteredImages := make(map[string][]string, 0)
+	for k, v := range registryScan.mapImageToTags {
+		filteredImages[k] = v
+	}
+	registryScan.mapImageToTags = filteredImages
 }
 
 func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *registryScan) ([]string, error) {

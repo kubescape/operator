@@ -114,9 +114,11 @@ func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
 
 func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHandler *registryScanHandler, registryName string) error {
 	secret, err := actionHandler.getRegistryScanSecret()
+
 	if err != nil {
 		return err
 	}
+
 	secretData := secret.GetData()
 	err = registryScanHandler.ParseSecretsData(secretData, registryName)
 
@@ -125,8 +127,22 @@ func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHa
 
 func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registryScanHandler *registryScanHandler) error {
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
+
 	if err != nil {
-		return err
+		var registryScanConfigs []registryScanConfig
+		var registryScanConfig *registryScanConfig
+		for reg := range registryScanHandler.mapRegistryToAuth {
+			registryScanConfig = NewRegistryScanConfig()
+			registryScanConfig.Registry = reg
+			registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
+		}
+		err = registryScanHandler.insertRegistryToScan(registryScanConfigs)
+		if err != nil {
+			return err
+		}
+		glog.Infof("configmap: %s does not exists", registryScanConfigmap)
+
+		return nil
 	}
 	configData := configMap.GetData()
 	err = registryScanHandler.ParseConfigMapData(configData)
@@ -159,12 +175,12 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		glog.Infof("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
+	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret, registryScanConfigmap)
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
 		glog.Infof("loadConfigMapRegistryScanHandler failed with err %v", err)
 		return err
 	}
-	glog.Infof("scanRegistries: %s secret and %s configmap parsing successful", registryScanSecret, registryScanConfigmap)
 
 	for _, reg := range registryScanHandler.registryScan {
 		err = actionHandler.scanRegistry(&reg, sessionObj, registryScanHandler)
