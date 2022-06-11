@@ -229,13 +229,6 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 
 func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
 	tags := make([]string, 0, 16)
-	// if configmap not set, include maximum number of images from repo
-	if len(registryScan.registryScanConfig.Include) == 0 && len(registryScan.registryScanConfig.Exclude) == 0 {
-		tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-		for i := 0; i < registryScan.registryScanConfig.Depth && i < len(tags); i++ {
-			registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
-		}
-	}
 
 	if len(registryScan.registryScanConfig.Include) > 0 {
 		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
