@@ -175,7 +175,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		glog.Infof("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
-	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret, registryScanConfigmap)
+	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
 		glog.Infof("loadConfigMapRegistryScanHandler failed with err %v", err)
