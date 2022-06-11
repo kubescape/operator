@@ -216,7 +216,7 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 		glog.Infof("ListRepoesInRegistry failed with err %v", err)
 		return err
 	}
-	glog.Infof("GetImagesForScanning: enumerating repoes successfully")
+	glog.Infof("GetImagesForScanning: enumerating repoes successfully, found %d repos", len(repoes))
 	for _, repo := range repoes {
 		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
@@ -228,6 +228,7 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 }
 
 func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
+	tags := make([]string, 0, 16)
 	// if configmap not set, include maximum number of images from repo
 	if len(registryScan.registryScanConfig.Include) == 0 && len(registryScan.registryScanConfig.Exclude) == 0 {
 		tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
@@ -238,19 +239,19 @@ func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *regi
 
 	if len(registryScan.registryScanConfig.Include) > 0 {
 		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-			for i := 0; i < registryScan.registryScanConfig.Depth; i++ {
-				registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
-			}
-
+			tags, _ = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 		}
 	} else if len(registryScan.registryScanConfig.Exclude) > 0 {
 		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, _ := registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-			for i := 0; i < registryScan.registryScanConfig.Depth; i++ {
-				registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
-			}
+			tags, _ = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 		}
+	} else {
+		tags, _ = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+	}
+	if len(tags) > registryScan.registryScanConfig.Depth {
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags[:registryScan.registryScanConfig.Depth]
+	} else {
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
 }
 
