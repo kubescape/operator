@@ -129,20 +129,25 @@ func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registrySca
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
 
 	if err != nil {
-		var registryScanConfigs []registryScanConfig
-		var registryScanConfig *registryScanConfig
-		for reg := range registryScanHandler.mapRegistryToAuth {
-			registryScanConfig = NewRegistryScanConfig()
-			registryScanConfig.Registry = reg
-			registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
-		}
-		err = registryScanHandler.insertRegistryToScan(registryScanConfigs)
-		if err != nil {
+		// if configmap not found, it means we will use all images and default depth
+		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
+			var registryScanConfigs []registryScanConfig
+			var registryScanConfig *registryScanConfig
+			for reg := range registryScanHandler.mapRegistryToAuth {
+				registryScanConfig = NewRegistryScanConfig()
+				registryScanConfig.Registry = reg
+				registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
+			}
+			err = registryScanHandler.insertRegistryToScan(registryScanConfigs)
+			if err != nil {
+				return err
+			}
+			glog.Infof("configmap: %s does not exists", registryScanConfigmap)
+
+			return nil
+		} else {
 			return err
 		}
-		glog.Infof("configmap: %s does not exists", registryScanConfigmap)
-
-		return nil
 	}
 	configData := configMap.GetData()
 	err = registryScanHandler.ParseConfigMapData(configData)
@@ -202,7 +207,7 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	err := registryScanHandler.GetImagesForScanning(*registry)
+	err := registryScanHandler.GetImagesForScanning(*registry, actionHandler.reporter)
 	if err != nil {
 		glog.Infof("GetImagesForScanning failed with err %v", err)
 		return err

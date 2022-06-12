@@ -2,6 +2,7 @@ package mainhandler
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -208,4 +209,57 @@ func TestSetCronJobTemplate(t *testing.T) {
 	assert.Equal(t, cronjob.Spec.Schedule, "* 0 * * *")
 	assert.Equal(t, cronjob.Spec.JobTemplate.Spec.Template.Annotations[registryNameAnnotation], "registry")
 
+}
+
+func TestFilterScanLimit(t *testing.T) {
+	registryScanHandler := NewRegistryScanHandler()
+	registryScan := NewRegistryScan()
+	registryScan.mapImageToTags = map[string][]string{
+		"1": {"first", "second"},
+		"2": {"first", "second"},
+	}
+	registryScanHandler.filterScanLimit(registryScan, 3)
+	expected := map[string][]string{
+		"1": {"first", "second"},
+		"2": {"first"},
+	}
+	assert.True(t, reflect.DeepEqual(registryScan.mapImageToTags, expected))
+
+	registryScan.mapImageToTags = map[string][]string{
+		"1": {"first", "second"},
+		"2": {"first", "second"},
+	}
+	registryScanHandler.filterScanLimit(registryScan, 4)
+	expected = registryScan.mapImageToTags
+	assert.True(t, reflect.DeepEqual(registryScan.mapImageToTags, expected))
+
+	registryScan.mapImageToTags = map[string][]string{
+		"1": {"first", "second", "third"},
+		"2": {"first", "second"},
+		"3": {"first", "second"},
+	}
+
+	expected = map[string][]string{
+		"1": {"first", "second", "third"},
+		"2": {"first", "second"},
+		"3": {"first"},
+	}
+	registryScanHandler.filterScanLimit(registryScan, 6)
+	assert.True(t, reflect.DeepEqual(registryScan.mapImageToTags, expected))
+
+}
+
+func TestGetNumOfImagesToScan(t *testing.T) {
+	registryScanHandler := NewRegistryScanHandler()
+	registryScan := NewRegistryScan()
+	registryScan.mapImageToTags = map[string][]string{
+		"1": {"first", "second"},
+		"2": {"first", "second"},
+	}
+
+	assert.Equal(t, registryScanHandler.getNumOfImagesToScan(registryScan.mapImageToTags), 4)
+	registryScan.mapImageToTags = map[string][]string{
+		"1": {"first", "second", "third", "fourth"},
+	}
+	assert.Equal(t, registryScanHandler.getNumOfImagesToScan(registryScan.mapImageToTags), 4)
 }

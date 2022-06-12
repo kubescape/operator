@@ -10,6 +10,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
 	containerregistry "github.com/google/go-containerregistry/pkg/name"
@@ -204,7 +205,7 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 	return err
 }
 
-func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan) error {
+func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan, reporter datastructures.IReporter) error {
 	imgNameToTags := make(map[string][]string, 0)
 	regCreds := &registryCreds{
 		auth:         &registryScan.registryAuth,
@@ -220,8 +221,11 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	for _, repo := range repoes {
 		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
 	}
-	if registryScanHandler.isExceedScanLimit(imgNameToTags) {
-		registryScanHandler.filterScanLimit(&registryScan)
+	if registryScanHandler.isExceedScanLimit(imgNameToTags, imagesToScanLimit) {
+		registryScanHandler.filterScanLimit(&registryScan, imagesToScanLimit)
+		if reporter != nil {
+			reporter.SendError(err, true, true)
+		}
 		glog.Warning("GetImagesForScanning: more than 500 images provided. scanning only first 500 images")
 	}
 	return nil
@@ -249,8 +253,8 @@ func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *regi
 }
 
 // Check if number of images (not repoes) to scan is more than limit
-func (registryScanHandler *registryScanHandler) isExceedScanLimit(imgNameToTags map[string][]string) bool {
-	return registryScanHandler.getNumOfImagesToScan(imgNameToTags) > imagesToScanLimit
+func (registryScanHandler *registryScanHandler) isExceedScanLimit(imgNameToTags map[string][]string, limit int) bool {
+	return registryScanHandler.getNumOfImagesToScan(imgNameToTags) > limit
 }
 
 func (registryScanHandler *registryScanHandler) getNumOfImagesToScan(imgNameToTags map[string][]string) int {
@@ -261,10 +265,17 @@ func (registryScanHandler *registryScanHandler) getNumOfImagesToScan(imgNameToTa
 	return numOfImgs
 }
 
-func (registryScanHandler *registryScanHandler) filterScanLimit(registryScan *registryScan) {
+func (registryScanHandler *registryScanHandler) filterScanLimit(registryScan *registryScan, limit int) {
 	filteredImages := make(map[string][]string, 0)
-	for k, v := range registryScan.mapImageToTags {
-		filteredImages[k] = v
+	counter := 0
+	for k := range registryScan.mapImageToTags {
+		for _, img := range registryScan.mapImageToTags[k] {
+			if counter >= limit {
+				break
+			}
+			filteredImages[k] = append(filteredImages[k], img)
+			counter++
+		}
 	}
 	registryScan.mapImageToTags = filteredImages
 }
