@@ -35,11 +35,17 @@ func getVulnScanURL() *url.URL {
 }
 func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) error {
 	var err error
+	errs := make([]error, 0)
 	for _, webSocketScanCMD := range webSocketScanCMDList {
 		err = sendWorkloadToVulnerabilityScanner(webSocketScanCMD)
 		if err != nil {
-			glog.Infof("sendWorkloadToVulnerabilityScanner failed with err %v", err)
+			glog.Errorf("sendWorkloadToVulnerabilityScanner failed with err %v", err)
+			errs = append(errs, err)
 		}
+	}
+
+	if len(errs) > 0 {
+		return err
 	}
 	return nil
 }

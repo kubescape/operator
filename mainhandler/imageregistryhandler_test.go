@@ -131,6 +131,51 @@ func TestPParseSecretsData(t *testing.T) {
 	assert.Error(t, registryScanHandler.ParseSecretsData(secretData, registryName))
 }
 
+// func TestLocalRegistryScan(t *testing.T) {
+// 	registryScanHandler := NewRegistryScanHandler()
+// 	var secretData map[string]interface{}
+// 	var configData map[string]interface{}
+// 	registryName := "127.0.0.1:5000"
+// 	secretDataStr := `
+// 	{"registriesAuth":"WwogICAgIHsKICAgICAgICAgInJlZ2lzdHJ5IjogImJsdSIsCiAgICAgICAgICJhdXRoX21ldGhvZCI6ICJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJ1c2VybmFtZSI6ICJvYXV0aDJhY2Nlc3N0b2tlbiIsCiAgICAgICAgICJwYXNzd29yZCI6ICJwYXNzIgogICAgIH0KICAgXQo="}
+// 		`
+// 	err := json.Unmarshal([]byte(secretDataStr), &secretData)
+// 	assert.NoError(t, err)
+// 	if err := registryScanHandler.ParseSecretsData(secretData, registryName); err != nil {
+// 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+// 	}
+
+// 	configDataStr := `
+// 	{
+// 		"registries":
+// 		"[ {     \"registry\": \"127.0.0.1:5000\",     \"depth\": 2,     \"include\": [      ], \"exclude\": [  \"armo-vuln\" , \"armo-vuln2\" ] }\n]\n"
+// 	}
+// 		`
+
+// 	err = json.Unmarshal([]byte(configDataStr), &configData)
+// 	assert.NoError(t, err)
+// 	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
+// 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+// 	}
+
+// 	assert.True(t, slices.Contains(registryScanHandler.registryScan[0].registryScanConfig.Exclude, "armo-vuln"))
+
+// 	for _, reg := range registryScanHandler.registryScan {
+// 		err = registryScanHandler.GetImagesForScanning(reg)
+
+// 		sessionObj := &cautils.SessionObj{Reporter: datastructures.NewBaseReportMock("test-guid", "test-reporter")}
+// 		webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(reg.mapImageToTags, sessionObj, &reg)
+// 		if err != nil {
+// 			t.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
+// 		}
+// 		err = sendAllImagesToVulnScan(webSocketScanCMDList)
+// 		if err != nil {
+// 			t.Errorf("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
+// 		}
+// 	}
+
+// }
+
 func TestParseSecretsDataAndConfigMap(t *testing.T) {
 	registryScanHandler := NewRegistryScanHandler()
 	var secretData map[string]interface{}

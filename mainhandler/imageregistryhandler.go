@@ -245,10 +245,17 @@ func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *r
 		return nil, err
 	}
 	var reposInGivenRegistry []string
+
+	//google repositories got project so we treat projects as part of the repo, ofc we also allow normal scenarios
 	for _, repo := range repos {
-		if strings.Contains(repo, registryScan.registry.projectID+"/") {
+		if registryScan.registry.projectID != "" {
+			if strings.Contains(repo, registryScan.registry.projectID+"/") {
+				reposInGivenRegistry = append(reposInGivenRegistry, repo)
+			}
+		} else {
 			reposInGivenRegistry = append(reposInGivenRegistry, repo)
 		}
+
 	}
 	return reposInGivenRegistry, nil
 }
