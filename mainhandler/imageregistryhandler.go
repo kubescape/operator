@@ -182,6 +182,8 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 		return fmt.Errorf("error parsing Secret: %s", err.Error())
 	}
 
+	glog.Infof("adding default auth for registry: %s", registryName)
+	registryScanHandler.mapRegistryToAuth[registryName] = types.AuthConfig{}
 	for _, reg := range registriesAuth {
 		switch AuthMethods(reg.AuthMethod) {
 		case accessTokenAuth:
@@ -191,6 +193,7 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 						Username: reg.Username,
 						Password: reg.Password,
 					}
+					glog.Infof("registry: %s credentials found, added proper authconfig", registryName)
 				} else {
 					return fmt.Errorf("must provide both username and password for secret: %v", registryScanSecret)
 				}
@@ -214,7 +217,7 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	glog.Infof("GetImagesForScanning: enumerating repoes...")
 	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
 	if err != nil {
-		glog.Infof("ListRepoesInRegistry failed with err %v", err)
+		glog.Errorf("ListRepoesInRegistry failed with err %v", err)
 		return err
 	}
 	glog.Infof("GetImagesForScanning: enumerating repoes successfully, found %d repos", len(repoes))
@@ -287,9 +290,23 @@ func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *r
 	}
 
 	ctx := context.Background()
+
 	repos, err := remote.Catalog(ctx, registry, remote.WithAuth(regCreds))
 	if err != nil {
-		return nil, err
+		//FUGLY code to handle https
+		if !strings.Contains(err.Error(), "server gave HTTP response to HTTPS client") {
+			return nil, err
+		}
+		glog.Infof("registry %s as https failed trying http", registry.Name())
+		registry, err := containerregistry.NewInsecureRegistry(registryScan.registry.hostname)
+		if err != nil {
+			return nil, err
+		}
+
+		if repos, err = remote.Catalog(ctx, registry, remote.WithAuth(regCreds)); err != nil {
+			return nil, err
+		}
+
 	}
 	var reposInGivenRegistry []string
 

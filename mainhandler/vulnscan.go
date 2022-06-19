@@ -156,18 +156,18 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
 	if err != nil {
-		glog.Infof("parseRegistryNameArg failed with err %v", err)
+		glog.Errorf("parseRegistryNameArg failed with err %v", err)
 		return err
 	}
 	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
 	if err != nil {
-		glog.Infof("loadSecretRegistryScanHandler failed with err %v", err)
+		glog.Errorf("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
 	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
-		glog.Infof("loadConfigMapRegistryScanHandler failed with err %v", err)
+		glog.Errorf("loadConfigMapRegistryScanHandler failed with err %v", err)
 		return err
 	}
 
@@ -193,17 +193,17 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
 	err := registryScanHandler.GetImagesForScanning(*registry, actionHandler.reporter)
 	if err != nil {
-		glog.Infof("GetImagesForScanning failed with err %v", err)
+		glog.Errorf("GetImagesForScanning failed with err %v", err)
 		return err
 	}
 	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry.mapImageToTags, sessionObj, registry)
 	if err != nil {
-		glog.Infof("convertImagesToWebsocketScanCommand failed with err %v", err)
+		glog.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
 		return err
 	}
 	err = sendAllImagesToVulnScan(webSocketScanCMDList)
 	if err != nil {
-		glog.Infof("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
+		glog.Errorf("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
 	}
 	return err
 }
