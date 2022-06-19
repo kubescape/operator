@@ -26,6 +26,10 @@ import (
 
 const dockerPullableURN = "docker-pullable://"
 
+var (
+	vulnScanHttpClient = &http.Client{}
+)
+
 func getVulnScanURL() *url.URL {
 	vulnURL := url.URL{}
 	vulnURL.Scheme = "http"
@@ -45,6 +49,10 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 	}
 
 	if len(errs) > 0 {
+		err = fmt.Errorf("sendAllImagesToVulnScan errors: ")
+		for errIdx := range errs {
+			err = fmt.Errorf("%w; %w", err, errs[errIdx])
+		}
 		return err
 	}
 	return nil
@@ -356,15 +364,10 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	// q := req.URL.Query()
-	// q.Add("imageTag", websocketScanCommand.ImageTag)
-	// q.Add("isScanned", strconv.FormatBool(websocketScanCommand.IsScanned))
-	// req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := vulnScanHttpClient.Do(req)
 	refusedNum := 0
-	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = client.Do(req) {
+	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = vulnScanHttpClient.Do(req) {
 		glog.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 		time.Sleep(5 * time.Second)
 		refusedNum++
@@ -400,20 +403,6 @@ func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, erro
 	return podObj, nil
 }
 
-// func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, error) {
-// 	var err error
-// 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	podspec, err := workload.GetPodSpec()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	podObj := &corev1.Pod{Spec: *podspec}
-// 	podObj.ObjectMeta.Namespace = pkgwlid.GetNamespaceFromWlid(wlid)
-// 	return podObj, nil
-// }
 func getScanFromArgs(args map[string]interface{}) (*apis.WebsocketScanCommand, error) {
 	scanInterface, ok := args["scan"]
 	if !ok {
