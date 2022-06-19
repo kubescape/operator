@@ -51,7 +51,7 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 	if len(errs) > 0 {
 		err = fmt.Errorf("sendAllImagesToVulnScan errors: ")
 		for errIdx := range errs {
-			err = fmt.Errorf("%w; %w", err, errs[errIdx])
+			err = fmt.Errorf("%s; %w", err, errs[errIdx])
 		}
 		return err
 	}
@@ -145,28 +145,38 @@ func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registrySca
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
-			var registryScanConfigs []registryScanConfig
-			var registryScanConfig *registryScanConfig
-			for reg := range registryScanHandler.mapRegistryToAuth {
-				registryScanConfig = NewRegistryScanConfig()
-				registryScanConfig.Registry = reg
-				registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
-			}
-			err = registryScanHandler.insertRegistryToScan(registryScanConfigs)
-			if err != nil {
-				return err
-			}
-			glog.Infof("configmap: %s does not exists", registryScanConfigmap)
-
-			return nil
+			glog.Infof("configmap: %s does not exists, using default values", registryScanConfigmap)
+			return actionHandler.initConfigMapDefaultValues(registryScanHandler)
 		} else {
 			return err
 		}
 	}
 	configData := configMap.GetData()
 	err = registryScanHandler.ParseConfigMapData(configData)
+	glog.Infof("configmap: %s parsed", registryScanConfigmap)
+	if len(registryScanHandler.registryScan) != len(registryScanHandler.mapRegistryToAuth) {
+		glog.Infof("configmap: %s not contains an entry for the registry. Found Registries: %v, desired registies: %v",
+			registryScanConfigmap, registryScanHandler.registryScan, registryScanHandler.mapRegistryToAuth)
+		return actionHandler.initConfigMapDefaultValues(registryScanHandler)
+	}
 	return err
 
+}
+
+func (*ActionHandler) initConfigMapDefaultValues(registryScanHandler *registryScanHandler) error {
+	var registryScanConfigs []registryScanConfig
+	var registryScanConfig *registryScanConfig
+	for reg := range registryScanHandler.mapRegistryToAuth {
+		registryScanConfig = NewRegistryScanConfig()
+		registryScanConfig.Registry = reg
+		registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
+	}
+	err := registryScanHandler.insertRegistryToScan(registryScanConfigs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
