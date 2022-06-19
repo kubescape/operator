@@ -12,7 +12,7 @@ import (
 )
 
 func isForceDelete(args map[string]interface{}) bool {
-	if args == nil || len(args) == 0 {
+	if len(args) == 0 {
 		return false
 	}
 	if v, ok := args["forceDelete"]; ok && v != nil {

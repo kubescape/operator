@@ -86,46 +86,6 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 	return webSocketScanCMDList, nil
 }
 
-func decryptAuth(auth types.AuthConfig) types.AuthConfig {
-	return auth
-}
-
-func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
-
-	username := ""
-	password := ""
-	innerAuth := ""
-	identityToken := ""
-	registryToken := ""
-
-	if _, ok := Args["username"]; ok {
-		username = Args["username"].(string)
-	}
-	if _, ok := Args["password"]; ok {
-		password = Args["password"].(string)
-	}
-	if _, ok := Args["auth"]; ok {
-		innerAuth = Args["auth"].(string)
-	}
-	if _, ok := Args["identityToken"]; ok {
-		identityToken = Args["identityToken"].(string)
-	}
-	if _, ok := Args["registryToken"]; ok {
-		registryToken = Args["registryToken"].(string)
-	}
-
-	auth := types.AuthConfig{
-		Username:      username,
-		Password:      password,
-		Auth:          innerAuth,
-		IdentityToken: identityToken,
-		RegistryToken: registryToken,
-	}
-
-	decrypt_auth := decryptAuth(auth)
-	return decrypt_auth, nil
-}
-
 func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHandler *registryScanHandler, registryName string) error {
 	secret, err := actionHandler.getRegistryScanSecret()
 
@@ -285,9 +245,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 		for contIdx := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
 				imageNameWithHash := pod.Status.ContainerStatuses[contIdx].ImageID
-				if strings.HasPrefix(imageNameWithHash, dockerPullableURN) {
-					imageNameWithHash = imageNameWithHash[len(dockerPullableURN):]
-				}
+				imageNameWithHash = strings.TrimPrefix(imageNameWithHash, dockerPullableURN)
 				websocketScanCommand.ImageHash = imageNameWithHash
 			}
 		}
@@ -432,20 +390,4 @@ func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, erro
 	podObj := &corev1.Pod{Spec: *podspec}
 	podObj.ObjectMeta.Namespace = pkgwlid.GetNamespaceFromWlid(wlid)
 	return podObj, nil
-}
-
-func getScanFromArgs(args map[string]interface{}) (*apis.WebsocketScanCommand, error) {
-	scanInterface, ok := args["scan"]
-	if !ok {
-		return nil, nil
-	}
-	websocketScanCommand := &apis.WebsocketScanCommand{}
-	scanBytes, err := json.Marshal(scanInterface)
-	if err != nil {
-		return nil, fmt.Errorf("cannot convert 'interface scan' to 'bytes array', reason: %s", err.Error())
-	}
-	if err = json.Unmarshal(scanBytes, websocketScanCommand); err != nil {
-		return nil, fmt.Errorf("cannot convert 'bytes array scan' to 'WebsocketScanCommand', reason: %s", err.Error())
-	}
-	return websocketScanCommand, nil
 }

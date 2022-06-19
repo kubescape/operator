@@ -91,7 +91,7 @@ func NewRegistryScanHandler() *registryScanHandler {
 
 func NewRegistryScan() *registryScan {
 	return &registryScan{
-		mapImageToTags: make(map[string][]string, 0),
+		mapImageToTags: make(map[string][]string),
 	}
 }
 
@@ -206,7 +206,7 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 }
 
 func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan, reporter datastructures.IReporter) error {
-	imgNameToTags := make(map[string][]string, 0)
+	imgNameToTags := make(map[string][]string)
 	regCreds := &registryCreds{
 		auth:         &registryScan.registryAuth,
 		RegistryName: registryScan.registry.hostname,
@@ -266,7 +266,7 @@ func (registryScanHandler *registryScanHandler) getNumOfImagesToScan(imgNameToTa
 }
 
 func (registryScanHandler *registryScanHandler) filterScanLimit(registryScan *registryScan, limit int) {
-	filteredImages := make(map[string][]string, 0)
+	filteredImages := make(map[string][]string)
 	counter := 0
 	for k := range registryScan.mapImageToTags {
 		for _, img := range registryScan.mapImageToTags[k] {
