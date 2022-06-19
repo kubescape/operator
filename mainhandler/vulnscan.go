@@ -120,9 +120,11 @@ func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
 
 func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHandler *registryScanHandler, registryName string) error {
 	secret, err := actionHandler.getRegistryScanSecret()
+
 	if err != nil {
 		return err
 	}
+
 	secretData := secret.GetData()
 	err = registryScanHandler.ParseSecretsData(secretData, registryName)
 
@@ -131,8 +133,27 @@ func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHa
 
 func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registryScanHandler *registryScanHandler) error {
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
+
 	if err != nil {
-		return err
+		// if configmap not found, it means we will use all images and default depth
+		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
+			var registryScanConfigs []registryScanConfig
+			var registryScanConfig *registryScanConfig
+			for reg := range registryScanHandler.mapRegistryToAuth {
+				registryScanConfig = NewRegistryScanConfig()
+				registryScanConfig.Registry = reg
+				registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
+			}
+			err = registryScanHandler.insertRegistryToScan(registryScanConfigs)
+			if err != nil {
+				return err
+			}
+			glog.Infof("configmap: %s does not exists", registryScanConfigmap)
+
+			return nil
+		} else {
+			return err
+		}
 	}
 	configData := configMap.GetData()
 	err = registryScanHandler.ParseConfigMapData(configData)
@@ -165,12 +186,12 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		glog.Infof("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
+	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
 		glog.Infof("loadConfigMapRegistryScanHandler failed with err %v", err)
 		return err
 	}
-	glog.Infof("scanRegistries: %s secret and %s configmap parsing successful", registryScanSecret, registryScanConfigmap)
 
 	for _, reg := range registryScanHandler.registryScan {
 		err = actionHandler.scanRegistry(&reg, sessionObj, registryScanHandler)
@@ -192,7 +213,7 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	err := registryScanHandler.GetImagesForScanning(*registry)
+	err := registryScanHandler.GetImagesForScanning(*registry, actionHandler.reporter)
 	if err != nil {
 		glog.Infof("GetImagesForScanning failed with err %v", err)
 		return err
