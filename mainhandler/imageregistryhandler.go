@@ -222,7 +222,9 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	}
 	glog.Infof("GetImagesForScanning: enumerating repoes successfully, found %d repos", len(repoes))
 	for _, repo := range repoes {
-		registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo)
+		if err := registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo); err != nil {
+			glog.Errorf("setImageToTagsMap failed with registry: %s repo: %s due to ERROR:: %s", registryScan.registry.hostname, repo, err.Error())
+		}
 	}
 	if registryScanHandler.isExceedScanLimit(imgNameToTags, imagesToScanLimit) {
 		registryScanHandler.filterScanLimit(&registryScan, imagesToScanLimit)
@@ -234,25 +236,32 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	return nil
 }
 
-func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) {
+func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) error {
 	tags := make([]string, 0, 16)
-
+	var err error
 	if len(registryScan.registryScanConfig.Include) > 0 {
 		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, _ = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+			tags, err = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 		}
 	} else if len(registryScan.registryScanConfig.Exclude) > 0 {
 		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, _ = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+			tags, err = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 		}
 	} else {
-		tags, _ = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
+		tags, err = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
 	}
+
+	if err != nil {
+		return err
+	}
+
 	if len(tags) > registryScan.registryScanConfig.Depth {
 		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags[:registryScan.registryScanConfig.Depth]
 	} else {
 		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
+
+	return nil
 }
 
 // Check if number of images (not repoes) to scan is more than limit
@@ -292,6 +301,7 @@ func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *r
 	ctx := context.Background()
 
 	repos, err := remote.Catalog(ctx, registry, remote.WithAuth(regCreds))
+
 	if err != nil {
 		//FUGLY code to handle https
 		if !strings.Contains(err.Error(), "server gave HTTP response to HTTPS client") {
@@ -328,12 +338,27 @@ func (registryScanHandler *registryScanHandler) ListImageTagsInRepo(repo string,
 	fullRepoName := regCreds.RegistryName + "/" + repo
 	repo_data, err := containerregistry.NewRepository(fullRepoName)
 	if err != nil {
-		return nil, err
+		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
+			return nil, err
+		}
+		repo_data, err = containerregistry.NewRepository(fullRepoName, containerregistry.Insecure)
+		if err != nil {
+			return nil, err
+		}
+
 	}
 	imagestags, err := remote.List(repo_data, remote.WithAuth(regCreds))
-
 	if err != nil {
-		return nil, err
+		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
+			return nil, err
+		}
+		glog.Infof("trying to get %s tags via http instead of https", fullRepoName)
+		repo_data, err = containerregistry.NewRepository(fullRepoName, containerregistry.Insecure)
+		if err != nil {
+			return nil, err
+		}
+		imagestags, err = remote.List(repo_data, remote.WithAuth(regCreds))
+		return imagestags, err
 	}
 
 	return imagestags, nil
