@@ -107,11 +107,12 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			continue
 		}
 
+		// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
+		sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
 		// if scan disabled
 		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.TypeScanImages {
 			err := fmt.Errorf("scan is disabled in cluster")
 			glog.Warningf(err.Error())
-			sessionObj.Reporter.SetActionName(string(apis.TypeScanImages))
 			sessionObj.Reporter.SendError(err, true, true)
 			continue
 		}
