@@ -22,7 +22,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 		return err
 	}
 
-	jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, CronjobTemplateName)
+	jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, CronjobTemplateName)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.updatejobid"] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
@@ -74,12 +74,18 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob() error {
 		return fmt.Errorf("deleteVulnScanCronJob: CronTabSchedule not found")
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Delete(context.Background(), scanJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	return actionHandler.deleteCronjob(scanJobParams.JobName)
+
+}
+
+func (actionHandler *ActionHandler) deleteCronjob(name string) error {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), scanJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil
+
 }

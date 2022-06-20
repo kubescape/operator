@@ -214,6 +214,12 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 		return actionHandler.updateVulnScanCronJob()
 	case apis.TypeDeleteVulnScanCronJob:
 		return actionHandler.deleteVulnScanCronJob()
+	case apis.TypeSetRegistryScanCronJob:
+		return actionHandler.setRegistryScanCronJob(sessionObj)
+	case apis.TypeUpdateRegistryScanCronJob:
+		return actionHandler.updateRegistryScanCronJob()
+	case apis.TypeDeleteRegistryScanCronJob:
+		return actionHandler.deleteRegistryScanCronJob()
 	default:
 		glog.Errorf("Command %s not found", c.CommandName)
 	}

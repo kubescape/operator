@@ -11,13 +11,11 @@ import (
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
-
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
-
 	"github.com/armosec/utils-go/httputils"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/golang/glog"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -47,29 +45,21 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 }
 
 func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
-	kubescapeJobParams := getKubescapeJobParams(&actionHandler.command)
-	if kubescapeJobParams == nil {
+	jobParams := getKubescapeJobParams(&actionHandler.command)
+	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
-	// req, err := getKubescapeRequest(actionHandler.command.Args)
-	// if err != nil {
-	// 	return err
-	// }
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), kubescapeJobParams.JobName, metav1.GetOptions{})
+
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	jobTemplateObj.Spec.Schedule = actionHandler.getCronTabSchedule()
+	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.command)
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.updatejobid"] = actionHandler.command.JobTracking.JobID
-
-	// editing host scanner is not enabled
-	// if req.HostScanner != nil {
-	// 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"] = boolutils.BoolPointerToString(req.HostScanner)
-	// }
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
@@ -93,12 +83,12 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJonTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
 		if err != nil {
 			return err
 		}
 
-		setCronJobTemplate(jobTemplateObj, name, actionHandler.getCronTabSchedule(), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
+		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
 		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
@@ -187,153 +177,17 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	return nil
 }
 
-// runKubescapeJob - deprecated
-func (actionHandler *ActionHandler) runKubescapeJob() error {
-
-	return actionHandler.kubescapeScan()
-
-	// 	namespaceName := cautils.CA_NAMESPACE
-	// 	configMap, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespaceName).Get(context.Background(), "kubescape-job-template", metav1.GetOptions{})
-	// 	if err != nil {
-	// 		return err
-
-	// 	}
-	// 	rulesList, ok := actionHandler.command.Args["rules"].([]opapolicy.PolicyIdentifier)
-	// 	if !ok {
-	// 		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
-	// 	}
-	// 	jobTemplateStr := configMap.Data["jobTemplate"]
-	// 	for ruleIdx := range rulesList {
-	// 		jobTemplateObj := &v1.Job{}
-	// 		if err := yaml.Unmarshal([]byte(jobTemplateStr), jobTemplateObj); err != nil {
-	// 			return err
-	// 		}
-	// 		// inject kubescape CLI parameters into pod spec
-	// 		ruleName := rulesList[ruleIdx].Name
-	// 		jobName := fmt.Sprintf("%s-%s-%s", jobTemplateObj.Name, ruleName, actionHandler.command.JobTracking.JobID)
-	// 		jobName = fixK8sJobNameLimit(jobName)
-	// 		if !strings.Contains(jobName, ruleName) {
-	// 			rndInt := rand.NewSource(time.Now().UnixNano()).Int63()
-	// 			jobName = fmt.Sprintf("%s-%d-%s", jobTemplateObj.Name, rndInt, ruleName)
-	// 			jobName = fixK8sJobNameLimit(jobName)
-	// 		}
-	// 		jobTemplateObj.Name = jobName
-
-	// 		jobTemplateObj.Spec.Template.Spec.Containers[0].Args = combineKubescapeCMDArgsWithFrameworkName(ruleName, jobTemplateObj.Spec.Template.Spec.Containers[0].Args)
-	// 		if jobTemplateObj.Spec.Template.Annotations == nil {
-	// 			jobTemplateObj.Spec.Template.Annotations = make(map[string]string)
-	// 		}
-	// 		jobTemplateObj.Spec.Template.Annotations["armo.jobid"] = actionHandler.command.JobTracking.JobID
-	// 		jobTemplateObj.Spec.Template.Annotations["armo.framework"] = ruleName
-	// 		_, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{})
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		// watch job status
-	// 		watchHand, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Watch(
-	// 			context.Background(), metav1.ListOptions{FieldSelector: fmt.Sprintf("metadata.name=%s", jobTemplateObj.Name)})
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		timerForError := time.NewTimer(4 * time.Minute)
-	// 		defer func() {
-	// 			if !timerForError.Stop() {
-	// 				<-timerForError.C
-	// 			}
-	// 		}()
-	// 		watchChan := watchHand.ResultChan()
-	// 		eventCount := int32(0) // ugly workaround for not reported failures
-	// 		backoffL := int32(6)
-	// 		if jobTemplateObj.Spec.BackoffLimit == nil {
-	// 			jobTemplateObj.Spec.BackoffLimit = &backoffL
-	// 		} else {
-	// 			backoffL = *jobTemplateObj.Spec.BackoffLimit
-	// 		}
-	// 		for {
-	// 			var event watch.Event
-	// 			select {
-	// 			case event = <-watchChan:
-	// 			case <-timerForError.C:
-	// 				glog.Errorf("New job watch - timer signal")
-	// 				logs, shouldReturn, returnValue := actionHandler.getJobPodLogs(namespaceName, jobTemplateObj)
-	// 				if shouldReturn {
-	// 					return fmt.Errorf("timer out signal, no pod logs: %v", returnValue)
-	// 				}
-	// 				return fmt.Errorf("timer out signal, pod logs: %s", logs)
-	// 			}
-	// 			if event.Type == watch.Error {
-	// 				glog.Errorf("New job watch chan loop error: %v", event.Object)
-	// 				watchHand.Stop()
-	// 				return fmt.Errorf("new job watch chan loop error: %v", event.Object)
-	// 			}
-
-	// 			jobTemplateObjReal, ok := event.Object.(*v1.Job)
-	// 			if !ok {
-	// 				glog.Errorf("New job watch - failed to convert job: %v", event)
-	// 				continue
-	// 			}
-	// 			eventCount++
-	// 			if jobTemplateObjReal.Status.Succeeded == 0 && jobTemplateObj.Status.Failed == 0 && jobTemplateObjReal.Status.Active == 0 {
-	// 				jobTemplateObjReal, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().Jobs(namespaceName).Get(context.Background(), jobTemplateObjReal.Name, metav1.GetOptions{})
-	// 				if err != nil {
-	// 					glog.Errorf("New job watch - failed to get job: %s", jobTemplateObj.Name)
-	// 					continue
-	// 				}
-	// 			}
-	// 			if jobTemplateObjReal.Status.Succeeded > 0 {
-	// 				glog.Infof("job %s succeeded", jobTemplateObj.Name)
-	// 				break
-	// 			} else if jobTemplateObjReal.Status.Failed > backoffL || eventCount > backoffL+1 {
-	// 				glog.Errorf("job %s failed", jobTemplateObj.Name)
-	// 				// reading logs of pod
-	// 				logs, shouldReturn, returnValue := actionHandler.getJobPodLogs(namespaceName, jobTemplateObjReal)
-	// 				if shouldReturn {
-	// 					return returnValue
-	// 				}
-	// 				glog.Errorf("job %s failed, error logs: %s", jobTemplateObjReal.Name, string(logs))
-
-	// 				return fmt.Errorf("job %s failed, error logs: %s", jobTemplateObjReal.Name, string(logs))
-	// 			} else {
-	// 				glog.Errorf("job %s status unknown: %+v", jobTemplateObjReal.Name, jobTemplateObjReal.Status)
-	// 			}
-	// 		}
-	// 	}
-	// 	return nil
-	// }
-
-	// func (actionHandler *ActionHandler) getJobPodLogs(namespaceName string, jobTemplateObjReal *v1.Job) ([]byte, bool, error) {
-	// 	podList, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).List(
-	// 		context.Background(), metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobTemplateObjReal.Name)})
-	// 	if err != nil {
-	// 		return nil, true, fmt.Errorf("new job watch -failed to get pods: %v", err)
-	// 	}
-	// 	if len(podList.Items) < 1 {
-	// 		return nil, true, fmt.Errorf("new job watch - wrong number of pods: %v", len(podList.Items))
-	// 	}
-	// 	podLogOpts := corev1.PodLogOptions{Timestamps: true, Container: jobTemplateObjReal.Spec.Template.Spec.Containers[0].Name}
-	// 	logsObj := actionHandler.k8sAPI.KubernetesClient.CoreV1().Pods(namespaceName).GetLogs(podList.Items[0].Name, &podLogOpts)
-	// 	readerObj, err := logsObj.Stream(actionHandler.k8sAPI.Context)
-	// 	if err != nil {
-	// 		return nil, true, fmt.Errorf("failed to get pod logs stream: %v", err)
-	// 	}
-	// 	logs, err := io.ReadAll(readerObj)
-	// 	if err != nil {
-	// 		return nil, true, fmt.Errorf("failed to read pod logs stream: %v", err)
-	// 	}
-	// 	return logs, false, nil
-}
-
-func (actionHandler *ActionHandler) getCronTabSchedule() string {
-	if kubescapeJobParams := getKubescapeJobParams(&actionHandler.command); kubescapeJobParams != nil {
+func getCronTabSchedule(command armoapi.Command) string {
+	if kubescapeJobParams := getKubescapeJobParams(&command); kubescapeJobParams != nil {
 		return kubescapeJobParams.CronTabSchedule
 	}
-	if schedule, ok := actionHandler.command.Args["cronTabSchedule"]; ok {
+	if schedule, ok := command.Args["cronTabSchedule"]; ok {
 		if s, k := schedule.(string); k {
 			return s
 		}
 	}
-	if len(actionHandler.command.Designators) > 0 {
-		if schedule, ok := actionHandler.command.Designators[0].Attributes["cronTabSchedule"]; ok {
+	if len(command.Designators) > 0 {
+		if schedule, ok := command.Designators[0].Attributes["cronTabSchedule"]; ok {
 			return schedule
 		}
 	}

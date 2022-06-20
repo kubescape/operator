@@ -16,9 +16,12 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const RequestBodyPlaceholder = "request-body.json"
-const VolumeNamePlaceholder = "request-body-volume"
-const CronjobTemplatePlaceholder = "cronjobTemplate"
+const (
+	requestBodyFile     = "request-body.json"
+	requestVolumeName   = "request-body-volume"
+	cronjobTemplateName = "cronjobTemplate"
+	armoJobIDAnnotation = "armo.updatejobid"
+)
 
 func fixK8sCronJobNameLimit(jobName string) string {
 	return fixK8sNameLimit(jobName, 52)
@@ -42,16 +45,16 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 	return strings.ToLower(jobName)
 }
 
-func getCronJonTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
+func getCronJobTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
 	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
 	// create cronJob
-	jobTemplateStr, ok := template.Data[CronjobTemplatePlaceholder]
+	jobTemplateStr, ok := template.Data[cronjobTemplateName]
 	if !ok {
-		return nil, fmt.Errorf("getCronJonTemplate: jobTemplate not found")
+		return nil, fmt.Errorf("getCronJobTemplate: jobTemplate not found")
 	}
 
 	jobTemplateObj := &v1.CronJob{}
@@ -87,7 +90,7 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name s
 		return err
 	}
 
-	configMap.Data[RequestBodyPlaceholder] = string(reqByte)
+	configMap.Data[requestBodyFile] = string(reqByte)
 	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
@@ -103,7 +106,7 @@ func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, job
 
 	// update volume name
 	for i, v := range jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes {
-		if v.Name == VolumeNamePlaceholder {
+		if v.Name == requestVolumeName {
 			jobTemplateObj.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].ConfigMap.Name = name
 		}
 	}

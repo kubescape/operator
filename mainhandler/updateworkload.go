@@ -140,13 +140,6 @@ func injectLabel(objectMeta *metav1.ObjectMeta, key, val string) {
 	objectMeta.Labels[key] = val
 }
 
-func injectAnnotation(objectMeta *metav1.ObjectMeta, key, val string) {
-	if objectMeta.Annotations == nil {
-		objectMeta.Annotations = make(map[string]string)
-	}
-	objectMeta.Annotations[key] = val
-}
-
 func removeAnnotation(meatdata *metav1.ObjectMeta, key string) {
 	if meatdata.Annotations != nil {
 		delete(meatdata.Annotations, key)

@@ -26,6 +26,10 @@ import (
 
 const dockerPullableURN = "docker-pullable://"
 
+var (
+	vulnScanHttpClient = &http.Client{}
+)
+
 func getVulnScanURL() *url.URL {
 	vulnURL := url.URL{}
 	vulnURL.Scheme = "http"
@@ -34,13 +38,22 @@ func getVulnScanURL() *url.URL {
 	return &vulnURL
 }
 func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) error {
-
 	var err error
+	errs := make([]error, 0)
 	for _, webSocketScanCMD := range webSocketScanCMDList {
 		err = sendWorkloadToVulnerabilityScanner(webSocketScanCMD)
 		if err != nil {
-			glog.Infof("sendWorkloadToVulnerabilityScanner failed with err %v", err)
+			glog.Errorf("sendWorkloadToVulnerabilityScanner failed with err %v", err)
+			errs = append(errs, err)
 		}
+	}
+
+	if len(errs) > 0 {
+		err = fmt.Errorf("sendAllImagesToVulnScan errors: ")
+		for errIdx := range errs {
+			err = fmt.Errorf("%s; %w", err, errs[errIdx])
+		}
+		return err
 	}
 	return nil
 }
@@ -48,7 +61,6 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *registryScan) ([]*apis.WebsocketScanCommand, error) {
 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
-
 	for repository, tags := range images {
 		// registry/project/repo --> repo
 		repositoryName := strings.Replace(repository, registry.registry.hostname+"/"+registry.registry.projectID+"/", "", -1)
@@ -74,51 +86,13 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 	return webSocketScanCMDList, nil
 }
 
-func decryptAuth(auth types.AuthConfig) types.AuthConfig {
-	return auth
-}
-
-func decryptSecretsData(Args map[string]interface{}) (types.AuthConfig, error) {
-
-	username := ""
-	password := ""
-	innerAuth := ""
-	identityToken := ""
-	registryToken := ""
-
-	if _, ok := Args["username"]; ok {
-		username = Args["username"].(string)
-	}
-	if _, ok := Args["password"]; ok {
-		password = Args["password"].(string)
-	}
-	if _, ok := Args["auth"]; ok {
-		innerAuth = Args["auth"].(string)
-	}
-	if _, ok := Args["identityToken"]; ok {
-		identityToken = Args["identityToken"].(string)
-	}
-	if _, ok := Args["registryToken"]; ok {
-		registryToken = Args["registryToken"].(string)
-	}
-
-	auth := types.AuthConfig{
-		Username:      username,
-		Password:      password,
-		Auth:          innerAuth,
-		IdentityToken: identityToken,
-		RegistryToken: registryToken,
-	}
-
-	decrypt_auth := decryptAuth(auth)
-	return decrypt_auth, nil
-}
-
 func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHandler *registryScanHandler, registryName string) error {
 	secret, err := actionHandler.getRegistryScanSecret()
+
 	if err != nil {
 		return err
 	}
+
 	secretData := secret.GetData()
 	err = registryScanHandler.ParseSecretsData(secretData, registryName)
 
@@ -127,13 +101,42 @@ func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHa
 
 func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registryScanHandler *registryScanHandler) error {
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
+
 	if err != nil {
-		return err
+		// if configmap not found, it means we will use all images and default depth
+		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
+			glog.Infof("configmap: %s does not exists, using default values", registryScanConfigmap)
+			return actionHandler.initConfigMapDefaultValues(registryScanHandler)
+		} else {
+			return err
+		}
 	}
 	configData := configMap.GetData()
 	err = registryScanHandler.ParseConfigMapData(configData)
+	glog.Infof("configmap: %s parsed", registryScanConfigmap)
+	if len(registryScanHandler.registryScan) != len(registryScanHandler.mapRegistryToAuth) {
+		glog.Infof("configmap: %s not contains an entry for the registry. Found Registries: %v, desired registies: %v",
+			registryScanConfigmap, registryScanHandler.registryScan, registryScanHandler.mapRegistryToAuth)
+		return actionHandler.initConfigMapDefaultValues(registryScanHandler)
+	}
 	return err
 
+}
+
+func (*ActionHandler) initConfigMapDefaultValues(registryScanHandler *registryScanHandler) error {
+	var registryScanConfigs []registryScanConfig
+	var registryScanConfig *registryScanConfig
+	for reg := range registryScanHandler.mapRegistryToAuth {
+		registryScanConfig = NewRegistryScanConfig()
+		registryScanConfig.Registry = reg
+		registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
+	}
+	err := registryScanHandler.insertRegistryToScan(registryScanConfigs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
@@ -153,14 +156,18 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
 	if err != nil {
+		glog.Errorf("parseRegistryNameArg failed with err %v", err)
 		return err
 	}
 	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
 	if err != nil {
+		glog.Errorf("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
+	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
+		glog.Errorf("loadConfigMapRegistryScanHandler failed with err %v", err)
 		return err
 	}
 
@@ -176,7 +183,7 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 	if !ok {
 		return "", fmt.Errorf("could not parse registry info")
 	}
-	registryName, ok := registryInfo[registryName].(string)
+	registryName, ok := registryInfo[registryNameField].(string)
 	if !ok {
 		return "", fmt.Errorf("could not parse registry name")
 	}
@@ -184,17 +191,19 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	images, err := registryScanHandler.GetImagesForScanning(*registry)
+	err := registryScanHandler.GetImagesForScanning(*registry, actionHandler.reporter)
 	if err != nil {
+		glog.Errorf("GetImagesForScanning failed with err %v", err)
 		return err
 	}
-	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(images, sessionObj, registry)
+	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry.mapImageToTags, sessionObj, registry)
 	if err != nil {
+		glog.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
 		return err
 	}
 	err = sendAllImagesToVulnScan(webSocketScanCMDList)
 	if err != nil {
-		glog.Infof("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
+		glog.Errorf("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
 	}
 	return err
 }
@@ -236,9 +245,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 		for contIdx := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
 				imageNameWithHash := pod.Status.ContainerStatuses[contIdx].ImageID
-				if strings.HasPrefix(imageNameWithHash, dockerPullableURN) {
-					imageNameWithHash = imageNameWithHash[len(dockerPullableURN):]
-				}
+				imageNameWithHash = strings.TrimPrefix(imageNameWithHash, dockerPullableURN)
 				websocketScanCommand.ImageHash = imageNameWithHash
 			}
 		}
@@ -346,15 +353,10 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	// q := req.URL.Query()
-	// q.Add("imageTag", websocketScanCommand.ImageTag)
-	// q.Add("isScanned", strconv.FormatBool(websocketScanCommand.IsScanned))
-	// req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := vulnScanHttpClient.Do(req)
 	refusedNum := 0
-	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = client.Do(req) {
+	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = vulnScanHttpClient.Do(req) {
 		glog.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 		time.Sleep(5 * time.Second)
 		refusedNum++
@@ -388,34 +390,4 @@ func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, erro
 	podObj := &corev1.Pod{Spec: *podspec}
 	podObj.ObjectMeta.Namespace = pkgwlid.GetNamespaceFromWlid(wlid)
 	return podObj, nil
-}
-
-// func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, error) {
-// 	var err error
-// 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	podspec, err := workload.GetPodSpec()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	podObj := &corev1.Pod{Spec: *podspec}
-// 	podObj.ObjectMeta.Namespace = pkgwlid.GetNamespaceFromWlid(wlid)
-// 	return podObj, nil
-// }
-func getScanFromArgs(args map[string]interface{}) (*apis.WebsocketScanCommand, error) {
-	scanInterface, ok := args["scan"]
-	if !ok {
-		return nil, nil
-	}
-	websocketScanCommand := &apis.WebsocketScanCommand{}
-	scanBytes, err := json.Marshal(scanInterface)
-	if err != nil {
-		return nil, fmt.Errorf("cannot convert 'interface scan' to 'bytes array', reason: %s", err.Error())
-	}
-	if err = json.Unmarshal(scanBytes, websocketScanCommand); err != nil {
-		return nil, fmt.Errorf("cannot convert 'bytes array scan' to 'WebsocketScanCommand', reason: %s", err.Error())
-	}
-	return websocketScanCommand, nil
 }
