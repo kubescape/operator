@@ -46,7 +46,7 @@ func (notification *NotificationHandler) WebsocketConnection() error {
 		if err := notification.SetupWebsocket(); err != nil {
 			retries += 1
 			time.Sleep(time.Duration(retries*2) * time.Second)
-			glog.Errorf("In WebsocketConnection, error: %s, retry: %d", err.Error(), retries)
+			glog.Warningf("In WebsocketConnection, error: %s, retry: %d", err.Error(), retries)
 		} else {
 			retries = 0
 		}
