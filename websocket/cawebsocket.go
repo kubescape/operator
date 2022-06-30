@@ -158,7 +158,7 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())
 			glog.Error(err)
-			sessionObj.Reporter.SendError(err, true, true)
+			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
 			continue
 		}
 

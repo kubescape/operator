@@ -21,7 +21,7 @@ func (handler *HTTPHandler) loadTLSKey() error {
 
 	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return fmt.Errorf("Filed to load key pair: %v", err)
+		return fmt.Errorf("failed to load key pair: %v", err)
 	}
 	handler.keyPair = &pair
 	return nil

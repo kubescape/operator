@@ -20,7 +20,7 @@ func displayReceivedCommand(receivedCommands []byte) {
 	if err = json.Unmarshal(receivedCommands, &commands); err != nil {
 		return
 	}
-	for i, _ := range commands.Commands {
+	for i := range commands.Commands {
 		commands.Commands[i].Args = map[string]interface{}{}
 	}
 
@@ -42,11 +42,10 @@ func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) err
 
 	for _, c := range commands.Commands {
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
-
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())
 			glog.Error(err)
-			sessionObj.Reporter.SendError(err, true, true)
+			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
 			continue
 		}
 
