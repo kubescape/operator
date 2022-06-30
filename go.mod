@@ -7,7 +7,7 @@ require (
 	github.com/armosec/cacli-wrapper-go v0.0.2
 	github.com/armosec/cluster-notifier-api-go v0.0.3
 	github.com/armosec/k8s-interface v0.0.77
-	github.com/armosec/logger-go v0.0.6
+	github.com/armosec/logger-go v0.0.8
 	github.com/armosec/opa-utils v0.0.138
 	github.com/armosec/utils-go v0.0.5
 	github.com/armosec/utils-k8s-go v0.0.7

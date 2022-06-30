@@ -22,6 +22,7 @@ type SafeModeHandler struct {
 	k8sApi            *k8sinterface.KubernetesApi
 	wlidCompatibleMap WlidCompatibleMap
 	workloadStatusMap WorkloadStatusMap
+	errChan           chan error
 }
 
 func NewSafeModeHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode, k8sApi *k8sinterface.KubernetesApi) *SafeModeHandler {
@@ -31,6 +32,7 @@ func NewSafeModeHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan a
 		k8sApi:            k8sApi,
 		wlidCompatibleMap: *NewWlidCompatibleMap(),
 		workloadStatusMap: *NewWorkloadStatusMap(),
+		errChan:           make(chan error),
 	}
 }
 
@@ -231,7 +233,7 @@ func (safeModeHandler *SafeModeHandler) reportSafeMode(safeMode *apis.SafeMode, 
 	reporter.SetActionName("Agent incompatible - detaching")
 	reporter.SetDetails(message)
 	reporter.SetStatus(reporterlib.JobFailed)
-	reporter.SendError(fmt.Errorf(safeMode.Message), true, true)
+	reporter.SendError(fmt.Errorf(safeMode.Message), true, true, safeModeHandler.errChan)
 }
 
 func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode) {
@@ -240,7 +242,7 @@ func (safeModeHandler *SafeModeHandler) reportJobSuccess(safeMode *apis.SafeMode
 	reporter.SetJobID(safeMode.JobID)
 	reporter.SetActionName("Attach armo agent")
 	reporter.SetStatus(reporterlib.JobDone)
-	reporter.SendStatus(reporterlib.JobDone, true)
+	reporter.SendStatus(reporterlib.JobDone, true, safeModeHandler.errChan)
 }
 
 func (safeModeHandler *SafeModeHandler) triggerCommand(safeMode *apis.SafeMode, commandName apis.NotificationPolicyType) {

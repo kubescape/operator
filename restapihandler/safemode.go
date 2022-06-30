@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/armosec/armoapi-go/apis"
-
 	"github.com/golang/glog"
 )
 
@@ -33,7 +31,7 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 		err = resthandler.safeModePost(r.URL.Query(), readBuffer)
 	default:
 		httpStatus = http.StatusMethodNotAllowed
-		err = fmt.Errorf("Method '%s' not allowed", r.Method)
+		err = fmt.Errorf("method '%s' not allowed", r.Method)
 	}
 	if err != nil {
 		returnValue = []byte(err.Error())
@@ -45,7 +43,7 @@ func (resthandler *HTTPHandler) SafeMode(w http.ResponseWriter, r *http.Request)
 }
 
 func (resthandler *HTTPHandler) safeModePost(urlVals url.Values, readBuffer []byte) error {
-	message := fmt.Sprintf("%s", readBuffer)
+	message := string(readBuffer)
 	glog.Infof("REST-API SafeMode received: %s", message)
 
 	// TODO
@@ -53,18 +51,4 @@ func (resthandler *HTTPHandler) safeModePost(urlVals url.Values, readBuffer []by
 	// nh := notificationhandler.NewNotificationHandler(resthandler.sessionObj)
 	// return nh.HandlerSafeModeNotification(safeModeObj)
 	return nil
-}
-
-func convertSafeModeRequest(bytesRequest []byte) (*apis.SafeMode, error) {
-	safeMode := &apis.SafeMode{}
-	if err := json.Unmarshal(bytesRequest, safeMode); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-	safeMode.InstanceID = safeMode.PodName
-	if safeMode.Action == "" {
-		safeMode.Action = "SafeMode notification"
-	}
-	return safeMode, nil
-
 }

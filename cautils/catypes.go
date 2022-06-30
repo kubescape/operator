@@ -9,6 +9,7 @@ import (
 type SessionObj struct {
 	Command  apis.Command          `json:"command"`
 	Reporter reporterlib.IReporter `json:"reporter"`
+	ErrChan  chan error            `json:"-"`
 }
 
 //WorkloadTemplate sent

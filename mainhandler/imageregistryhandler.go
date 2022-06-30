@@ -229,7 +229,12 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	if registryScanHandler.isExceedScanLimit(imgNameToTags, imagesToScanLimit) {
 		registryScanHandler.filterScanLimit(&registryScan, imagesToScanLimit)
 		if reporter != nil {
-			reporter.SendError(err, true, true)
+			errChan := make(chan error)
+			reporter.SendError(err, true, true, errChan)
+			if err := <-errChan; err != nil {
+				glog.Errorf("setImageToTagsMap failed to send error report: %s due to ERROR:: %s",
+					registryScan.registry.hostname, err.Error())
+			}
 		}
 		glog.Warning("GetImagesForScanning: more than 500 images provided. scanning only first 500 images")
 	}

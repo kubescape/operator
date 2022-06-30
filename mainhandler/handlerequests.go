@@ -113,7 +113,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.TypeScanImages {
 			err := fmt.Errorf("scan is disabled in cluster")
 			glog.Warningf(err.Error())
-			sessionObj.Reporter.SendError(err, true, true)
+			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
 			continue
 		}
 		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
@@ -133,6 +133,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 			// handle requests
 			mainHandler.HandleSingleRequest(&sessionObj)
 		}
+		close(sessionObj.ErrChan)
 	}
 }
 
@@ -149,14 +150,14 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj, mainHandler.commandResponseChannel)
 	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
-	actionHandler.reporter.SendAction(string(sessionObj.Command.CommandName), true)
+	actionHandler.reporter.SendAction(string(sessionObj.Command.CommandName), true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
-		actionHandler.reporter.SendError(err, true, true)
+		actionHandler.reporter.SendError(err, true, true, sessionObj.ErrChan)
 		status = "FAIL"
 		// cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
-		actionHandler.reporter.SendStatus(jobStatus(sessionObj.Command.CommandName), true)
+		actionHandler.reporter.SendStatus(jobStatus(sessionObj.Command.CommandName), true, sessionObj.ErrChan)
 	}
 	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.GetID(), status)
 	if err != nil {
@@ -242,7 +243,7 @@ func (actionHandler *ActionHandler) signWorkload() error {
 	if err != nil {
 		return err
 	}
-
+	close(s.ErrChan)
 	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
 
 	return actionHandler.update(apis.TypeRestartWorkload)
@@ -274,14 +275,14 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	}
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	glog.Infof(info)
-	sessionObj.Reporter.SendAction(info, true)
+	sessionObj.Reporter.SendAction(info, true, sessionObj.ErrChan)
 	ids, errs := mainHandler.getIDs(namespaces, labels, fields, resources)
 	for i := range errs {
 		glog.Warningf(errs[i].Error())
-		sessionObj.Reporter.SendError(errs[i], true, true)
+		sessionObj.Reporter.SendError(errs[i], true, true, sessionObj.ErrChan)
 	}
 
-	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
+	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
 
 	glog.Infof("ids found: '%v'", ids)
 	go func() { // send to goroutine so the channel will be released release the channel
@@ -309,7 +310,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			if err != nil {
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
 				glog.Error(err)
-				sessionObj.Reporter.SendError(err, true, true)
+				sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
 				continue
 			}
 

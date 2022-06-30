@@ -215,7 +215,7 @@ func (wsm *WorkloadStatusMap) GetKeys() []string {
 	wsm.mutex.RLock()
 	defer wsm.mutex.RUnlock()
 	keys := []string{}
-	for k, _ := range wsm.workloadStatusMap {
+	for k := range wsm.workloadStatusMap {
 		keys = append(keys, k)
 	}
 	return keys
