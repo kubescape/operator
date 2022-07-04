@@ -1,0 +1,13 @@
+{
+    "commands": [
+        {
+            "CommandName": "updateRegistryScanCronJob",
+            "args": {
+                "jobParams": {
+                    "name": "kubescape-registry-scan-3351514809465429647",
+                    "cronTabSchedule": "* 0 * * *"
+                }
+            }
+        }
+    ]
+}
