@@ -1,0 +1,12 @@
+{
+    "commands": [
+        {
+            "CommandName": "scanRegistry",
+            "args": {
+                "registryInfo-v1": {
+                    "registryName": "quay.io/armosec"
+                }
+            }
+        }
+    ]
+}
