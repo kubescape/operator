@@ -185,22 +185,20 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 	glog.Infof("adding default auth for registry: %s", registryName)
 	registryScanHandler.mapRegistryToAuth[registryName] = types.AuthConfig{}
 	for _, reg := range registriesAuth {
-		switch AuthMethods(reg.AuthMethod) {
-		case accessTokenAuth:
-			if registryName == reg.Registry {
-				if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
-					registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
-						Username: reg.Username,
-						Password: reg.Password,
-					}
-					glog.Infof("registry: %s credentials found, added proper authconfig", registryName)
-				} else {
-					return fmt.Errorf("must provide both username and password for secret: %v", registryScanSecret)
-				}
-			}
-		default:
-			registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{}
 
+		if registryName == reg.Registry {
+			if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
+				registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
+					Username: reg.Username,
+					Password: reg.Password,
+					Auth:     reg.AuthMethod,
+					//TODO:addd tokens support
+				}
+				glog.Infof("registry: %s credentials found, added proper authconfig", registryName)
+				break //[lior]@daneil if it's indeed one registry then you're done...
+			} else {
+				return fmt.Errorf("must provide both username and password for secret: %v", registryScanSecret)
+			}
 		}
 
 	}
@@ -299,13 +297,26 @@ func (registryScanHandler *registryScanHandler) filterScanLimit(registryScan *re
 
 func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *registryScan) ([]string, error) {
 	registry, err := containerregistry.NewRegistry(registryScan.registry.hostname)
+
 	if err != nil {
 		return nil, err
 	}
+	// authcfg, err := regCreds.Authorization()
+	// if err != nil {
+	// 	glog.Errorf("registry %s unable to authenticate: %s", registry.Name(), err.Error())
+	// }
+
+	// reg, err := registries.Factory(authcfg, &registry, common.MakeRegistryOptions(false, false, registryScan.registry.hostname, "", registryScan.registry.projectID))
+	// if err != nil {
+	// 	glog.Errorf("registry %s unable to complete factory: %s", registry.Name(), err.Error())
+
+	// 	return nil, err
+	// }
 
 	ctx := context.Background()
 
 	repos, err := remote.Catalog(ctx, registry, remote.WithAuth(regCreds))
+	// repos, err := reg.Catalog(ctx, common.NoPagination(0), common.CatalogOption{Namespaces: registryScan.registry.projectID}, regCreds)
 
 	if err != nil {
 		//FUGLY code to handle https
@@ -352,6 +363,7 @@ func (registryScanHandler *registryScanHandler) ListImageTagsInRepo(repo string,
 		}
 
 	}
+
 	imagestags, err := remote.List(repo_data, remote.WithAuth(regCreds))
 	if err != nil {
 		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
