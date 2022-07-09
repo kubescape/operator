@@ -159,6 +159,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		glog.Errorf("parseRegistryNameArg failed with err %v", err)
 		return err
 	}
+	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", armotypes.AttributeRegistryName, registryName))
 	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
 	if err != nil {
 		glog.Errorf("loadSecretRegistryScanHandler failed with err %v", err)
