@@ -58,6 +58,7 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 	return nil
 }
 
+// in what scenario this function returns error???
 func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *registryScan) ([]*apis.WebsocketScanCommand, error) {
 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
@@ -67,8 +68,10 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 		for _, tag := range tags {
 			glog.Info("image ", repository+":"+tag)
 			websocketScanCommand := &apis.WebsocketScanCommand{
-				ImageTag: repository + ":" + tag,
-				Session:  apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+				ParentJobID: sessionObj.Reporter.GetJobID(),
+				JobID:       uuid.NewString(),
+				ImageTag:    repository + ":" + tag,
+				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 				Args: map[string]interface{}{
 					armotypes.AttributeRegistryName: registry.registry.hostname + "/" + registry.registry.projectID,
 					armotypes.AttributeRepository:   repositoryName,
