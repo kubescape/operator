@@ -2,7 +2,6 @@ package mainhandler
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -268,7 +267,13 @@ func TestFilterScanLimit(t *testing.T) {
 		"1": {"first", "second"},
 		"2": {"first"},
 	}
-	assert.True(t, reflect.DeepEqual(registryScan.mapImageToTags, expected))
+	assert.NotNil(t, registryScan.mapImageToTags)
+	assert.Equal(t, len(expected), len(registryScan.mapImageToTags))
+	for k := range registryScan.mapImageToTags {
+		for nameIdx := range registryScan.mapImageToTags[k] {
+			assert.Equal(t, expected[k][nameIdx], registryScan.mapImageToTags[k][nameIdx])
+		}
+	}
 
 	registryScan.mapImageToTags = map[string][]string{
 		"1": {"first", "second"},
@@ -276,7 +281,13 @@ func TestFilterScanLimit(t *testing.T) {
 	}
 	registryScanHandler.filterScanLimit(registryScan, 4)
 	expected = registryScan.mapImageToTags
-	assert.True(t, reflect.DeepEqual(registryScan.mapImageToTags, expected))
+	assert.NotNil(t, registryScan.mapImageToTags)
+	assert.Equal(t, len(expected), len(registryScan.mapImageToTags))
+	for k := range registryScan.mapImageToTags {
+		for nameIdx := range registryScan.mapImageToTags[k] {
+			assert.Equal(t, expected[k][nameIdx], registryScan.mapImageToTags[k][nameIdx])
+		}
+	}
 
 	registryScan.mapImageToTags = map[string][]string{
 		"1": {"first", "second", "third"},
@@ -290,8 +301,13 @@ func TestFilterScanLimit(t *testing.T) {
 		"3": {"first"},
 	}
 	registryScanHandler.filterScanLimit(registryScan, 6)
-	assert.True(t, reflect.DeepEqual(registryScan.mapImageToTags, expected))
-
+	assert.NotNil(t, registryScan.mapImageToTags)
+	assert.Equal(t, len(expected), len(registryScan.mapImageToTags))
+	for k := range registryScan.mapImageToTags {
+		for nameIdx := range registryScan.mapImageToTags[k] {
+			assert.Equal(t, expected[k][nameIdx], registryScan.mapImageToTags[k][nameIdx])
+		}
+	}
 }
 
 func TestGetNumOfImagesToScan(t *testing.T) {
