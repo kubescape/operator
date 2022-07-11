@@ -256,58 +256,47 @@ func TestSetCronJobTemplate(t *testing.T) {
 }
 
 func TestFilterScanLimit(t *testing.T) {
+	// NOTICE: we can't expect the same results in each run, since the filtering has no gurentee about the order of top X
 	registryScanHandler := NewRegistryScanHandler()
 	registryScan := NewRegistryScan()
 	registryScan.mapImageToTags = map[string][]string{
 		"1": {"first", "second"},
 		"2": {"first", "second"},
 	}
-	registryScanHandler.filterScanLimit(registryScan, 3)
-	expected := map[string][]string{
-		"1": {"first", "second"},
-		"2": {"first"},
-	}
+	expectedTagsCount := 3
+	registryScanHandler.filterScanLimit(registryScan, expectedTagsCount)
 	assert.NotNil(t, registryScan.mapImageToTags)
-	assert.Equal(t, len(expected), len(registryScan.mapImageToTags))
+	actualTagsCount := 0
 	for k := range registryScan.mapImageToTags {
-		for nameIdx := range registryScan.mapImageToTags[k] {
-			assert.Equal(t, expected[k][nameIdx], registryScan.mapImageToTags[k][nameIdx])
-		}
+		actualTagsCount += len(registryScan.mapImageToTags[k])
 	}
-
+	assert.Equal(t, expectedTagsCount, actualTagsCount)
 	registryScan.mapImageToTags = map[string][]string{
 		"1": {"first", "second"},
 		"2": {"first", "second"},
 	}
-	registryScanHandler.filterScanLimit(registryScan, 4)
-	expected = registryScan.mapImageToTags
+	expectedTagsCount = 4
+	registryScanHandler.filterScanLimit(registryScan, expectedTagsCount)
 	assert.NotNil(t, registryScan.mapImageToTags)
-	assert.Equal(t, len(expected), len(registryScan.mapImageToTags))
+	actualTagsCount = 0
 	for k := range registryScan.mapImageToTags {
-		for nameIdx := range registryScan.mapImageToTags[k] {
-			assert.Equal(t, expected[k][nameIdx], registryScan.mapImageToTags[k][nameIdx])
-		}
+		actualTagsCount += len(registryScan.mapImageToTags[k])
 	}
+	assert.Equal(t, expectedTagsCount, actualTagsCount)
 
 	registryScan.mapImageToTags = map[string][]string{
 		"1": {"first", "second", "third"},
 		"2": {"first", "second"},
 		"3": {"first", "second"},
 	}
-
-	expected = map[string][]string{
-		"1": {"first", "second", "third"},
-		"2": {"first", "second"},
-		"3": {"first"},
-	}
-	registryScanHandler.filterScanLimit(registryScan, 6)
+	expectedTagsCount = 6
+	registryScanHandler.filterScanLimit(registryScan, expectedTagsCount)
 	assert.NotNil(t, registryScan.mapImageToTags)
-	assert.Equal(t, len(expected), len(registryScan.mapImageToTags))
+	actualTagsCount = 0
 	for k := range registryScan.mapImageToTags {
-		for nameIdx := range registryScan.mapImageToTags[k] {
-			assert.Equal(t, expected[k][nameIdx], registryScan.mapImageToTags[k][nameIdx])
-		}
+		actualTagsCount += len(registryScan.mapImageToTags[k])
 	}
+	assert.Equal(t, expectedTagsCount, actualTagsCount)
 }
 
 func TestGetNumOfImagesToScan(t *testing.T) {
