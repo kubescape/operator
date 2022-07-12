@@ -162,12 +162,12 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		glog.Errorf("parseRegistryNameArg failed with err %v", err)
 		return err
 	}
-	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", armotypes.AttributeRegistryName, registryName))
 	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
 	if err != nil {
 		glog.Errorf("loadSecretRegistryScanHandler failed with err %v", err)
 		return err
 	}
+	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
 	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
 	if err != nil {
@@ -191,6 +191,10 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 	if !ok {
 		return "", fmt.Errorf("could not parse registry name")
 	}
+
+	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", armotypes.AttributeRegistryName,
+		registryName))
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), true, sessionObj.ErrChan)
 	return registryName, nil
 }
 
@@ -205,6 +209,7 @@ func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, session
 		glog.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
 		return err
 	}
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(webSocketScanCMDList), registry.registry), true, sessionObj.ErrChan)
 	err = sendAllImagesToVulnScan(webSocketScanCMDList)
 	if err != nil {
 		glog.Errorf("sendAllImagesToVulnScanByMemLimit failed with err %v", err)

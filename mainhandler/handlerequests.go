@@ -150,7 +150,8 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 
 	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj, mainHandler.commandResponseChannel)
 	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
-	actionHandler.reporter.SendAction(string(sessionObj.Command.CommandName), true, sessionObj.ErrChan)
+	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
+	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(sessionObj)
 	if err != nil {
 		actionHandler.reporter.SendError(err, true, true, sessionObj.ErrChan)
@@ -275,7 +276,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	}
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	glog.Infof(info)
-	sessionObj.Reporter.SendAction(info, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendDetails(info, true, sessionObj.ErrChan)
 	ids, errs := mainHandler.getIDs(namespaces, labels, fields, resources)
 	for i := range errs {
 		glog.Warningf(errs[i].Error())

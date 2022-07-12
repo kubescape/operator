@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
-	reportutils "github.com/armosec/logger-go/system-reports/utilities"
 	"github.com/golang/glog"
+	"github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
@@ -17,8 +17,14 @@ func NewSessionObj(command *apis.Command, message, parentID, jobID string, actio
 	if target == armotypes.DesignatorsToken {
 		target = fmt.Sprintf("wlid://cluster-%s/", CA_CLUSTER_NAME)
 	}
+	if target == "" {
+		target = fmt.Sprintf("%v", command.Args)
+	}
 	reporter.SetTarget(target)
 
+	if jobID == "" {
+		jobID = uuid.NewString()
+	}
 	reporter.SetJobID(jobID)
 	reporter.SetParentAction(parentID)
 	reporter.SetActionIDN(actionNumber)
@@ -33,7 +39,7 @@ func NewSessionObj(command *apis.Command, message, parentID, jobID string, actio
 	}
 	go sessionObj.WatchErrors()
 
-	reporter.SendAsRoutine(reportutils.EmptyString, true, sessionObj.ErrChan)
+	reporter.SendAsRoutine(true, sessionObj.ErrChan)
 	return &sessionObj
 }
 

@@ -105,7 +105,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 
 	info := fmt.Sprintf("getting kubescape scanID %s job status", data.scanID)
 	errChan := make(chan error)
-	data.reporter.SendAction(info, true, errChan)
+	data.reporter.SendDetails(info, true, errChan)
 	if err := <-errChan; err != nil {
 		glog.Errorf("HandleKubascapeResponse failed to send error report.  %s", err.Error())
 	}
@@ -113,7 +113,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 	resp, err := httputils.HttpGet(http.DefaultClient, getKubescapeV1ScanStatusURL(data.scanID).String(), nil)
 	if err != nil {
 		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendStatus(info, true, errChan)
+		data.reporter.SendDetails(info, true, errChan)
 		if err := <-errChan; err != nil {
 			glog.Errorf("HandleKubascapeResponse failed to send status report.  %s", err.Error())
 		}
@@ -128,7 +128,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 	response, err := readKubescapeV1ScanResponse(resp)
 	if err != nil {
 		info := fmt.Sprintf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendStatus(info, true, errChan)
+		data.reporter.SendDetails(info, true, errChan)
 		if err := <-errChan; err != nil {
 			glog.Errorf("HandleKubascapeResponse::readKubescapeV1ScanResponse failed to send status report.  %s", err.Error())
 		}
@@ -144,7 +144,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 		nextTimeRehandled := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
 		info = fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String())
 		glog.Infof("%s", info)
-		data.reporter.SendStatus(info, true, errChan)
+		data.reporter.SendDetails(info, true, errChan)
 		if err := <-errChan; err != nil {
 			glog.Errorf("HandleKubascapeResponse::BusyScanResponseType failed to send status report.  %s", err.Error())
 		}
@@ -153,7 +153,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 
 	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished succussfully", data.scanID)
 	glog.Infof("%s", info)
-	data.reporter.SendStatus(info, true, errChan)
+	data.reporter.SendDetails(info, true, errChan)
 	if err := <-errChan; err != nil {
 		glog.Errorf("HandleKubascapeResponse::Done failed to send status report.  %s", err.Error())
 	}
@@ -185,7 +185,7 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 		info = fmt.Sprintf("Kubescape scanID '%s' returned an error: %s", response.ID, response.Response)
 	}
 	errChan := make(chan error)
-	actionHandler.reporter.SendStatus(info, true, errChan)
+	actionHandler.reporter.SendDetails(info, true, errChan)
 	if err := <-errChan; err != nil {
 		glog.Errorf("kubescapeScan::Done failed to send status report.  %s", err.Error())
 	}
