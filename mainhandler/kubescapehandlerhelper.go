@@ -191,10 +191,6 @@ func combineKubescapeCMDArgsWithFrameworkName(frameworkName string, currentArgs 
 	return append(firstArgs, currentArgs...)
 }
 
-func fixK8sJobNameLimit(jobName string) string {
-	return fixK8sNameLimit(jobName, 63)
-}
-
 // wrapRequestWithCommand wrap kubescape post request  with command so the websocket can parse the request
 func wrapRequestWithCommand(postScanRequest *utilsmetav1.PostScanRequest) ([]byte, error) {
 

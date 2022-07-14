@@ -29,20 +29,20 @@ func (regCreds *registryCreds) Authorization() (*authn.AuthConfig, error) {
 	/*
 		in the registry
 	*/
-	if cloudsupport.CheckIsECRImage(regCreds.RegistryName) {
-		username, password, err = cloudsupport.GetLoginDetailsForECR(regCreds.RegistryName)
+	if cloudsupport.CheckIsECRImage(regCreds.registryName) {
+		username, password, err = cloudsupport.GetLoginDetailsForECR(regCreds.registryName)
 		if err != nil {
 			return nil, fmt.Errorf("ECR get Authorization failed with err %v", err.Error())
 		}
 		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
-	} else if cloudsupport.CheckIsGCRImage(regCreds.RegistryName + "/") {
-		username, password, err = cloudsupport.GetLoginDetailsForGCR(regCreds.RegistryName)
+	} else if cloudsupport.CheckIsGCRImage(regCreds.registryName + "/") {
+		username, password, err = cloudsupport.GetLoginDetailsForGCR(regCreds.registryName)
 		if err != nil {
 			return nil, fmt.Errorf("GCR get Authorization failed with err %v", err.Error())
 		}
 		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
-	} else if cloudsupport.CheckIsACRImage(regCreds.RegistryName + "/") {
-		username, password, err = cloudsupport.GetLoginDetailsForAzurCR(regCreds.RegistryName)
+	} else if cloudsupport.CheckIsACRImage(regCreds.registryName + "/") {
+		username, password, err = cloudsupport.GetLoginDetailsForAzurCR(regCreds.registryName)
 		if err != nil {
 			return nil, fmt.Errorf("ACR get Authorization failed with err %v", err.Error())
 		}

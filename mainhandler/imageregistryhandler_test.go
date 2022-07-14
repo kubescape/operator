@@ -24,8 +24,8 @@ func TestParseConfigMapData(t *testing.T) {
 		`
 	err := json.Unmarshal([]byte(configDataStr), &configData)
 	assert.NoError(t, err)
-	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err := registryScanHandler.parseConfigMapData(configData); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 	assert.Equal(t, registryScanHandler.registryScan[0].registry.hostname, "gcr.io")
 	assert.Equal(t, registryScanHandler.registryScan[0].registry.projectID, "blu")
@@ -44,8 +44,8 @@ func TestParseConfigMapData(t *testing.T) {
 
 	err = json.Unmarshal([]byte(configDataStr), &configData)
 	assert.NoError(t, err)
-	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err := registryScanHandler.parseConfigMapData(configData); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 	assert.Equal(t, registryScanHandler.registryScan[1].registry.hostname, "gcr.io")
 	assert.Equal(t, registryScanHandler.registryScan[1].registry.projectID, "blu")
@@ -62,8 +62,8 @@ func TestParseConfigMapData(t *testing.T) {
 
 	err = json.Unmarshal([]byte(configDataStr), &configData)
 	assert.NoError(t, err)
-	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err := registryScanHandler.parseConfigMapData(configData); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 	assert.Equal(t, registryScanHandler.registryScan[2].registry.hostname, "gcr.io")
 	assert.Equal(t, registryScanHandler.registryScan[2].registry.projectID, "")
@@ -80,7 +80,7 @@ func TestParseConfigMapData(t *testing.T) {
 
 	err = json.Unmarshal([]byte(configDataStr), &configData)
 	assert.NoError(t, err)
-	assert.Error(t, registryScanHandler.ParseConfigMapData(configData))
+	assert.Error(t, registryScanHandler.parseConfigMapData(configData))
 
 }
 
@@ -96,7 +96,7 @@ func TestPParseSecretsData(t *testing.T) {
 		`
 	err := json.Unmarshal([]byte(secretDataStr), &secretData)
 	assert.NoError(t, err)
-	err = registryScanHandler.ParseSecretsData(secretData, registryName)
+	err = registryScanHandler.parseSecretsData(secretData, registryName)
 	assert.Error(t, err)
 
 	secretDataStr = `
@@ -104,8 +104,8 @@ func TestPParseSecretsData(t *testing.T) {
 		`
 	err = json.Unmarshal([]byte(secretDataStr), &secretData)
 	assert.NoError(t, err)
-	if err = registryScanHandler.ParseSecretsData(secretData, registryName); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err = registryScanHandler.parseSecretsData(secretData, registryName); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 	assert.Equal(t, registryScanHandler.mapRegistryToAuth[registryName].Username, "oauth2accesstoken")
 	assert.Equal(t, registryScanHandler.mapRegistryToAuth[registryName].Password, "pass")
@@ -116,8 +116,8 @@ func TestPParseSecretsData(t *testing.T) {
 	err = json.Unmarshal([]byte(secretDataStr), &secretData)
 	registryName = "blu"
 	assert.NoError(t, err)
-	if err := registryScanHandler.ParseSecretsData(secretData, registryName); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err := registryScanHandler.parseSecretsData(secretData, registryName); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 
 	assert.Equal(t, registryScanHandler.mapRegistryToAuth[registryName].Username, "oauth2accesstoken")
@@ -129,7 +129,7 @@ func TestPParseSecretsData(t *testing.T) {
 	err = json.Unmarshal([]byte(secretDataStr), &secretData)
 	registryName = "blu"
 	assert.NoError(t, err)
-	assert.Error(t, registryScanHandler.ParseSecretsData(secretData, registryName))
+	assert.Error(t, registryScanHandler.parseSecretsData(secretData, registryName))
 }
 
 // func TestLocalRegistryScan(t *testing.T) {
@@ -143,7 +143,7 @@ func TestPParseSecretsData(t *testing.T) {
 // 	err := json.Unmarshal([]byte(secretDataStr), &secretData)
 // 	assert.NoError(t, err)
 // 	if err := registryScanHandler.ParseSecretsData(secretData, registryName); err != nil {
-// 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+// 		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 // 	}
 
 // 	configDataStr := `
@@ -155,8 +155,8 @@ func TestPParseSecretsData(t *testing.T) {
 
 // 	err = json.Unmarshal([]byte(configDataStr), &configData)
 // 	assert.NoError(t, err)
-// 	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
-// 		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+// 	if err := registryScanHandler.parseConfigMapData(configData); err != nil {
+// 		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 // 	}
 
 // 	assert.True(t, slices.Contains(registryScanHandler.registryScan[0].registryScanConfig.Exclude, "armo-vuln"))
@@ -187,8 +187,8 @@ func TestParseSecretsDataAndConfigMap(t *testing.T) {
 		`
 	err := json.Unmarshal([]byte(secretDataStr), &secretData)
 	assert.NoError(t, err)
-	if err := registryScanHandler.ParseSecretsData(secretData, registryName); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err := registryScanHandler.parseSecretsData(secretData, registryName); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 
 	configDataStr := `
@@ -200,8 +200,8 @@ func TestParseSecretsDataAndConfigMap(t *testing.T) {
 
 	err = json.Unmarshal([]byte(configDataStr), &configData)
 	assert.NoError(t, err)
-	if err := registryScanHandler.ParseConfigMapData(configData); err != nil {
-		t.Errorf("registryScanHandler.ParseConfigMapData() error = %v", err)
+	if err := registryScanHandler.parseConfigMapData(configData); err != nil {
+		t.Errorf("registryScanHandler.parseConfigMapData() error = %v", err)
 	}
 	assert.Equal(t, registryScanHandler.registryScan[0].registryAuth.Username, "oauth2accesstoken")
 	assert.Equal(t, registryScanHandler.registryScan[0].registryAuth.Password, "pass")

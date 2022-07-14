@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"fmt"
 	"net/url"
 )
 
@@ -24,7 +23,7 @@ func CreateWebSocketHandlerMock() *WebsocketHandler {
 	urlObj := url.URL{}
 	urlObj.Scheme = "wss"
 	urlObj.Host = "postman.onprem.eudev3.cyberarmorsoft.com"
-	urlObj.Path = fmt.Sprintf("waitfornotification/1e3a88bf-92ce-44f8-914e-cbe71830d566-onprem-test-1")
+	urlObj.Path = "waitfornotification/1e3a88bf-92ce-44f8-914e-cbe71830d566-onprem-test-1"
 	urlObj.ForceQuery = false
 	return &WebsocketHandler{
 		// data:         make(chan DataSocket),
