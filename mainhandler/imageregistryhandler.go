@@ -340,40 +340,6 @@ func (registryScanHandler *registryScanHandler) setImageToTagsMap(registryScan *
 	return nil
 }
 
-/*
-
-
-
-	tags := make([]string, 0, 16)
-	regCreds := &registryCreds{
-		auth:         &registryScan.registryAuth.dockerRegistryAuth,
-		RegistryName: registryScan.registry.hostname,
-	}
-	var err error
-	if len(registryScan.registryScanConfig.Include) > 0 {
-		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, err = registryScanHandler.listImageTagsInRepo(repo, regCreds)
-		}
-	} else if len(registryScan.registryScanConfig.Exclude) > 0 {
-		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, err = registryScanHandler.listImageTagsInRepo(repo, regCreds)
-		}
-	} else {
-		tags, err = registryScanHandler.listImageTagsInRepo(repo, regCreds)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	if len(tags) > registryScan.registryScanConfig.Depth {
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags[:registryScan.registryScanConfig.Depth]
-	} else {
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
-	}
-
-return nil*/
-
 func updateTagsCandidates(tagsCandidates []string, tagsPage []string, tagsDepth int, latestTagFound bool) []string {
 	prevCandidates := tagsCandidates
 	tagsCandidates = []string{}
@@ -458,92 +424,8 @@ func (registryScanHandler *registryScanHandler) listReposInRegistry(registryScan
 		}
 	}
 	return repos, nil
-
-	// authcfg, err := regCreds.Authorization()
-	// if err != nil {
-	// 	glog.Errorf("registry %s unable to authenticate: %s", registry.Name(), err.Error())
-	// }
-
-	// reg, err := registries.Factory(authcfg, &registry, common.MakeRegistryOptions(false, false, registryScan.registry.hostname, "", registryScan.registry.projectID))
-	// if err != nil {
-	// 	glog.Errorf("registry %s unable to complete factory: %s", registry.Name(), err.Error())
-
-	// 	return nil, err
-	// }
-
-	/*ctx := context.Background()
-	regCreds := &registryCreds{
-		auth:         &registryScan.registryAuth.dockerRegistryAuth,
-		RegistryName: registryScan.registry.hostname,
-	}*/
-
-	//	repos, err := remote.Catalog(ctx, registry, remote.WithAuth(regCreds))
-	// repos, err := reg.Catalog(ctx, common.NoPagination(0), common.CatalogOption{Namespaces: registryScan.registry.projectID}, regCreds)
-
-	/*	if err != nil {
-			//FUGLY code to handle https
-			if !strings.Contains(err.Error(), "server gave HTTP response to HTTPS client") {
-				return nil, err
-			}
-			glog.Infof("registry %s as https failed trying http", registry.Name())
-			registry, err := containerregistry.NewRegistry(registryScan.registry.hostname, containerregistry.Insecure)
-			if err != nil {
-				return nil, err
-			}
-
-			if repos, err = remote.Catalog(ctx, registry, remote.WithAuth(regCreds)); err != nil {
-				return nil, err
-			}
-
-		}
-		var reposInGivenRegistry []string
-
-		//google repositories got project so we treat projects as part of the repo, ofc we also allow normal scenarios
-		for _, repo := range repos {
-			if registryScan.registry.projectID != "" {
-				if strings.Contains(repo, registryScan.registry.projectID+"/") {
-					reposInGivenRegistry = append(reposInGivenRegistry, repo)
-				}
-			} else {
-				reposInGivenRegistry = append(reposInGivenRegistry, repo)
-			}
-
-		}
-		return reposInGivenRegistry, nil*/
 }
 
-/*
-func (registryScanHandler *registryScanHandler) listImageTagsInRepo(repo string, regCreds *registryCreds) ([]string, error) {
-	fullRepoName := regCreds.registryName + "/" + repo
-	repo_data, err := containerregistry.NewRepository(fullRepoName)
-	if err != nil {
-		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
-			return nil, err
-		}
-		repo_data, err = containerregistry.NewRepository(fullRepoName, containerregistry.Insecure)
-		if err != nil {
-			return nil, err
-		}
-
-	}
-
-	imagestags, err := remote.List(repo_data, remote.WithAuth(regCreds))
-	if err != nil {
-		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
-			return nil, err
-		}
-		glog.Infof("trying to get %s tags via http instead of https", fullRepoName)
-		repo_data, err = containerregistry.NewRepository(fullRepoName, containerregistry.Insecure)
-		if err != nil {
-			return nil, err
-		}
-		imagestags, err = remote.List(repo_data, remote.WithAuth(regCreds))
-		return imagestags, err
-	}
-
-	return imagestags, nil
-}
-*/
 func (registryScanHandler *registryScanHandler) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, registryName string) error {
 
 	jobTemplateObj.Name = name
