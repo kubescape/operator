@@ -134,9 +134,10 @@ func (rs *registryScan) authConfig() *types.AuthConfig {
 	return authConfig
 }
 
-func makeRegistryAuth() registryAuth {
+func makeRegistryAuth(registryName string) registryAuth {
+	kind, _ := regCommon.GetRegistryKind(strings.Split(registryName, "/")[0])
 	falseBool := false
-	return registryAuth{SkipTLSVerify: &falseBool, Insecure: &falseBool}
+	return registryAuth{SkipTLSVerify: &falseBool, Insecure: &falseBool, Kind: kind}
 }
 
 func (rs *registryScan) filterRepositories(repos []string) []string {
@@ -188,7 +189,7 @@ func (registryScanHandler *registryScanHandler) insertRegistryToScan(registries 
 			registryScan.registryAuth = auth
 			registryScan.registryScanConfig = reg
 		} else { // public registry
-			registryScan.registryAuth = makeRegistryAuth()
+			registryScan.registryAuth = makeRegistryAuth(reg.Registry)
 			registryScan.registryScanConfig = reg
 		}
 		registrySpplited := strings.Split(reg.Registry, "/")
@@ -248,7 +249,7 @@ func (registryScanHandler *registryScanHandler) parseSecretsData(secretData map[
 	}
 
 	glog.Infof("adding default auth for registry: %s", registryName)
-	registryScanHandler.mapRegistryToAuth[registryName] = makeRegistryAuth()
+	registryScanHandler.mapRegistryToAuth[registryName] = makeRegistryAuth(registryName)
 	for _, reg := range registriesAuth {
 		if reg.Insecure == nil {
 			falseBool := false
@@ -320,8 +321,11 @@ func (registryScanHandler *registryScanHandler) setImageToTagsMap(registryScan *
 	latestTagFound := false
 	tagsDepth := registryScan.registryScanConfig.Depth
 	tags := []string{}
-	regCreds := registryScan.registryCredentials()
-	for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, remote.WithAuth(regCreds)); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
+	options := []remote.Option{}
+	if registryScan.hasAuth() {
+		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
+	}
+	for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, options...); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
 		if err != nil {
 			return err
 		}
@@ -406,7 +410,7 @@ func (registryScanHandler *registryScanHandler) listReposInRegistry(registryScan
 	//TODO
 	firstPage := regCommon.MakePagination(iRegistry.GetMaxPageSize())
 	ctx := context.Background()
-	catalogOpts := regCommon.CatalogOption{}
+	catalogOpts := regCommon.CatalogOption{IsPublic: !registryScan.hasAuth(), Namespaces: registryScan.registry.projectID}
 	for pageRepos, nextPage, err := iRegistry.Catalog(ctx, firstPage, catalogOpts, regCreds); ; pageRepos, nextPage, err = iRegistry.Catalog(ctx, *nextPage, catalogOpts, regCreds) {
 		if err != nil {
 			return nil, err
