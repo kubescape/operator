@@ -141,6 +141,20 @@ func (rs *registryScan) authConfig() *types.AuthConfig {
 }
 
 func (reg *registryAuth) initDefaultValues() error {
+	switch reg.AuthMethod {
+	case "accesstoken", "":
+		if reg.Password == "" || reg.Username == "" {
+			return fmt.Errorf("auth_method accesstoken requirers username and password. Please refer to the documentation %s", "https://hub.armosec.io/docs/registry-vulnerability-scan")
+		}
+	case "public", "ips":
+		//do nothing
+		break
+	case "identity_token", "registry_token":
+		fallthrough
+	default:
+		return fmt.Errorf("auth_method (%s) not supported. Please refer to the documentation %s", reg.AuthMethod, "https://hub.armosec.io/docs/registry-vulnerability-scan")
+	}
+
 	if reg.Insecure == nil {
 		falseBool := false
 		reg.Insecure = &falseBool
