@@ -372,7 +372,6 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 }
 
 func (registryScan *registryScan) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, registryName string) error {
-
 	jobTemplateObj.Name = name
 	if schedule == "" {
 		return fmt.Errorf("schedule cannot be empty")
