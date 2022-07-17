@@ -2,6 +2,7 @@ package mainhandler
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"k8s-ca-websocket/cautils"
@@ -92,61 +93,82 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *cau
 	return webSocketScanCMDList, nil
 }
 
-func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHandler *registryScanHandler, registryName string) error {
+func (actionHandler *ActionHandler) getRegistryAuth(registryName string) (*registryAuth, error) {
 	secret, err := actionHandler.getRegistryScanSecret()
-
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	secretData := secret.GetData()
-	err = registryScanHandler.parseSecretsData(secretData, registryName)
+	var registriesAuth []registryAuth
+	registriesAuthStr, ok := secretData[registriesAuthFieldInSecret].(string)
+	if !ok {
+		return nil, fmt.Errorf("error parsing Secret: %s field must be a string", registriesAuthFieldInSecret)
+	}
+	data, err := base64.StdEncoding.DecodeString(registriesAuthStr)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing Secret: %s", err.Error())
+	}
+	registriesAuthStr = strings.Replace(string(data), "\n", "", -1)
+	err = json.Unmarshal([]byte(registriesAuthStr), &registriesAuth)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing Secret: %s", err.Error())
+	}
+	//try to find an auth with the same registry name from the request
+	for _, auth := range registriesAuth {
+		if auth.Registry == registryName {
+			if err := auth.initDefaultValues(); err != nil {
+				return nil, err
+			}
+			return &auth, nil
+		}
+	}
+	//couldn't find auth with the full, check if there is an auth for the registry without the project name
+	regAndProject := strings.Split(registryName, "/")
+	if len(regAndProject) > 1 {
+		for _, auth := range registriesAuth {
+			if auth.Registry == regAndProject[0] {
+				if err := auth.initDefaultValues(); err != nil {
+					return nil, err
+				}
+				return &auth, nil
+			}
+		}
 
-	return err
+	}
+	//no auth found for registry return a default one
+	auth := makeRegistryAuth(registryName)
+	return &auth, nil
 }
 
-func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registryScanHandler *registryScanHandler) error {
+func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, error) {
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
-
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
 			glog.Infof("configmap: %s does not exists, using default values", registryScanConfigmap)
-			return actionHandler.initConfigMapDefaultValues(registryScanHandler)
+			return NewRegistryScanConfig(registryName), nil
 		} else {
-			return err
+			return nil, err
 		}
 	}
 	configData := configMap.GetData()
-	err = registryScanHandler.parseConfigMapData(configData)
+	var registriesConfigs []registryScanConfig
+	registriesConfigStr, ok := configData["registries"].(string)
+	if !ok {
+		return nil, fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
+	}
+	registriesConfigStr = strings.Replace(registriesConfigStr, "\n", "", -1)
+	err = json.Unmarshal([]byte(registriesConfigStr), &registriesConfigs)
 	if err != nil {
-		glog.Error("error paring config map", err)
-		return err
+		return nil, fmt.Errorf("error parsing ConfigMap: %s", err.Error())
 	}
-	glog.Infof("configmap: %s parsed", registryScanConfigmap)
-	if len(registryScanHandler.registryScan) != len(registryScanHandler.mapRegistryToAuth) {
-		glog.Infof("configmap: %s not contains an entry for the registry. Found Registries: %v, desired registies: %v",
-			registryScanConfigmap, registryScanHandler.registryScan, registryScanHandler.mapRegistryToAuth)
-		return actionHandler.initConfigMapDefaultValues(registryScanHandler)
+	for _, config := range registriesConfigs {
+		if config.Registry == registryName {
+			return &config, nil
+		}
 	}
-	return err
+	return NewRegistryScanConfig(registryName), nil
 
-}
-
-func (*ActionHandler) initConfigMapDefaultValues(registryScanHandler *registryScanHandler) error {
-	var registryScanConfigs []registryScanConfig
-	var registryScanConfig *registryScanConfig
-	for reg := range registryScanHandler.mapRegistryToAuth {
-		registryScanConfig = NewRegistryScanConfig()
-		registryScanConfig.Registry = reg
-		registryScanConfigs = append(registryScanConfigs, *registryScanConfig)
-	}
-	err := registryScanHandler.insertRegistryToScan(registryScanConfigs)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
@@ -162,31 +184,27 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		Config data must be stored in "kubescape-registry-scan" config map
 	*/
 
-	registryScanHandler := NewRegistryScanHandler()
-
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
 	if err != nil {
 		glog.Errorf("parseRegistryNameArg failed with err %v", err)
 		return err
 	}
-	err = actionHandler.loadSecretRegistryScanHandler(registryScanHandler, registryName)
+	auth, err := actionHandler.getRegistryAuth(registryName)
 	if err != nil {
-		glog.Errorf("loadSecretRegistryScanHandler failed with err %v", err)
+		glog.Errorf("get registry auth failed with err %v", err)
 		return err
 	}
 	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
-	err = actionHandler.loadConfigMapRegistryScanHandler(registryScanHandler)
+
+	conf, err := actionHandler.getRegistryConfig(registryName)
 	if err != nil {
-		glog.Errorf("loadConfigMapRegistryScanHandler failed with err %v", err)
+		glog.Errorf("get registry config failed with err %v", err)
 		return err
 	}
 
-	for _, reg := range registryScanHandler.registryScan {
-		err = actionHandler.scanRegistry(&reg, sessionObj, registryScanHandler)
-	}
-
-	return err
+	registryScan := NewRegistryScan(registryName, *auth, *conf)
+	return actionHandler.scanRegistry(&registryScan, sessionObj)
 }
 
 func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.SessionObj) (string, error) {
@@ -205,8 +223,8 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 	return registryName, nil
 }
 
-func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	err := registryScanHandler.getImagesForScanning(registry, actionHandler.reporter)
+func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj) error {
+	err := registry.getImagesForScanning(actionHandler.reporter)
 	if err != nil {
 		glog.Errorf("GetImagesForScanning failed with err %v", err)
 		return err
