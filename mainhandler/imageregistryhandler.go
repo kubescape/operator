@@ -107,7 +107,7 @@ func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error)
 }
 
 func (rs *registryScan) hasAuth() bool {
-	return rs.registryAuth.Password != "" || rs.authConfig().RegistryToken != ""
+	return rs.registryAuth.Password != ""
 }
 
 func (rs *registryScan) registryCredentials() *registryCreds {
