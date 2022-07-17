@@ -84,13 +84,6 @@ func NewRegistryScanConfig(registryName string) *registryScanConfig {
 	}
 }
 
-/*func NewRegistryScanHandler() *registryScanHandler {
-	return &registryScanHandler{
-		registryScan:      make([]registryScan, 0),
-		mapRegistryToAuth: make(map[string]registryAuth),
-	}
-}*/
-
 func NewRegistryScan(registryName string, auth registryAuth, config registryScanConfig) registryScan {
 	regAndProject := strings.Split(registryName, "/")
 	hostname := regAndProject[0]
