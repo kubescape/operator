@@ -41,7 +41,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 }
 
 func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.SessionObj) error {
-	registryScanHandler := NewRegistryScanHandler()
+	registryScan := registryScan{}
 
 	// parse registry name from command
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
@@ -54,13 +54,13 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.S
 	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", registryScanConfigmap, rand.NewSource(time.Now().UnixNano()).Int63()))
 
 	// create configmap with POST data to trigger websocket
-	err = registryScanHandler.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
+	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
 	if err != nil {
 		glog.Infof("setRegistryScanCronJob: error creating configmap : %s", err.Error())
 		return err
 	}
 
-	err = registryScanHandler.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
+	err = registryScan.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
 	if err != nil {
 		glog.Infof("setRegistryScanCronJob: error creating conjob : %s", err.Error())
 		return err
