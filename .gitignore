@@ -5,3 +5,5 @@
 dist/*
 licenses
 .vscode/launch.json
+go.work
+go.work.*

@@ -3,12 +3,13 @@ module k8s-ca-websocket
 go 1.18
 
 require (
-	github.com/armosec/armoapi-go v0.0.98
+	github.com/armosec/armoapi-go v0.0.99
 	github.com/armosec/cacli-wrapper-go v0.0.2
 	github.com/armosec/cluster-notifier-api-go v0.0.3
 	github.com/armosec/k8s-interface v0.0.77
 	github.com/armosec/logger-go v0.0.10
 	github.com/armosec/opa-utils v0.0.138
+	github.com/armosec/registryx v0.0.3
 	github.com/armosec/utils-go v0.0.7
 	github.com/armosec/utils-k8s-go v0.0.7
 	github.com/docker/docker v20.10.16+incompatible
@@ -44,6 +45,7 @@ require (
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
+	github.com/armosec/gojay v1.2.15 // indirect
 	github.com/armosec/rbac-utils v0.0.14 // indirect
 	github.com/aws/aws-sdk-go v1.41.11 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.12.0 // indirect
@@ -121,7 +123,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.0 // indirect
 	k8s.io/klog/v2 v2.30.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	sigs.k8s.io/controller-runtime v0.11.1 // indirect

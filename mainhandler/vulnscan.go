@@ -14,7 +14,6 @@ import (
 	"k8s.io/utils/strings/slices"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-	"github.com/docker/docker/api/types"
 	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -59,7 +58,8 @@ func sendAllImagesToVulnScan(webSocketScanCMDList []*apis.WebsocketScanCommand) 
 }
 
 // in what scenario this function returns error???
-func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj *cautils.SessionObj, registry *registryScan) ([]*apis.WebsocketScanCommand, error) {
+func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *cautils.SessionObj) ([]*apis.WebsocketScanCommand, error) {
+	images := registry.mapImageToTags
 
 	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
 	for repository, tags := range images {
@@ -73,14 +73,17 @@ func convertImagesToWebsocketScanCommand(images map[string][]string, sessionObj 
 				ImageTag:    repository + ":" + tag,
 				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 				Args: map[string]interface{}{
-					armotypes.AttributeRegistryName: registry.registry.hostname + "/" + registry.registry.projectID,
-					armotypes.AttributeRepository:   repositoryName,
-					armotypes.AttributeTag:          tag,
+					armotypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
+					armotypes.AttributeRepository:    repositoryName,
+					armotypes.AttributeTag:           tag,
+					armotypes.AttributeUseHTTP:       *registry.registryAuth.Insecure,
+					armotypes.AttributeSkipTLSVerify: *registry.registryAuth.SkipTLSVerify,
 				},
 			}
 			// Check if auth is empty (used for public registries)
-			if registry.registryAuth != (types.AuthConfig{}) {
-				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, registry.registryAuth)
+			authConfig := registry.authConfig()
+			if authConfig != nil {
+				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, *authConfig)
 			}
 			webSocketScanCMDList = append(webSocketScanCMDList, websocketScanCommand)
 		}
@@ -97,7 +100,7 @@ func (actionHandler *ActionHandler) loadSecretRegistryScanHandler(registryScanHa
 	}
 
 	secretData := secret.GetData()
-	err = registryScanHandler.ParseSecretsData(secretData, registryName)
+	err = registryScanHandler.parseSecretsData(secretData, registryName)
 
 	return err
 }
@@ -115,7 +118,11 @@ func (actionHandler *ActionHandler) loadConfigMapRegistryScanHandler(registrySca
 		}
 	}
 	configData := configMap.GetData()
-	err = registryScanHandler.ParseConfigMapData(configData)
+	err = registryScanHandler.parseConfigMapData(configData)
+	if err != nil {
+		glog.Error("error paring config map", err)
+		return err
+	}
 	glog.Infof("configmap: %s parsed", registryScanConfigmap)
 	if len(registryScanHandler.registryScan) != len(registryScanHandler.mapRegistryToAuth) {
 		glog.Infof("configmap: %s not contains an entry for the registry. Found Registries: %v, desired registies: %v",
@@ -199,12 +206,12 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj, registryScanHandler *registryScanHandler) error {
-	err := registryScanHandler.GetImagesForScanning(*registry, actionHandler.reporter)
+	err := registryScanHandler.getImagesForScanning(registry, actionHandler.reporter)
 	if err != nil {
 		glog.Errorf("GetImagesForScanning failed with err %v", err)
 		return err
 	}
-	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry.mapImageToTags, sessionObj, registry)
+	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry, sessionObj)
 	if err != nil {
 		glog.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
 		return err

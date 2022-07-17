@@ -8,12 +8,16 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
+	regCommon "github.com/armosec/registryx/common"
+	regInterfaces "github.com/armosec/registryx/interfaces"
+	regFactory "github.com/armosec/registryx/registries"
+
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
-	containerregistry "github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +39,7 @@ const (
 	accessTokenAuth             AuthMethods = "accesstoken"
 	registryCronjobTemplate                 = "registry-scan-cronjob-template"
 	registryNameAnnotation                  = "armo.cloud/registryname"
+	tagsPageSize                            = 1000
 )
 
 type registryScanConfig struct {
@@ -43,12 +48,15 @@ type registryScanConfig struct {
 	Include  []string `json:"include,omitempty"`
 	Exclude  []string `json:"exclude,omitempty"`
 }
-
 type registryAuth struct {
-	Registry   string `json:"registry"`
-	AuthMethod string `json:"auth_method,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Password   string `json:"password,omitempty"`
+	Registry      string                 `json:"registry"`
+	AuthMethod    string                 `json:"auth_method,omitempty"`
+	Username      string                 `json:"username,omitempty"`
+	Password      string                 `json:"password,omitempty"`
+	Kind          regCommon.RegistryKind `json:"kind,omitempty"`
+	SkipTLSVerify *bool                  `json:"skipTLSVerify,omitempty"`
+	Insecure      *bool                  `json:"http,omitempty"`
+	//dockerRegistryAuth types.AuthConfig
 }
 
 type registry struct {
@@ -58,18 +66,17 @@ type registry struct {
 
 type registryScan struct {
 	registry           registry
-	registryAuth       types.AuthConfig
+	registryAuth       registryAuth
 	registryScanConfig registryScanConfig
 	mapImageToTags     map[string][]string
 }
-
 type registryScanHandler struct {
 	registryScan      []registryScan
-	mapRegistryToAuth map[string]types.AuthConfig
+	mapRegistryToAuth map[string]registryAuth
 }
 
 type registryCreds struct {
-	RegistryName string
+	registryName string
 	auth         *types.AuthConfig
 }
 
@@ -79,13 +86,12 @@ func NewRegistryScanConfig() *registryScanConfig {
 		Include: make([]string, 0),
 		Exclude: make([]string, 0),
 	}
-
 }
 
 func NewRegistryScanHandler() *registryScanHandler {
 	return &registryScanHandler{
 		registryScan:      make([]registryScan, 0),
-		mapRegistryToAuth: make(map[string]types.AuthConfig),
+		mapRegistryToAuth: make(map[string]registryAuth),
 	}
 }
 
@@ -95,7 +101,66 @@ func NewRegistryScan() *registryScan {
 	}
 }
 
-func (registryScanHandler *registryScanHandler) ParseConfigMapData(configData map[string]interface{}) error {
+func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error) {
+	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryAuth.Username, Password: rs.registryAuth.Password}, rs.registry.hostname,
+		regCommon.MakeRegistryOptions(false, *rs.registryAuth.Insecure, *rs.registryAuth.SkipTLSVerify, "", "", rs.registry.projectID, rs.registryAuth.Kind))
+}
+
+func (rs *registryScan) hasAuth() bool {
+	return rs.registryAuth.Password != "" || rs.authConfig().RegistryToken != ""
+}
+
+func (rs *registryScan) registryCredentials() *registryCreds {
+	var regCreds *registryCreds
+	if rs.hasAuth() {
+		regCreds = &registryCreds{
+			auth:         rs.authConfig(),
+			registryName: rs.registry.hostname,
+		}
+	}
+	return regCreds
+}
+
+func (rs *registryScan) authConfig() *types.AuthConfig {
+	var authConfig *types.AuthConfig
+	if rs.hasAuth() {
+		authConfig = &types.AuthConfig{
+			Username: rs.registryAuth.Username,
+			Password: rs.registryAuth.Password,
+			Auth:     rs.registryAuth.AuthMethod,
+			//TODO:addd tokens support
+		}
+	}
+	return authConfig
+}
+
+func makeRegistryAuth(registryName string) registryAuth {
+	kind, _ := regCommon.GetRegistryKind(strings.Split(registryName, "/")[0])
+	falseBool := false
+	return registryAuth{SkipTLSVerify: &falseBool, Insecure: &falseBool, Kind: kind}
+}
+
+func (rs *registryScan) filterRepositories(repos []string) []string {
+	if len(rs.registryScanConfig.Include) == 0 && len(rs.registryScanConfig.Exclude) == 0 {
+		return repos
+	}
+	filteredRepos := []string{}
+	for _, repo := range repos {
+		if rs.registry.projectID != "" {
+			if !strings.Contains(repo, rs.registry.projectID+"/") {
+				continue
+			}
+		}
+		if len(rs.registryScanConfig.Include) != 0 && slices.Contains(rs.registryScanConfig.Include, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
+			filteredRepos = append(filteredRepos, repo)
+		}
+		if len(rs.registryScanConfig.Exclude) != 0 && !slices.Contains(rs.registryScanConfig.Exclude, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
+			filteredRepos = append(filteredRepos, repo)
+		}
+	}
+	return filteredRepos
+}
+func (registryScanHandler *registryScanHandler) parseConfigMapData(configData map[string]interface{}) error {
 	var registries []registryScanConfig
 	registriesStr, ok := configData["registries"].(string)
 	if !ok {
@@ -116,6 +181,7 @@ func (registryScanHandler *registryScanHandler) insertRegistryToScan(registries 
 		if len(reg.Include) > 0 && len(reg.Exclude) > 0 {
 			return fmt.Errorf("configMap should contain either 'Include' or 'Exclude', not both. In registry: %v", reg.Registry)
 		}
+
 		if auth, ok := registryScanHandler.mapRegistryToAuth[reg.Registry]; ok {
 			if reg.Depth == 0 {
 				reg.Depth = defaultDepth
@@ -123,7 +189,7 @@ func (registryScanHandler *registryScanHandler) insertRegistryToScan(registries 
 			registryScan.registryAuth = auth
 			registryScan.registryScanConfig = reg
 		} else { // public registry
-			registryScan.registryAuth = types.AuthConfig{}
+			registryScan.registryAuth = makeRegistryAuth(reg.Registry)
 			registryScan.registryScanConfig = reg
 		}
 		registrySpplited := strings.Split(reg.Registry, "/")
@@ -166,7 +232,7 @@ func (registryScanHandler *registryScanHandler) createTriggerRequestConfigMap(k8
 }
 
 // parse secret data according to convention
-func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[string]interface{}, registryName string) error {
+func (registryScanHandler *registryScanHandler) parseSecretsData(secretData map[string]interface{}, registryName string) error {
 	var registriesAuth []registryAuth
 	registriesStr, ok := secretData[registriesAuthFieldInSecret].(string)
 	if !ok {
@@ -183,17 +249,26 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 	}
 
 	glog.Infof("adding default auth for registry: %s", registryName)
-	registryScanHandler.mapRegistryToAuth[registryName] = types.AuthConfig{}
+	registryScanHandler.mapRegistryToAuth[registryName] = makeRegistryAuth(registryName)
 	for _, reg := range registriesAuth {
+		if reg.Insecure == nil {
+			falseBool := false
+			reg.Insecure = &falseBool
+		}
+		if reg.SkipTLSVerify == nil {
+			falseBool := false
+			reg.SkipTLSVerify = &falseBool
+		}
+		if kind, err := regCommon.GetRegistryKind(string(reg.Kind)); err != nil {
+			glog.Error("cannot validate registry kind", err)
+			return err
+		} else {
+			reg.Kind = kind
+		}
 
 		if registryName == reg.Registry {
 			if reg.Registry != "" && reg.Username != "" && reg.Password != "" {
-				registryScanHandler.mapRegistryToAuth[reg.Registry] = types.AuthConfig{
-					Username: reg.Username,
-					Password: reg.Password,
-					Auth:     reg.AuthMethod,
-					//TODO:addd tokens support
-				}
+				registryScanHandler.mapRegistryToAuth[registryName] = reg
 				glog.Infof("registry: %s credentials found, added proper authconfig", registryName)
 				break //[lior]@daneil if it's indeed one registry then you're done...
 			} else {
@@ -206,26 +281,23 @@ func (registryScanHandler *registryScanHandler) ParseSecretsData(secretData map[
 	return err
 }
 
-func (registryScanHandler *registryScanHandler) GetImagesForScanning(registryScan registryScan, reporter datastructures.IReporter) error {
+func (registryScanHandler *registryScanHandler) getImagesForScanning(registryScan *registryScan, reporter datastructures.IReporter) error {
 	imgNameToTags := make(map[string][]string)
-	regCreds := &registryCreds{
-		auth:         &registryScan.registryAuth,
-		RegistryName: registryScan.registry.hostname,
-	}
+
 	glog.Infof("GetImagesForScanning: enumerating repoes...")
-	repoes, err := registryScanHandler.ListRepoesInRegistry(regCreds, &registryScan)
+	repoes, err := registryScanHandler.listReposInRegistry(registryScan)
 	if err != nil {
 		glog.Errorf("ListRepoesInRegistry failed with err %v", err)
 		return err
 	}
 	glog.Infof("GetImagesForScanning: enumerating repoes successfully, found %d repos", len(repoes))
 	for _, repo := range repoes {
-		if err := registryScanHandler.setImageToTagsMap(regCreds, &registryScan, repo); err != nil {
+		if err := registryScanHandler.setImageToTagsMap(registryScan, repo); err != nil {
 			glog.Errorf("setImageToTagsMap failed with registry: %s repo: %s due to ERROR:: %s", registryScan.registry.hostname, repo, err.Error())
 		}
 	}
 	if registryScanHandler.isExceedScanLimit(imgNameToTags, imagesToScanLimit) {
-		registryScanHandler.filterScanLimit(&registryScan, imagesToScanLimit)
+		registryScanHandler.filterScanLimit(registryScan, imagesToScanLimit)
 		if reporter != nil {
 			errChan := make(chan error)
 			reporter.SendError(err, true, true, errChan)
@@ -239,32 +311,65 @@ func (registryScanHandler *registryScanHandler) GetImagesForScanning(registrySca
 	return nil
 }
 
-func (registryScanHandler *registryScanHandler) setImageToTagsMap(regCreds *registryCreds, registryScan *registryScan, repo string) error {
-	tags := make([]string, 0, 16)
-	var err error
-	if len(registryScan.registryScanConfig.Include) > 0 {
-		if slices.Contains(registryScan.registryScanConfig.Include, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, err = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-		}
-	} else if len(registryScan.registryScanConfig.Exclude) > 0 {
-		if !slices.Contains(registryScan.registryScanConfig.Exclude, strings.Replace(repo, registryScan.registry.projectID+"/", "", -1)) {
-			tags, err = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-		}
-	} else {
-		tags, err = registryScanHandler.ListImageTagsInRepo(repo, regCreds)
-	}
-
+func (registryScanHandler *registryScanHandler) setImageToTagsMap(registryScan *registryScan, repo string) error {
+	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
 		return err
 	}
 
-	if len(tags) > registryScan.registryScanConfig.Depth {
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags[:registryScan.registryScanConfig.Depth]
-	} else {
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+	firstPage := regCommon.MakePagination(tagsPageSize)
+	latestTagFound := false
+	tagsDepth := registryScan.registryScanConfig.Depth
+	tags := []string{}
+	options := []remote.Option{}
+	if registryScan.hasAuth() {
+		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
+	}
+	for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, options...); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
+		if err != nil {
+			return err
+		}
+
+		if !latestTagFound {
+			latestTagFound = slices.Contains(tagsPage, "latest")
+		}
+		tags = updateTagsCandidates(tags, tagsPage, tagsDepth, latestTagFound)
+
+		if nextPage == nil {
+			break
+		}
 	}
 
+	registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	return nil
+}
+
+func updateTagsCandidates(tagsCandidates []string, tagsPage []string, tagsDepth int, latestTagFound bool) []string {
+	prevCandidates := tagsCandidates
+	tagsCandidates = []string{}
+	lastIndexInPage := len(tagsPage) - 1
+	for i := 0; len(tagsCandidates) < tagsDepth && i <= lastIndexInPage; i++ {
+		if tagsPage[lastIndexInPage-i] == "latest" {
+			continue
+		}
+		tagsCandidates = append(tagsCandidates, tagsPage[lastIndexInPage-i])
+	}
+
+	for i := 0; i < len(prevCandidates) && len(tagsPage) < tagsDepth; i++ {
+		if prevCandidates[i] == "latest" {
+			continue
+		}
+		tagsCandidates = append(tagsCandidates, prevCandidates[i])
+	}
+
+	if latestTagFound {
+		tagsCandidates = append([]string{"latest"}, tagsCandidates...)
+	}
+	if len(tagsCandidates) > tagsDepth {
+		tagsCandidates = tagsCandidates[:tagsDepth]
+	}
+
+	return tagsCandidates
 }
 
 // Check if number of images (not repoes) to scan is more than limit
@@ -295,90 +400,34 @@ func (registryScanHandler *registryScanHandler) filterScanLimit(registryScan *re
 	registryScan.mapImageToTags = filteredImages
 }
 
-func (registryScanHandler *registryScanHandler) ListRepoesInRegistry(regCreds *registryCreds, registryScan *registryScan) ([]string, error) {
-	registry, err := containerregistry.NewRegistry(registryScan.registry.hostname)
-
+func (registryScanHandler *registryScanHandler) listReposInRegistry(registryScan *registryScan) ([]string, error) {
+	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
 		return nil, err
 	}
-	// authcfg, err := regCreds.Authorization()
-	// if err != nil {
-	// 	glog.Errorf("registry %s unable to authenticate: %s", registry.Name(), err.Error())
-	// }
-
-	// reg, err := registries.Factory(authcfg, &registry, common.MakeRegistryOptions(false, false, registryScan.registry.hostname, "", registryScan.registry.projectID))
-	// if err != nil {
-	// 	glog.Errorf("registry %s unable to complete factory: %s", registry.Name(), err.Error())
-
-	// 	return nil, err
-	// }
-
+	regCreds := registryScan.registryCredentials()
+	var repos []string
+	//TODO
+	firstPage := regCommon.MakePagination(iRegistry.GetMaxPageSize())
 	ctx := context.Background()
-
-	repos, err := remote.Catalog(ctx, registry, remote.WithAuth(regCreds))
-	// repos, err := reg.Catalog(ctx, common.NoPagination(0), common.CatalogOption{Namespaces: registryScan.registry.projectID}, regCreds)
-
-	if err != nil {
-		//FUGLY code to handle https
-		if !strings.Contains(err.Error(), "server gave HTTP response to HTTPS client") {
-			return nil, err
-		}
-		glog.Infof("registry %s as https failed trying http", registry.Name())
-		registry, err := containerregistry.NewInsecureRegistry(registryScan.registry.hostname)
+	catalogOpts := regCommon.CatalogOption{IsPublic: !registryScan.hasAuth(), Namespaces: registryScan.registry.projectID}
+	for pageRepos, nextPage, err := iRegistry.Catalog(ctx, firstPage, catalogOpts, regCreds); ; pageRepos, nextPage, err = iRegistry.Catalog(ctx, *nextPage, catalogOpts, regCreds) {
 		if err != nil {
 			return nil, err
 		}
-
-		if repos, err = remote.Catalog(ctx, registry, remote.WithAuth(regCreds)); err != nil {
-			return nil, err
+		repos = append(repos, registryScan.filterRepositories(pageRepos)...)
+		total2Include := len(registryScan.registryScanConfig.Include)
+		if total2Include != 0 && total2Include == len(repos) {
+			break
 		}
-
+		if len(repos) >= imagesToScanLimit {
+			break
+		}
+		if nextPage == nil {
+			break
+		}
 	}
-	var reposInGivenRegistry []string
-
-	//google repositories got project so we treat projects as part of the repo, ofc we also allow normal scenarios
-	for _, repo := range repos {
-		if registryScan.registry.projectID != "" {
-			if strings.Contains(repo, registryScan.registry.projectID+"/") {
-				reposInGivenRegistry = append(reposInGivenRegistry, repo)
-			}
-		} else {
-			reposInGivenRegistry = append(reposInGivenRegistry, repo)
-		}
-
-	}
-	return reposInGivenRegistry, nil
-}
-
-func (registryScanHandler *registryScanHandler) ListImageTagsInRepo(repo string, regCreds *registryCreds) ([]string, error) {
-	fullRepoName := regCreds.RegistryName + "/" + repo
-	repo_data, err := containerregistry.NewRepository(fullRepoName)
-	if err != nil {
-		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
-			return nil, err
-		}
-		repo_data, err = containerregistry.NewRepository(fullRepoName, containerregistry.Insecure)
-		if err != nil {
-			return nil, err
-		}
-
-	}
-
-	imagestags, err := remote.List(repo_data, remote.WithAuth(regCreds))
-	if err != nil {
-		if !strings.Contains(err.Error(), "http: server gave HTTP response to HTTPS client") {
-			return nil, err
-		}
-		glog.Infof("trying to get %s tags via http instead of https", fullRepoName)
-		repo_data, err = containerregistry.NewRepository(fullRepoName, containerregistry.Insecure)
-		if err != nil {
-			return nil, err
-		}
-		imagestags, err = remote.List(repo_data, remote.WithAuth(regCreds))
-		return imagestags, err
-	}
-
-	return imagestags, nil
+	return repos, nil
 }
 
 func (registryScanHandler *registryScanHandler) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, registryName string) error {

@@ -7,7 +7,6 @@ import (
 	"k8s-ca-websocket/cautils"
 	"strings"
 
-	"github.com/armosec/armoapi-go/apis"
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	v1 "k8s.io/api/batch/v1"
@@ -73,7 +72,7 @@ func getJobParams(command *armoapi.Command) *armoapi.CronJobParams {
 	return nil
 }
 
-func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name string, req *apis.Command) error {
+func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name string, req *armoapi.Command) error {
 	// create config map
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
