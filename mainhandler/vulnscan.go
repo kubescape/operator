@@ -140,34 +140,34 @@ func (actionHandler *ActionHandler) getRegistryAuth(registryName string) (*regis
 	return &auth, nil
 }
 
-func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, error) {
+func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, bool, error) {
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
 			glog.Infof("configmap: %s does not exists, using default values", registryScanConfigmap)
-			return NewRegistryScanConfig(registryName), nil
+			return NewRegistryScanConfig(registryName), false, nil
 		} else {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	configData := configMap.GetData()
 	var registriesConfigs []registryScanConfig
 	registriesConfigStr, ok := configData["registries"].(string)
 	if !ok {
-		return nil, fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
+		return nil, false, fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
 	}
 	registriesConfigStr = strings.Replace(registriesConfigStr, "\n", "", -1)
 	err = json.Unmarshal([]byte(registriesConfigStr), &registriesConfigs)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing ConfigMap: %s", err.Error())
+		return nil, false, fmt.Errorf("error parsing ConfigMap: %s", err.Error())
 	}
 	for _, config := range registriesConfigs {
 		if config.Registry == registryName {
-			return &config, nil
+			return &config, true, nil
 		}
 	}
-	return NewRegistryScanConfig(registryName), nil
+	return NewRegistryScanConfig(registryName), false, nil
 
 }
 
@@ -197,12 +197,16 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
 
-	conf, err := actionHandler.getRegistryConfig(registryName)
+	conf, isLoaded, err := actionHandler.getRegistryConfig(registryName)
 	if err != nil {
-		glog.Errorf("get registry config failed with err %v", err)
+		glog.Errorf("get registry(%s) config failed with err %v", registryName, err) //systest depedendent
 		return err
 	}
-
+	cmLoadMode := "default"
+	if isLoaded {
+		cmLoadMode = "loaded"
+	}
+	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, cmLoadMode) // systest
 	registryScan := NewRegistryScan(registryName, *auth, *conf)
 	return actionHandler.scanRegistry(&registryScan, sessionObj)
 }
