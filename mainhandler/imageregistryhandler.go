@@ -269,26 +269,34 @@ func (registryScan *registryScan) setImageToTagsMap(repo string) error {
 	if registryScan.hasAuth() {
 		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
 	}
-	for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, options...); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
-		if err != nil {
-			return err
+	if latestTags, err := iRegistry.GetLatestTags(repo, tagsDepth, options...); err == nil {
+		tags := []string{}
+		for _, tag := range latestTags {
+			tags = append(tags, strings.Split(tag, ",")...)
 		}
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 
-		if !latestTagFound {
-			latestTagFound = slices.Contains(tagsPage, "latest")
-		}
-		tags = updateTagsCandidates(tags, tagsPage, tagsDepth, latestTagFound)
+	} else {
+		for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, options...); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
+			if err != nil {
+				return err
+			}
 
-		if tagsDepth == 1 && latestTagFound {
-			break
-		}
+			if !latestTagFound {
+				latestTagFound = slices.Contains(tagsPage, "latest")
+			}
+			tags = updateTagsCandidates(tags, tagsPage, tagsDepth, latestTagFound)
 
-		if nextPage == nil {
-			break
+			if tagsDepth == 1 && latestTagFound {
+				break
+			}
+
+			if nextPage == nil {
+				break
+			}
 		}
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
-
-	registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	return nil
 }
 
