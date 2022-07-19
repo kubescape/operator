@@ -199,14 +199,14 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	conf, isLoaded, err := actionHandler.getRegistryConfig(registryName)
 	if err != nil {
-		glog.Errorf("get registry(%s) config failed with err %v", registryName, err) //systest depedendent
+		glog.Errorf("get registry(%s) config failed with err %v", registryName, err)
 		return err
 	}
 	cmLoadMode := "default"
 	if isLoaded {
 		cmLoadMode = "loaded"
 	}
-	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, cmLoadMode) // systest
+	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, cmLoadMode) // systest depedendent
 	registryScan := NewRegistryScan(registryName, *auth, *conf)
 	return actionHandler.scanRegistry(&registryScan, sessionObj)
 }
