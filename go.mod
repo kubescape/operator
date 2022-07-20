@@ -9,7 +9,7 @@ require (
 	github.com/armosec/k8s-interface v0.0.77
 	github.com/armosec/logger-go v0.0.10
 	github.com/armosec/opa-utils v0.0.138
-	github.com/armosec/registryx v0.0.8
+	github.com/armosec/registryx v0.0.10
 	github.com/armosec/utils-go v0.0.7
 	github.com/armosec/utils-k8s-go v0.0.7
 	github.com/docker/docker v20.10.16+incompatible
@@ -86,6 +86,7 @@ require (
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.1.1 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
+	github.com/hashicorp/go-version v1.2.1 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
