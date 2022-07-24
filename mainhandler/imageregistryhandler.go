@@ -191,8 +191,18 @@ func (rs *registryScan) filterRepositories(repos []string) []string {
 		if len(rs.registryScanConfig.Include) != 0 && slices.Contains(rs.registryScanConfig.Include, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
 			filteredRepos = append(filteredRepos, repo)
 		}
-		if len(rs.registryScanConfig.Exclude) != 0 && !slices.Contains(rs.registryScanConfig.Exclude, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
-			filteredRepos = append(filteredRepos, repo)
+		if len(rs.registryScanConfig.Exclude) != 0 {
+			if !slices.Contains(rs.registryScanConfig.Exclude, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
+				filteredRepos = append(filteredRepos, repo)
+			} else {
+				repomsg := rs.registry.hostname + "/"
+				if rs.registry.projectID != "" {
+					repomsg += rs.registry.projectID + "/"
+				}
+				repomsg += repo
+				glog.Warningf("image registry scan::%s was excluded", repomsg) // systest dependent
+			}
+
 		}
 	}
 	return filteredRepos
