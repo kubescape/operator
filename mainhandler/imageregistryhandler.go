@@ -247,18 +247,17 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 	}
 	if registryScan.isExceedScanLimit(imagesToScanLimit) {
 		registryScan.filterScanLimit(imagesToScanLimit)
+		errMsg := fmt.Sprintf("more than %d images provided. scanning only first %d images", imagesToScanLimit, imagesToScanLimit)
 		if reporter != nil {
 			errChan := make(chan error)
-			go func(errChan chan error, registryScanHost string) {
-				if err := <-errChan; err != nil {
-					glog.Errorf("setImageToTagsMap failed to send error report: %s due to ERROR:: %s",
-						registryScanHost, err.Error())
-				}
-			}(errChan, registryScan.registry.hostname)
-			err := errorWithDocumentationRef(fmt.Sprintf("more than %d images provided. scanning only first %d images", imagesToScanLimit, imagesToScanLimit))
-			reporter.SendError(err, true, true, errChan)
+			err := errorWithDocumentationRef(errMsg)
+			reporter.SendWarning(err.Error(), true, true, errChan)
+			if err := <-errChan; err != nil {
+				glog.Errorf("setImageToTagsMap failed to send error report: %s due to ERROR:: %s",
+					registryScan.registry.hostname, err.Error())
+			}
 		}
-		glog.Warning("GetImagesForScanning: more than 500 images provided. scanning only first 500 images")
+		glog.Warning("GetImagesForScanning: %S", errMsg)
 	}
 	return nil
 }
@@ -288,21 +287,17 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 			} else {
 				if tagsForDigestLen > tagsDepth {
 					tags = append(tags, tagsForDigest[:tagsDepth]...)
+					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:tagsDepth], ","))
 					if reporter != nil {
 						errChan := make(chan error)
-						go func(errChan chan error, registryHost string) {
-							if err := <-errChan; err != nil {
-								glog.Errorf("GetLatestTags failed to send error report: %s due to ERROR:: %s",
-									registryHost, err.Error())
-							} else {
-								glog.Info("multiple tags error sent")
-							}
-						}(errChan, registryScan.registry.hostname)
-						err := errorWithDocumentationRef(fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:tagsDepth], ",")))
-						reporter.SendError(err, true, true, errChan)
-
+						err := errorWithDocumentationRef(errMsg)
+						reporter.SendWarning(err.Error(), true, true, errChan)
+						if err := <-errChan; err != nil {
+							glog.Errorf("GetLatestTags failed to send error report: %s due to ERROR:: %s",
+								registryScan.registry.hostname, err.Error())
+						}
 					}
-					glog.Warning("GetImagesForScanning: more than 500 images provided. scanning only first 500 images")
+					glog.Warning("GetImagesForScanning: %s", errMsg)
 				} else {
 					tags = append(tags, tagsForDigest...)
 				}
