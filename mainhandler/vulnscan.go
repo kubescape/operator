@@ -195,7 +195,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 		return err
 	}
 	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
-	glog.Infof("scanRegistries: %s secret parsing successful", registryScanSecret)
+	glog.Info("scanRegistries secret parsing successful")
 
 	conf, isLoaded, err := actionHandler.getRegistryConfig(registryName)
 	if err != nil {

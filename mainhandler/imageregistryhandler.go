@@ -39,6 +39,7 @@ const (
 	registryCronjobTemplate                 = "registry-scan-cronjob-template"
 	registryNameAnnotation                  = "armo.cloud/registryname"
 	tagsPageSize                            = 1000
+	registryScanDocumentation               = "https://hub.armosec.io/docs/registry-vulnerability-scan"
 )
 
 type registryScanConfig struct {
@@ -82,6 +83,10 @@ func NewRegistryScanConfig(registryName string) *registryScanConfig {
 		Include:  make([]string, 0),
 		Exclude:  make([]string, 0),
 	}
+}
+
+func errorWithDocumentationRef(errorMessage string) error {
+	return fmt.Errorf("%s. Please refer to the documentation %s", errorMessage, registryScanDocumentation)
 }
 
 func NewRegistryScan(registryName string, auth registryAuth, config registryScanConfig) registryScan {
@@ -144,7 +149,7 @@ func (reg *registryAuth) initDefaultValues() error {
 	switch reg.AuthMethod {
 	case "accesstoken", "":
 		if reg.Password == "" || reg.Username == "" {
-			return fmt.Errorf("auth_method accesstoken requirers username and password. Please refer to the documentation %s", "https://hub.armosec.io/docs/registry-vulnerability-scan")
+			return errorWithDocumentationRef("auth_method accesstoken requirers username and password")
 		}
 	case "public", "ips":
 		//do nothing
@@ -152,7 +157,7 @@ func (reg *registryAuth) initDefaultValues() error {
 	case "identity_token", "registry_token":
 		fallthrough
 	default:
-		return fmt.Errorf("auth_method (%s) not supported. Please refer to the documentation %s", reg.AuthMethod, "https://hub.armosec.io/docs/registry-vulnerability-scan")
+		return errorWithDocumentationRef(fmt.Sprintf("auth_method (%s) not supported", reg.AuthMethod))
 	}
 
 	if reg.Insecure == nil {
@@ -246,26 +251,29 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 	}
 	glog.Infof("GetImagesForScanning: enumerating repoes successfully, found %d repos", len(repoes))
 	for _, repo := range repoes {
-		if err := registryScan.setImageToTagsMap(repo); err != nil {
+		if err := registryScan.setImageToTagsMap(repo, reporter); err != nil {
 			glog.Errorf("setImageToTagsMap failed with registry: %s repo: %s due to ERROR:: %s", registryScan.registry.hostname, repo, err.Error())
 		}
 	}
 	if registryScan.isExceedScanLimit(imagesToScanLimit) {
 		registryScan.filterScanLimit(imagesToScanLimit)
+		errMsg := fmt.Sprintf("more than %d images provided. scanning only first %d images", imagesToScanLimit, imagesToScanLimit)
 		if reporter != nil {
 			errChan := make(chan error)
-			reporter.SendError(err, true, true, errChan)
+			err := errorWithDocumentationRef(errMsg)
+			reporter.SendWarning(err.Error(), true, true, errChan)
 			if err := <-errChan; err != nil {
 				glog.Errorf("setImageToTagsMap failed to send error report: %s due to ERROR:: %s",
 					registryScan.registry.hostname, err.Error())
 			}
 		}
-		glog.Warning("GetImagesForScanning: more than 500 images provided. scanning only first 500 images")
+		glog.Warning("GetImagesForScanning: %S", errMsg)
 	}
 	return nil
 }
 
-func (registryScan *registryScan) setImageToTagsMap(repo string) error {
+func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datastructures.IReporter) error {
+	glog.Infof("Fetching repository %s tags", repo)
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
 		return err
@@ -279,26 +287,56 @@ func (registryScan *registryScan) setImageToTagsMap(repo string) error {
 	if registryScan.hasAuth() {
 		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
 	}
-	for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, options...); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
-		if err != nil {
-			return err
+	if latestTags, err := iRegistry.GetLatestTags(repo, tagsDepth, options...); err == nil {
+		tags := []string{}
+		for _, tag := range latestTags {
+			tagsForDigest := strings.Split(tag, ",")
+			tagsForDigestLen := len(tagsForDigest)
+			if tagsForDigestLen == 1 {
+				tags = append(tags, tagsForDigest[0])
+			} else {
+				if tagsForDigestLen > tagsDepth {
+					tags = append(tags, tagsForDigest[:tagsDepth]...)
+					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:tagsDepth], ","))
+					if reporter != nil {
+						errChan := make(chan error)
+						err := errorWithDocumentationRef(errMsg)
+						reporter.SendWarning(err.Error(), true, true, errChan)
+						if err := <-errChan; err != nil {
+							glog.Errorf("GetLatestTags failed to send error report: %s due to ERROR:: %s",
+								registryScan.registry.hostname, err.Error())
+						}
+					}
+					glog.Warning("GetImagesForScanning: %s", errMsg)
+				} else {
+					tags = append(tags, tagsForDigest...)
+				}
+			}
 		}
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 
-		if !latestTagFound {
-			latestTagFound = slices.Contains(tagsPage, "latest")
-		}
-		tags = updateTagsCandidates(tags, tagsPage, tagsDepth, latestTagFound)
+	} else { //fallback to list images lexicographically
+		glog.Errorf("get latestTags failed for repository %s with error:%s/n fetching lexicographical list of tags", repo, err.Error())
+		for tagsPage, nextPage, err := iRegistry.List(repo, firstPage, options...); ; tagsPage, nextPage, err = iRegistry.List(repo, *nextPage) {
+			if err != nil {
+				return err
+			}
 
-		if tagsDepth == 1 && latestTagFound {
-			break
-		}
+			if !latestTagFound {
+				latestTagFound = slices.Contains(tagsPage, "latest")
+			}
+			tags = updateTagsCandidates(tags, tagsPage, tagsDepth, latestTagFound)
 
-		if nextPage == nil {
-			break
+			if tagsDepth == 1 && latestTagFound {
+				break
+			}
+
+			if nextPage == nil {
+				break
+			}
 		}
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
-
-	registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	return nil
 }
 
