@@ -261,6 +261,7 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 		if reporter != nil {
 			errChan := make(chan error)
 			err := errorWithDocumentationRef(errMsg)
+			reporter.SetDetails("Too many images")
 			reporter.SendWarning(err.Error(), true, true, errChan)
 			if err := <-errChan; err != nil {
 				glog.Errorf("setImageToTagsMap failed to send error report: %s due to ERROR:: %s",
@@ -301,6 +302,7 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 					if reporter != nil {
 						errChan := make(chan error)
 						err := errorWithDocumentationRef(errMsg)
+						reporter.SetDetails("Too many tags per image")
 						reporter.SendWarning(err.Error(), true, true, errChan)
 						if err := <-errChan; err != nil {
 							glog.Errorf("GetLatestTags failed to send error report: %s due to ERROR:: %s",
