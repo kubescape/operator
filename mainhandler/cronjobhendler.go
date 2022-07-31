@@ -72,7 +72,7 @@ func getJobParams(command *armoapi.Command) *armoapi.CronJobParams {
 	return nil
 }
 
-func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name string, req *armoapi.Command) error {
+func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name string, req *armoapi.Commands) error {
 	// create config map
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
