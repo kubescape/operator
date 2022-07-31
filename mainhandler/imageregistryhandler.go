@@ -307,7 +307,7 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 								registryScan.registry.hostname, err.Error())
 						}
 					}
-					glog.Warning("GetImagesForScanning: %s", errMsg)
+					glog.Warningf("GetImagesForScanning: %s", errMsg)
 				} else {
 					tags = append(tags, tagsForDigest...)
 				}
