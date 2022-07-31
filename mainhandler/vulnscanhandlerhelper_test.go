@@ -25,9 +25,9 @@ func getSetCronjobCommand() *apis.Command {
 // Extract vuln-scan command from create cronjob command
 func TestGetVulnScanRequest(t *testing.T) {
 	commandSet := getSetCronjobCommand()
-	commandScan := getVulnScanRequest(commandSet)
-	assert.NotEqual(t, commandScan.CommandName, commandSet.CommandName)
-	assert.Equal(t, commandScan.CommandName, (apis.NotificationPolicyType)(cautils.VulnScan))
-	assert.Equal(t, commandScan.Args, map[string]interface{}(nil))
+	commandsScan := getVulnScanRequest(commandSet)
+	assert.NotEqual(t, commandsScan.Commands[0].CommandName, commandSet.CommandName)
+	assert.Equal(t, commandsScan.Commands[0].CommandName, (apis.NotificationPolicyType)(cautils.VulnScan))
+	assert.Equal(t, commandsScan.Commands[0].Args, map[string]interface{}(nil))
 
 }

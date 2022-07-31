@@ -60,7 +60,7 @@ curl -X POST \
          "commands": [
             {
                   "CommandName": "setVulnScanCronJob",
-                  "WildWlid": "wlid://cluster-minikube-moshe",
+                  "WildWlid": "wlid://cluster-minikube-moshe/namespace-systest-ns-chj8",
                   "args": {
                      "jobParams": {
                         "cronTabSchedule": "* * * * *"
@@ -82,7 +82,7 @@ curl -X POST \
                   "CommandName": "updateVulnScanCronJob",
                   "args": {
                      "jobParams": {
-                        "cronTabSchedule": "2 0 * * *",
+                        "cronTabSchedule": "* * * * *",
                         "name": "vuln-scan-scheduled-2393196145723502557"
                      }
                   }
