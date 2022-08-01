@@ -7,10 +7,12 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const CronjobTemplateName = "vulnscan-cronjob-template"
+const NamespaceAnnotation = "armo.namespace"
 
 func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
@@ -32,6 +34,11 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 		return fmt.Errorf("setVulnScanCronJob: CronTabSchedule not found")
 	}
 	setCronJobForTriggerRequest(jobTemplateObj, name, scanJobParams.CronTabSchedule, actionHandler.command.JobTracking.JobID)
+
+	// add namespace annotation
+	namespace := getNamespaceFromVulnScanCommand(&actionHandler.command)
+	glog.Infof("setVulnScanCronJob: command namespace - '%s'", namespace)
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[NamespaceAnnotation] = namespace
 
 	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		return err
