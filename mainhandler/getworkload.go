@@ -10,14 +10,10 @@ type ContainerData struct {
 	container string
 }
 
-func getWorkloadImages(k8sAPI *k8sinterface.KubernetesApi, wlid string) ([]ContainerData, error) {
+func listWorkloadImages(workload k8sinterface.IWorkload) ([]ContainerData, error) {
 
 	containersData := []ContainerData{}
 
-	workload, err := k8sAPI.GetWorkloadByWlid(wlid)
-	if err != nil {
-		return containersData, err
-	}
 	containers, err := workload.GetContainers()
 	if err != nil {
 		return containersData, err

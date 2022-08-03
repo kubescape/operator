@@ -14,7 +14,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
 
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -235,14 +234,18 @@ func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, session
 
 func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj) error {
 
-	pod, err := actionHandler.getPodByWLID(actionHandler.wlid)
+	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
-		glog.Errorf("scanning might fail if some images require credentials")
+		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
+	}
+	pod := actionHandler.getPodByWLID(workload)
+	if pod == nil {
+		glog.Info("workload %s has no podSpec, skipping", actionHandler.wlid)
 		return nil
 	}
 	// get all images of workload
 	errs := ""
-	containers, err := getWorkloadImages(actionHandler.k8sAPI, actionHandler.wlid)
+	containers, err := listWorkloadImages(workload)
 	if err != nil {
 		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
@@ -374,17 +377,14 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	return nil
 }
 
-func (actionHandler *ActionHandler) getPodByWLID(wlid string) (*corev1.Pod, error) {
+func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) *corev1.Pod {
 	var err error
-	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-	if err != nil {
-		return nil, err
-	}
+
 	podspec, err := workload.GetPodSpec()
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	podObj := &corev1.Pod{Spec: *podspec}
-	podObj.ObjectMeta.Namespace = pkgwlid.GetNamespaceFromWlid(wlid)
-	return podObj, nil
+	podObj.ObjectMeta.Namespace = workload.GetNamespace()
+	return podObj
 }
