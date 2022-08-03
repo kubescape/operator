@@ -172,7 +172,7 @@ func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name stri
 	}
 
 	configMap.Data["request-body.json"] = string(command)
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil

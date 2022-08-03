@@ -15,40 +15,6 @@ import (
 	"github.com/golang/glog"
 )
 
-func (notification *NotificationHandler) websocketPingMessage() error {
-	for {
-		time.Sleep(30 * time.Second)
-		if err := notification.connector.WritePingMessage(); err != nil {
-			glog.Errorf("PING, %s", err.Error())
-			return fmt.Errorf("PING, %s", err.Error())
-		}
-	}
-}
-
-func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
-	notif := &notificationserver.Notification{}
-	if err := json.Unmarshal(bytesNotification, notif); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-	return notif, nil
-}
-
-func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
-	notif := &notificationserver.Notification{}
-	if err := bson.Unmarshal(bytesNotification, notif); err != nil {
-		glog.Error(err)
-		return nil, err
-	}
-	return notif, nil
-}
-
-func NewCommands() interface{} {
-	cmds := apis.Commands{Commands: []apis.Command{{CommandName: "1234", ResponseID: "1234567"}}}
-	fmt.Println(cmds)
-	return &cmds
-}
-
 func parseNotificationCommand(notification interface{}) (*apis.Commands, error) {
 	cmds := &apis.Commands{}
 
@@ -69,30 +35,9 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 }
 
 func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
-	dst := notif.Target["dest"]
+	dst := notif.Target["dest"] // TODO: move target "dest" so it will be a constant
 	switch dst {
-	// case "kubescape":
-	// 	// sent by this function in dash BE: KubescapeInClusterHandler
-	// 	policyNotificationBytes, ok := notif.Notification.([]byte)
-	// 	if !ok {
-	// 		return fmt.Errorf("handleNotification, kubescape, failed to get policyNotificationBytes")
-	// 	}
-	// 	policyNotification := &opapolicy.PolicyNotification{}
-	// 	if err := json.Unmarshal(policyNotificationBytes, policyNotification); err != nil {
-	// 		return fmt.Errorf("handleNotification, kubescape, failed to Unmarshal: %v", err)
-	// 	}
-
-	// 	sessionOnj := cautils.NewSessionObj(&apis.Command{
-	// 		CommandName: string(policyNotification.NotificationType),
-	// 		Designators: []armotypes.PortalDesignator{policyNotification.Designators},
-	// 		JobTracking: apis.JobTracking{JobID: policyNotification.JobID},
-	// 		Args: map[string]interface{}{
-	// 			"kubescapeJobParams": policyNotification.KubescapeJobParams,
-	// 			"rules":              policyNotification.Rules},
-	// 	}, "WebSocket", "", policyNotification.JobID, 1)
-	// 	*notification.sessionObj <- *sessionOnj
-
-	case "trigger", "kubescape":
+	case "trigger", "kubescape": // the "kubescape" is for backward compatibility
 		cmds, err := parseNotificationCommand(notif.Notification)
 		if err != nil {
 			return err
@@ -101,15 +46,6 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			*notification.sessionObj <- *sessionObj
 		}
-
-	case "safeMode":
-		safeMode, e := parseSafeModeNotification(notif.Notification)
-		if e != nil {
-			return e
-		}
-
-		// send to pipe
-		*notification.safeModeObj <- *safeMode
 	}
 
 	return nil
@@ -177,21 +113,30 @@ func initNotificationServerURL() string {
 	return urlObj.String()
 }
 
-func parseSafeModeNotification(notification interface{}) (*apis.SafeMode, error) {
-	safeMode := &apis.SafeMode{}
-	notificationBytes, err := json.Marshal(notification)
-	if err != nil {
-		return safeMode, err
+func (notification *NotificationHandler) websocketPingMessage() error {
+	for {
+		time.Sleep(30 * time.Second)
+		if err := notification.connector.WritePingMessage(); err != nil {
+			glog.Errorf("PING, %s", err.Error())
+			return fmt.Errorf("PING, %s", err.Error())
+		}
 	}
+}
 
-	glog.Infof("Notification: %s", string(notificationBytes))
-	if err := json.Unmarshal(notificationBytes, safeMode); err != nil {
+func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
+	notif := &notificationserver.Notification{}
+	if err := json.Unmarshal(bytesNotification, notif); err != nil {
 		glog.Error(err)
-		return safeMode, err
+		return nil, err
 	}
-	if safeMode.InstanceID == "" {
-		safeMode.InstanceID = safeMode.PodName
-	}
+	return notif, nil
+}
 
-	return safeMode, nil
+func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
+	notif := &notificationserver.Notification{}
+	if err := bson.Unmarshal(bytesNotification, notif); err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	return notif, nil
 }

@@ -234,7 +234,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	// command will be mounted into cronjob by using this configmap
 	configMap.Data[requestBodyFile] = string(command)
 
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	glog.Infof("createTriggerRequestConfigMap: created configmap: %s", name)
@@ -505,7 +505,7 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 	}
 
 	// create cronJob
-	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		glog.Infof("setRegistryScanCronJob: cronjob: %s creation failed. err: %s", name, err.Error())
 		return err
 	}

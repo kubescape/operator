@@ -35,7 +35,6 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
 	}
 	rtr := mux.NewRouter()
-	rtr.HandleFunc("/v1/safeMode", resthandler.SafeMode)
 	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
 	server.Handler = rtr
 

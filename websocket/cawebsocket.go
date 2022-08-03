@@ -30,7 +30,7 @@ func NewWebsocketHandler(sessionObj *chan cautils.SessionObj) *WebsocketHandler 
 }
 func initPostmanURL() url.URL {
 	urlObj := url.URL{}
-	host := cautils.CA_POSTMAN
+	host := cautils.PostmanURL
 
 	scheme := "wss"
 
@@ -44,7 +44,7 @@ func initPostmanURL() url.URL {
 
 	urlObj.Scheme = scheme
 	urlObj.Host = host
-	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
+	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.AccountID, cautils.ClusterName)
 	urlObj.ForceQuery = false
 
 	return urlObj
@@ -124,9 +124,6 @@ func (wsh *WebsocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	glog.Infof("Connecting to %s", wsh.webSocketURL.String())
 
-	if cautils.CA_IGNORE_VERIFY_CACLI {
-		websocket.DefaultDialer.TLSClientConfig.InsecureSkipVerify = true
-	}
 	conn, _, err = websocket.DefaultDialer.Dial(wsh.webSocketURL.String(), nil)
 	if err != nil {
 		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", wsh.webSocketURL.String(), err)

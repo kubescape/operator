@@ -40,7 +40,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 	glog.Infof("setVulnScanCronJob: command namespace - '%s'", namespace)
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[NamespaceAnnotation] = namespace
 
-	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 
@@ -56,7 +56,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 		return fmt.Errorf("updateVulnScanCronJob: jobName not found")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 	}
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -86,11 +86,11 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob() error {
 }
 
 func (actionHandler *ActionHandler) deleteCronjob(name string) error {
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil

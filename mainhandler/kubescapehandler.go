@@ -34,11 +34,11 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -50,7 +50,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	}
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
-		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 	}

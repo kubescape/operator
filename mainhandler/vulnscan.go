@@ -186,27 +186,19 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *cautils.SessionOb
 
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
 	if err != nil {
-		glog.Errorf("parseRegistryNameArg failed with err %v", err)
-		return err
+		return fmt.Errorf("parseRegistryNameArg failed with err %v", err)
 	}
 	auth, err := actionHandler.getRegistryAuth(registryName)
 	if err != nil {
-		glog.Errorf("get registry auth failed with err %v", err)
-		return err
+		return fmt.Errorf("get registry auth failed with err %v", err)
 	}
 	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
-	glog.Info("scanRegistries secret parsing successful")
 
-	conf, isLoaded, err := actionHandler.getRegistryConfig(registryName)
+	conf, _, err := actionHandler.getRegistryConfig(registryName)
 	if err != nil {
-		glog.Errorf("get registry(%s) config failed with err %v", registryName, err)
-		return err
+		return fmt.Errorf("get registry(%s) config failed with err %v", registryName, err)
 	}
-	cmLoadMode := "default"
-	if isLoaded {
-		cmLoadMode = "loaded"
-	}
-	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, cmLoadMode) // systest depedendent
+
 	registryScan := NewRegistryScan(registryName, *auth, *conf)
 	return actionHandler.scanRegistry(&registryScan, sessionObj)
 }
@@ -230,20 +222,15 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *cautils.SessionObj) error {
 	err := registry.getImagesForScanning(actionHandler.reporter)
 	if err != nil {
-		glog.Errorf("GetImagesForScanning failed with err %v", err)
-		return err
+		return fmt.Errorf("GetImagesForScanning failed with err %v", err)
 	}
 	webSocketScanCMDList, err := convertImagesToWebsocketScanCommand(registry, sessionObj)
 	if err != nil {
-		glog.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
-		return err
+		return fmt.Errorf("convertImagesToWebsocketScanCommand failed with err %v", err)
 	}
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(webSocketScanCMDList), registry.registry), true, sessionObj.ErrChan)
-	err = sendAllImagesToVulnScan(webSocketScanCMDList)
-	if err != nil {
-		glog.Errorf("sendAllImagesToVulnScanByMemLimit failed with err %v", err)
-	}
-	return err
+
+	return sendAllImagesToVulnScan(webSocketScanCMDList)
 }
 
 func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj) error {
@@ -251,6 +238,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	pod, err := actionHandler.getPodByWLID(actionHandler.wlid)
 	if err != nil {
 		glog.Errorf("scanning might fail if some images require credentials")
+		return nil
 	}
 	// get all images of workload
 	errs := ""
@@ -260,7 +248,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	}
 
 	// we want running pod in order to have the image hash
-	actionHandler.getRunningPodDescription(pod)
+	// actionHandler.getRunningPodDescription(pod)
 
 	for i := range containers {
 
@@ -297,7 +285,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 				}
 
 				/*
-					the websocketScanCommand.Credentials is depracated, still use it for backward compstability
+					the websocketScanCommand.Credentials is deprecated, still use it for backward computability
 				*/
 				if len(websocketScanCommand.Credentialslist) != 0 {
 					websocketScanCommand.Credentials = &websocketScanCommand.Credentialslist[0]
@@ -341,35 +329,6 @@ func prepareSessionChain(sessionObj *cautils.SessionObj, websocketScanCommand *a
 	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
 	websocketScanCommand.JobID = uuid.NewString()
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
-}
-
-func (actionHandler *ActionHandler) getRunningPodDescription(pod *corev1.Pod) {
-	if workloadObj, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid); err == nil {
-		if selectors, err := workloadObj.GetSelector(); err == nil {
-			gvr, _ := k8sinterface.GetGroupVersionResource("Pod")
-			podList, err := actionHandler.k8sAPI.ListWorkloads(&gvr, workloadObj.GetNamespace(), selectors.MatchLabels, map[string]string{"status.phase": "Running"})
-			if err == nil {
-				if len(podList) > 0 {
-					wlidKind := pkgwlid.GetKindFromWlid(actionHandler.wlid)
-					wlidName := pkgwlid.GetNameFromWlid(actionHandler.wlid)
-					for podIdx := range podList {
-						parentKind, parentName, err := actionHandler.k8sAPI.CalculateWorkloadParentRecursive(podList[podIdx])
-						if err == nil && parentKind == wlidKind && wlidName == parentName {
-							podBts, err := json.Marshal(podList[podIdx].GetObject())
-							if err != nil {
-								continue
-							}
-							err = json.Unmarshal(podBts, pod)
-							if err != nil {
-								continue
-							}
-							break
-						}
-					}
-				}
-			}
-		}
-	}
 }
 
 func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScanCommand) error {

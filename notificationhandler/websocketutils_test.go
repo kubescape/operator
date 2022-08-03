@@ -15,3 +15,52 @@ func TestParseNotificationCommand(t *testing.T) {
 	assert.Equal(t, 1, len(cmd.Commands))
 	assert.Equal(t, apis.TypeRunKubescapeJob, cmd.Commands[0].CommandName)
 }
+
+// func Test_parseNotificationCommand(t *testing.T) {
+// 	type args struct {
+// 		notification interface{}
+// 	}
+// 	tests := []struct {
+// 		name    string
+// 		args    args
+// 		want    *apis.Commands
+// 		wantErr bool
+// 	}{
+// 		// TODO: Add test cases.
+// 		{
+// 			name: "test",
+// 			args: args{
+// 				notification: []byte(mockCommandRunKubescapeJob),
+// 			},
+// 			want: &apis.Commands{
+
+// 				[]apis.Command{
+// 					apis.Command{
+// 						CommandName: apis.TypeRunKubescapeJob,
+// 						WildWlid:    "wlid://cluster-temp/namescpace-temp",
+// 						JobTracking: apis.JobTracking{
+
+// 						},
+// 						Args: map[string]interface{}{
+// 							apis.CommandDeprecatedArgsJobParams: map[string]interface{}{
+// 							}
+// 						},
+// 					},
+// 				},
+// 			},
+// 			wantErr: false,
+// 		},
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			got, err := parseNotificationCommand(tt.args.notification)
+// 			if (err != nil) != tt.wantErr {
+// 				t.Errorf("parseNotificationCommand() error = %v, wantErr %v", err, tt.wantErr)
+// 				return
+// 			}
+// 			if !reflect.DeepEqual(got, tt.want) {
+// 				t.Errorf("parseNotificationCommand() = %v, want %v", got, tt.want)
+// 			}
+// 		})
+// 	}
+// }

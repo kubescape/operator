@@ -5,35 +5,31 @@ import (
 	"k8s-ca-websocket/cautils"
 	"time"
 
-	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )
 
 type NotificationHandler struct {
-	connector   IWebsocketActions
-	sessionObj  *chan cautils.SessionObj
-	safeModeObj *chan apis.SafeMode
+	connector  IWebsocketActions
+	sessionObj *chan cautils.SessionObj
 }
 
-func NewTriggerHandlerNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
+func NewTriggerHandlerNotificationHandler(sessionObj *chan cautils.SessionObj) *NotificationHandler {
 	urlStr := initARMOHelmNotificationServiceURL()
 
 	return &NotificationHandler{
-		connector:   NewWebsocketActions(urlStr),
-		sessionObj:  sessionObj,
-		safeModeObj: safeModeObj,
+		connector:  NewWebsocketActions(urlStr),
+		sessionObj: sessionObj,
 	}
 }
 
-func NewNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
+func NewNotificationHandler(sessionObj *chan cautils.SessionObj) *NotificationHandler {
 	urlStr := initNotificationServerURL()
 
 	return &NotificationHandler{
-		connector:   NewWebsocketActions(urlStr),
-		sessionObj:  sessionObj,
-		safeModeObj: safeModeObj,
+		connector:  NewWebsocketActions(urlStr),
+		sessionObj: sessionObj,
 	}
 }
 

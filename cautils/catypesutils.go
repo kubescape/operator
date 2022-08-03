@@ -12,10 +12,10 @@ import (
 )
 
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := reporterlib.NewBaseReport(CA_CUSTOMER_GUID, message)
+	reporter := reporterlib.NewBaseReport(AccountID, message)
 	target := command.GetID()
 	if target == armotypes.DesignatorsToken {
-		target = fmt.Sprintf("wlid://cluster-%s/", CA_CLUSTER_NAME)
+		target = fmt.Sprintf("wlid://cluster-%s/", ClusterName)
 	}
 	if target == "" {
 		target = fmt.Sprintf("%v", command.Args)

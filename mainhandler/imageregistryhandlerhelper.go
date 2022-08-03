@@ -18,7 +18,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 		return fmt.Errorf("failed to get failed to get jobParams")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		glog.Infof("updateRegistryScanCronJob: failed to get cronjob: %s", jobParams.JobName)
 		return err
@@ -31,7 +31,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
