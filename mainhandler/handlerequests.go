@@ -5,10 +5,12 @@ import (
 	"k8s-ca-websocket/cautils"
 	"regexp"
 
+	apitypes "github.com/armosec/armoapi-go/armotypes"
+
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
-	"github.com/armosec/utils-k8s-go/armometadata"
 	uuid "github.com/google/uuid"
 
 	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
@@ -50,7 +52,7 @@ func init() {
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan cautils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
-	armometadata.InitNamespacesListToIgnore(cautils.Namespace)
+	utilsmetadata.InitNamespacesListToIgnore(cautils.Namespace)
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -63,7 +65,7 @@ func NewMainHandler(sessionObj *chan cautils.SessionObj, k8sAPI *k8sinterface.Ku
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *cautils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
-	armometadata.InitNamespacesListToIgnore(cautils.Namespace)
+	utilsmetadata.InitNamespacesListToIgnore(cautils.Namespace)
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
@@ -190,7 +192,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	if len(sessionObj.Command.Designators) > 0 {
 		namespaces = make([]string, 0, 3)
 		for desiIdx := range sessionObj.Command.Designators {
-			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[armotypes.AttributeNamespace]; ok {
+			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[apitypes.AttributeNamespace]; ok {
 				namespaces = append(namespaces, ns)
 			}
 		}
@@ -228,7 +230,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			// clean all scope request parameters
 			cmd.WildWlid = ""
 			cmd.WildSid = ""
-			cmd.Designators = make([]armotypes.PortalDesignator, 0)
+			cmd.Designators = make([]apitypes.PortalDesignator, 0)
 			// send specific command to the channel
 			newSessionObj := cautils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/armosec/utils-k8s-go/armometadata"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 
 	"github.com/golang/glog"
 )
@@ -21,12 +21,12 @@ var (
 	NotificationServerRESTURL string = ""
 )
 
-var ClusterConfig = &armometadata.ClusterConfig{}
+var ClusterConfig = &utilsmetadata.ClusterConfig{}
 
 // LoadEnvironmentVariables -
 func LoadEnvironmentVariables() (err error) {
 	pathToConfig := os.Getenv("CA_CONFIG") // if empty, will load config from default path
-	ClusterConfig, err = armometadata.LoadConfig(pathToConfig, true)
+	ClusterConfig, err = utilsmetadata.LoadConfig(pathToConfig, true)
 	if err != nil {
 		glog.Warning(err.Error())
 	}

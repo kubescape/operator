@@ -17,7 +17,7 @@ import (
 	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
+	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/golang/glog"
@@ -73,11 +73,11 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *cau
 				ImageTag:    repository + ":" + tag,
 				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 				Args: map[string]interface{}{
-					armotypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
-					armotypes.AttributeRepository:    repositoryName,
-					armotypes.AttributeTag:           tag,
-					armotypes.AttributeUseHTTP:       *registry.registryAuth.Insecure,
-					armotypes.AttributeSkipTLSVerify: *registry.registryAuth.SkipTLSVerify,
+					apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
+					apitypes.AttributeRepository:    repositoryName,
+					apitypes.AttributeTag:           tag,
+					apitypes.AttributeUseHTTP:       *registry.registryAuth.Insecure,
+					apitypes.AttributeSkipTLSVerify: *registry.registryAuth.SkipTLSVerify,
 				},
 			}
 			// Check if auth is empty (used for public registries)
@@ -212,7 +212,7 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *cautils.Ses
 		return "", fmt.Errorf("could not parse registry name")
 	}
 
-	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", armotypes.AttributeRegistryName,
+	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", apitypes.AttributeRegistryName,
 		registryName))
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), true, sessionObj.ErrChan)
 	return registryName, nil

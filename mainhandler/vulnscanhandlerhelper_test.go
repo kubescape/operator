@@ -4,8 +4,9 @@ import (
 	"k8s-ca-websocket/cautils"
 	"testing"
 
+	apitypes "github.com/armosec/armoapi-go/armotypes"
+
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -70,12 +71,12 @@ func TestGetNamespaceFromVulnScanCommand(t *testing.T) {
 			name: "namespace from designators",
 			command: &apis.Command{
 				CommandName: apis.TypeSetVulnScanCronJob,
-				Designators: []armotypes.PortalDesignator{
+				Designators: []apitypes.PortalDesignator{
 					{
-						DesignatorType: armotypes.DesignatorAttributes,
+						DesignatorType: apitypes.DesignatorAttributes,
 						Attributes: map[string]string{
-							armotypes.AttributeCluster:   "minikube",
-							armotypes.AttributeNamespace: "test-333",
+							apitypes.AttributeCluster:   "minikube",
+							apitypes.AttributeNamespace: "test-333",
 						},
 					},
 				},

@@ -12,7 +12,8 @@ import (
 )
 
 const CronjobTemplateName = "vulnscan-cronjob-template"
-const NamespaceAnnotation = "armo.namespace"
+const NamespaceAnnotationDeprecated = "armo.namespace" // deprecated
+const NamespaceAnnotation = "app.kubescape/namespace"  // TODO: move to shared package
 
 func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
@@ -38,6 +39,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 	// add namespace annotation
 	namespace := getNamespaceFromVulnScanCommand(&actionHandler.command)
 	glog.Infof("setVulnScanCronJob: command namespace - '%s'", namespace)
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[NamespaceAnnotationDeprecated] = namespace // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[NamespaceAnnotation] = namespace
 
 	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
@@ -65,7 +67,8 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotationDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {

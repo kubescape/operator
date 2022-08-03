@@ -56,7 +56,7 @@ func (wsh *WebsocketHandler) Websocket(isReadinessReady *bool) error {
 	for {
 		conn, err := wsh.ConnectToWebsocket()
 		if err != nil {
-			glog.Errorf("failed to open websocket with Armo backend, reason: %s", err.Error())
+			glog.Errorf("failed to open websocket with backend, reason: %s", err.Error())
 			time.Sleep(3 * time.Second)
 			continue
 
@@ -148,8 +148,6 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 	}
 	glog.Infof("receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
-		apis.SIDFallback(&c)
-
 		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
 		if c.CommandName == "" {

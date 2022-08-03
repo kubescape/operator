@@ -19,7 +19,12 @@ const (
 	requestBodyFile     = "request-body.json"
 	requestVolumeName   = "request-body-volume"
 	cronjobTemplateName = "cronjobTemplate"
-	armoJobIDAnnotation = "armo.updatejobid"
+)
+const (
+	armoUpdateJobIDAnnotationDeprecated = "armo.updatejobid"
+	armoJobIDAnnotationDeprecated       = "armo.cloud/jobid"
+	armoUpdateJobIDAnnotation           = "app.kubescape/update-job-id" // TODO: move to external package
+	armoJobIDAnnotation                 = "app.kubescape/job-id"        // TODO: move to external package
 )
 
 func fixK8sCronJobNameLimit(jobName string) string {
@@ -114,7 +119,8 @@ func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, job
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.cloud/jobid"] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotationDeprecated] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = jobID
 
 	// add annotations
 	if jobTemplateObj.ObjectMeta.Labels == nil {

@@ -3,18 +3,18 @@ package cautils
 import (
 	"fmt"
 
+	apitypes "github.com/armosec/armoapi-go/armotypes"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/golang/glog"
 	"github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
 )
 
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
 	reporter := reporterlib.NewBaseReport(AccountID, message)
 	target := command.GetID()
-	if target == armotypes.DesignatorsToken {
+	if target == apitypes.DesignatorsToken {
 		target = fmt.Sprintf("wlid://cluster-%s/", ClusterName)
 	}
 	if target == "" {
