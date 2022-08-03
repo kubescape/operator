@@ -12,6 +12,7 @@ import (
 	regFactory "github.com/armosec/registryx/registries"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/docker/docker/api/types"
@@ -147,13 +148,28 @@ func (rs *registryScan) authConfig() *types.AuthConfig {
 
 func (reg *registryAuth) initDefaultValues() error {
 	switch reg.AuthMethod {
-	case "accesstoken", "":
+	case string(accessTokenAuth), "":
 		if reg.Password == "" || reg.Username == "" {
 			return errorWithDocumentationRef("auth_method accesstoken requirers username and password")
 		}
-	case "public", "ips":
+	case "public":
 		//do nothing
 		break
+	case "ips":
+		// retrieve token and consider it as regular accesstoken auth
+		authConfig, err := cloudsupport.GetCloudVendorRegistryCredentials(reg.Registry)
+		if err != nil {
+			return fmt.Errorf("error getting credentials: %v", err)
+		}
+
+		// map[registryName]<username:password>
+		if authConfigReg, ok := authConfig[reg.Registry]; ok {
+			reg.Username = authConfigReg.Username
+			reg.Password = authConfigReg.Password
+			reg.AuthMethod = string(accessTokenAuth)
+		} else {
+			return fmt.Errorf("error getting credentials for: %v", reg.Registry)
+		}
 	case "identity_token", "registry_token":
 		fallthrough
 	default:
