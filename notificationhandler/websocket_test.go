@@ -1,14 +1,14 @@
 package notificationhandler
 
 import (
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"reflect"
 	"testing"
 )
 
 func TestNewTriggerHandlerNotificationHandler(t *testing.T) {
 	type args struct {
-		sessionObj *chan cautils.SessionObj
+		sessionObj *chan utils.SessionObj
 	}
 	tests := []struct {
 		name string

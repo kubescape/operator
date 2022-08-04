@@ -1,4 +1,4 @@
-package cautils
+package utils
 
 import (
 	"fmt"
@@ -23,9 +23,8 @@ var (
 
 var ClusterConfig = &utilsmetadata.ClusterConfig{}
 
-// LoadEnvironmentVariables -
 func LoadEnvironmentVariables() (err error) {
-	pathToConfig := os.Getenv("CA_CONFIG") // if empty, will load config from default path
+	pathToConfig := os.Getenv(ConfigEnvironmentVariable) // if empty, will load config from default path
 	ClusterConfig, err = utilsmetadata.LoadConfig(pathToConfig, true)
 	if err != nil {
 		glog.Warning(err.Error())
@@ -33,17 +32,15 @@ func LoadEnvironmentVariables() (err error) {
 
 	loadMandatoryVariables()
 
-	// vuln
-	if CA_VULNSCAN, err = testEnvironmentVariable("CA_VULNSCAN"); err != nil {
-		// TODO - set default
+	if CA_VULNSCAN, err = testEnvironmentVariable(VulnScanEnvironmentVariable); err != nil {
+		// TODO: set default
 	} else {
 		if !strings.HasPrefix(CA_VULNSCAN, "http") {
 			CA_VULNSCAN = fmt.Sprintf("http://%s", CA_VULNSCAN)
 		}
-		if NotificationServerWSURL, err = testEnvironmentVariable("CA_NOTIFICATION_SERVER_WS"); err != nil {
-			// TODO - set default
-			glog.Errorf("CA_NOTIFICATION_SERVER_WS not set. Won't be able to run on-demand commands")
-			// return err
+		if NotificationServerWSURL, err = testEnvironmentVariable(NotificationServerWebsocketEnvironmentVariable); err != nil {
+			// TODO: set default
+			glog.Errorf("%s not set. Won't be able to run on-demand commands", NotificationServerWebsocketEnvironmentVariable)
 		}
 	}
 
@@ -55,19 +52,19 @@ func AdoptClusterName(clusterName string) string {
 }
 
 func loadMandatoryVariables() (err error) {
-	if Namespace, err = testEnvironmentVariable("CA_NAMESPACE"); err != nil {
+	if Namespace, err = testEnvironmentVariable(NamespaceEnvironmentVariable); err != nil {
 		return err
 	}
-	if ClusterName, err = testEnvironmentVariable("CA_CLUSTER_NAME"); err != nil {
+	if ClusterName, err = testEnvironmentVariable(ClusterNameEnvironmentVariable); err != nil {
 
 		return err
 	}
 	ClusterName = AdoptClusterName(ClusterName)
 
-	if PostmanURL, err = testEnvironmentVariable("CA_POSTMAN"); err != nil {
+	if PostmanURL, err = testEnvironmentVariable(PostmanEnvironmentVariable); err != nil {
 		return err
 	}
-	if AccountID, err = testEnvironmentVariable("CA_CUSTOMER_GUID"); err != nil {
+	if AccountID, err = testEnvironmentVariable(CustomerGuidEnvironmentVariable); err != nil {
 		return err
 	}
 

@@ -3,7 +3,7 @@ package notificationhandler
 import (
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/url"
 	"strings"
 	"time"
@@ -43,7 +43,7 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 			return err
 		}
 		for _, cmd := range cmds.Commands {
-			sessionObj := cautils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
+			sessionObj := utils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			*notification.sessionObj <- *sessionObj
 		}
 	}
@@ -54,7 +54,7 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 
 func initARMOHelmNotificationServiceURL() string {
 	urlObj := url.URL{}
-	host := cautils.NotificationServerWSURL
+	host := utils.NotificationServerWSURL
 	if host == "" {
 		return ""
 	}
@@ -73,8 +73,8 @@ func initARMOHelmNotificationServiceURL() string {
 	urlObj.Path = notificationserver.PathWebsocketV1
 
 	q := urlObj.Query()
-	q.Add(notificationserver.TargetCustomer, cautils.ClusterConfig.CustomerGUID)
-	q.Add(notificationserver.TargetCluster, cautils.ClusterConfig.ClusterName)
+	q.Add(notificationserver.TargetCustomer, utils.ClusterConfig.CustomerGUID)
+	q.Add(notificationserver.TargetCluster, utils.ClusterConfig.ClusterName)
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
 	urlObj.RawQuery = q.Encode()
 
@@ -83,7 +83,7 @@ func initARMOHelmNotificationServiceURL() string {
 
 func initNotificationServerURL() string {
 	urlObj := url.URL{}
-	host := cautils.NotificationServerWSURL
+	host := utils.NotificationServerWSURL
 	if host == "" {
 		return ""
 	}
@@ -102,10 +102,6 @@ func initNotificationServerURL() string {
 	urlObj.Path = notificationserver.PathWebsocketV1
 
 	q := urlObj.Query()
-	// customerGUID := strings.ToUpper(cautils.CustomerGUID)
-	// customerGUID = strings.Replace(customerGUID, "-", "", -1)
-	// q.Add(notificationserver.TargetCustomer, customerGUID)
-	// q.Add(notificationserver.TargetCluster, cautils.ClusterName)
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentLoggerValue)
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
 	urlObj.RawQuery = q.Encode()

@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/notificationhandler"
 	"k8s-ca-websocket/restapihandler"
+	"k8s-ca-websocket/utils"
 	"k8s-ca-websocket/websocket"
 	"os"
 
@@ -25,12 +25,12 @@ func main() {
 
 	displayBuildTag()
 
-	if err := cautils.LoadEnvironmentVariables(); err != nil {
+	if err := utils.LoadEnvironmentVariables(); err != nil {
 		glog.Error(err)
 		return
 	}
 
-	sessionObj := make(chan cautils.SessionObj)
+	sessionObj := make(chan utils.SessionObj)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
@@ -69,5 +69,5 @@ func main() {
 }
 
 func displayBuildTag() {
-	glog.Infof("Image version: %s", os.Getenv("RELEASE"))
+	glog.Infof("Image version: %s", os.Getenv(utils.ReleaseBuildTagEnvironmentVariable))
 }
