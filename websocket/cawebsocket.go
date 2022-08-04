@@ -129,7 +129,8 @@ func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", wsh.webSocketURL.String(), err)
 		return conn, err
 	}
-	glog.Infof("Successfully connected")
+	glog.Infof("Successfully connected to %s", wsh.webSocketURL.String())
+
 	return conn, err
 }
 

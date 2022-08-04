@@ -66,7 +66,6 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *cau
 		// registry/project/repo --> repo
 		repositoryName := strings.Replace(repository, registry.registry.hostname+"/"+registry.registry.projectID+"/", "", -1)
 		for _, tag := range tags {
-			glog.Info("image ", repository+":"+tag)
 			websocketScanCommand := &apis.WebsocketScanCommand{
 				ParentJobID: sessionObj.Reporter.GetJobID(),
 				JobID:       uuid.NewString(),
@@ -240,7 +239,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	}
 	pod := actionHandler.getPodByWLID(workload)
 	if pod == nil {
-		glog.Info("workload %s has no podSpec, skipping", actionHandler.wlid)
+		glog.Infof("workload %s has no podSpec, skipping", actionHandler.wlid)
 		return nil
 	}
 	// get all images of workload

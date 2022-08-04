@@ -2,8 +2,6 @@ package mainhandler
 
 import (
 	"time"
-
-	"github.com/golang/glog"
 )
 
 type HandleCommandResponseCallBack func(payload interface{}) (bool, *time.Duration)
@@ -44,7 +42,6 @@ func createNewCommandResponseData(commandName string, cb HandleCommandResponseCa
 }
 
 func insertNewCommandResponseData(commandResponseChannel *commandResponseChannelData, data *CommandResponseData) {
-	glog.Infof("insert new data of %s to command response channel", data.commandName)
 	timer := time.NewTimer(*data.nextHandledTime)
 	*commandResponseChannel.limitedGoRoutinesCommandResponseChannel <- &timerData{
 		timer:   timer,
