@@ -240,7 +240,7 @@ func (actionHandler *ActionHandler) scanWorkload(sessionObj *cautils.SessionObj)
 	}
 	pod := actionHandler.getPodByWLID(workload)
 	if pod == nil {
-		glog.Info("workload %s has no podSpec, skipping", actionHandler.wlid)
+		glog.Infof("workload %s has no podSpec, skipping", actionHandler.wlid)
 		return nil
 	}
 	// get all images of workload
