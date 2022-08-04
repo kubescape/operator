@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/http"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -30,7 +30,7 @@ func displayReceivedCommand(receivedCommands []byte) {
 	glog.Infof("restAPI receivedCommands: %s", receivedCommandsWithNoArgs)
 }
 
-// HandlePostmanRequest Parse received commands and run the command
+// HandleActionRequest Parse received commands and run the command
 func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) error {
 	commands := apis.Commands{}
 	if err := json.Unmarshal(receivedCommands, &commands); err != nil {
@@ -41,7 +41,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(receivedCommands []byte) err
 	displayReceivedCommand(receivedCommands)
 
 	for _, c := range commands.Commands {
-		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
+		sessionObj := utils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())
 			glog.Error(err)

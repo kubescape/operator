@@ -3,7 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/url"
 	"strings"
 	"time"
@@ -15,12 +15,12 @@ import (
 
 // WebsocketHandler -
 type WebsocketHandler struct {
-	sessionObj   *chan cautils.SessionObj
+	sessionObj   *chan utils.SessionObj
 	webSocketURL url.URL
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewWebsocketHandler(sessionObj *chan cautils.SessionObj) *WebsocketHandler {
+func NewWebsocketHandler(sessionObj *chan utils.SessionObj) *WebsocketHandler {
 	urlObj := initPostmanURL()
 
 	return &WebsocketHandler{
@@ -30,7 +30,7 @@ func NewWebsocketHandler(sessionObj *chan cautils.SessionObj) *WebsocketHandler 
 }
 func initPostmanURL() url.URL {
 	urlObj := url.URL{}
-	host := cautils.PostmanURL
+	host := utils.PostmanURL
 
 	scheme := "wss"
 
@@ -44,7 +44,7 @@ func initPostmanURL() url.URL {
 
 	urlObj.Scheme = scheme
 	urlObj.Host = host
-	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.AccountID, cautils.ClusterName)
+	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", utils.AccountID, utils.ClusterName)
 	urlObj.ForceQuery = false
 
 	return urlObj
@@ -68,7 +68,6 @@ func (wsh *WebsocketHandler) Websocket(isReadinessReady *bool) error {
 				time.Sleep(30 * time.Second)
 				if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					glog.Errorf("PING, %s", err.Error())
-					// *isReadinessReady = false
 					conn.Close()
 					return
 				}
@@ -149,7 +148,7 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 	}
 	glog.Infof("receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
-		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
+		sessionObj := utils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())

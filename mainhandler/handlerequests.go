@@ -2,7 +2,7 @@ package mainhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"regexp"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
@@ -13,7 +13,6 @@ import (
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	uuid "github.com/google/uuid"
 
-	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
@@ -21,7 +20,7 @@ import (
 )
 
 type MainHandler struct {
-	sessionObj             *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
+	sessionObj             *chan utils.SessionObj // TODO: wrap chan with struct for mutex support
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 }
@@ -51,8 +50,8 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(sessionObj *chan cautils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
-	utilsmetadata.InitNamespacesListToIgnore(cautils.Namespace)
+func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+	utilsmetadata.InitNamespacesListToIgnore(utils.Namespace)
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -64,8 +63,8 @@ func NewMainHandler(sessionObj *chan cautils.SessionObj, k8sAPI *k8sinterface.Ku
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *cautils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
-	utilsmetadata.InitNamespacesListToIgnore(cautils.Namespace)
+func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
+	utilsmetadata.InitNamespacesListToIgnore(utils.Namespace)
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
@@ -114,7 +113,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 	}
 }
 
-func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionObj) {
+func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *utils.SessionObj) {
 
 	status := "SUCCESS"
 
@@ -126,7 +125,6 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	if err != nil {
 		actionHandler.reporter.SendError(err, true, true, sessionObj.ErrChan)
 		status = "FAIL"
-		// cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
 		actionHandler.reporter.SendStatus(reporterlib.JobDone, true, sessionObj.ErrChan)
 	}
@@ -137,7 +135,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	glog.Infof(donePrint)
 }
 
-func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
+func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) error {
 	c := sessionObj.Command
 	if pkgwlid.IsWlid(c.GetID()) {
 		actionHandler.wlid = c.GetID()
@@ -178,7 +176,7 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 }
 
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
-func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
+func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj) {
 	if sessionObj.Command.GetID() == "" {
 		glog.Errorf("Received empty id")
 		return
@@ -232,7 +230,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			cmd.WildSid = ""
 			cmd.Designators = make([]apitypes.PortalDesignator, 0)
 			// send specific command to the channel
-			newSessionObj := cautils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+			newSessionObj := utils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 			if err != nil {
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
@@ -279,7 +277,7 @@ func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc()
-			sessionObj := cautils.NewSessionObj(&actions[index], "Websocket", "", uuid.NewString(), 1)
+			sessionObj := utils.NewSessionObj(&actions[index], "Websocket", "", uuid.NewString(), 1)
 			*mainHandler.sessionObj <- *sessionObj
 		}(i)
 	}
@@ -289,14 +287,14 @@ func GetStartupActions() []apis.Command {
 	return []apis.Command{
 		{
 			CommandName: apis.TypeRunKubescape,
-			WildWlid:    pkgwlid.GetK8sWLID(cautils.ClusterConfig.ClusterName, "", "", ""),
+			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
 			Args: map[string]interface{}{
-				cautils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
+				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
 			},
 		},
 		{
 			CommandName: apis.TypeScanImages,
-			WildWlid:    pkgwlid.GetK8sWLID(cautils.ClusterConfig.ClusterName, "", "", ""),
+			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
 		},
 	}
 }

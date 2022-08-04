@@ -1,4 +1,4 @@
-package cautils
+package utils
 
 import (
 	"github.com/armosec/armoapi-go/apis"

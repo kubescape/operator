@@ -2,7 +2,7 @@ package notificationhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"time"
 
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
@@ -12,10 +12,10 @@ import (
 
 type NotificationHandler struct {
 	connector  IWebsocketActions
-	sessionObj *chan cautils.SessionObj
+	sessionObj *chan utils.SessionObj
 }
 
-func NewTriggerHandlerNotificationHandler(sessionObj *chan cautils.SessionObj) *NotificationHandler {
+func NewTriggerHandlerNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
 	urlStr := initARMOHelmNotificationServiceURL()
 
 	return &NotificationHandler{
@@ -24,7 +24,7 @@ func NewTriggerHandlerNotificationHandler(sessionObj *chan cautils.SessionObj) *
 	}
 }
 
-func NewNotificationHandler(sessionObj *chan cautils.SessionObj) *NotificationHandler {
+func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
 	urlStr := initNotificationServerURL()
 
 	return &NotificationHandler{
@@ -34,7 +34,7 @@ func NewNotificationHandler(sessionObj *chan cautils.SessionObj) *NotificationHa
 }
 
 func (notification *NotificationHandler) WebsocketConnection() error {
-	if cautils.NotificationServerWSURL == "" {
+	if utils.NotificationServerWSURL == "" {
 		return nil
 	}
 	retries := 0

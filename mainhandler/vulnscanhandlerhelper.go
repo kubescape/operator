@@ -1,8 +1,6 @@
 package mainhandler
 
 import (
-	"k8s-ca-websocket/cautils"
-
 	"github.com/armosec/armoapi-go/apis"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 )
@@ -12,7 +10,7 @@ import (
 func getVulnScanRequest(command *apis.Command) *apis.Commands {
 
 	c := *command
-	c.CommandName = cautils.VulnScan
+	c.CommandName = apis.TypeScanImages
 	c.Args = nil
 	commands := apis.Commands{
 		Commands: []apis.Command{c},

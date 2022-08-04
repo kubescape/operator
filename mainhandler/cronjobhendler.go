@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"strings"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -50,7 +50,7 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 }
 
 func getCronJobTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
-	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Get(context.Background(), name, metav1.GetOptions{})
+	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name s
 	}
 
 	configMap.Data[requestBodyFile] = string(reqByte)
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil

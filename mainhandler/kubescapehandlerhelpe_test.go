@@ -1,7 +1,7 @@
 package mainhandler
 
 import (
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"testing"
 
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
@@ -17,7 +17,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		actionHandler := ActionHandler{
 			command: apis.Command{
 				Args: map[string]interface{}{
-					cautils.KubescapeScanV1: nil,
+					utils.KubescapeScanV1: nil,
 				},
 			},
 		}
@@ -27,7 +27,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{cautils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
+			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
 		}
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
@@ -64,13 +64,13 @@ func TestFixK8sNameLimit(t *testing.T) {
 }
 
 func TestGetKubescapeV1ScanURL(t *testing.T) {
-	cautils.ClusterConfig.KubescapeURL = "kubescape"
+	utils.ClusterConfig.KubescapeURL = "kubescape"
 	u := getKubescapeV1ScanURL()
 	assert.Equal(t, "http://kubescape/v1/scan?keep=true", u.String())
 }
 
 func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
-	cautils.ClusterConfig.KubescapeURL = "armo-kubescape:8080"
+	utils.ClusterConfig.KubescapeURL = "armo-kubescape:8080"
 	url := getKubescapeV1ScanStatusURL("123").String()
-	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed unitest")
+	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")
 }

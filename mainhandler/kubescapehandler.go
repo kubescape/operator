@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"math/rand"
 	"net/http"
 	"time"
@@ -34,11 +34,11 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob() error {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -50,7 +50,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotationDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
-		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 	}
@@ -100,7 +100,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 	return nil
 }
 
-func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
+func HandleKubescapeResponse(payload interface{}) (bool, *time.Duration) {
 	data := payload.(*kubescapeResponseData)
 	glog.Infof("handle kubescape response for scan id %s", data.scanID)
 
@@ -108,7 +108,7 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 	errChan := make(chan error)
 	data.reporter.SendDetails(info, true, errChan)
 	if err := <-errChan; err != nil {
-		glog.Errorf("HandleKubascapeResponse failed to send error report.  %s", err.Error())
+		glog.Errorf("HandleKubescapeResponse failed to send error report.  %s", err.Error())
 	}
 
 	resp, err := httputils.HttpGet(http.DefaultClient, getKubescapeV1ScanStatusURL(data.scanID).String(), nil)
@@ -116,11 +116,11 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
 		data.reporter.SendDetails(info, true, errChan)
 		if err := <-errChan; err != nil {
-			glog.Errorf("HandleKubascapeResponse failed to send status report.  %s", err.Error())
+			glog.Errorf("HandleKubescapeResponse failed to send status report.  %s", err.Error())
 		}
 		data.reporter.SendError(err, true, true, errChan)
 		if err := <-errChan; err != nil {
-			glog.Errorf("HandleKubascapeResponse::error in HTTP GET + failed to send error report.  %s", err.Error())
+			glog.Errorf("HandleKubescapeResponse::error in HTTP GET + failed to send error report.  %s", err.Error())
 		}
 		glog.Errorf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
 		return false, nil
@@ -131,11 +131,11 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 		info := fmt.Sprintf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
 		data.reporter.SendDetails(info, true, errChan)
 		if err := <-errChan; err != nil {
-			glog.Errorf("HandleKubascapeResponse::readKubescapeV1ScanResponse failed to send status report.  %s", err.Error())
+			glog.Errorf("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send status report.  %s", err.Error())
 		}
 		data.reporter.SendError(err, true, true, errChan)
 		if err := <-errChan; err != nil {
-			glog.Errorf("HandleKubascapeResponse::readKubescapeV1ScanResponse failed to send error report.  %s", err.Error())
+			glog.Errorf("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send error report.  %s", err.Error())
 		}
 		glog.Errorf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
 		return false, nil
@@ -147,16 +147,16 @@ func HandleKubascapeResponse(payload interface{}) (bool, *time.Duration) {
 		glog.Infof("%s", info)
 		data.reporter.SendDetails(info, true, errChan)
 		if err := <-errChan; err != nil {
-			glog.Errorf("HandleKubascapeResponse::BusyScanResponseType failed to send status report.  %s", err.Error())
+			glog.Errorf("HandleKubescapeResponse::BusyScanResponseType failed to send status report.  %s", err.Error())
 		}
 		return true, &nextTimeRehandled
 	}
 
-	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished succussfully", data.scanID)
+	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID)
 	glog.Infof("%s", info)
 	data.reporter.SendDetails(info, true, errChan)
 	if err := <-errChan; err != nil {
-		glog.Errorf("HandleKubascapeResponse::Done failed to send status report.  %s", err.Error())
+		glog.Errorf("HandleKubescapeResponse::Done failed to send status report.  %s", err.Error())
 	}
 	return false, nil
 }
@@ -198,7 +198,7 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	}
 
 	nextHandledTime := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
-	commandResponseData := createNewCommandResponseData(KubascapeResponse, HandleKubascapeResponse, data, &nextHandledTime)
+	commandResponseData := createNewCommandResponseData(KubescapeResponse, HandleKubescapeResponse, data, &nextHandledTime)
 	insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
 
 	return nil

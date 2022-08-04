@@ -1,4 +1,4 @@
-package cautils
+package utils
 
 import (
 	"fmt"

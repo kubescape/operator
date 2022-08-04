@@ -3,7 +3,7 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"math/rand"
 	"time"
 
@@ -18,7 +18,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 		return fmt.Errorf("failed to get failed to get jobParams")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		glog.Infof("updateRegistryScanCronJob: failed to get cronjob: %s", jobParams.JobName)
 		return err
@@ -32,7 +32,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotationDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 
 }
 
-func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.SessionObj) error {
+func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.SessionObj) error {
 	registryScan := registryScan{}
 
 	// parse registry name from command
@@ -63,7 +63,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *cautils.S
 
 	err = registryScan.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
 	if err != nil {
-		glog.Infof("setRegistryScanCronJob: error creating conjob : %s", err.Error())
+		glog.Infof("setRegistryScanCronJob: error creating cronjob : %s", err.Error())
 		return err
 	}
 
