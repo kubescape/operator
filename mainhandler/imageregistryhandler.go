@@ -50,10 +50,12 @@ type registryScanConfig struct {
 	Exclude  []string `json:"exclude,omitempty"`
 }
 type registryAuth struct {
-	Registry      string                 `json:"registry"`
-	AuthMethod    string                 `json:"auth_method,omitempty"`
-	Username      string                 `json:"username,omitempty"`
-	Password      string                 `json:"password,omitempty"`
+	Registry      string `json:"registry"`
+	AuthMethod    string `json:"auth_method,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	RegistryToken string `json:"registryToken,omitempty"`
+
 	Kind          regCommon.RegistryKind `json:"kind,omitempty"`
 	SkipTLSVerify *bool                  `json:"skipTLSVerify,omitempty"`
 	Insecure      *bool                  `json:"http,omitempty"`
@@ -112,7 +114,7 @@ func makeRegistryAuth(registryName string) registryAuth {
 }
 
 func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error) {
-	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryAuth.Username, Password: rs.registryAuth.Password}, rs.registry.hostname,
+	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryAuth.Username, Password: rs.registryAuth.Password, RegistryToken: rs.registryAuth.RegistryToken}, rs.registry.hostname,
 		regCommon.MakeRegistryOptions(false, *rs.registryAuth.Insecure, *rs.registryAuth.SkipTLSVerify, "", "", rs.registry.projectID, rs.registryAuth.Kind))
 }
 
@@ -258,6 +260,11 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 func (registryScan *registryScan) getImagesForScanning(reporter datastructures.IReporter) error {
 
 	glog.Infof("GetImagesForScanning: enumerating repoes...")
+	// token sometimes includes a lot of dots, so we need to remove them
+	i := strings.Index(registryScan.registryAuth.Password, ".....")
+	if i != -1 {
+		registryScan.registryAuth.Password = registryScan.registryAuth.Password[:i]
+	}
 	repos, err := registryScan.listReposInRegistry()
 	if err != nil {
 		glog.Errorf("listReposInRegistry failed with err %v", err)
