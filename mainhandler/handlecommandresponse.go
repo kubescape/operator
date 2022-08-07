@@ -2,8 +2,6 @@ package mainhandler
 
 import (
 	"time"
-
-	"github.com/golang/glog"
 )
 
 type HandleCommandResponseCallBack func(payload interface{}) (bool, *time.Duration)
@@ -13,7 +11,7 @@ const (
 )
 
 const (
-	KubascapeResponse string = "KubascapeResponse"
+	KubescapeResponse string = "KubascapeResponse"
 )
 
 type CommandResponseData struct {
@@ -44,7 +42,6 @@ func createNewCommandResponseData(commandName string, cb HandleCommandResponseCa
 }
 
 func insertNewCommandResponseData(commandResponseChannel *commandResponseChannelData, data *CommandResponseData) {
-	glog.Infof("insert new data of %s to command response channel", data.commandName)
 	timer := time.NewTimer(*data.nextHandledTime)
 	*commandResponseChannel.limitedGoRoutinesCommandResponseChannel <- &timerData{
 		timer:   timer,
@@ -52,7 +49,7 @@ func insertNewCommandResponseData(commandResponseChannel *commandResponseChannel
 	}
 }
 
-func (mainHandler *MainHandler) waitTimerTofinishAndInsert(data *timerData) {
+func (mainHandler *MainHandler) waitFroTimer(data *timerData) {
 	<-data.timer.C
 	*mainHandler.commandResponseChannel.commandResponseChannel <- data.payload.(*CommandResponseData)
 }
@@ -60,7 +57,7 @@ func (mainHandler *MainHandler) waitTimerTofinishAndInsert(data *timerData) {
 func (mainHandler *MainHandler) handleLimitedGoroutineOfCommandsResponse() {
 	for {
 		tData := <-*mainHandler.commandResponseChannel.limitedGoRoutinesCommandResponseChannel
-		mainHandler.waitTimerTofinishAndInsert(tData)
+		mainHandler.waitFroTimer(tData)
 	}
 }
 
@@ -74,9 +71,7 @@ func (mainHandler *MainHandler) handleCommandResponse() {
 	mainHandler.createInsertCommandsResponseThreadPool()
 	for {
 		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
-		glog.Infof("handle command response %s", data.commandName)
 		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(data.payload)
-		glog.Infof("%s is need to be rehandled: %v", data.commandName, data.isCommandResponseNeedToBeRehandled)
 		if data.isCommandResponseNeedToBeRehandled {
 			insertNewCommandResponseData(mainHandler.commandResponseChannel, data)
 		}

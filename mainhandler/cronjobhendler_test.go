@@ -14,7 +14,7 @@ func getCommand(jobName, cronTabSchedule string) *apis.Command {
 	}
 	return &apis.Command{
 		CommandName: apis.TypeSetVulnScanCronJob,
-		WildWlid:    "wlid://cluster-minikube-moshe",
+		WildWlid:    "wlid://cluster-minikube",
 		Args: map[string]interface{}{
 			"jobParams": jobParams,
 		},

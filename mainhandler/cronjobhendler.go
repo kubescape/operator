@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"strings"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -19,7 +19,12 @@ const (
 	requestBodyFile     = "request-body.json"
 	requestVolumeName   = "request-body-volume"
 	cronjobTemplateName = "cronjobTemplate"
-	armoJobIDAnnotation = "armo.updatejobid"
+)
+const (
+	armoUpdateJobIDAnnotationDeprecated = "armo.updatejobid"
+	armoJobIDAnnotationDeprecated       = "armo.cloud/jobid"
+	armoUpdateJobIDAnnotation           = "app.kubescape/update-job-id" // TODO: move to external package
+	armoJobIDAnnotation                 = "app.kubescape/job-id"        // TODO: move to external package
 )
 
 func fixK8sCronJobNameLimit(jobName string) string {
@@ -45,7 +50,7 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 }
 
 func getCronJobTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
-	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Get(context.Background(), name, metav1.GetOptions{})
+	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +95,7 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name s
 	}
 
 	configMap.Data[requestBodyFile] = string(reqByte)
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -114,7 +119,8 @@ func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, job
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.cloud/jobid"] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotationDeprecated] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = jobID
 
 	// add annotations
 	if jobTemplateObj.ObjectMeta.Labels == nil {

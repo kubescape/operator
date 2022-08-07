@@ -2,15 +2,13 @@ package main
 
 import (
 	"flag"
-	"k8s-ca-websocket/cautils"
 	"k8s-ca-websocket/mainhandler"
 	"k8s-ca-websocket/notificationhandler"
-	"k8s-ca-websocket/notificationhandler/safemode"
 	"k8s-ca-websocket/restapihandler"
+	"k8s-ca-websocket/utils"
 	"k8s-ca-websocket/websocket"
 	"os"
 
-	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	restclient "k8s.io/client-go/rest"
 
@@ -27,44 +25,34 @@ func main() {
 
 	displayBuildTag()
 
-	if err := cautils.LoadEnvironmentVaribles(); err != nil {
+	if err := utils.LoadEnvironmentVariables(); err != nil {
 		glog.Error(err)
 		return
 	}
 
-	sessionObj := make(chan cautils.SessionObj)
-	safeModeObj := make(chan apis.SafeMode)
+	sessionObj := make(chan utils.SessionObj)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
-	// Websocket
+
+	// Open Websocket with cloud
 	go func() {
 		websocketHandler := websocket.NewWebsocketHandler(&sessionObj)
 		glog.Fatal(websocketHandler.Websocket(&isReadinessReady))
 	}()
 
-	// notification websocket setup
-	go func() { // need to be deprecated
-		notificationHandler := notificationhandler.NewNotificationHandler(&sessionObj, &safeModeObj)
+	// Open Websocket with cloud
+	go func() { // should be deprecated
+		notificationHandler := notificationhandler.NewNotificationHandler(&sessionObj)
 		if err := notificationHandler.WebsocketConnection(); err != nil {
 			glog.Fatal(err)
 		}
 	}()
 
 	go func() {
-		triggerNotificationHandler := notificationhandler.NewTriggerHandlerNotificationHandler(&sessionObj, &safeModeObj)
+		triggerNotificationHandler := notificationhandler.NewTriggerHandlerNotificationHandler(&sessionObj)
 		if err := triggerNotificationHandler.WebsocketConnection(); err != nil {
 			glog.Fatal(err)
 		}
-	}()
-
-	// safe mode handler setup
-	go func() {
-		safeModeHandler := safemode.NewSafeModeHandler(&sessionObj, &safeModeObj, k8sApi)
-		if err := safeModeHandler.InitSafeModeHandler(); err != nil {
-			glog.Errorf("failed to initialize safeMode, reason: %s", err.Error())
-			return
-		}
-		safeModeHandler.HandlerSafeModeNotification()
 	}()
 
 	// http listener
@@ -73,13 +61,13 @@ func main() {
 		glog.Fatal(restAPIHandler.SetupHTTPListener())
 	}()
 
-	mainHandler := mainhandler.NewMainHandler(&sessionObj, cautils.NewCacliObj(cautils.SystemMode), k8sApi)
-	go mainHandler.StartupTriggerActions(cautils.GetStartupActions())
+	mainHandler := mainhandler.NewMainHandler(&sessionObj, k8sApi)
+	go mainHandler.StartupTriggerActions(mainhandler.GetStartupActions())
 
 	mainHandler.HandleRequest()
 
 }
 
 func displayBuildTag() {
-	glog.Infof("Image version: %s", os.Getenv("RELEASE"))
+	glog.Infof("Image version: %s", os.Getenv(utils.ReleaseBuildTagEnvironmentVariable))
 }

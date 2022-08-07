@@ -2,43 +2,39 @@ package notificationhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"time"
 
-	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )
 
 type NotificationHandler struct {
-	connector   IWebsocketActions
-	sessionObj  *chan cautils.SessionObj
-	safeModeObj *chan apis.SafeMode
+	connector  IWebsocketActions
+	sessionObj *chan utils.SessionObj
 }
 
-func NewTriggerHandlerNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
+func NewTriggerHandlerNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
 	urlStr := initARMOHelmNotificationServiceURL()
 
 	return &NotificationHandler{
-		connector:   NewWebsocketActions(urlStr),
-		sessionObj:  sessionObj,
-		safeModeObj: safeModeObj,
+		connector:  NewWebsocketActions(urlStr),
+		sessionObj: sessionObj,
 	}
 }
 
-func NewNotificationHandler(sessionObj *chan cautils.SessionObj, safeModeObj *chan apis.SafeMode) *NotificationHandler {
+func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
 	urlStr := initNotificationServerURL()
 
 	return &NotificationHandler{
-		connector:   NewWebsocketActions(urlStr),
-		sessionObj:  sessionObj,
-		safeModeObj: safeModeObj,
+		connector:  NewWebsocketActions(urlStr),
+		sessionObj: sessionObj,
 	}
 }
 
 func (notification *NotificationHandler) WebsocketConnection() error {
-	if cautils.NotificationServerWSURL == "" {
+	if utils.NotificationServerWSURL == "" {
 		return nil
 	}
 	retries := 0

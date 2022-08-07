@@ -1,47 +1,35 @@
 package mainhandler
 
 import (
-	"context"
 	"fmt"
-	"k8s-ca-websocket/cautils"
-	"k8s-ca-websocket/sign"
+	"k8s-ca-websocket/utils"
 	"regexp"
 
+	apitypes "github.com/armosec/armoapi-go/armotypes"
+
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/armosec/utils-k8s-go/armometadata"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+
+	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	uuid "github.com/google/uuid"
 
-	// pkgcautils "github.com/armosec/utils-k8s-go/wlid"
-	cacli "github.com/armosec/cacli-wrapper-go/cacli"
 	"github.com/armosec/k8s-interface/k8sinterface"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/golang/glog"
-	"golang.org/x/sync/semaphore"
 )
 
-/*
-	this function need to return if it finish to handle the command response
-	by true or false, and next time to rehandled
-*/
-
 type MainHandler struct {
-	sessionObj             *chan cautils.SessionObj // TODO: wrap chan with struct for mutex support
-	cacli                  cacli.ICacli
+	sessionObj             *chan utils.SessionObj // TODO: wrap chan with struct for mutex support
 	k8sAPI                 *k8sinterface.KubernetesApi
-	signerSemaphore        *semaphore.Weighted
 	commandResponseChannel *commandResponseChannelData
 }
 
 type ActionHandler struct {
-	cacli                  cacli.ICacli
 	k8sAPI                 *k8sinterface.KubernetesApi
 	reporter               reporterlib.IReporter
 	wlid                   string
-	sid                    string
 	command                apis.Command
-	signerSemaphore        *semaphore.Weighted
 	commandResponseChannel *commandResponseChannelData
 }
 
@@ -62,29 +50,25 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(sessionObj *chan cautils.SessionObj, cacliRef cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
-	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+	utilsmetadata.InitNamespacesListToIgnore(utils.Namespace)
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	return &MainHandler{
 		sessionObj:             sessionObj,
-		cacli:                  cacliRef,
 		k8sAPI:                 k8sAPI,
-		signerSemaphore:        semaphore.NewWeighted(cautils.SignerSemaphore),
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 	}
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(cacliObj cacli.ICacli, k8sAPI *k8sinterface.KubernetesApi, signerSemaphore *semaphore.Weighted, sessionObj *cautils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
-	armometadata.InitNamespacesListToIgnore(cautils.CA_NAMESPACE)
+func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
+	utilsmetadata.InitNamespacesListToIgnore(utils.Namespace)
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
-		cacli:                  cacliObj,
 		k8sAPI:                 k8sAPI,
-		signerSemaphore:        signerSemaphore,
 		commandResponseChannel: commandResponseChannel,
 	}
 }
@@ -109,13 +93,7 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 
 		// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
 		sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
-		// if scan disabled
-		if cautils.ScanDisabled && sessionObj.Command.CommandName == apis.TypeScanImages {
-			err := fmt.Errorf("scan is disabled in cluster")
-			glog.Warningf(err.Error())
-			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
-			continue
-		}
+
 		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
 		switch sessionObj.Command.CommandName {
 		case apis.TypeRunKubescape, apis.TypeRunKubescapeJob, apis.TypeSetKubescapeCronJob, apis.TypeDeleteKubescapeCronJob, apis.TypeUpdateKubescapeCronJob:
@@ -127,8 +105,6 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 
 		if isToItemizeScopeCommand {
 			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
-			// } else if sessionObj.Command.Sid != "" {
-			// 	go mainHandler.HandleSingleRequest(&sessionObj)
 		} else {
 			// handle requests
 			mainHandler.HandleSingleRequest(&sessionObj)
@@ -137,18 +113,11 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 	}
 }
 
-func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionObj) {
-	// FALLBACK
-	sidFallback(sessionObj)
-
-	// if sessionObj.Command.CommandName != apis.SCAN_REGISTRY && sessionObj.Command.GetID() == "" {
-	// 	glog.Errorf("Received empty id")
-	// 	return
-	// }
+func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *utils.SessionObj) {
 
 	status := "SUCCESS"
 
-	actionHandler := NewActionHandler(mainHandler.cacli, mainHandler.k8sAPI, mainHandler.signerSemaphore, sessionObj, mainHandler.commandResponseChannel)
+	actionHandler := NewActionHandler(mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
 	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
@@ -156,9 +125,8 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	if err != nil {
 		actionHandler.reporter.SendError(err, true, true, sessionObj.ErrChan)
 		status = "FAIL"
-		// cautils.SendSafeModeReport(sessionObj, err.Error(), 1)
 	} else {
-		actionHandler.reporter.SendStatus(jobStatus(sessionObj.Command.CommandName), true, sessionObj.ErrChan)
+		actionHandler.reporter.SendStatus(reporterlib.JobDone, true, sessionObj.ErrChan)
 	}
 	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.GetID(), status)
 	if err != nil {
@@ -167,37 +135,16 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *cautils.SessionO
 	glog.Infof(donePrint)
 }
 
-func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) error {
+func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) error {
 	c := sessionObj.Command
 	if pkgwlid.IsWlid(c.GetID()) {
 		actionHandler.wlid = c.GetID()
-	} else {
-		actionHandler.sid = c.GetID()
 	}
 
 	logCommandInfo := fmt.Sprintf("Running %s command, id: '%s'", c.CommandName, c.GetID())
 
 	glog.Infof(logCommandInfo)
 	switch c.CommandName {
-	case apis.TypeUpdateWorkload, apis.TypeInjectToWorkload, apis.TypeAttachWorkload:
-		return actionHandler.update(c.CommandName)
-	case apis.TypeRemoveWorkload, apis.TypeDetachWorkload:
-		actionHandler.deleteConfigMaps(c)
-		err := actionHandler.update(c.CommandName)
-		go actionHandler.workloadCleanupDiscovery()
-		return err
-	case apis.TypeRestartWorkload, apis.TypeWorkloadIncompatible, apis.TypeImageUnreachableInWorkload, apis.TypeReplaceHeadersInWorkload:
-		return actionHandler.update(c.CommandName)
-	case apis.TypeClusterUnregistered:
-		err := actionHandler.update(c.CommandName)
-		go actionHandler.workloadCleanupAll()
-		return err
-	case apis.TypeSignWorkload:
-		actionHandler.signerSemaphore.Acquire(context.Background(), 1)
-		defer actionHandler.signerSemaphore.Release(1)
-		return actionHandler.signWorkload()
-	case apis.TypeEncryptSecret, apis.TypeDecryptSecret:
-		return actionHandler.runSecretCommand(sessionObj)
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(sessionObj)
 	case apis.TypeScanRegistry:
@@ -228,35 +175,12 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *cautils.SessionObj) e
 	return nil
 }
 
-func (actionHandler *ActionHandler) signWorkload() error {
-	var err error
-	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-	if err != nil {
-		return err
-	}
-
-	s := sign.NewSigner(actionHandler.cacli, actionHandler.k8sAPI, actionHandler.reporter, actionHandler.wlid)
-	if cautils.CA_USE_DOCKER {
-		err = s.SignImageDocker(workload)
-	} else {
-		err = s.SignImageOcimage(workload)
-	}
-	if err != nil {
-		return err
-	}
-	close(s.ErrChan)
-	glog.Infof("Done signing, updating workload, wlid: %s", actionHandler.wlid)
-
-	return actionHandler.update(apis.TypeRestartWorkload)
-}
-
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
-func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionObj) {
+func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj) {
 	if sessionObj.Command.GetID() == "" {
 		glog.Errorf("Received empty id")
 		return
 	}
-	fmt.Printf("HandleScopedRequest: %v\n", sessionObj.Command.JobTracking)
 
 	namespaces := make([]string, 0, 1)
 	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
@@ -266,7 +190,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 	if len(sessionObj.Command.Designators) > 0 {
 		namespaces = make([]string, 0, 3)
 		for desiIdx := range sessionObj.Command.Designators {
-			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[armotypes.AttributeNamespace]; ok {
+			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[apitypes.AttributeNamespace]; ok {
 				namespaces = append(namespaces, ns)
 			}
 		}
@@ -304,9 +228,9 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			// clean all scope request parameters
 			cmd.WildWlid = ""
 			cmd.WildSid = ""
-			cmd.Designators = make([]armotypes.PortalDesignator, 0)
-			// send specific command to ourselve
-			newSessionObj := cautils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+			cmd.Designators = make([]apitypes.PortalDesignator, 0)
+			// send specific command to the channel
+			newSessionObj := utils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 			if err != nil {
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
@@ -316,9 +240,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *cautils.SessionO
 			}
 
 			glog.Infof("triggering id: '%s'", newSessionObj.Command.GetID())
-			// sessionObj.Reporter.SendAction(fmt.Sprintf("triggering id: '%s'", newSessionObj.Command.GetID()), true)
 			*mainHandler.sessionObj <- *newSessionObj
-			// sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true)
 		}
 	}()
 }
@@ -332,8 +254,6 @@ func (mainHandler *MainHandler) getIDs(namespaces []string, labels, fields map[s
 			errs = append(errs, err)
 		}
 		if len(workloads) == 0 {
-			// err := fmt.Errorf("Resource: '%s', no workloads found. namespace: '%s', labels: '%v'", resource, namespace, labels)
-			// errs = append(errs, err)
 			continue
 		}
 		w, e := mainHandler.getResourcesIDs(workloads)
@@ -357,8 +277,24 @@ func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc()
-			sessionObj := cautils.NewSessionObj(&actions[index], "Websocket", "", uuid.NewString(), 1)
+			sessionObj := utils.NewSessionObj(&actions[index], "Websocket", "", uuid.NewString(), 1)
 			*mainHandler.sessionObj <- *sessionObj
 		}(i)
+	}
+}
+
+func GetStartupActions() []apis.Command {
+	return []apis.Command{
+		{
+			CommandName: apis.TypeRunKubescape,
+			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
+			Args: map[string]interface{}{
+				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
+			},
+		},
+		{
+			CommandName: apis.TypeScanImages,
+			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
+		},
 	}
 }

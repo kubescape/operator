@@ -2,12 +2,11 @@ package mainhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/http"
 	"strings"
 	"time"
 
-	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -16,7 +15,6 @@ import (
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 
 	"github.com/armosec/k8s-interface/k8sinterface"
-	"github.com/armosec/utils-k8s-go/secrethandling"
 )
 
 var IgnoreCommandInNamespace = map[apis.NotificationPolicyType][]string{}
@@ -25,14 +23,13 @@ func InitIgnoreCommandInNamespace() {
 	if len(IgnoreCommandInNamespace) != 0 {
 		return
 	}
-	IgnoreCommandInNamespace[apis.TypeUpdateWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.TypeInjectToWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.TypeDecryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.TypeEncryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
-	IgnoreCommandInNamespace[apis.TypeRemoveWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE}
+	IgnoreCommandInNamespace[apis.TypeUpdateWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
+	IgnoreCommandInNamespace[apis.TypeInjectToWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
+	IgnoreCommandInNamespace[apis.TypeDecryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
+	IgnoreCommandInNamespace[apis.TypeEncryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
+	IgnoreCommandInNamespace[apis.TypeRemoveWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
 	IgnoreCommandInNamespace[apis.TypeRestartWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic}
 	IgnoreCommandInNamespace[apis.TypeScanImages] = []string{}
-	// apis.SCAN:    {metav1.NamespaceSystem, metav1.NamespacePublic, cautils.CA_NAMESPACE},
 }
 
 func ignoreNamespace(command apis.NotificationPolicyType, namespace string) bool {
@@ -67,10 +64,7 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 	for i := range workloads {
 		switch workloads[i].GetKind() {
 		case "Namespace":
-			idMap[pkgwlid.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
-		case "Secret":
-			secretName := strings.TrimPrefix(workloads[i].GetName(), secrethandling.ArmoShadowSecretPrefix) // remove shadow secret prefix
-			idMap[secrethandling.GetSID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), secretName, "")] = true
+			idMap[pkgwlid.GetWLID(utils.ClusterName, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		default:
 			if wlid := workloads[i].GetWlid(); wlid != "" {
 				idMap[wlid] = true
@@ -80,14 +74,14 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 				if err != nil {
 					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
 				}
-				wlid := pkgwlid.GetWLID(cautils.CA_CLUSTER_NAME, workloads[i].GetNamespace(), kind, name)
+				wlid := pkgwlid.GetWLID(utils.ClusterName, workloads[i].GetNamespace(), kind, name)
 				if wlid != "" {
 					idMap[wlid] = true
 				}
 			}
 		}
 	}
-	return cautils.MapToString(idMap), errs
+	return utils.MapToString(idMap), errs
 }
 
 func getCommandNamespace(command *apis.Command) string {
@@ -114,7 +108,6 @@ func resourceList(command apis.NotificationPolicyType) []string {
 	switch command {
 	case apis.TypeClusterUnregistered:
 		return []string{"namespaces", "pods"}
-		// return []string{"namespaces", "secrets", "pods"}
 	case apis.TypeDecryptSecret, apis.TypeEncryptSecret:
 		return []string{"secrets"}
 	default:
@@ -122,23 +115,6 @@ func resourceList(command apis.NotificationPolicyType) []string {
 
 	}
 
-}
-
-func sidFallback(sessionObj *cautils.SessionObj) {
-	if sessionObj.Command.GetID() == "" {
-		sid, err := getSIDFromArgs(sessionObj.Command.Args)
-		if err != nil || sid == "" {
-			return
-		}
-		sessionObj.Command.Sid = sid
-	}
-}
-
-func jobStatus(commandName apis.NotificationPolicyType) string {
-	if commandName == apis.TypeUpdateWorkload || commandName == apis.TypeInjectToWorkload || commandName == apis.TypeAttachWorkload || commandName == apis.TypeRestartWorkload {
-		return reporterlib.JobSuccess
-	}
-	return reporterlib.JobDone
 }
 
 func notWaitAtAll() {
@@ -163,7 +139,7 @@ func waitForVulnScanReady() {
 	for {
 		timer.Reset(time.Duration(1) * time.Second)
 		<-timer.C
-		req, err := http.NewRequest("HEAD", fullURL.String(), nil)
+		req, err := http.NewRequest(http.MethodHead, fullURL.String(), nil)
 		if err != nil {
 			glog.Warningf("failed to create http req with err %s", err.Error())
 			continue
@@ -190,7 +166,7 @@ func waitForKubescapeReady() {
 	for {
 		timer.Reset(time.Duration(1) * time.Second)
 		<-timer.C
-		req, err := http.NewRequest("HEAD", fullURL.String(), nil)
+		req, err := http.NewRequest(http.MethodHead, fullURL.String(), nil)
 		if err != nil {
 			glog.Warningf("failed to create http req with err %s", err.Error())
 			continue

@@ -1,11 +1,11 @@
 package mainhandler
 
 import (
-	"k8s-ca-websocket/cautils"
 	"testing"
 
+	apitypes "github.com/armosec/armoapi-go/armotypes"
+
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +16,7 @@ func getSetCronjobCommand() *apis.Command {
 	}
 	return &apis.Command{
 		CommandName: apis.TypeSetVulnScanCronJob,
-		WildWlid:    "wlid://cluster-minikube-moshe",
+		WildWlid:    "wlid://cluster-minikube",
 		Args: map[string]interface{}{
 			"jobParams": jobParams,
 		},
@@ -28,7 +28,7 @@ func TestGetVulnScanRequest(t *testing.T) {
 	commandSet := getSetCronjobCommand()
 	commandsScan := getVulnScanRequest(commandSet)
 	assert.NotEqual(t, commandsScan.Commands[0].CommandName, commandSet.CommandName)
-	assert.Equal(t, commandsScan.Commands[0].CommandName, (apis.NotificationPolicyType)(cautils.VulnScan))
+	assert.Equal(t, commandsScan.Commands[0].CommandName, (apis.NotificationPolicyType)(apis.TypeScanImages))
 	assert.Equal(t, commandsScan.Commands[0].Args, map[string]interface{}(nil))
 
 }
@@ -43,7 +43,7 @@ func TestGetNamespaceFromVulnScanCommand(t *testing.T) {
 			name: "no namespace in WildWlid - empty string",
 			command: &apis.Command{
 				CommandName: apis.TypeSetVulnScanCronJob,
-				WildWlid:    "wlid://cluster-minikube-moshe",
+				WildWlid:    "wlid://cluster-minikube",
 				Args: map[string]interface{}{
 					"jobParams": apis.CronJobParams{
 						JobName:         "",
@@ -70,12 +70,12 @@ func TestGetNamespaceFromVulnScanCommand(t *testing.T) {
 			name: "namespace from designators",
 			command: &apis.Command{
 				CommandName: apis.TypeSetVulnScanCronJob,
-				Designators: []armotypes.PortalDesignator{
+				Designators: []apitypes.PortalDesignator{
 					{
-						DesignatorType: armotypes.DesignatorAttributes,
+						DesignatorType: apitypes.DesignatorAttributes,
 						Attributes: map[string]string{
-							armotypes.AttributeCluster:   "minikube",
-							armotypes.AttributeNamespace: "test-333",
+							apitypes.AttributeCluster:   "minikube",
+							apitypes.AttributeNamespace: "test-333",
 						},
 					},
 				},
@@ -92,7 +92,7 @@ func TestGetNamespaceFromVulnScanCommand(t *testing.T) {
 			name: "namespace from WildWlid",
 			command: &apis.Command{
 				CommandName: apis.TypeSetVulnScanCronJob,
-				WildWlid:    "wlid://cluster-minikube-moshe/namespace-test-123",
+				WildWlid:    "wlid://cluster-minikube/namespace-test-123",
 				Args: map[string]interface{}{
 					"jobParams": apis.CronJobParams{
 						JobName:         "",

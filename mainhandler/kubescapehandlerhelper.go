@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,8 +23,8 @@ import (
 func getKubescapeV1ScanURL() *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = cautils.ClusterConfig.KubescapeURL
-	ksURL.Path = cautils.KubescapeRequestPathV1
+	ksURL.Host = utils.ClusterConfig.KubescapeURL
+	ksURL.Path = utils.KubescapeRequestPathV1
 
 	q := ksURL.Query()
 	q.Set("keep", "true")
@@ -36,8 +36,8 @@ func getKubescapeV1ScanURL() *url.URL {
 func getKubescapeV1ScanStatusURL(scanID string) *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = cautils.ClusterConfig.KubescapeURL
-	ksURL.Path = cautils.KubescapeRequestStatusV1
+	ksURL.Host = utils.ClusterConfig.KubescapeURL
+	ksURL.Path = utils.KubescapeRequestStatusV1
 
 	q := ksURL.Query()
 	q.Set("ID", scanID)
@@ -48,7 +48,7 @@ func getKubescapeV1ScanStatusURL(scanID string) *url.URL {
 
 func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
 
-	scanV1, ok := args[cautils.KubescapeScanV1]
+	scanV1, ok := args[utils.KubescapeScanV1]
 	if !ok {
 		return nil, fmt.Errorf("request not found")
 	}
@@ -138,22 +138,6 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 
 }
 
-// func convertRulesToRequest(args map[string]interface{}) error {
-// 	// TODO: use "kubescapeJobParams" instead of "rules"
-// 	rulesList, ok := args["rules"].([]opapolicy.PolicyIdentifier)
-// 	if !ok {
-// 		return fmt.Errorf("failed to convert rules list to PolicyIdentifier")
-// 	}
-
-// 	postScanRequest := &utilsmetav1.PostScanRequest{}
-// 	for i := range rulesList {
-// 		postScanRequest.TargetType = utilsapisv1.NotificationPolicyKind(rulesList[i].Kind)
-// 		postScanRequest.TargetNames = append(postScanRequest.TargetNames, rulesList[i].Name)
-// 	}
-// 	args[cautils.KubescapeScanV1] = postScanRequest
-// 	return nil
-// }
-
 func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name string, req *utilsmetav1.PostScanRequest) error {
 	// create config map
 	configMap := corev1.ConfigMap{}
@@ -172,7 +156,7 @@ func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name stri
 	}
 
 	configMap.Data["request-body.json"] = string(command)
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -199,7 +183,7 @@ func wrapRequestWithCommand(postScanRequest *utilsmetav1.PostScanRequest) ([]byt
 			{
 				CommandName: apis.TypeRunKubescape,
 				Args: map[string]interface{}{
-					cautils.KubescapeScanV1: *postScanRequest,
+					utils.KubescapeScanV1: *postScanRequest,
 				},
 			},
 		},

@@ -3,7 +3,7 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"math/rand"
 	"time"
 
@@ -12,7 +12,8 @@ import (
 )
 
 const CronjobTemplateName = "vulnscan-cronjob-template"
-const NamespaceAnnotation = "armo.namespace"
+const NamespaceAnnotationDeprecated = "armo.namespace" // deprecated
+const NamespaceAnnotation = "app.kubescape/namespace"  // TODO: move to shared package
 
 func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
@@ -38,9 +39,10 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 	// add namespace annotation
 	namespace := getNamespaceFromVulnScanCommand(&actionHandler.command)
 	glog.Infof("setVulnScanCronJob: command namespace - '%s'", namespace)
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[NamespaceAnnotationDeprecated] = namespace // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[NamespaceAnnotation] = namespace
 
-	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 
@@ -56,7 +58,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 		return fmt.Errorf("updateVulnScanCronJob: jobName not found")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -65,9 +67,10 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotationDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoUpdateJobIDAnnotation] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -86,11 +89,11 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob() error {
 }
 
 func (actionHandler *ActionHandler) deleteCronjob(name string) error {
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil

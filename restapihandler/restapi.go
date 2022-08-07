@@ -3,7 +3,7 @@ package restapihandler
 import (
 	"crypto/tls"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/http"
 
 	"github.com/golang/glog"
@@ -12,10 +12,10 @@ import (
 
 type HTTPHandler struct {
 	keyPair    *tls.Certificate
-	sessionObj *chan cautils.SessionObj
+	sessionObj *chan utils.SessionObj
 }
 
-func NewHTTPHandler(sessionObj *chan cautils.SessionObj) *HTTPHandler {
+func NewHTTPHandler(sessionObj *chan utils.SessionObj) *HTTPHandler {
 	return &HTTPHandler{
 		keyPair:    nil,
 		sessionObj: sessionObj,
@@ -29,17 +29,16 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 		return err
 	}
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%v", cautils.RestAPIPort), // port
+		Addr: fmt.Sprintf(":%v", utils.RestAPIPort),
 	}
 	if resthandler.keyPair != nil {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
 	}
 	rtr := mux.NewRouter()
-	rtr.HandleFunc("/v1/safeMode", resthandler.SafeMode)
 	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
 	server.Handler = rtr
 
-	glog.Infof("Waiting for REST API to receive notifications, port: %s", cautils.RestAPIPort)
+	glog.Infof("Waiting for REST API to receive notifications, port: %s", utils.RestAPIPort)
 
 	// listen
 	if resthandler.keyPair != nil {

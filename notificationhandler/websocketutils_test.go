@@ -1,13 +1,15 @@
 package notificationhandler
 
 import (
+	_ "embed"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/stretchr/testify/assert"
 )
 
-var mockCommandRunKubescapeJob = `{"commands":[{"CommandName":"runKubescapeJob","responseID":"","jobTracking":{"jobID":"6be09aad-a376-4d6b-97ad-8d1a75fce89d","timestamp":"0001-01-01T00:00:00Z"},"args":{"kubescapeJobParams":{"clusterName":"dwertent","frameworkName":"DevOpsBest","jobID":"6be09aad-a376-4d6b-97ad-8d1a75fce89d"},"scanV1":{"targetNames":["DevOpsBest"],"targetType":"Framework"}},"designators":[{"designatorType":"","attributes":{"cluster":"dwertent"}}]}]}`
+//go:embed testdata/mockCommandRunKubescapeJob.json
+var mockCommandRunKubescapeJob string
 
 func TestParseNotificationCommand(t *testing.T) {
 	cmd, err := parseNotificationCommand([]byte(mockCommandRunKubescapeJob))

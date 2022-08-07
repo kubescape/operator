@@ -12,7 +12,6 @@ func (handler *HTTPHandler) loadTLSKey() error {
 
 	flag.StringVar(&certFile, "tlsCertFile", "", "File containing the x509 Certificate for HTTPS.")
 	flag.StringVar(&keyFile, "tlsKeyFile", "", "File containing the x509 private key to --tlsCertFile.")
-	// flag.BoolVar(&localAgent, "debug", false, "Run with local agent")
 	flag.Parse()
 
 	if keyFile == "" || certFile == "" {

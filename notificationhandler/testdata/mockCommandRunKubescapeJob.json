@@ -1,0 +1,33 @@
+{
+    "commands": [
+        {
+            "CommandName": "runKubescapeJob",
+            "responseID": "",
+            "jobTracking": {
+                "jobID": "6be09aad-a376-4d6b-97ad-8d1a75fce89d",
+                "timestamp": "0001-01-01T00:00:00Z"
+            },
+            "args": {
+                "kubescapeJobParams": {
+                    "clusterName": "minikube",
+                    "frameworkName": "DevOpsBest",
+                    "jobID": "6be09aad-a376-4d6b-97ad-8d1a75fce89d"
+                },
+                "scanV1": {
+                    "targetNames": [
+                        "DevOpsBest"
+                    ],
+                    "targetType": "Framework"
+                }
+            },
+            "designators": [
+                {
+                    "designatorType": "",
+                    "attributes": {
+                        "cluster": "minikube"
+                    }
+                }
+            ]
+        }
+    ]
+}

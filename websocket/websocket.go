@@ -3,7 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"net/url"
 	"strings"
 	"time"
@@ -15,12 +15,12 @@ import (
 
 // WebsocketHandler -
 type WebsocketHandler struct {
-	sessionObj   *chan cautils.SessionObj
+	sessionObj   *chan utils.SessionObj
 	webSocketURL url.URL
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewWebsocketHandler(sessionObj *chan cautils.SessionObj) *WebsocketHandler {
+func NewWebsocketHandler(sessionObj *chan utils.SessionObj) *WebsocketHandler {
 	urlObj := initPostmanURL()
 
 	return &WebsocketHandler{
@@ -30,7 +30,7 @@ func NewWebsocketHandler(sessionObj *chan cautils.SessionObj) *WebsocketHandler 
 }
 func initPostmanURL() url.URL {
 	urlObj := url.URL{}
-	host := cautils.CA_POSTMAN
+	host := utils.PostmanURL
 
 	scheme := "wss"
 
@@ -44,7 +44,7 @@ func initPostmanURL() url.URL {
 
 	urlObj.Scheme = scheme
 	urlObj.Host = host
-	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", cautils.CA_CUSTOMER_GUID, cautils.CA_CLUSTER_NAME)
+	urlObj.Path = fmt.Sprintf("waitfornotification/%s-%s", utils.AccountID, utils.ClusterName)
 	urlObj.ForceQuery = false
 
 	return urlObj
@@ -56,7 +56,7 @@ func (wsh *WebsocketHandler) Websocket(isReadinessReady *bool) error {
 	for {
 		conn, err := wsh.ConnectToWebsocket()
 		if err != nil {
-			glog.Errorf("failed to open websocket with Armo backend, reason: %s", err.Error())
+			glog.Errorf("failed to open websocket with backend, reason: %s", err.Error())
 			time.Sleep(3 * time.Second)
 			continue
 
@@ -68,7 +68,6 @@ func (wsh *WebsocketHandler) Websocket(isReadinessReady *bool) error {
 				time.Sleep(30 * time.Second)
 				if err = conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					glog.Errorf("PING, %s", err.Error())
-					// *isReadinessReady = false
 					conn.Close()
 					return
 				}
@@ -124,15 +123,13 @@ func (wsh *WebsocketHandler) ConnectToWebsocket() (*websocket.Conn, error) {
 func (wsh *WebsocketHandler) dialWebSocket() (conn *websocket.Conn, err error) {
 	glog.Infof("Connecting to %s", wsh.webSocketURL.String())
 
-	if cautils.CA_IGNORE_VERIFY_CACLI {
-		websocket.DefaultDialer.TLSClientConfig.InsecureSkipVerify = true
-	}
 	conn, _, err = websocket.DefaultDialer.Dial(wsh.webSocketURL.String(), nil)
 	if err != nil {
 		glog.Errorf("Error connecting to postman. url: %s\nMessage %#v", wsh.webSocketURL.String(), err)
 		return conn, err
 	}
-	glog.Infof("Successfully connected")
+	glog.Infof("Successfully connected to %s", wsh.webSocketURL.String())
+
 	return conn, err
 }
 
@@ -151,9 +148,7 @@ func (wsh *WebsocketHandler) HandlePostmanRequest(receivedCommands []byte) {
 	}
 	glog.Infof("receivedCommands: %s", receivedCommands)
 	for _, c := range commands.Commands {
-		apis.SIDFallback(&c)
-
-		sessionObj := cautils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
+		sessionObj := utils.NewSessionObj(&c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())

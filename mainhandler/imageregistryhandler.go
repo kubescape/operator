@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/cautils"
+	"k8s-ca-websocket/utils"
 	"strings"
 
 	regCommon "github.com/armosec/registryx/common"
@@ -59,7 +59,6 @@ type registryAuth struct {
 	Kind          regCommon.RegistryKind `json:"kind,omitempty"`
 	SkipTLSVerify *bool                  `json:"skipTLSVerify,omitempty"`
 	Insecure      *bool                  `json:"http,omitempty"`
-	//dockerRegistryAuth types.AuthConfig
 }
 
 type registry struct {
@@ -120,8 +119,8 @@ func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error)
 }
 
 func (rs *registryScan) hasAuth() bool {
-	//todo - support registry token
-	return rs.registryAuth.Password != "" //|| rs.registryAuth.RegistryToken != ""
+	//TODO: support registry token
+	return rs.registryAuth.Password != ""
 }
 
 func (rs *registryScan) registryCredentials() *registryCreds {
@@ -142,7 +141,7 @@ func (rs *registryScan) authConfig() *types.AuthConfig {
 			Username: rs.registryAuth.Username,
 			Password: rs.registryAuth.Password,
 			Auth:     rs.registryAuth.AuthMethod,
-			//TODO:addd tokens support
+			//TODO: add tokens support
 		}
 	}
 	return authConfig
@@ -164,7 +163,6 @@ func (reg *registryAuth) initDefaultValues() error {
 			return fmt.Errorf("error getting credentials: %v", err)
 		}
 
-		// map[registryName]<username:password>
 		if authConfigReg, ok := authConfig[reg.Registry]; ok {
 			reg.Username = authConfigReg.Username
 			reg.Password = authConfigReg.Password
@@ -252,7 +250,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	// command will be mounted into cronjob by using this configmap
 	configMap.Data[requestBodyFile] = string(command)
 
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(cautils.CA_NAMESPACE).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	glog.Infof("createTriggerRequestConfigMap: created configmap: %s", name)
@@ -267,13 +265,13 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 	if i != -1 {
 		registryScan.registryAuth.Password = registryScan.registryAuth.Password[:i]
 	}
-	repoes, err := registryScan.listReposInRegistry()
+	repos, err := registryScan.listReposInRegistry()
 	if err != nil {
-		glog.Errorf("ListRepoesInRegistry failed with err %v", err)
+		glog.Errorf("listReposInRegistry failed with err %v", err)
 		return err
 	}
-	glog.Infof("GetImagesForScanning: enumerating repoes successfully, found %d repos", len(repoes))
-	for _, repo := range repoes {
+	glog.Infof("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos))
+	for _, repo := range repos {
 		if err := registryScan.setImageToTagsMap(repo, reporter); err != nil {
 			glog.Errorf("setImageToTagsMap failed with registry: %s repo: %s due to ERROR:: %s", registryScan.registry.hostname, repo, err.Error())
 		}
@@ -391,7 +389,7 @@ func updateTagsCandidates(tagsCandidates []string, tagsPage []string, tagsDepth 
 	return tagsCandidates
 }
 
-// Check if number of images (not repoes) to scan is more than limit
+// Check if number of images (not repos) to scan is more than limit
 func (registryScan *registryScan) isExceedScanLimit(limit int) bool {
 	return registryScan.getNumOfImagesToScan() > limit
 }
@@ -426,7 +424,7 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 	}
 	regCreds := registryScan.registryCredentials()
 	var repos []string
-	//TODO
+
 	firstPage := regCommon.MakePagination(iRegistry.GetMaxPageSize())
 	ctx := context.Background()
 	catalogOpts := regCommon.CatalogOption{IsPublic: !registryScan.hasAuth(), Namespaces: registryScan.registry.projectID}
@@ -481,20 +479,20 @@ func (registryScan *registryScan) setCronJobTemplate(jobTemplateObj *v1.CronJob,
 	return nil
 }
 
+/*
+		scan registry command:
+		{
+	    "commands": [{
+	        "CommandName": "scanRegistry",
+	        "args": {
+	            "registryInfo-v1": {
+	                "registryName": "gcr.io/project"
+	            }
+	        }
+	    }]
+	}
+*/
 func (registryScan *registryScan) getRegistryScanV1ScanCommand(registryName string) (string, error) {
-	/*
-			scan registry command:
-			{
-		    "commands": [{
-		        "CommandName": "scanRegistry",
-		        "args": {
-		            "registryInfo-v1": {
-		                "registryName": "gcr.io/project"
-		            }
-		        }
-		    }]
-		}
-	*/
 	scanRegistryCommand := apis.Command{}
 	scanRegistryCommand.CommandName = apis.TypeScanRegistry
 	registryInfo := map[string]string{registryNameField: registryName}
@@ -528,7 +526,7 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 	}
 
 	// create cronJob
-	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(cautils.CA_NAMESPACE).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		glog.Infof("setRegistryScanCronJob: cronjob: %s creation failed. err: %s", name, err.Error())
 		return err
 	}

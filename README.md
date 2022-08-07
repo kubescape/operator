@@ -7,6 +7,8 @@ add git submodules
 CA_POSTURE_SCAN_SCHEDULE
 CA_VULN_SCAN_SCHEDULE
 
+Checkout utils/environmentvariables.go
+
 [cronjob format](https://pkg.go.dev/github.com/robfig/cron)
 
 ## Supported Environments
@@ -21,7 +23,7 @@ CA_VULN_SCAN_SCHEDULE
 ```
 curl -X POST http://<websocket-url>/v1/triggerAction
    -H 'Content-Type: application/json'
-   -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-dwertent-v1"}]}'
+   -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-minikube-v1"}]}'
 ```
 
 ### Trigger Kubescape scan
@@ -49,7 +51,7 @@ curl -X POST \
 ### Trigger image scan
 
 ```
-curl -X POST http://127.0.0.1:4002/v1/triggerAction -H 'Content-Type: application/json' -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-dwertent-v1"}]}'
+curl -X POST http://127.0.0.1:4002/v1/triggerAction -H 'Content-Type: application/json' -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-minikube-v1"}]}'
 ```
    
 ### Set vuln-scan 
@@ -60,7 +62,7 @@ curl -X POST \
          "commands": [
             {
                   "CommandName": "setVulnScanCronJob",
-                  "WildWlid": "wlid://cluster-minikube-moshe/namespace-systest-ns-chj8",
+                  "WildWlid": "wlid://cluster-minikube/namespace-systest-ns-chj8",
                   "args": {
                      "jobParams": {
                         "cronTabSchedule": "* * * * *"
