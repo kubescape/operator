@@ -15,7 +15,7 @@ import (
 	"github.com/golang/glog"
 )
 
-// main function
+//go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
 	flag.Parse()
 

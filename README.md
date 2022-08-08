@@ -1,4 +1,19 @@
 # Websocket
+
+The Websocket is an in-cluster component of the Kubescape security platform.
+It allows clients to connect to itself, listens for commands from the connected clients and controls other in-cluster components according to received commands.
+
+
+## API Documentation
+
+The Websocket provides an HTTP API.
+You can learn more about the API using one of the provided interactive OpenAPI UIs:
+- SwaggerUI, available at `/openapi/v2/swaggerui`
+- RapiDoc, available at `/openapi/v2/rapi`
+- Redoc, available at `/openapi/v2/docs`
+
+## Misc
+
 add git submodules
 ```git submodule update --init --recursive```
 

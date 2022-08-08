@@ -3,6 +3,7 @@ package restapihandler
 import (
 	"crypto/tls"
 	"fmt"
+	"k8s-ca-websocket/docs"
 	"k8s-ca-websocket/utils"
 	"net/http"
 
@@ -36,6 +37,10 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 	}
 	rtr := mux.NewRouter()
 	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
+
+	openAPIUIHandler := docs.NewOpenAPIUIHandler()
+	rtr.PathPrefix(docs.OpenAPIV2Prefix).Methods("GET").Handler(openAPIUIHandler)
+
 	server.Handler = rtr
 
 	glog.Infof("Waiting for REST API to receive notifications, port: %s", utils.RestAPIPort)
