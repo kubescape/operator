@@ -1,13 +1,30 @@
 # Websocket
-add git submodules
+
+The Websocket is an in-cluster component of the Kubescape security platform.
+It allows clients to connect to itself, listens for commands from the connected clients and controls other in-cluster components according to received commands.
+
+
+## API Documentation
+
+The Websocket provides an HTTP API.
+You can learn more about the API using one of the provided interactive OpenAPI UIs:
+- SwaggerUI, available at `/openapi/v2/swaggerui`
+- RapiDoc, available at `/openapi/v2/rapi`
+- Redoc, available at `/openapi/v2/docs`
+
+## Misc Information
+
+Add git submodules:
 ```git submodule update --init --recursive```
 
 
-### env variables
+## Environment Variables
 
-Checkout utils/environmentvariables.go
+Check out utils/environmentvariables.go
 
-## Trigger action
+## Example Requests
+
+### Trigger an Action
 
 ```
 curl -X POST http://<websocket-url>/v1/triggerAction
@@ -15,7 +32,7 @@ curl -X POST http://<websocket-url>/v1/triggerAction
    -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-minikube-v1"}]}'
 ```
 
-### Trigger Kubescape scan
+### Trigger a Kubescape Scan
 
 ```
 curl -X POST \
@@ -24,7 +41,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 
-### Set kubescape cronJob Kubescape scan
+### Create a CronJob that Runs Kubescape Scans
 
 ```
 curl -X POST \
@@ -33,17 +50,21 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 
+```
 curl -X POST \
    -H 'Content-Type: application/json' \
    -d '{"commands":[{"CommandName":"setKubescapeCronJob","args":{"kubescapeJobParams":{"cronTabSchedule": "* * * * *"},"scanV1": {"submit": true, "targetType": "framework", "targetNames": ["nsa"]}}}]}' \
    http://127.0.0.1:4002/v1/triggerAction
-### Trigger image scan
+```
+
+### Trigger an Image Scan
 
 ```
 curl -X POST http://127.0.0.1:4002/v1/triggerAction -H 'Content-Type: application/json' -d '{"commands":[{"CommandName": "scan", "WildWlid": "wlid://cluster-minikube-v1"}]}'
 ```
    
-### Set vuln-scan 
+### Create a CronJob that runs Vulnerability Scans
+
 ```
 curl -X POST \
    -H 'Content-Type: application/json' \
@@ -63,7 +84,8 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 
-### Update vuln-scan 
+### Update a CronJob that runs Vulnerability Scans
+
 ```
 curl -X POST \
    -H 'Content-Type: application/json' \
@@ -83,7 +105,8 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 
-### Delete vuln-scan 
+### Delete a CronJob that runs Vulnerability Scans
+
 ```
 curl -X POST \
    -H 'Content-Type: application/json' \
