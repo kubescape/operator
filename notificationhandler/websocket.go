@@ -15,15 +15,6 @@ type NotificationHandler struct {
 	sessionObj *chan utils.SessionObj
 }
 
-func NewTriggerHandlerNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
-	urlStr := initARMOHelmNotificationServiceURL()
-
-	return &NotificationHandler{
-		connector:  NewWebsocketActions(urlStr),
-		sessionObj: sessionObj,
-	}
-}
-
 func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
 	urlStr := initNotificationServerURL()
 
@@ -34,12 +25,12 @@ func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHand
 }
 
 func (notification *NotificationHandler) WebsocketConnection() error {
-	if utils.NotificationServerWSURL == "" {
+	if utils.ClusterConfig.NotificationWSURL == "" {
 		return nil
 	}
 	retries := 0
 	for {
-		if err := notification.SetupWebsocket(); err != nil {
+		if err := notification.setupWebsocket(); err != nil {
 			retries += 1
 			time.Sleep(time.Duration(retries*2) * time.Second)
 			glog.Warningf("In WebsocketConnection, warning: %s, retry: %d", err.Error(), retries)
@@ -50,7 +41,7 @@ func (notification *NotificationHandler) WebsocketConnection() error {
 }
 
 // Websocket main function
-func (notification *NotificationHandler) SetupWebsocket() error {
+func (notification *NotificationHandler) setupWebsocket() error {
 	errs := make(chan error)
 	_, err := notification.connector.DefaultDialer(nil)
 	if err != nil {

@@ -11,7 +11,7 @@ const (
 )
 
 const (
-	KubescapeResponse string = "KubascapeResponse"
+	KubescapeResponse string = "KubescapeResponse"
 )
 
 type CommandResponseData struct {

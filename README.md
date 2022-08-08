@@ -4,19 +4,8 @@ add git submodules
 
 
 ### env variables
-CA_POSTURE_SCAN_SCHEDULE
-CA_VULN_SCAN_SCHEDULE
 
 Checkout utils/environmentvariables.go
-
-[cronjob format](https://pkg.go.dev/github.com/robfig/cron)
-
-## Supported Environments
-
-| Environment |  value | default |
-| :=== | :===:  | :===:  |
-| `CA_SYSTEM_MODE` | `ALL`/`SCAN` | `ALL`  |
-
 
 ## Trigger action
 

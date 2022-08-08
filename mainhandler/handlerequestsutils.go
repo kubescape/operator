@@ -64,7 +64,7 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 	for i := range workloads {
 		switch workloads[i].GetKind() {
 		case "Namespace":
-			idMap[pkgwlid.GetWLID(utils.ClusterName, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
+			idMap[pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		default:
 			if wlid := workloads[i].GetWlid(); wlid != "" {
 				idMap[wlid] = true
@@ -74,7 +74,7 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 				if err != nil {
 					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
 				}
-				wlid := pkgwlid.GetWLID(utils.ClusterName, workloads[i].GetNamespace(), kind, name)
+				wlid := pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, workloads[i].GetNamespace(), kind, name)
 				if wlid != "" {
 					idMap[wlid] = true
 				}

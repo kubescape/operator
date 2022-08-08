@@ -6,7 +6,6 @@ import (
 	"k8s-ca-websocket/notificationhandler"
 	"k8s-ca-websocket/restapihandler"
 	"k8s-ca-websocket/utils"
-	"k8s-ca-websocket/websocket"
 	"os"
 
 	"github.com/armosec/k8s-interface/k8sinterface"
@@ -34,36 +33,23 @@ func main() {
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
-	// Open Websocket with cloud
-	go func() {
-		websocketHandler := websocket.NewWebsocketHandler(&sessionObj)
-		glog.Fatal(websocketHandler.Websocket(&isReadinessReady))
-	}()
-
-	// Open Websocket with cloud
-	go func() { // should be deprecated
+	go func() { // open websocket connection to notification server
 		notificationHandler := notificationhandler.NewNotificationHandler(&sessionObj)
 		if err := notificationHandler.WebsocketConnection(); err != nil {
 			glog.Fatal(err)
 		}
 	}()
 
-	go func() {
-		triggerNotificationHandler := notificationhandler.NewTriggerHandlerNotificationHandler(&sessionObj)
-		if err := triggerNotificationHandler.WebsocketConnection(); err != nil {
-			glog.Fatal(err)
-		}
-	}()
-
-	// http listener
-	go func() {
+	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(&sessionObj)
 		glog.Fatal(restAPIHandler.SetupHTTPListener())
 	}()
 
+	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(&sessionObj, k8sApi)
 	go mainHandler.StartupTriggerActions(mainhandler.GetStartupActions())
 
+	// wait for requests to come from the websocket or from the REST API
 	mainHandler.HandleRequest()
 
 }

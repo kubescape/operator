@@ -52,9 +52,9 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 
 }
 
-func initARMOHelmNotificationServiceURL() string {
+func initNotificationServerURL() string {
 	urlObj := url.URL{}
-	host := utils.NotificationServerWSURL
+	host := utils.ClusterConfig.NotificationWSURL
 	if host == "" {
 		return ""
 	}
@@ -75,34 +75,6 @@ func initARMOHelmNotificationServiceURL() string {
 	q := urlObj.Query()
 	q.Add(notificationserver.TargetCustomer, utils.ClusterConfig.CustomerGUID)
 	q.Add(notificationserver.TargetCluster, utils.ClusterConfig.ClusterName)
-	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
-	urlObj.RawQuery = q.Encode()
-
-	return urlObj.String()
-}
-
-func initNotificationServerURL() string {
-	urlObj := url.URL{}
-	host := utils.NotificationServerWSURL
-	if host == "" {
-		return ""
-	}
-
-	scheme := "ws"
-	if strings.HasPrefix(host, "ws://") {
-		host = strings.TrimPrefix(host, "ws://")
-		scheme = "ws"
-	} else if strings.HasPrefix(host, "wss://") {
-		host = strings.TrimPrefix(host, "wss://")
-		scheme = "wss"
-	}
-
-	urlObj.Scheme = scheme
-	urlObj.Host = host
-	urlObj.Path = notificationserver.PathWebsocketV1
-
-	q := urlObj.Query()
-	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentLoggerValue)
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
 	urlObj.RawQuery = q.Encode()
 
