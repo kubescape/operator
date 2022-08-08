@@ -49,6 +49,8 @@ func main() {
 	mainHandler := mainhandler.NewMainHandler(&sessionObj, k8sApi)
 	go mainHandler.StartupTriggerActions(mainhandler.GetStartupActions())
 
+	isReadinessReady = true
+
 	// wait for requests to come from the websocket or from the REST API
 	mainHandler.HandleRequest()
 
