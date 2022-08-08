@@ -1,0 +1,251 @@
+basePath: /
+consumes:
+- application/json
+definitions:
+  Command:
+    description: Command describes an individual command for the in-cluster components
+    properties:
+      args:
+        additionalProperties:
+          type: object
+        description: Arguments for the command
+        type: object
+        x-go-name: Args
+      commandName:
+        description: |-
+          Name of the command
+          validateRules TypeValidateRules
+          execPostureScan TypeExecPostureScan  Execute a posture scan
+          updateRules TypeUpdateRules
+          runKubescapeJob TypeRunKubescapeJob
+          kubescapeScan TypeRunKubescape  Trigger a Kubescape scan
+          setKubescapeCronJob TypeSetKubescapeCronJob  Create a CronJob that runs a Kubescape scan
+          updateKubescapeCronJob TypeUpdateKubescapeCronJob  Update a CronJob that runs a Kubescape scan
+          deleteKubescapeCronJob TypeDeleteKubescapeCronJob  Delete a CronJob that runs a Kubescape scan
+          setVulnScanCronJob TypeSetVulnScanCronJob  Create a CronJob that runs a Vulnerability Scan
+          updateVulnScanCronJob TypeUpdateVulnScanCronJob  Update a CronJob that runs a Vulnerability Scan
+          deleteVulnScanCronJob TypeDeleteVulnScanCronJob  Delete a CronJob that runs a Vulnerability Scan
+          update TypeUpdateWorkload
+          Attach TypeAttachWorkload
+          remove TypeRemoveWorkload
+          Detach TypeDetachWorkload
+          Incompatible TypeWorkloadIncompatible
+          sign TypeSignWorkload
+          unregistered TypeClusterUnregistered
+          ReplaceHeaders TypeReplaceHeadersInWorkload
+          ImageUnreachable TypeImageUnreachableInWorkload
+          inject TypeInjectToWorkload
+          restart TypeRestartWorkload
+          encryptSecret TypeEncryptSecret
+          decryptSecret TypeDecryptSecret
+          scan TypeScanImages  Trigger an image scan
+          scanRegistry TypeScanRegistry  Trigger a registry scan
+          setRegistryScanCronJob TypeSetRegistryScanCronJob  Create a CronJob that runs registry scans
+          updateRegistryScanCronJob TypeUpdateRegistryScanCronJob  Update a CronJob that runs registry scans
+          deleteRegistryScanCronJob TypeDeleteRegistryScanCronJob  Delete a CronJob that runs registry scans
+        enum:
+        - validateRules
+        - execPostureScan
+        - updateRules
+        - runKubescapeJob
+        - kubescapeScan
+        - setKubescapeCronJob
+        - updateKubescapeCronJob
+        - deleteKubescapeCronJob
+        - setVulnScanCronJob
+        - updateVulnScanCronJob
+        - deleteVulnScanCronJob
+        - update
+        - Attach
+        - remove
+        - Detach
+        - Incompatible
+        - sign
+        - unregistered
+        - ReplaceHeaders
+        - ImageUnreachable
+        - inject
+        - restart
+        - encryptSecret
+        - decryptSecret
+        - scan
+        - scanRegistry
+        - setRegistryScanCronJob
+        - updateRegistryScanCronJob
+        - deleteRegistryScanCronJob
+        example: updateRules
+        type: string
+        x-go-enum-desc: |-
+          validateRules TypeValidateRules
+          execPostureScan TypeExecPostureScan  Execute a posture scan
+          updateRules TypeUpdateRules
+          runKubescapeJob TypeRunKubescapeJob
+          kubescapeScan TypeRunKubescape  Trigger a Kubescape scan
+          setKubescapeCronJob TypeSetKubescapeCronJob  Create a CronJob that runs a Kubescape scan
+          updateKubescapeCronJob TypeUpdateKubescapeCronJob  Update a CronJob that runs a Kubescape scan
+          deleteKubescapeCronJob TypeDeleteKubescapeCronJob  Delete a CronJob that runs a Kubescape scan
+          setVulnScanCronJob TypeSetVulnScanCronJob  Create a CronJob that runs a Vulnerability Scan
+          updateVulnScanCronJob TypeUpdateVulnScanCronJob  Update a CronJob that runs a Vulnerability Scan
+          deleteVulnScanCronJob TypeDeleteVulnScanCronJob  Delete a CronJob that runs a Vulnerability Scan
+          update TypeUpdateWorkload
+          Attach TypeAttachWorkload
+          remove TypeRemoveWorkload
+          Detach TypeDetachWorkload
+          Incompatible TypeWorkloadIncompatible
+          sign TypeSignWorkload
+          unregistered TypeClusterUnregistered
+          ReplaceHeaders TypeReplaceHeadersInWorkload
+          ImageUnreachable TypeImageUnreachableInWorkload
+          inject TypeInjectToWorkload
+          restart TypeRestartWorkload
+          encryptSecret TypeEncryptSecret
+          decryptSecret TypeDecryptSecret
+          scan TypeScanImages  Trigger an image scan
+          scanRegistry TypeScanRegistry  Trigger a registry scan
+          setRegistryScanCronJob TypeSetRegistryScanCronJob  Create a CronJob that runs registry scans
+          updateRegistryScanCronJob TypeUpdateRegistryScanCronJob  Update a CronJob that runs registry scans
+          deleteRegistryScanCronJob TypeDeleteRegistryScanCronJob  Delete a CronJob that runs registry scans
+        x-go-name: CommandName
+      designators:
+        description: |-
+          Designators for the command
+
+          Designators select the targets to which the command applies.
+        items:
+          $ref: '#/definitions/PortalDesignator'
+        type: array
+        x-go-name: Designators
+      jobTracking:
+        $ref: '#/definitions/JobTracking'
+      responseID:
+        description: ID of the response
+        example: 49cfe0a0-9fab-4e54-a6e4-7b27e566d3cd
+        type: string
+        x-go-name: ResponseID
+      sid:
+        type: string
+        x-go-name: Sid
+      wildSid:
+        type: string
+        x-go-name: WildSid
+      wildWlid:
+        type: string
+        x-go-name: WildWlid
+      wlid:
+        type: string
+        x-go-name: Wlid
+    type: object
+    x-go-package: github.com/armosec/armoapi-go/apis
+  Commands:
+    description: Commands contains a collection of commands for the in-cluster components
+    properties:
+      commands:
+        description: A list of commands to execute
+        example:
+        - CommandName: scanRegistry
+          args:
+            registryInfo-v1:
+              registryName: quay.io/armosec
+        items:
+          $ref: '#/definitions/Command'
+        type: array
+        x-go-name: Commands
+    type: object
+    x-go-package: github.com/armosec/armoapi-go/apis
+  JobTracking:
+    description: |-
+      JobTracking describes a context in which the job is executing
+      It is used to track job execution source and context: what spawned it, when and under what circumstances.
+    properties:
+      jobID:
+        description: ID of the current job
+        example: 0f2c8611-ba99-40e5-af21-2bc3823e3283
+        type: string
+        x-go-name: JobID
+      numSeq:
+        description: Number of the last action
+        example: 2
+        format: int64
+        type: integer
+        x-go-name: LastActionNumber
+      parentAction:
+        description: ID of the parent job
+        example: 6ecfe560-104c-4e7b-8cd3-ee3cbc3b58fb
+        type: string
+        x-go-name: ParentID
+      timestamp:
+        description: Timestamp of the latest action
+        format: date-time
+        type: string
+        x-go-name: Timestamp
+    type: object
+    x-go-package: github.com/armosec/armoapi-go/apis
+  PortalDesignator:
+    description: PortalDesignator represents a single designation option
+    properties:
+      attributes:
+        additionalProperties:
+          type: string
+        description: Attributes that describe the targets
+        type: object
+        x-go-name: Attributes
+      designatorType:
+        enum:
+        - Attributes
+        - Attribute
+        - Wlid
+        - WildWlid
+        - WlidContainer
+        - WlidProcess
+        - Sid
+        type: string
+        x-go-enum-desc: |-
+          Attributes DesignatorAttributes
+          Attribute DesignatorAttribute
+          Wlid DesignatorWlid  WorkloadID format.   Has two formats:   1. Kubernetes format: wlid://cluster-<cluster>/namespace-<namespace>/<kind>-<name>   2. Native format: wlid://datacenter-<datacenter>/project-<project>/native-<name>
+          WildWlid DesignatorWildWlid  A WorkloadID wildcard expression.   A wildcard expression that includes a cluster:    wlid://cluster-<cluster>/   An expression that includes a cluster and namespace (filters out all other namespaces):    wlid://cluster-<cluster>/namespace-<namespace>/
+          WlidContainer DesignatorWlidContainer
+          WlidProcess DesignatorWlidProcess
+          Sid DesignatorSid
+        x-go-name: DesignatorType
+      sid:
+        description: A specific Secret ID
+        type: string
+        x-go-name: SID
+      wildwlid:
+        description: An expression that describes applicable workload IDs
+        type: string
+        x-go-name: WildWLID
+      wlid:
+        description: A specific Workload ID
+        type: string
+        x-go-name: WLID
+    type: object
+    x-go-package: github.com/armosec/armoapi-go/armotypes
+info:
+  description: The Kubescape Websocket coordinates the Kubescape in-cluster components
+    and allows clients to execute actions these components.
+  title: Kubescape Websocket
+  version: 1.0.0
+paths:
+  /v1/triggerAction:
+    post:
+      operationId: postTriggerAction
+      parameters:
+      - in: body
+        name: Body
+        schema:
+          $ref: '#/definitions/Commands'
+      responses:
+        "200":
+          $ref: '#/responses/postTriggerActionOK'
+      summary: Triggers an action to be run in one of the Kubescape in-cluster components.
+produces:
+- text/plain
+responses:
+  postTriggerActionOK:
+    description: The server has successfully received the action.
+schemes:
+- https
+- http
+swagger: "2.0"
