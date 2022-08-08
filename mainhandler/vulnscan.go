@@ -23,7 +23,13 @@ import (
 	"github.com/golang/glog"
 )
 
-const dockerPullableURN = "docker-pullable://"
+const (
+	dockerPullableURN        = "docker-pullable://"
+	cmDefaultMode     cmMode = "default"
+	cmLoadedMode      cmMode = "loaded"
+)
+
+type cmMode string
 
 var (
 	vulnScanHttpClient = &http.Client{}
@@ -137,34 +143,34 @@ func (actionHandler *ActionHandler) getRegistryAuth(registryName string) (*regis
 	return &auth, nil
 }
 
-func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, bool, error) {
+func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, string, error) {
 	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
 			glog.Infof("configmap: %s does not exists, using default values", registryScanConfigmap)
-			return NewRegistryScanConfig(registryName), false, nil
+			return NewRegistryScanConfig(registryName), string(cmDefaultMode), nil
 		} else {
-			return nil, false, err
+			return nil, string(cmDefaultMode), err
 		}
 	}
 	configData := configMap.GetData()
 	var registriesConfigs []registryScanConfig
 	registriesConfigStr, ok := configData["registries"].(string)
 	if !ok {
-		return nil, false, fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
+		return nil, string(cmDefaultMode), fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
 	}
 	registriesConfigStr = strings.Replace(registriesConfigStr, "\n", "", -1)
 	err = json.Unmarshal([]byte(registriesConfigStr), &registriesConfigs)
 	if err != nil {
-		return nil, false, fmt.Errorf("error parsing ConfigMap: %s", err.Error())
+		return nil, string(cmDefaultMode), fmt.Errorf("error parsing ConfigMap: %s", err.Error())
 	}
 	for _, config := range registriesConfigs {
 		if config.Registry == registryName {
-			return &config, true, nil
+			return &config, string(cmLoadedMode), nil
 		}
 	}
-	return NewRegistryScanConfig(registryName), false, nil
+	return NewRegistryScanConfig(registryName), string(cmDefaultMode), nil
 
 }
 
@@ -191,16 +197,13 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 	}
 	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 
-	conf, isLoaded, err := actionHandler.getRegistryConfig(registryName)
-	cmLoadMode := "default"
-	if isLoaded {
-		cmLoadMode = "loaded"
-	}
+	conf, configMapMode, err := actionHandler.getRegistryConfig(registryName)
+
 	if err != nil {
 		return fmt.Errorf("get registry(%s) config failed with err %v", registryName, err)
 	}
 
-	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, cmLoadMode) // systest depedendent
+	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, configMapMode) // systest depedendent
 	registryScan := NewRegistryScan(registryName, *auth, *conf)
 	return actionHandler.scanRegistry(&registryScan, sessionObj)
 }
