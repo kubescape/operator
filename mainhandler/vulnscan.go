@@ -191,11 +191,16 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 	}
 	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 
-	conf, _, err := actionHandler.getRegistryConfig(registryName)
+	conf, isLoaded, err := actionHandler.getRegistryConfig(registryName)
+	cmLoadMode := "default"
+	if isLoaded {
+		cmLoadMode = "loaded"
+	}
 	if err != nil {
 		return fmt.Errorf("get registry(%s) config failed with err %v", registryName, err)
 	}
 
+	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, cmLoadMode) // systest depedendent
 	registryScan := NewRegistryScan(registryName, *auth, *conf)
 	return actionHandler.scanRegistry(&registryScan, sessionObj)
 }
