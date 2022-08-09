@@ -82,6 +82,7 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 					apitypes.AttributeTag:           tag,
 					apitypes.AttributeUseHTTP:       *registry.registryAuth.Insecure,
 					apitypes.AttributeSkipTLSVerify: *registry.registryAuth.SkipTLSVerify,
+					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
 				},
 			}
 			// Check if auth is empty (used for public registries)
