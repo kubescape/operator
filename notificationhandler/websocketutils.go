@@ -94,7 +94,6 @@ func (notification *NotificationHandler) websocketPingMessage() error {
 func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
 	notif := &notificationserver.Notification{}
 	if err := json.Unmarshal(bytesNotification, notif); err != nil {
-		glog.Error(err)
 		return nil, err
 	}
 	return notif, nil
@@ -103,7 +102,6 @@ func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notif
 func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
 	notif := &notificationserver.Notification{}
 	if err := bson.Unmarshal(bytesNotification, notif); err != nil {
-		glog.Error(err)
 		return nil, err
 	}
 	return notif, nil

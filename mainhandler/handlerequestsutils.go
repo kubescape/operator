@@ -146,7 +146,6 @@ func waitForVulnScanReady() {
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			glog.Infof("return response with err %s", err.Error())
 			continue
 		}
 		defer resp.Body.Close()
@@ -173,7 +172,6 @@ func waitForKubescapeReady() {
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			glog.Infof("return response with err %s", err.Error())
 			continue
 		}
 		defer resp.Body.Close()

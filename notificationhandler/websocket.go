@@ -71,6 +71,7 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 		if err != nil {
 			return fmt.Errorf("error receiving data from notificationServer. message: %s", err.Error())
 		}
+
 		switch messageType {
 		case websocket.TextMessage, websocket.BinaryMessage:
 			var notif *notificationserver.Notification
@@ -78,10 +79,9 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 			case '{', '[', '"':
 				notif, err = decodeJsonNotification(messageBytes)
 				if err != nil {
-					glog.Errorf("failed to handle notification as JSON: %s, %v", messageBytes, err)
 					notif, err = decodeBsonNotification(messageBytes)
 					if err != nil {
-						glog.Errorf("failed to handle notification as BSON: %s, %v", messageBytes, err)
+						glog.Errorf("failed to handle notification: %s, %v", messageBytes, err)
 						continue
 					}
 				}

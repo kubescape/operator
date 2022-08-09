@@ -28,7 +28,7 @@ func LoadEnvironmentVariables() (err error) {
 		return fmt.Errorf("missing customer guid in config")
 	}
 
-	if ns := os.Getenv(NamespaceEnvironmentVariable); ns == "" {
+	if ns := os.Getenv(NamespaceEnvironmentVariable); ns != "" {
 		Namespace = ns // override default namespace
 	}
 
