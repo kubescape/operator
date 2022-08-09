@@ -5,14 +5,17 @@ import (
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
+	"github.com/armosec/utils-go/httputils"
 	"github.com/golang/glog"
 	"github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
 )
 
+var ReporterHttpClient httputils.IHttpClient
+
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := reporterlib.NewBaseReport(ClusterConfig.CustomerGUID, message)
+	reporter := reporterlib.NewBaseReport(ClusterConfig.CustomerGUID, message, ClusterConfig.EventReceiverREST, ReporterHttpClient)
 	target := command.GetID()
 	if target == apitypes.DesignatorsToken {
 		target = fmt.Sprintf("wlid://cluster-%s/", ClusterConfig.ClusterName)

@@ -29,6 +29,8 @@ func main() {
 		return
 	}
 
+	initHttpHandlers()
+
 	sessionObj := make(chan utils.SessionObj)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
@@ -58,4 +60,10 @@ func main() {
 
 func displayBuildTag() {
 	glog.Infof("Image version: %s", os.Getenv(utils.ReleaseBuildTagEnvironmentVariable))
+}
+
+func initHttpHandlers() {
+	mainhandler.KubescapeHttpClient = utils.InitKubescapeHttpHandler()
+	mainhandler.VulnScanHttpClient = utils.InitVulnScanHttpHandler()
+	utils.ReporterHttpClient = utils.InitReporterHttpHandler()
 }
