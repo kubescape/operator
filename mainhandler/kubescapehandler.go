@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"time"
 
 	"github.com/kubescape/kontroller/utils"
@@ -112,7 +111,7 @@ func HandleKubescapeResponse(payload interface{}) (bool, *time.Duration) {
 		glog.Errorf("HandleKubescapeResponse failed to send error report.  %s", err.Error())
 	}
 
-	resp, err := httputils.HttpGet(http.DefaultClient, getKubescapeV1ScanStatusURL(data.scanID).String(), nil)
+	resp, err := httputils.HttpGet(KubescapeHttpClient, getKubescapeV1ScanStatusURL(data.scanID).String(), nil)
 	if err != nil {
 		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
 		data.reporter.SendDetails(info, true, errChan)
@@ -173,7 +172,7 @@ func (actionHandler *ActionHandler) kubescapeScan() error {
 	if err != nil {
 		return err
 	}
-	resp, err := httputils.HttpPost(http.DefaultClient, getKubescapeV1ScanURL().String(), nil, body)
+	resp, err := httputils.HttpPost(KubescapeHttpClient, getKubescapeV1ScanURL().String(), nil, body)
 	if err != nil {
 		return err
 	}

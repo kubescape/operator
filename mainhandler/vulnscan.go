@@ -1,11 +1,9 @@
 package mainhandler
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -21,6 +19,7 @@ import (
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/armosec/utils-go/httputils"
 	"github.com/golang/glog"
 )
 
@@ -31,10 +30,6 @@ const (
 )
 
 type cmMode string
-
-var (
-	vulnScanHttpClient = &http.Client{}
-)
 
 func getVulnScanURL() *url.URL {
 	vulnURL := url.URL{}
@@ -348,16 +343,9 @@ func sendWorkloadToVulnerabilityScanner(websocketScanCommand *apis.WebsocketScan
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
 	glog.Infof("requesting scan. url: %s wlid: %s image: %s with credentials: %v", vulnURL.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds)
 
-	req, err := http.NewRequest(http.MethodPost, vulnURL.String(), bytes.NewBuffer(jsonScannerC))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := vulnScanHttpClient.Do(req)
+	resp, err := httputils.HttpPost(VulnScanHttpClient, vulnURL.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
 	refusedNum := 0
-	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = vulnScanHttpClient.Do(req) {
+	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = httputils.HttpPost(VulnScanHttpClient, vulnURL.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC) {
 		glog.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
 		time.Sleep(5 * time.Second)
 		refusedNum++

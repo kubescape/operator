@@ -2,7 +2,6 @@ package mainhandler
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/utils-go/httputils"
 	"github.com/armosec/utils-k8s-go/probes"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 
@@ -140,12 +140,7 @@ func waitForVulnScanReady() {
 	for {
 		timer.Reset(time.Duration(1) * time.Second)
 		<-timer.C
-		req, err := http.NewRequest(http.MethodHead, fullURL.String(), nil)
-		if err != nil {
-			glog.Warningf("failed to create http req with err %s", err.Error())
-			continue
-		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httputils.HttpHead(VulnScanHttpClient, fullURL.String(), nil)
 		if err != nil {
 			continue
 		}
@@ -166,12 +161,7 @@ func waitForKubescapeReady() {
 	for {
 		timer.Reset(time.Duration(1) * time.Second)
 		<-timer.C
-		req, err := http.NewRequest(http.MethodHead, fullURL.String(), nil)
-		if err != nil {
-			glog.Warningf("failed to create http req with err %s", err.Error())
-			continue
-		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httputils.HttpHead(KubescapeHttpClient, fullURL.String(), nil)
 		if err != nil {
 			continue
 		}

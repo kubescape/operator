@@ -7,6 +7,7 @@ import (
 	"github.com/kubescape/kontroller/utils"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/utils-go/httputils"
 
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -38,6 +39,8 @@ type waitFunc func()
 
 var k8sNamesRegex *regexp.Regexp
 var actionNeedToBeWaitOnStartUp = map[apis.NotificationPolicyType]waitFunc{}
+var KubescapeHttpClient httputils.IHttpClient
+var VulnScanHttpClient httputils.IHttpClient
 
 func init() {
 	var err error
