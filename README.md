@@ -1,12 +1,12 @@
 # Kontroller 
 
-The Kontroller is an in-cluster component of the Kubescape security platform.
+Kontroller is an in-cluster component of the Kubescape security platform.
 It allows clients to connect to itself, listens for commands from the connected clients and controls other in-cluster components according to received commands.
 
 
 ## API Documentation
 
-The Websocket provides an HTTP API.
+Kontroller provides an HTTP API.
 You can learn more about the API using one of the provided interactive OpenAPI UIs:
 - SwaggerUI, available at `/openapi/v2/swaggerui`
 - RapiDoc, available at `/openapi/v2/rapi`
