@@ -1,6 +1,7 @@
 *_tests_go.txt
 *_tests_xunit.xml
 *k8s-ca-websocket*
+*kontroller*
 *.vscode*
 dist/*
 licenses

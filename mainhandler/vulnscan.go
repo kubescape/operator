@@ -5,11 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kubescape/kontroller/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"

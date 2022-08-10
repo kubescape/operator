@@ -3,9 +3,10 @@ package restapihandler
 import (
 	"crypto/tls"
 	"fmt"
-	"k8s-ca-websocket/docs"
-	"k8s-ca-websocket/utils"
 	"net/http"
+
+	"github.com/kubescape/kontroller/docs"
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"

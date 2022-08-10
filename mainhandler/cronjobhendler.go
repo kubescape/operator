@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"strings"
+
+	"github.com/kubescape/kontroller/utils"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/k8s-interface/k8sinterface"

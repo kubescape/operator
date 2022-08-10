@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"k8s-ca-websocket/utils"
 	"net/http"
+
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/golang/glog"

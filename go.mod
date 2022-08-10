@@ -1,4 +1,4 @@
-module k8s-ca-websocket
+module github.com/kubescape/kontroller
 
 go 1.18
 

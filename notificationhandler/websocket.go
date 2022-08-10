@@ -2,8 +2,9 @@ package notificationhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"time"
+
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"github.com/golang/glog"

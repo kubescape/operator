@@ -1,9 +1,10 @@
 package notificationhandler
 
 import (
-	"k8s-ca-websocket/utils"
 	"reflect"
 	"testing"
+
+	"github.com/kubescape/kontroller/utils"
 )
 
 func TestNewTriggerHandlerNotificationHandler(t *testing.T) {

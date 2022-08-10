@@ -2,8 +2,9 @@ package mainhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"regexp"
+
+	"github.com/kubescape/kontroller/utils"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 

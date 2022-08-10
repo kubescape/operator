@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"strings"
+
+	"github.com/kubescape/kontroller/utils"
 
 	regCommon "github.com/armosec/registryx/common"
 	regInterfaces "github.com/armosec/registryx/interfaces"
