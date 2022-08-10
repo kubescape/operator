@@ -1,6 +1,6 @@
-# Websocket
+# Kontroller 
 
-The Websocket is an in-cluster component of the Kubescape security platform.
+The Kontroller is an in-cluster component of the Kubescape security platform.
 It allows clients to connect to itself, listens for commands from the connected clients and controls other in-cluster components according to received commands.
 
 
@@ -11,11 +11,6 @@ You can learn more about the API using one of the provided interactive OpenAPI U
 - SwaggerUI, available at `/openapi/v2/swaggerui`
 - RapiDoc, available at `/openapi/v2/rapi`
 - Redoc, available at `/openapi/v2/docs`
-
-## Misc Information
-
-Add git submodules:
-```git submodule update --init --recursive```
 
 
 ## Environment Variables

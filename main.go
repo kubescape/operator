@@ -2,11 +2,12 @@ package main
 
 import (
 	"flag"
-	"k8s-ca-websocket/mainhandler"
-	"k8s-ca-websocket/notificationhandler"
-	"k8s-ca-websocket/restapihandler"
-	"k8s-ca-websocket/utils"
 	"os"
+
+	"github.com/kubescape/kontroller/mainhandler"
+	"github.com/kubescape/kontroller/notificationhandler"
+	"github.com/kubescape/kontroller/restapihandler"
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/armosec/k8s-interface/k8sinterface"
 	restclient "k8s.io/client-go/rest"

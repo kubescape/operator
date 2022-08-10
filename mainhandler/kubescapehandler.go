@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"math/rand"
 	"time"
+
+	"github.com/kubescape/kontroller/utils"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"

@@ -1,8 +1,9 @@
 package mainhandler
 
 import (
-	"k8s-ca-websocket/utils"
 	"testing"
+
+	"github.com/kubescape/kontroller/utils"
 
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	"github.com/armosec/utils-go/boolutils"

@@ -3,10 +3,11 @@ package notificationhandler
 import (
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"

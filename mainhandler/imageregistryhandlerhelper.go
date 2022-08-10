@@ -3,9 +3,10 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"math/rand"
 	"time"
+
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

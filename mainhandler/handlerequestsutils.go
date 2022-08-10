@@ -2,9 +2,10 @@ package mainhandler
 
 import (
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"strings"
 	"time"
+
+	"github.com/kubescape/kontroller/utils"
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

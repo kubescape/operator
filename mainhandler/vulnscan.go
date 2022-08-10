@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kubescape/kontroller/utils"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
 
@@ -77,6 +79,7 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 					apitypes.AttributeTag:           tag,
 					apitypes.AttributeUseHTTP:       *registry.registryAuth.Insecure,
 					apitypes.AttributeSkipTLSVerify: *registry.registryAuth.SkipTLSVerify,
+					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
 				},
 			}
 			// Check if auth is empty (used for public registries)
