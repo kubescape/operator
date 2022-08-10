@@ -10,7 +10,7 @@ ADD . .
 RUN apk add git
 
 WORKDIR /work
-RUN go build -o build/trigger
+RUN go build -o build/kontroller
 
 FROM alpine
 
@@ -18,9 +18,9 @@ RUN addgroup -S ks && adduser -S ks -G ks
 USER ks
 WORKDIR /home/ks/
 
-COPY --from=builder /work/build/trigger /usr/bin/trigger
+COPY --from=builder /work/build/kontroller /usr/bin/kontroller
 
 ARG image_version
 ENV RELEASE=$image_version
 
-ENTRYPOINT ["trigger"]
+ENTRYPOINT ["kontroller"]
