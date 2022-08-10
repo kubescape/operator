@@ -63,7 +63,7 @@ func displayBuildTag() {
 }
 
 func initHttpHandlers() {
-	mainhandler.KubescapeHttpClient = utils.InitKubescapeHttpHandler()
-	mainhandler.VulnScanHttpClient = utils.InitVulnScanHttpHandler()
-	utils.ReporterHttpClient = utils.InitReporterHttpHandler()
+	mainhandler.KubescapeHttpClient = utils.InitKubescapeHttpClient()
+	mainhandler.VulnScanHttpClient = utils.InitVulnScanHttpClient()
+	utils.ReporterHttpClient = utils.InitReporterHttpClient()
 }

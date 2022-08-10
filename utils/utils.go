@@ -28,21 +28,21 @@ func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
 		Body:       http.NoBody}, nil
 }
 
-func InitKubescapeHttpHandler() httputils.IHttpClient {
+func InitKubescapeHttpClient() httputils.IHttpClient {
 	// If the KubescapeURL not configured, then the HttpClient defined as a mock
 	if ClusterConfig.KubescapeURL == "" {
 		return &ClientMock{}
 	}
 	return &http.Client{}
 }
-func InitVulnScanHttpHandler() httputils.IHttpClient {
+func InitVulnScanHttpClient() httputils.IHttpClient {
 	// If the VulnScan URL not configured, then the HttpClient defined as a mock
 	if ClusterConfig.VulnScanURL == "" {
 		return &ClientMock{}
 	}
 	return &http.Client{}
 }
-func InitReporterHttpHandler() httputils.IHttpClient {
+func InitReporterHttpClient() httputils.IHttpClient {
 	// If the EventReceiverREST not configured, then the HttpClient defined as a mock
 	if ClusterConfig.EventReceiverREST == "" {
 		return &ClientMock{}
