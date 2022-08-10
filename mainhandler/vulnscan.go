@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"k8s-ca-websocket/utils"
 	"net/url"
 	"strings"
 	"time"
