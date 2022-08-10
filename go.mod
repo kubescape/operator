@@ -8,7 +8,7 @@ require (
 	github.com/armosec/k8s-interface v0.0.79
 	github.com/armosec/logger-go v0.0.13
 	github.com/armosec/opa-utils v0.0.166
-	github.com/armosec/registryx v0.0.11
+	github.com/armosec/registryx v0.0.12
 	github.com/armosec/utils-go v0.0.12
 	github.com/armosec/utils-k8s-go v0.0.8
 	github.com/docker/docker v20.10.17+incompatible
