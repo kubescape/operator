@@ -3,13 +3,13 @@ package mainhandler
 import (
 	"fmt"
 
-	"github.com/armosec/k8s-interface/cloudsupport"
 	"github.com/docker/docker/api/types"
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/kubescape/k8s-interface/cloudsupport"
 )
 
 // Authorization implements Authenticator.
-// Check if can be replaced with https://github.com/armosec/k8s-interface/blob/227d2ab94a72086c86b0f5ce1bf222dc13e90d49/cloudsupport/cloudvendorregistrycreds.go#L209
+// Check if can be replaced with https://github.com/kubescape/k8s-interface/blob/227d2ab94a72086c86b0f5ce1bf222dc13e90d49/cloudsupport/cloudvendorregistrycreds.go#L209
 func (regCreds *registryCreds) Authorization() (*authn.AuthConfig, error) {
 
 	var err error

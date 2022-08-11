@@ -1,7 +1,7 @@
 package mainhandler
 
 import (
-	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
 // ContainerData specific container data

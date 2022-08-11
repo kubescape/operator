@@ -9,7 +9,7 @@ import (
 	"github.com/kubescape/kontroller/utils"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

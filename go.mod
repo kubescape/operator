@@ -5,12 +5,11 @@ go 1.18
 require (
 	github.com/armosec/armoapi-go v0.0.112
 	github.com/armosec/cluster-notifier-api-go v0.0.3
-	github.com/armosec/k8s-interface v0.0.79
 	github.com/armosec/logger-go v0.0.13
 	github.com/armosec/opa-utils v0.0.166
 	github.com/armosec/registryx v0.0.12
 	github.com/armosec/utils-go v0.0.12
-	github.com/armosec/utils-k8s-go v0.0.8
+	github.com/armosec/utils-k8s-go v0.0.12
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/go-openapi/runtime v0.24.1
 	github.com/golang/glog v1.0.0
@@ -18,6 +17,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
+	github.com/kubescape/k8s-interface v0.0.82
 	github.com/stretchr/testify v1.8.0
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	k8s.io/api v0.24.3
@@ -111,7 +111,7 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	go.uber.org/zap v1.21.0 // indirect
+	go.uber.org/zap v1.22.0 // indirect
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
 	golang.org/x/oauth2 v0.0.0-20220718184931-c8730f7fcb92 // indirect

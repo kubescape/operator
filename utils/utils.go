@@ -37,14 +37,14 @@ func InitKubescapeHttpClient() httputils.IHttpClient {
 }
 func InitVulnScanHttpClient() httputils.IHttpClient {
 	// If the VulnScan URL not configured, then the HttpClient defined as a mock
-	if ClusterConfig.VulnScanURL == "" {
+	if ClusterConfig.KubevulnURL == "" {
 		return &ClientMock{}
 	}
 	return &http.Client{}
 }
 func InitReporterHttpClient() httputils.IHttpClient {
 	// If the EventReceiverREST not configured, then the HttpClient defined as a mock
-	if ClusterConfig.EventReceiverREST == "" {
+	if ClusterConfig.EventReceiverRestURL == "" {
 		return &ClientMock{}
 	}
 	return &http.Client{}

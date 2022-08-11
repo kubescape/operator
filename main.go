@@ -9,7 +9,7 @@ import (
 	"github.com/kubescape/kontroller/restapihandler"
 	"github.com/kubescape/kontroller/utils"
 
-	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
