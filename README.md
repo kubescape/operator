@@ -1,28 +1,39 @@
+
 # Kontroller 
 
-The Kontroller is an in-cluster component of the Kubescape security platform.
-It allows clients to connect to itself, listens for commands from the connected clients and controls other in-cluster components according to received commands.
-
-
-## API Documentation
-
-The Websocket provides an HTTP API.
-You can learn more about the API using one of the provided interactive OpenAPI UIs:
-- SwaggerUI, available at `/openapi/v2/swaggerui`
-- RapiDoc, available at `/openapi/v2/rapi`
-- Redoc, available at `/openapi/v2/docs`
-
-
-## Environment Variables
-
-Check out utils/environmentvariables.go
+The Kontroller component is at the heart of the solution as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connection, and triggers the relevant action in the cluster. Such actions could be triggering a configuration scan, image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
 
 ## Building Kontroller
 
-Before running Kontroller we need to take care of communication between it and other components.
-For example:
-What is the address of the client that connects to it.
-What is the address of the other in-cluster components that execute the commands.
+Before running Kontroller we need to take care of communication between it and other components.  
+For example:  
+What is the address of the client that connects to it.  
+What is the address of the other in-cluster components that execute the commands.  
+For this you need to define a configuration file with all the information inside, and add the file path to environment variable CONFIG.
+
+    export CONFIG=path/to/clusterData.json
+<details><summary>example/clusterData.json</summary>
+
+```json5
+// example/clusterData.json
+{
+    "notificationWSURL": "127.0.0.1:8001",
+    "notificationRestURL": "127.0.0.1:8002",
+    "vulnScanURL": "127.0.0.1:8081",
+    "kubescapeURL": "127.0.0.1:8080",
+    "triggerNewImageScan": "false",
+    "customerGUID": "11111-22222-33333-44444-55555",
+    "clusterName": "minikube-v1",
+    "backendOpenAPI": "https://api.armosec.io/api",
+    "eventReceiverREST": "https://report.armo.cloud",
+    "eventReceiverWS": "wss://report.armo.cloud",
+    "masterNotificationServer": "wss://ens.euprod1.cyberarmorsoft.com/v1/waitfornotification"
+}
+```
+</details>  
+Then just build the Kontroller.
+
+    go build .
 
 ### VS code configuration samples
 
@@ -62,11 +73,16 @@ You can use the samples files below to setup your VS code environment for buildi
 // .vscode/clusterData.json
 {
     "notificationWSURL": "127.0.0.1:8001",
+    "notificationRestURL": "127.0.0.1:8002",
     "vulnScanURL": "127.0.0.1:8081",
     "kubescapeURL": "127.0.0.1:8080",
-    "eventReceiverREST": "",
-    "customerGUID": "12345-12345-12345-12345",
-    "clusterName": "minikube-v1"
+    "triggerNewImageScan": "false",
+    "customerGUID": "11111-22222-33333-44444-55555",
+    "clusterName": "minikube-v1",
+    "backendOpenAPI": "https://api.armosec.io/api",
+    "eventReceiverREST": "https://report.armo.cloud",
+    "eventReceiverWS": "wss://report.armo.cloud",
+    "masterNotificationServer": "wss://ens.euprod1.cyberarmorsoft.com/v1/waitfornotification"
 }
 ```
 </details>
@@ -77,9 +93,10 @@ Just need to open the ports of the other in-cluster components, to have access t
     kubectl port-forward -n armo-system service/armo-vuln-scan 8081:8080 & 
     kubectl port-forward -n armo-system service/armo-notification-service 8001:8001 &
     
-#### Running Kontroller  as standalone
+### Running Kontroller  as standalone
 
-To run the Kontroller without connecting to other components, or to some of them, we will leave their value empty in the clusterData file.
+The Kontroller also supports running as a stand-alone.
+For this you need to define in the config file, for the relevant values that will be empty
 For example:
 <details><summary>.vscode/clusterData.json</summary>
 
@@ -87,14 +104,35 @@ For example:
 // .vscode/clusterData.json
 {
     "notificationWSURL": "",
+    "notificationRestURL": "",
     "vulnScanURL": "",
     "kubescapeURL": "",
-    "eventReceiverREST": "",
-    "customerGUID": "12345-12345-12345-12345",
-    "clusterName": "minikube-v1"
+    "triggerNewImageScan": "false",
+    "customerGUID": "11111-22222-33333-44444-55555",
+    "clusterName": "minikube-v1",
+    "backendOpenAPI": "",
+	"eventReceiverREST": "",
+	"eventReceiverWS": "",
+	"masterNotificationServer": ""
 }
 ```
 </details>
+
+## API Documentation
+
+The Websocket provides an HTTP API.
+You can learn more about the API using one of the provided interactive OpenAPI UIs:
+- SwaggerUI, available at `/openapi/v2/swaggerui`
+- RapiDoc, available at `/openapi/v2/rapi`
+- Redoc, available at `/openapi/v2/docs`
+
+
+## Environment Variables
+
+Check out utils/environmentvariables.go
+
+
+
 
 
 ## Example Requests
