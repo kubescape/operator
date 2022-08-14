@@ -55,8 +55,8 @@ You can learn more about the API using one of the provided interactive OpenAPI U
 Check out `utils/environmentvariables.go`
 
 ## Example Requests
-
-<details><summary>Trigger an Action</summary>
+#### Trigger an Action
+<details><summary>Example</summary>
 
 ```
 curl -X POST http://<Kuntroller-url>/v1/triggerAction
@@ -71,7 +71,9 @@ curl -X POST http://<Kuntroller-url>/v1/triggerAction
 	}'
 ```
 </details>
-<details><summary>Trigger Kubescape scanning</summary>
+
+#### Trigger [Kubescape](https://github.com/armosec/kubescape) scanning
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
@@ -91,7 +93,9 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Create a CronJob that will repeatedly trigger a Kubescape scanning all frameworks</summary>
+
+#### Create a CronJob that will repeatedly trigger a Kubescape scanning all frameworks
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
@@ -114,7 +118,9 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Create a CronJob that will repeatedly trigger a Kubescape scanning specific framework</summary>
+
+#### Create a CronJob that will repeatedly trigger a Kubescape scanning specific framework
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
@@ -141,7 +147,9 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Trigger Kubevuln scanning</summary>
+
+#### Trigger [Kubevuln](https://github.com/kubescape/kubevuln) scanning
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
@@ -157,7 +165,9 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Create a CronJob that will repeatedly trigger a Kubevuln scanning</summary>
+
+#### Create a CronJob that will repeatedly trigger a Kubevuln scanning
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
@@ -178,7 +188,9 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Update a CronJob that repeatedly trigger a Kubevuln scanning</summary>
+
+#### Update a CronJob that repeatedly trigger a Kubevuln scanning
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
@@ -199,7 +211,9 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Delete a CronJob that repeatedly trigger a Kubevuln scanning</summary>
+
+#### Delete a CronJob that repeatedly trigger a Kubevuln scanning
+<details><summary>Example</summary>
 
 ```
 curl -X POST \
