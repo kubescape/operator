@@ -1,19 +1,18 @@
 
-  
 # Kontroller 
 
 The Kontroller component is at the heart of the solution as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connection, and triggers the relevant action in the cluster. Such actions could be triggering a configuration scan, image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
 
 ## Running Kontroller
 Build Kontroller `go build .`  
-Run the executable  
+Run the executable, you can run the executable as a [stand alone](https://github.com/kubescape/kontroller#running-kontroller--as-standalone) and as part of the Kubescape cluster components.  
 ### Prerequisites
- * Running cluster
- * [Kubescape cluster components](https://github.com/armosec/armo-helm#installing-armo-cluster-components-in-a-kubernetes-cluster-using-helm)
+ * A running Kubernetes cluster
 ### Preparations
-
-After buliding Kontroller you need to prepare the environment for running.   
- * You need to open the ports of the other in-cluster components, to have access to them from the outside.
+If you running the Kontroller as part of the Kubescape cluster components, you need to prepare the environment for running.  
+As follows:  
+ 1. [install Kubescape cluster components](https://github.com/armosec/armo-helm#installing-armo-cluster-components-in-a-kubernetes-cluster-using-helm)
+ 2. Port-forward the other in-cluster components ports, this way the Kontroller will communicate with them.
 
 	```    
 	kubectl port-forward -n armo-system service/armo-kubescape 8080:8080 & 
@@ -21,25 +20,28 @@ After buliding Kontroller you need to prepare the environment for running.
 	kubectl port-forward -n armo-system service/armo-notification-service 8001:8001 &
 	```
 
- * To configure Kontroller how to access to the other in-cluster components you need to define a configuration file (**clusterData**) with all the information inside, and add the file path to environment variable CONFIG.  
-     `export CONFIG=path/to/clusterData.json`
-   <details><summary>example/clusterData.json</summary>
+ 3. Add a configuration file.  
+	<details><summary>example/clusterData.json</summary>
+
+	   ```json5 
+		{
+	       "gatewayWebsocketURL": "127.0.0.1:8001",
+	       "gatewayRestURL": "127.0.0.1:8002",
+	       "kubevulnURL": "127.0.0.1:8081",
+	       "kubescapeURL": "127.0.0.1:8080",
+	       "eventReceiverRestURL": "https://report.armo.cloud",
+	       "eventReceiverWebsocketURL": "wss://report.armo.cloud",
+	       "rootGatewayURL": "wss://ens.euprod1.cyberarmorsoft.com/v1/waitfornotification",
+	       "accountID": "*********************",
+	       "clusterName": "******", } 
+	```
+	</details>
    
-   ```json5 
-	{
-       "gatewayWebsocketURL": "127.0.0.1:8001",
-       "gatewayRestURL": "127.0.0.1:8002",
-       "kubevulnURL": "127.0.0.1:8081",
-       "kubescapeURL": "127.0.0.1:8080",
-       "eventReceiverRestURL": "https://report.armo.cloud",
-       "eventReceiverWebsocketURL": "wss://report.armo.cloud",
-       "rootGatewayURL": "wss://ens.euprod1.cyberarmorsoft.com/v1/waitfornotification",
-       "accountID": "*********************",
-       "clusterName": "******", } 
-	``` 
-</details>
-
-
+ 4. Set the file path to the `CONFIG` environment variable 
+     ```
+     export CONFIG=path/to/clusterData.json
+     ```
+     
 ## API Documentation
 
 The Kontroller provides an HTTP API.
@@ -48,10 +50,9 @@ You can learn more about the API using one of the provided interactive OpenAPI U
 - RapiDoc, available at `/openapi/v2/rapi`
 - Redoc, available at `/openapi/v2/docs`
 
-
 ## Environment Variables
 
-Check out utils/environmentvariables.go
+Check out `utils/environmentvariables.go`
 
 ## Example Requests
 
@@ -70,7 +71,7 @@ curl -X POST http://<Kuntroller-url>/v1/triggerAction
 	}'
 ```
 </details>
-<details><summary>Trigger a Kubescape Scan</summary>
+<details><summary>Trigger Kubescape scanning</summary>
 
 ```
 curl -X POST \
@@ -90,7 +91,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Create a CronJob that Runs Kubescape Scans</summary>
+<details><summary>Create a CronJob that will repeatedly trigger a Kubescape scanning all frameworks</summary>
 
 ```
 curl -X POST \
@@ -112,6 +113,8 @@ curl -X POST \
 	}' \
    http://127.0.0.1:4002/v1/triggerAction
 ```
+</details>
+<details><summary>Create a CronJob that will repeatedly trigger a Kubescape scanning specific framework</summary>
 
 ```
 curl -X POST \
@@ -138,7 +141,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Trigger an Image Scan</summary>
+<details><summary>Trigger Kubevuln scanning</summary>
 
 ```
 curl -X POST \
@@ -154,7 +157,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Create a CronJob that runs Vulnerability Scans</summary>
+<details><summary>Create a CronJob that will repeatedly trigger a Kubevuln scanning</summary>
 
 ```
 curl -X POST \
@@ -175,7 +178,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Update a CronJob that runs Vulnerability Scans</summary>
+<details><summary>Update a CronJob that repeatedly trigger a Kubevuln scanning</summary>
 
 ```
 curl -X POST \
@@ -196,7 +199,7 @@ curl -X POST \
    http://127.0.0.1:4002/v1/triggerAction
 ```
 </details>
-<details><summary>Delete a CronJob that runs Vulnerability Scans</summary>
+<details><summary>Delete a CronJob that repeatedly trigger a Kubevuln scanning</summary>
 
 ```
 curl -X POST \
@@ -246,10 +249,10 @@ You can use the samples files below to setup your VS code environment for buildi
     ]
 }
 ```
-We configure the Kontroller to listen to port 4002, and define the configuration in the clusterData.json file as mentioned above.
-	</details>
-And also need to open the ports of the other in-cluster components,  as mentioned above.
+We configure the Kontroller to listen to port 4002, and define the configuration in the clusterData.json file [as mentioned above](https://github.com/kubescape/kontroller#preparations).
+</details>
 
+And also need to open the ports of the other in-cluster components, [as mentioned above](https://github.com/kubescape/kontroller#preparations).
     
 ## Running Kontroller  as standalone
 
