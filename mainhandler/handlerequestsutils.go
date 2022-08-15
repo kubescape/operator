@@ -8,42 +8,15 @@ import (
 	"github.com/kubescape/kontroller/utils"
 
 	"github.com/golang/glog"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/armosec/utils-k8s-go/probes"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 
-	"github.com/armosec/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
-var IgnoreCommandInNamespace = map[apis.NotificationPolicyType][]string{}
-
-func InitIgnoreCommandInNamespace() {
-	if len(IgnoreCommandInNamespace) != 0 {
-		return
-	}
-	IgnoreCommandInNamespace[apis.TypeUpdateWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
-	IgnoreCommandInNamespace[apis.TypeInjectToWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
-	IgnoreCommandInNamespace[apis.TypeDecryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
-	IgnoreCommandInNamespace[apis.TypeEncryptSecret] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
-	IgnoreCommandInNamespace[apis.TypeRemoveWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic, utils.Namespace}
-	IgnoreCommandInNamespace[apis.TypeRestartWorkload] = []string{metav1.NamespaceSystem, metav1.NamespacePublic}
-	IgnoreCommandInNamespace[apis.TypeScanImages] = []string{}
-}
-
-func ignoreNamespace(command apis.NotificationPolicyType, namespace string) bool {
-	InitIgnoreCommandInNamespace()
-	if s, ok := IgnoreCommandInNamespace[command]; ok {
-		for i := range s {
-			if s[i] == namespace {
-				return true
-			}
-		}
-	}
-	return false
-}
 func (mainHandler *MainHandler) listWorkloads(namespaces []string, resource string, labels, fields map[string]string) ([]k8sinterface.IWorkload, error) {
 	groupVersionResource, err := k8sinterface.GetGroupVersionResource(resource)
 	if err != nil {
@@ -67,42 +40,18 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 		case "Namespace":
 			idMap[pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		default:
-			if wlid := workloads[i].GetWlid(); wlid != "" {
+			// find wlid
+			kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(workloads[i])
+			if err != nil {
+				errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
+			}
+			wlid := pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, workloads[i].GetNamespace(), kind, name)
+			if wlid != "" {
 				idMap[wlid] = true
-			} else {
-				// find wlid
-				kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(workloads[i])
-				if err != nil {
-					errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
-				}
-				wlid := pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, workloads[i].GetNamespace(), kind, name)
-				if wlid != "" {
-					idMap[wlid] = true
-				}
 			}
 		}
 	}
 	return utils.MapToString(idMap), errs
-}
-
-func getCommandNamespace(command *apis.Command) string {
-	if command.Wlid != "" {
-		return pkgwlid.GetNamespaceFromWlid(command.Wlid)
-	}
-	if command.WildWlid != "" {
-		return pkgwlid.GetNamespaceFromWlid(command.WildWlid)
-	}
-	return ""
-}
-
-func getCommandID(command *apis.Command) string {
-	if command.Wlid != "" {
-		return command.Wlid
-	}
-	if command.WildWlid != "" {
-		return command.WildWlid
-	}
-	return ""
 }
 
 func resourceList(command apis.NotificationPolicyType) []string {

@@ -10,15 +10,14 @@ import (
 	"github.com/armosec/utils-go/httputils"
 
 	"github.com/armosec/armoapi-go/apis"
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	uuid "github.com/google/uuid"
 
-	"github.com/armosec/k8s-interface/k8sinterface"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/golang/glog"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
 type MainHandler struct {
@@ -55,7 +54,6 @@ func init() {
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
-	utilsmetadata.InitNamespacesListToIgnore(utils.Namespace)
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -68,7 +66,6 @@ func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.Kube
 
 // CreateWebSocketHandler Create ws-handler obj
 func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
-	utilsmetadata.InitNamespacesListToIgnore(utils.Namespace)
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
@@ -89,11 +86,6 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 	go mainHandler.handleCommandResponse()
 	for {
 		sessionObj := <-*mainHandler.sessionObj
-
-		if ignoreNamespace(sessionObj.Command.CommandName, getCommandNamespace(&sessionObj.Command)) {
-			glog.Infof("namespace '%s' out of scope. Ignoring wlid: %s, command: %s", getCommandNamespace(&sessionObj.Command), getCommandID(&sessionObj.Command), sessionObj.Command.CommandName)
-			continue
-		}
 
 		// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
 		sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))

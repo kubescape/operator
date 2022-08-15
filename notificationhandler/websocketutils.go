@@ -55,7 +55,7 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 
 func initNotificationServerURL() string {
 	urlObj := url.URL{}
-	host := utils.ClusterConfig.NotificationWSURL
+	host := utils.ClusterConfig.GatewayWebsocketURL
 	if host == "" {
 		return ""
 	}
@@ -74,7 +74,7 @@ func initNotificationServerURL() string {
 	urlObj.Path = notificationserver.PathWebsocketV1
 
 	q := urlObj.Query()
-	q.Add(notificationserver.TargetCustomer, utils.ClusterConfig.CustomerGUID)
+	q.Add(notificationserver.TargetCustomer, utils.ClusterConfig.AccountID)
 	q.Add(notificationserver.TargetCluster, utils.ClusterConfig.ClusterName)
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
 	urlObj.RawQuery = q.Encode()

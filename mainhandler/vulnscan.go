@@ -17,10 +17,10 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
-	"github.com/armosec/k8s-interface/cloudsupport"
-	"github.com/armosec/k8s-interface/k8sinterface"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/golang/glog"
+	"github.com/kubescape/k8s-interface/cloudsupport"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
 const (
@@ -34,7 +34,7 @@ type cmMode string
 func getVulnScanURL() *url.URL {
 	vulnURL := url.URL{}
 	vulnURL.Scheme = "http"
-	vulnURL.Host = utils.ClusterConfig.VulnScanURL
+	vulnURL.Host = utils.ClusterConfig.KubevulnURL
 	vulnURL.Path = fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
 	return &vulnURL
 }

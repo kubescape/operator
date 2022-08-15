@@ -26,7 +26,7 @@ func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHand
 }
 
 func (notification *NotificationHandler) WebsocketConnection() error {
-	if utils.ClusterConfig.NotificationWSURL == "" {
+	if utils.ClusterConfig.GatewayWebsocketURL == "" {
 		return nil
 	}
 	retries := 0

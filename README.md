@@ -14,6 +14,7 @@ As follows:
  1. [install Kubescape cluster components](https://github.com/armosec/armo-helm#installing-armo-cluster-components-in-a-kubernetes-cluster-using-helm)
  2. Port-forward the other in-cluster components ports, this way the Kontroller will communicate with them.
 
+
 	```    
 	kubectl port-forward -n armo-system service/armo-kubescape 8080:8080 & 
 	kubectl port-forward -n armo-system service/armo-vuln-scan 8081:8080 & 
@@ -45,6 +46,7 @@ As follows:
 ## API Documentation
 
 The Kontroller provides an HTTP API.
+
 You can learn more about the API using one of the provided interactive OpenAPI UIs:
 - SwaggerUI, available at `/openapi/v2/swaggerui`
 - RapiDoc, available at `/openapi/v2/rapi`

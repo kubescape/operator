@@ -16,7 +16,7 @@ var ClusterConfig = &utilsmetadata.ClusterConfig{}
 
 func LoadEnvironmentVariables() (err error) {
 	pathToConfig := os.Getenv(ConfigEnvironmentVariable) // if empty, will load config from default path
-	ClusterConfig, err = utilsmetadata.LoadConfig(pathToConfig, true)
+	ClusterConfig, err = utilsmetadata.LoadConfig(pathToConfig)
 	if err != nil {
 		return err
 	}
@@ -24,7 +24,7 @@ func LoadEnvironmentVariables() (err error) {
 	if ClusterConfig.ClusterName == "" {
 		return fmt.Errorf("missing cluster name in config")
 	}
-	if ClusterConfig.CustomerGUID == "" {
+	if ClusterConfig.AccountID == "" {
 		return fmt.Errorf("missing customer guid in config")
 	}
 

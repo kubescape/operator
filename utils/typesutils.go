@@ -15,7 +15,7 @@ import (
 var ReporterHttpClient httputils.IHttpClient
 
 func NewSessionObj(command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := reporterlib.NewBaseReport(ClusterConfig.CustomerGUID, message, ClusterConfig.EventReceiverREST, ReporterHttpClient)
+	reporter := reporterlib.NewBaseReport(ClusterConfig.AccountID, message, ClusterConfig.EventReceiverRestURL, ReporterHttpClient)
 	target := command.GetID()
 	if target == apitypes.DesignatorsToken {
 		target = fmt.Sprintf("wlid://cluster-%s/", ClusterConfig.ClusterName)
