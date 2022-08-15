@@ -22,10 +22,10 @@ const (
 	cronjobTemplateName = "cronjobTemplate"
 )
 const (
-	armoUpdateJobIDAnnotationDeprecated = "armo.updatejobid"
-	armoJobIDAnnotationDeprecated       = "armo.cloud/jobid"
-	armoUpdateJobIDAnnotation           = "app.kubescape/update-job-id" // TODO: move to external package
-	armoJobIDAnnotation                 = "app.kubescape/job-id"        // TODO: move to external package
+	kubescapeUpdateJobIDAnnotationDeprecated = "armo.updatejobid"
+	kubescapeJobIDAnnotationDeprecated       = "armo.cloud/jobid"
+	kubescapeUpdateJobIDAnnotation           = "app.kubescape/update-job-id" // TODO: move to external package
+	kubescapeJobIDAnnotation                 = "app.kubescape/job-id"        // TODO: move to external package
 )
 
 func fixK8sCronJobNameLimit(jobName string) string {
@@ -120,8 +120,8 @@ func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, job
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotationDeprecated] = jobID // deprecated
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armoJobIDAnnotation] = jobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeJobIDAnnotationDeprecated] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeJobIDAnnotation] = jobID
 
 	// add annotations
 	if jobTemplateObj.ObjectMeta.Labels == nil {
