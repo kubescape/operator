@@ -141,7 +141,7 @@ func (actionHandler *ActionHandler) getRegistryAuth(registryName string) (*regis
 }
 
 func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, string, error) {
-	configMap, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "ConfigMap", registryScanConfigmap)
+	configMap, err := actionHandler.k8sAPI.GetWorkload(kubescapeNamespace, "ConfigMap", registryScanConfigmap)
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
@@ -172,7 +172,7 @@ func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*reg
 }
 
 func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
-	secret, err := actionHandler.k8sAPI.GetWorkload(armoNamespace, "Secret", registryScanSecret)
+	secret, err := actionHandler.k8sAPI.GetWorkload(kubescapeNamespace, "Secret", registryScanSecret)
 	return secret, err
 
 }
