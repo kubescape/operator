@@ -54,19 +54,6 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 	return utils.MapToString(idMap), errs
 }
 
-func resourceList(command apis.NotificationPolicyType) []string {
-	switch command {
-	case apis.TypeClusterUnregistered:
-		return []string{"namespaces", "pods"}
-	case apis.TypeDecryptSecret, apis.TypeEncryptSecret:
-		return []string{"secrets"}
-	default:
-		return []string{"pods"}
-
-	}
-
-}
-
 func notWaitAtAll() {
 }
 

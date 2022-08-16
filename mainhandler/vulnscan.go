@@ -16,6 +16,7 @@ import (
 	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/golang/glog"
@@ -141,7 +142,12 @@ func (actionHandler *ActionHandler) getRegistryAuth(registryName string) (*regis
 }
 
 func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, string, error) {
-	configMap, err := actionHandler.k8sAPI.GetWorkload(kubescapeNamespace, "ConfigMap", registryScanConfigmap)
+	configMap, err := actionHandler.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "ConfigMap", registryScanConfigmap)
+	// in case of an error or missing configmap, fallback to the deprecated namespace
+	if err != nil || configMap == nil {
+		configMap, err = actionHandler.k8sAPI.GetWorkload(armotypes.ArmoSystemNamespace, "ConfigMap", registryScanConfigmap)
+	}
+
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
@@ -172,7 +178,13 @@ func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*reg
 }
 
 func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
-	secret, err := actionHandler.k8sAPI.GetWorkload(kubescapeNamespace, "Secret", registryScanSecret)
+	secret, err := actionHandler.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", armotypes.RegistryScanSecretName)
+	if err == nil && secret != nil {
+		return secret, err
+	}
+
+	// deprecated namespace
+	secret, err = actionHandler.k8sAPI.GetWorkload(armotypes.ArmoSystemNamespace, "Secret", armotypes.RegistryScanSecretName)
 	return secret, err
 
 }
@@ -206,7 +218,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 }
 
 func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *utils.SessionObj) (string, error) {
-	registryInfo, ok := sessionObj.Command.Args[registryInfoV1].(map[string]interface{})
+	registryInfo, ok := sessionObj.Command.Args[armotypes.RegistryInfoArgKey].(map[string]interface{})
 	if !ok {
 		return "", fmt.Errorf("could not parse registry info")
 	}

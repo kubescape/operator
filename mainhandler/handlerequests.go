@@ -182,7 +182,6 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj
 	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
 	labels := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
-	resources := resourceList(sessionObj.Command.CommandName)
 	if len(sessionObj.Command.Designators) > 0 {
 		namespaces = make([]string, 0, 3)
 		for desiIdx := range sessionObj.Command.Designators {
@@ -197,7 +196,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	glog.Infof(info)
 	sessionObj.Reporter.SendDetails(info, true, sessionObj.ErrChan)
-	ids, errs := mainHandler.getIDs(namespaces, labels, fields, resources)
+	ids, errs := mainHandler.getIDs(namespaces, labels, fields, []string{"pods"})
 	for i := range errs {
 		glog.Warningf(errs[i].Error())
 		sessionObj.Reporter.SendError(errs[i], true, true, sessionObj.ErrChan)

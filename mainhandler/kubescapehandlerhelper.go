@@ -12,6 +12,8 @@ import (
 	"github.com/kubescape/kontroller/utils"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
+
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	"github.com/armosec/utils-go/boolutils"
@@ -123,12 +125,12 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.jobid"] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationArmoJobIDKeyDeprecated] = jobID // deprecated
 	if targetType != "" {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[strings.ToLower(fmt.Sprintf("armo.%s", targetType))] = targetName
 	}
 	if hostScanner != nil {
-		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations["armo.host-scanner"] = boolutils.BoolPointerToString(hostScanner)
+		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationHostScannerKey] = boolutils.BoolPointerToString(hostScanner)
 	}
 
 	// add annotations
