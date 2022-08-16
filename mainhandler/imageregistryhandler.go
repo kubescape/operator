@@ -36,7 +36,7 @@ const (
 	imagesToScanLimit                       = 500
 	defaultDepth                            = 1
 	registriesAuthFieldInSecret             = "registriesAuth"
-	armoNamespace                           = "armo-system"
+	kubescapeNamespace                      = "armo-system"
 	accessTokenAuth             AuthMethods = "accesstoken"
 	registryCronjobTemplate                 = "registry-scan-cronjob-template"
 	registryNameAnnotation                  = "armo.cloud/registryname"

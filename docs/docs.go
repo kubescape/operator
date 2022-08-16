@@ -1,7 +1,7 @@
 /*
-Package classification Kubescape Websocket
+Package classification Kubescape Kontroller
 
-The Kubescape Websocket coordinates the Kubescape in-cluster components and allows clients to execute actions these components.
+The Kubescape Kontroller coordinates the Kubescape in-cluster components and allows clients to execute actions these components.
 
 Schemes: https, http
 BasePath: /
