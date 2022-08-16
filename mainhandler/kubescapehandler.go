@@ -10,6 +10,7 @@ import (
 	"github.com/kubescape/kontroller/utils"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	"github.com/armosec/utils-go/httputils"
@@ -20,6 +21,7 @@ import (
 
 const (
 	WaitTimeForKubescapeScanResponse = 40
+	KubescapeCronJobTemplateName     = "kubescape-cronjob-template"
 )
 
 type kubescapeResponseData struct {
@@ -59,8 +61,8 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob() error {
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeUpdateJobIDAnnotationDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeUpdateJobIDAnnotation] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
@@ -84,7 +86,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, "kubescape-cronjob-template")
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName)
 		if err != nil {
 			return err
 		}

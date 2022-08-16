@@ -9,6 +9,7 @@ import (
 	"github.com/kubescape/kontroller/utils"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,12 +21,6 @@ const (
 	requestBodyFile     = "request-body.json"
 	requestVolumeName   = "request-body-volume"
 	cronjobTemplateName = "cronjobTemplate"
-)
-const (
-	kubescapeUpdateJobIDAnnotationDeprecated = "armo.updatejobid"
-	kubescapeJobIDAnnotationDeprecated       = "armo.cloud/jobid"
-	kubescapeUpdateJobIDAnnotation           = "app.kubescape/update-job-id" // TODO: move to external package
-	kubescapeJobIDAnnotation                 = "app.kubescape/job-id"        // TODO: move to external package
 )
 
 func fixK8sCronJobNameLimit(jobName string) string {
@@ -120,8 +115,8 @@ func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, job
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeJobIDAnnotationDeprecated] = jobID // deprecated
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeJobIDAnnotation] = jobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationArmoCloudJobIDKeyDeprecated] = jobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationJobIDKey] = jobID
 
 	// add annotations
 	if jobTemplateObj.ObjectMeta.Labels == nil {

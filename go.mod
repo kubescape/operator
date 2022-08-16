@@ -3,7 +3,7 @@ module github.com/kubescape/kontroller
 go 1.18
 
 require (
-	github.com/armosec/armoapi-go v0.0.112
+	github.com/armosec/armoapi-go v0.0.115
 	github.com/armosec/cluster-notifier-api-go v0.0.3
 	github.com/armosec/logger-go v0.0.13
 	github.com/armosec/opa-utils v0.0.166

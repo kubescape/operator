@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/kontroller/utils"
 
 	"github.com/golang/glog"
@@ -30,8 +31,8 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
 
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeUpdateJobIDAnnotationDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[kubescapeUpdateJobIDAnnotation] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {

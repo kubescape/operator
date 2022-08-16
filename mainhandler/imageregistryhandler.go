@@ -13,6 +13,7 @@ import (
 	regFactory "github.com/armosec/registryx/registries"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
@@ -29,17 +30,12 @@ import (
 type AuthMethods string
 
 const (
-	registryScanSecret                      = "kubescape-registry-scan"
 	registryScanConfigmap                   = "kubescape-registry-scan"
-	registryInfoV1                          = "registryInfo-v1"
 	registryNameField                       = "registryName"
 	imagesToScanLimit                       = 500
-	defaultDepth                            = 1
 	registriesAuthFieldInSecret             = "registriesAuth"
-	kubescapeNamespace                      = "armo-system"
 	accessTokenAuth             AuthMethods = "accesstoken"
 	registryCronjobTemplate                 = "registry-scan-cronjob-template"
-	registryNameAnnotation                  = "armo.cloud/registryname"
 	tagsPageSize                            = 1000
 	registryScanDocumentation               = "https://hub.armosec.io/docs/registry-vulnerability-scan"
 )
@@ -469,7 +465,7 @@ func (registryScan *registryScan) setCronJobTemplate(jobTemplateObj *v1.CronJob,
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
 
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[registryNameAnnotation] = registryName
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationRegistryNameKey] = registryName
 
 	// add annotations
 	if jobTemplateObj.ObjectMeta.Labels == nil {
@@ -498,8 +494,8 @@ func (registryScan *registryScan) getRegistryScanV1ScanCommand(registryName stri
 	scanRegistryCommand.CommandName = apis.TypeScanRegistry
 	registryInfo := map[string]string{registryNameField: registryName}
 
-	scanRegistryCommand.Args = map[string]interface{}{registryInfoV1: registryInfo}
-	scanRegistryCommand.Args[registryInfoV1] = registryInfo
+	scanRegistryCommand.Args = map[string]interface{}{armotypes.RegistryInfoArgKey: registryInfo}
+	scanRegistryCommand.Args[armotypes.RegistryInfoArgKey] = registryInfo
 
 	scanRegistryCommands := apis.Commands{}
 	scanRegistryCommands.Commands = append(scanRegistryCommands.Commands, scanRegistryCommand)
