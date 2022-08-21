@@ -16,9 +16,9 @@ As follows:
 
 
 	```    
-	kubectl port-forward -n armo-system service/armo-kubescape 8080:8080 & 
-	kubectl port-forward -n armo-system service/armo-vuln-scan 8081:8080 & 
-	kubectl port-forward -n armo-system service/armo-notification-service 8001:8001 &
+	kubectl port-forward -n kubescape service/armo-kubescape 8080:8080 & 
+	kubectl port-forward -n kubescape service/armo-vuln-scan 8081:8080 & 
+	kubectl port-forward -n kubescape service/armo-notification-service 8001:8001 &
 	```
 
  3. Add a configuration file.  
@@ -255,7 +255,7 @@ You can use the samples files below to setup your VS code environment for buildi
             "program":  "${workspaceRoot}",
                  "env": {
                      "PORT": "4002",
-                     "NAMESPACE": "armo-system",
+                     "NAMESPACE": "kubescape",
                      "CONFIG": "${workspaceRoot}/.vscode/clusterData.json",
             },
             "args": [
