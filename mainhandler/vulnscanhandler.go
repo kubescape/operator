@@ -13,13 +13,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const VulnScanCronjobTemplateName = "vulnscan-cronjob-template"
+const VulnScanCronjobTemplateName = "kubevuln-cronjob-template"
 
 func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
 	req := getVulnScanRequest(&actionHandler.command)
 
-	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "vuln-scan-scheduled", rand.NewSource(time.Now().UnixNano()).Int63()))
+	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "kubevuln-schedule", rand.NewSource(time.Now().UnixNano()).Int63()))
 
 	if err := createConfigMapForTriggerRequest(actionHandler.k8sAPI, name, req); err != nil {
 		return err
