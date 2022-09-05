@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 )
 
 func TestNewTriggerHandlerNotificationHandler(t *testing.T) {

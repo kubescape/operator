@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"

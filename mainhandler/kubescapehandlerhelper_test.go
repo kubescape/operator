@@ -3,7 +3,7 @@ package mainhandler
 import (
 	"testing"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	"github.com/armosec/utils-go/boolutils"

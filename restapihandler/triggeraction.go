@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/golang/glog"

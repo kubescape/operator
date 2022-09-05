@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

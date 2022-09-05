@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	"github.com/golang/glog"
 

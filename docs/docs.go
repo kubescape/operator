@@ -1,7 +1,7 @@
 /*
-Package classification Kubescape Kontroller
+Package classification Kubescape Operator
 
-The Kubescape Kontroller coordinates the Kubescape in-cluster components and allows clients to execute actions these components.
+The Kubescape Operator coordinates the Kubescape in-cluster components and allows clients to execute actions these components.
 
 Schemes: https, http
 BasePath: /

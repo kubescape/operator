@@ -1,4 +1,4 @@
-module github.com/kubescape/kontroller
+module github.com/kubescape/operator
 
 go 1.18
 

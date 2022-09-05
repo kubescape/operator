@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kubescape/kontroller/docs"
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/docs"
+	"github.com/kubescape/operator/utils"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"

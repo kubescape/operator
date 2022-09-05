@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"

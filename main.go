@@ -4,10 +4,10 @@ import (
 	"flag"
 	"os"
 
-	"github.com/kubescape/kontroller/mainhandler"
-	"github.com/kubescape/kontroller/notificationhandler"
-	"github.com/kubescape/kontroller/restapihandler"
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/mainhandler"
+	"github.com/kubescape/operator/notificationhandler"
+	"github.com/kubescape/operator/restapihandler"
+	"github.com/kubescape/operator/utils"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	restclient "k8s.io/client-go/rest"

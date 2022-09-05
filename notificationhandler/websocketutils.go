@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubescape/kontroller/utils"
+	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"

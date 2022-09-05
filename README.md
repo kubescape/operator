@@ -1,18 +1,18 @@
 
-# Kontroller 
+# Operator 
 
-The Kontroller component is at the heart of the solution as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connection, and triggers the relevant action in the cluster. Such actions could be triggering a configuration scan, image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
+The Operator component is at the heart of the solution as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connection, and triggers the relevant action in the cluster. Such actions could be triggering a configuration scan, image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
 
-## Running Kontroller
-Build Kontroller `go build .`  
-Run the executable, you can run the executable as a [stand alone](https://github.com/kubescape/kontroller#running-kontroller--as-standalone) and as part of the Kubescape cluster components.  
+## Running Operator
+Build Operator `go build .`  
+Run the executable, you can run the executable as a [stand alone](https://github.com/kubescape/operator#running-operator--as-standalone) and as part of the Kubescape cluster components.  
 ### Prerequisites
  * A running Kubernetes cluster
 ### Preparations
-If you running the Kontroller as part of the Kubescape cluster components, you need to prepare the environment for running.  
+If you running the Operator as part of the Kubescape cluster components, you need to prepare the environment for running.  
 As follows:  
  1. [install Kubescape cluster components](https://github.com/armosec/armo-helm#installing-armo-cluster-components-in-a-kubernetes-cluster-using-helm)
- 2. Port-forward the other in-cluster components ports, this way the Kontroller will communicate with them.
+ 2. Port-forward the other in-cluster components ports, this way the Operator will communicate with them.
 
 
 	```    
@@ -45,7 +45,7 @@ As follows:
      
 ## API Documentation
 
-The Kontroller provides an HTTP API.
+The Operator provides an HTTP API.
 
 You can learn more about the API using one of the provided interactive OpenAPI UIs:
 - SwaggerUI, available at `/openapi/v2/swaggerui`
@@ -265,14 +265,14 @@ You can use the samples files below to setup your VS code environment for buildi
     ]
 }
 ```
-We configure the Kontroller to listen to port 4002, and define the configuration in the clusterData.json file [as mentioned above](https://github.com/kubescape/kontroller#preparations).
+We configure the Operator to listen to port 4002, and define the configuration in the clusterData.json file [as mentioned above](https://github.com/kubescape/operator#preparations).
 </details>
 
-And also need to open the ports of the other in-cluster components, [as mentioned above](https://github.com/kubescape/kontroller#preparations).
+And also need to open the ports of the other in-cluster components, [as mentioned above](https://github.com/kubescape/operator#preparations).
     
-## Running Kontroller  as standalone
+## Running Operator  as standalone
 
-The Kontroller also supports running as a stand-alone.
+The Operator also supports running as a stand-alone.
 For this you need to define in the config file, for the relevant values that will be empty
 For example:
 <details><summary>.vscode/clusterData.json</summary>

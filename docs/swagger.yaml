@@ -223,9 +223,9 @@ definitions:
     type: object
     x-go-package: github.com/armosec/armoapi-go/armotypes
 info:
-  description: The Kubescape Kontroller coordinates the Kubescape in-cluster components
+  description: The Kubescape Operator coordinates the Kubescape in-cluster components
     and allows clients to execute actions these components.
-  title: Kubescape Kontroller
+  title: Kubescape Operator
   version: 1.0.0
 paths:
   /v1/triggerAction:
