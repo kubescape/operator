@@ -145,6 +145,8 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) err
 		return actionHandler.scanWorkload(sessionObj)
 	case apis.TypeScanRegistry:
 		return actionHandler.scanRegistries(sessionObj)
+	case apis.TypeTestRegistryConnectivity:
+		return actionHandler.testRegistryConnectivity(sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan()
 	case apis.TypeSetKubescapeCronJob:

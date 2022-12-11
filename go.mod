@@ -2,6 +2,10 @@ module github.com/kubescape/operator
 
 go 1.18
 
+replace github.com/armosec/armoapi-go => /home/daniel/armo/armoapi-go
+
+replace github.com/armosec/registryx => /home/daniel/armo/registryx
+
 require (
 	github.com/armosec/armoapi-go v0.0.115
 	github.com/armosec/cluster-notifier-api-go v0.0.3
@@ -18,6 +22,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/kubescape/k8s-interface v0.0.82
+	github.com/mitchellh/mapstructure v1.4.3
 	github.com/stretchr/testify v1.8.0
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	k8s.io/api v0.24.3
@@ -95,7 +100,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

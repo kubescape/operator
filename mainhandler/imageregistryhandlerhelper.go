@@ -44,7 +44,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 }
 
 func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.SessionObj) error {
-	registryScan := registryScan{}
+	registryScan := NewRegistryScan(actionHandler.k8sAPI)
 
 	// parse registry name from command
 	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)

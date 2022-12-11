@@ -135,8 +135,6 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
-github.com/armosec/armoapi-go v0.0.115 h1:KpxcACULFwX0BScYSS2u7DLO3D5Rlea3WNUKQpdCfJw=
-github.com/armosec/armoapi-go v0.0.115/go.mod h1:2zoNzb3Fy9ZByeczJZ47ftDRLRzTykVdTISS3GTc/JU=
 github.com/armosec/cluster-notifier-api-go v0.0.3 h1:noJ6IL/Bnkn2hnNLFvMwIMaZsxY9DJ+3MEQi3i/DAQI=
 github.com/armosec/cluster-notifier-api-go v0.0.3/go.mod h1:7J+XboqvPNAPABtkH2ecITg8/23fP4YXvtAa5wJONQU=
 github.com/armosec/gojay v1.2.15 h1:sSB2vnAvacUNkw9nzUYZKcPzhJOyk6/5LK2JCNdmoZY=
@@ -145,8 +143,6 @@ github.com/armosec/logger-go v0.0.13 h1:S6KCc9Di7AWzKQyQawtKwLimmZxwIubHOhXWsTSH
 github.com/armosec/logger-go v0.0.13/go.mod h1:xEAtirJOHlqgxGlKTEtNHN2uiTzHiSL8NbmkVuCAwSw=
 github.com/armosec/opa-utils v0.0.166 h1:g3gKpLf2YsGuQxSTTHQLb0k4+UHVC3NArv0lEtqpmbg=
 github.com/armosec/opa-utils v0.0.166/go.mod h1:dFTUgba55U+P7E91g+UOOzfQ2deiKM5PP18XKlBkcCo=
-github.com/armosec/registryx v0.0.12 h1:ZE1L2RyY7LKzpHiIatNetu102asLybTlRtQKoi+Akxs=
-github.com/armosec/registryx v0.0.12/go.mod h1:qLBiNF0991fCQ6EiAX5laPWGnkOFBzdABdTizEBs1GE=
 github.com/armosec/utils-go v0.0.12 h1:NXkG/BhbSVAmTVXr0qqsK02CmxEiXuJyPmdTRcZ4jAo=
 github.com/armosec/utils-go v0.0.12/go.mod h1:F/K1mI/qcj7fNuJl7xktoCeHM83azOF0Zq6eC2WuPyU=
 github.com/armosec/utils-k8s-go v0.0.12 h1:u7kHSUp4PpvPP3hEaRXMbM0Vw23IyLhAzzE+2TW6Jkk=
