@@ -524,7 +524,7 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	}
 	err := mapstructure.Decode(registryInfo, &registryScan.registryInfo)
 	if err != nil {
-		return fmt.Errorf("could decode registry info into registryInfo struct")
+		return fmt.Errorf("could not decode registry info into registryInfo struct")
 	}
 	registryScan.setHostnameAndProject()
 	return nil

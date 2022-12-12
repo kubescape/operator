@@ -105,6 +105,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 	}
 	if err != nil {
 		sessionObj.Reporter.SendStatus(reporterlib.JobFailed, true, sessionObj.ErrChan)
+		glog.Errorf("in parseRegistryCommand: error: ", err.Error())
 		return fmt.Errorf("parseRegistryCommand failed with err %v", err)
 	}
 
@@ -116,12 +117,14 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.S
 
 	err := registryScan.parseRegistryFromCommand(sessionObj)
 	if err != nil {
+		glog.Errorf("in testRegistryConnectivity: parseRegistryFromCommand failed with error: ", err.Error())
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryConnectivityStatusInfo, err))
 		return fmt.Errorf("parseRegistryCommand failed with err %v", err)
 	}
 
 	err = actionHandler.testRegistryConnect(&registryScan, sessionObj)
 	if err != nil {
+		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: ", err.Error())
 		return err
 	}
 	return nil
@@ -148,7 +151,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 
 	// registry information is valid, but auth is not
 	// ecr returns 400 for bad token
-	if statusCode == 401 || statusCode == 403 || err != nil && strings.Contains(err.Error(), "DENIED") {
+	if statusCode == 401 || statusCode == 403 || (err != nil && strings.Contains(err.Error(), "DENIED")) {
 		sessionObj.Reporter.SendDetails(fmt.Sprintf("%v success", testRegistryConnectivityStatusInfo), true, sessionObj.ErrChan)
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryConnectivityStatusAuth, err))
 		if err != nil {
@@ -161,6 +164,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryConnectivityStatusInfo, err))
 		return fmt.Errorf("failed to retrieve repositories: got unexpected status code: %v", statusCode)
 	}
+
 	if err != nil {
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryConnectivityStatusInfo, err))
 		return fmt.Errorf("testRegistryConnect failed with error:  %v", err)
@@ -182,6 +186,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 			return fmt.Errorf("setImageToTagsMap failed with err %v", err)
 		}
 	}
+
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("%v success", testRegistryConnectivityStatusRetrieveTag), true, sessionObj.ErrChan)
 
 	return nil
