@@ -1,8 +1,10 @@
 package mainhandler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -186,9 +188,34 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 			return fmt.Errorf("setImageToTagsMap failed with err %v", err)
 		}
 	}
-
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("%v success", testRegistryConnectivityStatusRetrieveTag), true, sessionObj.ErrChan)
 
+	params := RepositoriesAndTagsParams{
+		RegistryName:        registry.registryInfo.RegistryName,
+		CustomerGUID:        sessionObj.Reporter.GetCustomerGUID(),
+		JobID:               sessionObj.Reporter.GetJobID(),
+		RepositoriesAndTags: registry.mapImageToTags,
+	}
+	err = actionHandler.SendRepositoriesAndTags(params)
+
+	return nil
+}
+
+func (actionHandler *ActionHandler) SendRepositoriesAndTags(params RepositoriesAndTagsParams) error {
+	reqBody, err := json.Marshal(params.RepositoriesAndTags)
+	if err != nil {
+		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
+	}
+	bodyReader := bytes.NewReader(reqBody)
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/k8s/repositoriesToTags?jobID=%v&customerGUID=%v&registryName=%v", actionHandler.repositoriesAndTagsReporter.eventReceiverUrl, params.JobID, params.CustomerGUID, params.RegistryName), bodyReader)
+
+	resp, err := actionHandler.repositoriesAndTagsReporter.httpClient.Do(req)
+	fmt.Print(resp)
+
+	if err != nil {
+		return fmt.Errorf("in 'sendReport' failed to send request, reason: %v", err)
+	}
 	return nil
 }
 

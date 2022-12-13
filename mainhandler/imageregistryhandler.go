@@ -149,7 +149,7 @@ func (rs *registryScan) authConfig() *types.AuthConfig {
 
 func (reg *registryAuth) initDefaultValues() error {
 	switch reg.AuthMethod {
-	case string(accessTokenAuth), "":
+	case string(accessTokenAuth), "", "credentials":
 		if reg.Password == "" || reg.Username == "" {
 			return errorWithDocumentationRef("auth_method accesstoken requirers username and password")
 		}
