@@ -526,6 +526,7 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	if err != nil {
 		return fmt.Errorf("could not decode registry info into registryInfo struct")
 	}
+	registryScan.registryInfo.Kind = registryScan.registryInfo.RegistryProvider
 	registryScan.setHostnameAndProject()
 	return nil
 }
