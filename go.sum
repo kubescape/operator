@@ -145,8 +145,8 @@ github.com/armosec/logger-go v0.0.13 h1:S6KCc9Di7AWzKQyQawtKwLimmZxwIubHOhXWsTSH
 github.com/armosec/logger-go v0.0.13/go.mod h1:xEAtirJOHlqgxGlKTEtNHN2uiTzHiSL8NbmkVuCAwSw=
 github.com/armosec/opa-utils v0.0.166 h1:g3gKpLf2YsGuQxSTTHQLb0k4+UHVC3NArv0lEtqpmbg=
 github.com/armosec/opa-utils v0.0.166/go.mod h1:dFTUgba55U+P7E91g+UOOzfQ2deiKM5PP18XKlBkcCo=
-github.com/armosec/registryx v0.0.13 h1:/gqGYYSEYKMWZdqhksOUa3IsUDL3xJ0J2hJJOOagiSg=
-github.com/armosec/registryx v0.0.13/go.mod h1:qLBiNF0991fCQ6EiAX5laPWGnkOFBzdABdTizEBs1GE=
+github.com/armosec/registryx v0.0.14 h1:f+BwX7ys88wjxNV/0RYsCxnX57RD65juZZXY7C6b76E=
+github.com/armosec/registryx v0.0.14/go.mod h1:qLBiNF0991fCQ6EiAX5laPWGnkOFBzdABdTizEBs1GE=
 github.com/armosec/utils-go v0.0.12 h1:NXkG/BhbSVAmTVXr0qqsK02CmxEiXuJyPmdTRcZ4jAo=
 github.com/armosec/utils-go v0.0.12/go.mod h1:F/K1mI/qcj7fNuJl7xktoCeHM83azOF0Zq6eC2WuPyU=
 github.com/armosec/utils-k8s-go v0.0.12 h1:u7kHSUp4PpvPP3hEaRXMbM0Vw23IyLhAzzE+2TW6Jkk=

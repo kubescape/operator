@@ -33,18 +33,18 @@ import (
 type AuthMethods string
 
 const (
-	registryScanConfigmap                                                     = "kubescape-registry-scan"
-	registryNameField                                                         = "registryName"
-	imagesToScanLimit                                                         = 500
-	registriesAuthFieldInSecret                                               = "registriesAuth"
-	accessTokenAuth                            AuthMethods                    = "accesstoken"
-	registryCronjobTemplate                                                   = "registry-scan-cronjob-template"
-	tagsPageSize                                                              = 1000
-	registryScanDocumentation                                                 = "https://hub.armosec.io/docs/registry-vulnerability-scan"
-	testRegistryConnectivityStatusInfo         testRegistryConnectivityStatus = "registryInformation"
-	testRegistryConnectivityStatusAuth         testRegistryConnectivityStatus = "registryAuthentication"
-	testRegistryConnectivityStatusRetrieveRepo testRegistryConnectivityStatus = "retrieveRepositories"
-	testRegistryConnectivityStatusRetrieveTag  testRegistryConnectivityStatus = "retrieveTags"
+	registryScanConfigmap                                           = "kubescape-registry-scan"
+	registryNameField                                               = "registryName"
+	imagesToScanLimit                                               = 500
+	registriesAuthFieldInSecret                                     = "registriesAuth"
+	accessTokenAuth                  AuthMethods                    = "accesstoken"
+	registryCronjobTemplate                                         = "registry-scan-cronjob-template"
+	tagsPageSize                                                    = 1000
+	registryScanDocumentation                                       = "https://hub.armosec.io/docs/registry-vulnerability-scan"
+	testRegistryInformationStatus    testRegistryConnectivityStatus = "registryInformation"
+	testRegistryAuthenticationStatus testRegistryConnectivityStatus = "registryAuthentication"
+	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
+	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
 )
 
 type testRegistryConnectivityStatus string
@@ -259,7 +259,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 func (registryScan *registryScan) getImagesForScanning(reporter datastructures.IReporter) error {
 	glog.Infof("getImagesForScanning: enumerating repoes...")
 	errChan := make(chan error)
-	repos, _, err := registryScan.enumerateRepoes()
+	repos, err := registryScan.enumerateRepoes()
 	if err != nil {
 		reporter.SetDetails(fmt.Sprintf("enumerateRepoes failed with err %v", err))
 		reporter.SendStatus(reporterlib.JobFailed, true, errChan)
@@ -306,6 +306,10 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 	if latestTags, err := iRegistry.GetLatestTags(repo, tagsDepth, options...); err == nil {
 		tags := []string{}
 		for _, tag := range latestTags {
+			// filter out signature tags
+			if strings.HasSuffix(tag, ".sig") {
+				continue
+			}
 			tagsForDigest := strings.Split(tag, ",")
 			tagsForDigestLen := len(tagsForDigest)
 			if tagsForDigestLen == 1 {
@@ -329,7 +333,9 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 				}
 			}
 		}
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		if len(tags) > 0 {
+			registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		}
 
 	} else { //fallback to list images lexicographically
 		glog.Errorf("get latestTags failed for repository %s with error:%s/n fetching lexicographical list of tags", repo, err.Error())
@@ -351,7 +357,9 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 				break
 			}
 		}
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		if len(tags) > 0 {
+			registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		}
 	}
 	return nil
 }
@@ -411,42 +419,36 @@ func (registryScan *registryScan) filterScanLimit(limit int) {
 	registryScan.mapImageToTags = filteredImages
 }
 
-func (registryScan *registryScan) enumerateRepoes() ([]string, int, error) {
+func (registryScan *registryScan) enumerateRepoes() ([]string, error) {
 	// token sometimes includes a lot of dots, so we need to remove them
 	i := strings.Index(registryScan.registryInfo.AuthMethod.Password, ".....")
 	if i != -1 {
 		registryScan.registryInfo.AuthMethod.Password = registryScan.registryInfo.AuthMethod.Password[:i]
 	}
 
-	repos, statusCode, err := registryScan.listReposInRegistry()
+	repos, err := registryScan.listReposInRegistry()
 	if err != nil {
-		glog.Errorf("listReposInRegistry failed with err %v", err)
-		return []string{}, statusCode, err
+		return []string{}, err
 	}
-	return repos, statusCode, nil
+	return repos, nil
 
 }
 
-func (registryScan *registryScan) listReposInRegistry() ([]string, int, error) {
+func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	regCreds := registryScan.registryCredentials()
 	var repos, pageRepos []string
 	var nextPage *regCommon.PaginationOption
 
-	var statusCode int
-
 	firstPage := regCommon.MakePagination(iRegistry.GetMaxPageSize())
 	ctx := context.Background()
 	catalogOpts := regCommon.CatalogOption{IsPublic: !registryScan.hasAuth(), Namespaces: registryScan.registry.projectID}
-	for pageRepos, nextPage, statusCode, err = iRegistry.Catalog(ctx, firstPage, catalogOpts, regCreds); ; pageRepos, nextPage, statusCode, err = iRegistry.Catalog(ctx, *nextPage, catalogOpts, regCreds) {
+	for pageRepos, nextPage, err = iRegistry.Catalog(ctx, firstPage, catalogOpts, regCreds); ; pageRepos, nextPage, err = iRegistry.Catalog(ctx, *nextPage, catalogOpts, regCreds) {
 		if err != nil {
-			return nil, statusCode, err
-		}
-		if statusCode > 299 {
-			return nil, statusCode, fmt.Errorf("unexpected status code %d while listing repositories in registry %s", statusCode, registryScan.registryInfo.RegistryName)
+			return nil, err
 		}
 		if len(pageRepos) == 0 {
 			break
@@ -463,7 +465,7 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, int, error) {
 			break
 		}
 	}
-	return repos, statusCode, nil
+	return repos, nil
 }
 
 func (registryScan *registryScan) getRegistryScanScanCommand(registryName string) (string, error) {
@@ -537,7 +539,7 @@ func (registryScan *registryScan) isParseRegistryFromCommand(command apis.Comman
 	if !ok {
 		return false
 	}
-	if _, ok = registryInfo["kind"]; !ok {
+	if _, ok = registryInfo["isHTTPs"]; !ok {
 		return false
 	}
 	return true
