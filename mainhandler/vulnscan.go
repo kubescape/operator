@@ -121,6 +121,10 @@ func (actionHandler *ActionHandler) loadRegistryScan(sessionObj *utils.SessionOb
 
 func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.SessionObj) error {
 	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
+	if err != nil {
+		glog.Errorf("in testRegistryConnectivity: loadRegistryScan failed with error: %v", err.Error())
+		return err
+	}
 	err = actionHandler.testRegistryConnect(registryScan, sessionObj)
 	if err != nil {
 		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: %v", err.Error())
