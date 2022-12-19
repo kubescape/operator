@@ -2,7 +2,6 @@ package mainhandler
 
 import (
 	"fmt"
-	"net/http"
 	"regexp"
 
 	"github.com/kubescape/operator/utils"
@@ -28,24 +27,11 @@ type MainHandler struct {
 }
 
 type ActionHandler struct {
-	k8sAPI                      *k8sinterface.KubernetesApi
-	reporter                    reporterlib.IReporter
-	wlid                        string
-	command                     apis.Command
-	commandResponseChannel      *commandResponseChannelData
-	repositoriesAndTagsReporter *RepositoriesAndTagsReporter
-}
-
-type RepositoriesAndTagsReporter struct {
-	eventReceiverUrl string
-	httpClient       httputils.IHttpClient
-}
-
-type RepositoriesAndTagsParams struct {
-	RepositoriesAndTags map[string][]string `json:"repositoriesAndTags"`
-	CustomerGUID        string              `json:"customerGUID"`
-	RegistryName        string              `json:"registryName"`
-	JobID               string              `json:"jobID"`
+	k8sAPI                 *k8sinterface.KubernetesApi
+	reporter               reporterlib.IReporter
+	wlid                   string
+	command                apis.Command
+	commandResponseChannel *commandResponseChannelData
 }
 
 type waitFunc func()
@@ -85,10 +71,6 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 		command:                sessionObj.Command,
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: commandResponseChannel,
-		repositoriesAndTagsReporter: &RepositoriesAndTagsReporter{
-			eventReceiverUrl: utils.ClusterConfig.EventReceiverRestURL,
-			httpClient:       http.DefaultClient,
-		},
 	}
 }
 

@@ -1,10 +1,13 @@
 package mainhandler
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/kubescape/operator/utils"
@@ -18,7 +21,6 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/logger-go/system-reports/datastructures"
-	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/docker/docker/api/types"
 	"github.com/golang/glog"
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -79,6 +81,13 @@ type registryScan struct {
 	mapImageToTags map[string][]string
 }
 
+type RepositoriesAndTagsParams struct {
+	RepositoriesAndTags map[string][]string `json:"repositoriesAndTags"`
+	CustomerGUID        string              `json:"customerGUID"`
+	RegistryName        string              `json:"registryName"`
+	JobID               string              `json:"jobID"`
+}
+
 type registryCreds struct {
 	registryName string
 	auth         *types.AuthConfig
@@ -108,7 +117,7 @@ func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 
 func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error) {
 	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryInfo.AuthMethod.Username, Password: rs.registryInfo.AuthMethod.Password, RegistryToken: rs.registryInfo.RegistryToken}, rs.registry.hostname,
-		regCommon.MakeRegistryOptions(false, !*&rs.registryInfo.IsHTTPs, *&rs.registryInfo.SkipTLS, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
+		regCommon.MakeRegistryOptions(false, !*&rs.registryInfo.IsHTTPs, *&rs.registryInfo.SkipTLSVerify, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
 }
 
 func makeRegistryAuth(registryName string) registryAuth {
@@ -198,7 +207,7 @@ func (reg *registryAuth) initDefaultValues() error {
 }
 
 func (rs *registryScan) filterRepositories(repos []string) []string {
-	if len(rs.registryInfo.Include) == 0 && len(rs.registryInfo.Include) == 0 {
+	if len(rs.registryInfo.Include) == 0 && len(rs.registryInfo.Exclude) == 0 {
 		return repos
 	}
 	filteredRepos := []string{}
@@ -241,7 +250,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	}
 
 	// command is POST request to trigger websocket
-	command, err := registryScan.getRegistryScanScanCommand(registryName)
+	command, err := registryScan.getRegistryScanCommand(registryName)
 	if err != nil {
 		return err
 	}
@@ -262,7 +271,6 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 	repos, err := registryScan.enumerateRepoes()
 	if err != nil {
 		reporter.SetDetails(fmt.Sprintf("enumerateRepoes failed with err %v", err))
-		reporter.SendStatus(reporterlib.JobFailed, true, errChan)
 		return err
 	}
 	glog.Infof("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos))
@@ -468,7 +476,7 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 	return repos, nil
 }
 
-func (registryScan *registryScan) getRegistryScanScanCommand(registryName string) (string, error) {
+func (registryScan *registryScan) getRegistryScanCommand(registryName string) (string, error) {
 	scanRegistryCommand := apis.Command{}
 	scanRegistryCommand.CommandName = apis.TypeScanRegistry
 	registryInfo := map[string]string{registryNameField: registryName}
@@ -642,7 +650,7 @@ func (registryScan *registryScan) setRegistryInfoFromAuth(auth registryAuth, reg
 	registryInfo.AuthMethod.Type = auth.AuthMethod
 	registryInfo.AuthMethod.Username = auth.Username
 	registryInfo.AuthMethod.Password = auth.Password
-	registryInfo.SkipTLS = *auth.SkipTLSVerify
+	registryInfo.SkipTLSVerify = *auth.SkipTLSVerify
 	registryInfo.IsHTTPs = !*auth.Insecure
 	registryInfo.Kind = string(auth.Kind)
 }
@@ -712,4 +720,34 @@ func (registryScan *registryScan) setHostnameAndProject() {
 		project = regAndProject[1]
 	}
 	registryScan.registry = registry{hostname: hostname, projectID: project}
+}
+
+func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAndTagsParams) error {
+	reqBody, err := json.Marshal(params.RepositoriesAndTags)
+	if err != nil {
+		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
+	}
+	bodyReader := bytes.NewReader(reqBody)
+	urlQuery := url.URL{
+		Scheme: "http",
+		Host:   strings.TrimPrefix(utils.ClusterConfig.EventReceiverRestURL, "http://"),
+		Path:   "k8s/repositoriesToTags",
+	}
+	query := url.Values{
+		"jobID":        []string{params.JobID},
+		"customerGUID": []string{params.CustomerGUID},
+		"registryName": []string{params.RegistryName},
+	}
+	urlQuery.RawQuery = query.Encode()
+	fmt.Print(urlQuery.String())
+	req, err := http.NewRequest("POST", urlQuery.String(), bodyReader)
+	if err != nil {
+		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to create request, reason: %v", err)
+	}
+	_, err = http.DefaultClient.Do(req)
+
+	if err != nil {
+		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to send request, reason: %v", err)
+	}
+	return nil
 }

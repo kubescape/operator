@@ -1,10 +1,8 @@
 package mainhandler
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -80,7 +78,7 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 					apitypes.AttributeRepository:    repositoryName,
 					apitypes.AttributeTag:           tag,
 					apitypes.AttributeUseHTTP:       !registry.registryInfo.IsHTTPs,
-					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLS,
+					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
 					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
 				},
 			}
@@ -98,6 +96,16 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 
 func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj) error {
 
+	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
+	if err != nil {
+		glog.Errorf("in parseRegistryCommand: error: ", err.Error())
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+
+	return actionHandler.scanRegistry(registryScan, sessionObj)
+}
+
+func (actionHandler *ActionHandler) loadRegistryScan(sessionObj *utils.SessionObj) (*registryScan, error) {
 	registryScan := NewRegistryScan(actionHandler.k8sAPI)
 	var err error
 	if registryScan.isParseRegistryFromCommand(sessionObj.Command) {
@@ -106,25 +114,14 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 		err = registryScan.parseRegistryFromCluster(sessionObj)
 	}
 	if err != nil {
-		sessionObj.Reporter.SendStatus(reporterlib.JobFailed, true, sessionObj.ErrChan)
-		glog.Errorf("in parseRegistryCommand: error: ", err.Error())
-		return fmt.Errorf("parseRegistryCommand failed with err %v", err)
+		return nil, err
 	}
-
-	return actionHandler.scanRegistry(&registryScan, sessionObj)
+	return &registryScan, nil
 }
 
 func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.SessionObj) error {
-	registryScan := NewRegistryScan(actionHandler.k8sAPI)
-
-	err := registryScan.parseRegistryFromCommand(sessionObj)
-	if err != nil {
-		glog.Errorf("in testRegistryConnectivity: parseRegistryFromCommand failed with error: ", err.Error())
-		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryInformationStatus, err))
-		return fmt.Errorf("parseRegistryCommand failed with err %v", err)
-	}
-
-	err = actionHandler.testRegistryConnect(&registryScan, sessionObj)
+	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
+	err = actionHandler.testRegistryConnect(registryScan, sessionObj)
 	if err != nil {
 		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: %v", err.Error())
 		return err
@@ -192,26 +189,9 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 		JobID:               sessionObj.Reporter.GetJobID(),
 		RepositoriesAndTags: registry.mapImageToTags,
 	}
-	err = actionHandler.SendRepositoriesAndTags(params)
+	err = registry.SendRepositoriesAndTags(params)
 	if err != nil {
 		return err
-	}
-	return nil
-}
-
-func (actionHandler *ActionHandler) SendRepositoriesAndTags(params RepositoriesAndTagsParams) error {
-	reqBody, err := json.Marshal(params.RepositoriesAndTags)
-	if err != nil {
-		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
-	}
-	bodyReader := bytes.NewReader(reqBody)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/k8s/repositoriesToTags?jobID=%v&customerGUID=%v&registryName=%v", actionHandler.repositoriesAndTagsReporter.eventReceiverUrl, params.JobID, params.CustomerGUID, params.RegistryName), bodyReader)
-
-	_, err = actionHandler.repositoriesAndTagsReporter.httpClient.Do(req)
-
-	if err != nil {
-		return fmt.Errorf("in 'sendReport' failed to send request, reason: %v", err)
 	}
 	return nil
 }
