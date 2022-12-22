@@ -689,6 +689,7 @@ func (registryScan *registryScan) getRegistryConfig(registryInfo *armotypes.Regi
 }
 
 func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *armotypes.RegistryInfo, registryConfig registryScanConfig) {
+	// default is one
 	if registryConfig.Depth != 0 {
 		registryInfo.Depth = registryConfig.Depth
 	}
