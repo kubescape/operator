@@ -35,21 +35,15 @@ import (
 type AuthMethods string
 
 const (
-	registryScanConfigmap                                           = "kubescape-registry-scan"
-	registryNameField                                               = "registryName"
-	imagesToScanLimit                                               = 500
-	registriesAuthFieldInSecret                                     = "registriesAuth"
-	accessTokenAuth                  AuthMethods                    = "accesstoken"
-	registryCronjobTemplate                                         = "registry-scan-cronjob-template"
-	tagsPageSize                                                    = 1000
-	registryScanDocumentation                                       = "https://hub.armosec.io/docs/registry-vulnerability-scan"
-	testRegistryInformationStatus    testRegistryConnectivityStatus = "registryInformation"
-	testRegistryAuthenticationStatus testRegistryConnectivityStatus = "registryAuthentication"
-	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
-	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
+	registryScanConfigmap                   = "kubescape-registry-scan"
+	registryNameField                       = "registryName"
+	imagesToScanLimit                       = 500
+	registriesAuthFieldInSecret             = "registriesAuth"
+	accessTokenAuth             AuthMethods = "accesstoken"
+	registryCronjobTemplate                 = "registry-scan-cronjob-template"
+	tagsPageSize                            = 1000
+	registryScanDocumentation               = "https://hub.armosec.io/docs/registry-vulnerability-scan"
 )
-
-type testRegistryConnectivityStatus string
 
 type registryScanConfig struct {
 	Registry string   `json:"registry"`
@@ -110,8 +104,11 @@ func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 	return registryScan{
 		registry:       registry{},
 		mapImageToTags: make(map[string][]string),
-		registryInfo:   armotypes.RegistryInfo{},
-		k8sAPI:         k8sAPI,
+		registryInfo: armotypes.RegistryInfo{
+			Depth:   1,
+			IsHTTPs: true,
+		},
+		k8sAPI: k8sAPI,
 	}
 }
 
@@ -127,14 +124,14 @@ func makeRegistryAuth(registryName string) registryAuth {
 	return registryAuth{SkipTLSVerify: &falseSkipTLS, Insecure: &falseInsecure, Kind: kind}
 }
 
-func (rs *registryScan) hasAuth() bool {
+func (rs *registryScan) isPrivate() bool {
 	//TODO: support registry token
 	return rs.registryInfo.AuthMethod.Type != "public"
 }
 
 func (rs *registryScan) registryCredentials() *registryCreds {
 	var regCreds *registryCreds
-	if rs.hasAuth() {
+	if rs.isPrivate() {
 		regCreds = &registryCreds{
 			auth:         rs.authConfig(),
 			registryName: rs.registry.hostname,
@@ -145,7 +142,7 @@ func (rs *registryScan) registryCredentials() *registryCreds {
 
 func (rs *registryScan) authConfig() *types.AuthConfig {
 	var authConfig *types.AuthConfig
-	if rs.hasAuth() {
+	if rs.isPrivate() {
 		authConfig = &types.AuthConfig{
 			Username: rs.registryInfo.AuthMethod.Username,
 			Password: rs.registryInfo.AuthMethod.Password,
@@ -270,12 +267,13 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 	errChan := make(chan error)
 	repos, err := registryScan.enumerateRepoes()
 	if err != nil {
-		reporter.SetDetails(fmt.Sprintf("enumerateRepoes failed with err %v", err))
+		reporter.SetDetails("enumerateRepoes failed")
 		return err
 	}
 	glog.Infof("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos))
 	for _, repo := range repos {
 		if err := registryScan.setImageToTagsMap(repo, reporter); err != nil {
+			reporter.SetDetails("setImageToTagsMap failed")
 			glog.Errorf("setImageToTagsMap failed with registry: %s repo: %s due to ERROR:: %s", registryScan.registry.hostname, repo, err.Error())
 			return err
 		}
@@ -308,7 +306,7 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 	tagsDepth := registryScan.registryInfo.Depth
 	tags := []string{}
 	options := []remote.Option{}
-	if registryScan.hasAuth() {
+	if registryScan.isPrivate() {
 		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
 	}
 	if latestTags, err := iRegistry.GetLatestTags(repo, tagsDepth, options...); err == nil {
@@ -341,9 +339,7 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 				}
 			}
 		}
-		if len(tags) > 0 {
-			registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
-		}
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 
 	} else { //fallback to list images lexicographically
 		glog.Errorf("get latestTags failed for repository %s with error:%s/n fetching lexicographical list of tags", repo, err.Error())
@@ -365,9 +361,7 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 				break
 			}
 		}
-		if len(tags) > 0 {
-			registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
-		}
+		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
 	return nil
 }
@@ -453,7 +447,7 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 
 	firstPage := regCommon.MakePagination(iRegistry.GetMaxPageSize())
 	ctx := context.Background()
-	catalogOpts := regCommon.CatalogOption{IsPublic: !registryScan.hasAuth(), Namespaces: registryScan.registry.projectID}
+	catalogOpts := regCommon.CatalogOption{IsPublic: !registryScan.isPrivate(), Namespaces: registryScan.registry.projectID}
 	for pageRepos, nextPage, err = iRegistry.Catalog(ctx, firstPage, catalogOpts, regCreds); ; pageRepos, nextPage, err = iRegistry.Catalog(ctx, *nextPage, catalogOpts, regCreds) {
 		if err != nil {
 			return nil, err
@@ -547,7 +541,7 @@ func (registryScan *registryScan) isParseRegistryFromCommand(command apis.Comman
 	if !ok {
 		return false
 	}
-	if _, ok = registryInfo["isHTTPs"]; !ok {
+	if _, ok = registryInfo["registryProvider"]; !ok {
 		return false
 	}
 	return true
@@ -695,7 +689,9 @@ func (registryScan *registryScan) getRegistryConfig(registryInfo *armotypes.Regi
 }
 
 func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *armotypes.RegistryInfo, registryConfig registryScanConfig) {
-	registryInfo.Depth = registryConfig.Depth
+	if registryConfig.Depth != 0 {
+		registryInfo.Depth = registryConfig.Depth
+	}
 	registryInfo.Include = registryConfig.Include
 	registryInfo.Exclude = registryConfig.Exclude
 }
@@ -739,7 +735,6 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 		"registryName": []string{params.RegistryName},
 	}
 	urlQuery.RawQuery = query.Encode()
-	fmt.Print(urlQuery.String())
 	req, err := http.NewRequest("POST", urlQuery.String(), bodyReader)
 	if err != nil {
 		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to create request, reason: %v", err)

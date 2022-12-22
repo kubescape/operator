@@ -32,6 +32,15 @@ const (
 
 type cmMode string
 
+type testRegistryConnectivityStatus string
+
+const (
+	testRegistryInformationStatus    testRegistryConnectivityStatus = "registryInformation"
+	testRegistryAuthenticationStatus testRegistryConnectivityStatus = "registryAuthentication"
+	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
+	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
+)
+
 func getVulnScanURL() *url.URL {
 	vulnURL := url.URL{}
 	vulnURL.Scheme = "http"
@@ -99,6 +108,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
 		glog.Errorf("in parseRegistryCommand: error: ", err.Error())
+		sessionObj.Reporter.SetDetails("loadRegistryScan failed")
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
@@ -122,11 +132,13 @@ func (actionHandler *ActionHandler) loadRegistryScan(sessionObj *utils.SessionOb
 func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.SessionObj) error {
 	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
+		sessionObj.Reporter.SetDetails("loadRegistryScan failed")
 		glog.Errorf("in testRegistryConnectivity: loadRegistryScan failed with error: %v", err.Error())
 		return err
 	}
 	err = actionHandler.testRegistryConnect(registryScan, sessionObj)
 	if err != nil {
+		sessionObj.Reporter.SetDetails("testRegistryConnect failed")
 		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: %v", err.Error())
 		return err
 	}
