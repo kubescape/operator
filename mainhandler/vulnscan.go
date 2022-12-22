@@ -107,7 +107,7 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 
 	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
-		glog.Errorf("in parseRegistryCommand: error: ", err.Error())
+		glog.Errorf("in parseRegistryCommand: error: %v", err.Error())
 		sessionObj.Reporter.SetDetails("loadRegistryScan")
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
