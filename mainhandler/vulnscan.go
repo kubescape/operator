@@ -1,7 +1,6 @@
 package mainhandler
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/golang/glog"
 	"github.com/kubescape/k8s-interface/cloudsupport"
@@ -31,6 +31,15 @@ const (
 )
 
 type cmMode string
+
+type testRegistryConnectivityStatus string
+
+const (
+	testRegistryInformationStatus    testRegistryConnectivityStatus = "registryInformation"
+	testRegistryAuthenticationStatus testRegistryConnectivityStatus = "registryAuthentication"
+	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
+	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
+)
 
 func getVulnScanURL() *url.URL {
 	vulnURL := url.URL{}
@@ -77,8 +86,8 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 					apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
 					apitypes.AttributeRepository:    repositoryName,
 					apitypes.AttributeTag:           tag,
-					apitypes.AttributeUseHTTP:       *registry.registryAuth.Insecure,
-					apitypes.AttributeSkipTLSVerify: *registry.registryAuth.SkipTLSVerify,
+					apitypes.AttributeUseHTTP:       !registry.registryInfo.IsHTTPs,
+					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
 					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
 				},
 			}
@@ -94,127 +103,46 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 	return webSocketScanCMDList
 }
 
-func (actionHandler *ActionHandler) getRegistryAuth(registryName string) (*registryAuth, error) {
-	secret, err := actionHandler.getRegistryScanSecret()
+func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj) error {
+
+	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
+	if err != nil {
+		glog.Errorf("in parseRegistryCommand: error: ", err.Error())
+		sessionObj.Reporter.SetDetails("loadRegistryScan")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+
+	return actionHandler.scanRegistry(registryScan, sessionObj)
+}
+
+func (actionHandler *ActionHandler) loadRegistryScan(sessionObj *utils.SessionObj) (*registryScan, error) {
+	registryScan := NewRegistryScan(actionHandler.k8sAPI)
+	var err error
+	if registryScan.isParseRegistryFromCommand(sessionObj.Command) {
+		err = registryScan.parseRegistryFromCommand(sessionObj)
+	} else {
+		err = registryScan.parseRegistryFromCluster(sessionObj)
+	}
 	if err != nil {
 		return nil, err
 	}
-	secretData := secret.GetData()
-	var registriesAuth []registryAuth
-	registriesAuthStr, ok := secretData[registriesAuthFieldInSecret].(string)
-	if !ok {
-		return nil, fmt.Errorf("error parsing Secret: %s field must be a string", registriesAuthFieldInSecret)
-	}
-	data, err := base64.StdEncoding.DecodeString(registriesAuthStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing Secret: %s", err.Error())
-	}
-	registriesAuthStr = strings.Replace(string(data), "\n", "", -1)
-	err = json.Unmarshal([]byte(registriesAuthStr), &registriesAuth)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing Secret: %s", err.Error())
-	}
-	//try to find an auth with the same registry name from the request
-	for _, auth := range registriesAuth {
-		if auth.Registry == registryName {
-			if err := auth.initDefaultValues(); err != nil {
-				return nil, err
-			}
-			return &auth, nil
-		}
-	}
-	//couldn't find auth with the full, check if there is an auth for the registry without the project name
-	regAndProject := strings.Split(registryName, "/")
-	if len(regAndProject) > 1 {
-		for _, auth := range registriesAuth {
-			if auth.Registry == regAndProject[0] {
-				if err := auth.initDefaultValues(); err != nil {
-					return nil, err
-				}
-				return &auth, nil
-			}
-		}
-
-	}
-	//no auth found for registry return a default one
-	auth := makeRegistryAuth(registryName)
-	return &auth, nil
+	return &registryScan, nil
 }
 
-func (actionHandler *ActionHandler) getRegistryConfig(registryName string) (*registryScanConfig, string, error) {
-	configMap, err := actionHandler.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "ConfigMap", registryScanConfigmap)
-	// in case of an error or missing configmap, fallback to the deprecated namespace
-	if err != nil || configMap == nil {
-		configMap, err = actionHandler.k8sAPI.GetWorkload(armotypes.ArmoSystemNamespace, "ConfigMap", registryScanConfigmap)
-	}
-
+func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.SessionObj) error {
+	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
-		// if configmap not found, it means we will use all images and default depth
-		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {
-			glog.Infof("configmap: %s does not exists, using default values", registryScanConfigmap)
-			return NewRegistryScanConfig(registryName), string(cmDefaultMode), nil
-		} else {
-			return nil, string(cmDefaultMode), err
-		}
+		sessionObj.Reporter.SetDetails("loadRegistryScan")
+		glog.Errorf("in testRegistryConnectivity: loadRegistryScan failed with error: %v", err.Error())
+		return err
 	}
-	configData := configMap.GetData()
-	var registriesConfigs []registryScanConfig
-	registriesConfigStr, ok := configData["registries"].(string)
-	if !ok {
-		return nil, string(cmDefaultMode), fmt.Errorf("error parsing %v confgimap: registries field not found", registryScanConfigmap)
-	}
-	registriesConfigStr = strings.Replace(registriesConfigStr, "\n", "", -1)
-	err = json.Unmarshal([]byte(registriesConfigStr), &registriesConfigs)
+	err = actionHandler.testRegistryConnect(registryScan, sessionObj)
 	if err != nil {
-		return nil, string(cmDefaultMode), fmt.Errorf("error parsing ConfigMap: %s", err.Error())
+		sessionObj.Reporter.SetDetails("testRegistryConnect")
+		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: %v", err.Error())
+		return err
 	}
-	for _, config := range registriesConfigs {
-		if config.Registry == registryName {
-			return &config, string(cmLoadedMode), nil
-		}
-	}
-	return NewRegistryScanConfig(registryName), string(cmDefaultMode), nil
-
-}
-
-func (actionHandler *ActionHandler) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
-	secret, err := actionHandler.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", armotypes.RegistryScanSecretName)
-	if err == nil && secret != nil {
-		return secret, err
-	}
-
-	// deprecated namespace
-	secret, err = actionHandler.k8sAPI.GetWorkload(armotypes.ArmoSystemNamespace, "Secret", armotypes.RegistryScanSecretName)
-	return secret, err
-
-}
-
-func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj) error {
-
-	/*
-		Auth data must be stored in kubescape-registry-scan secret
-		Config data must be stored in "kubescape-registry-scan" config map
-	*/
-
-	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
-	if err != nil {
-		return fmt.Errorf("parseRegistryNameArg failed with err %v", err)
-	}
-	auth, err := actionHandler.getRegistryAuth(registryName)
-	if err != nil {
-		return fmt.Errorf("get registry auth failed with err %v", err)
-	}
-	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
-
-	conf, configMapMode, err := actionHandler.getRegistryConfig(registryName)
-
-	if err != nil {
-		return fmt.Errorf("get registry(%s) config failed with err %v", registryName, err)
-	}
-
-	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryName, configMapMode) // systest depedendent
-	registryScan := NewRegistryScan(registryName, *auth, *conf)
-	return actionHandler.scanRegistry(&registryScan, sessionObj)
+	return nil
 }
 
 func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *utils.SessionObj) (string, error) {
@@ -231,6 +159,58 @@ func (actionHandler *ActionHandler) parseRegistryNameArg(sessionObj *utils.Sessi
 		registryName))
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), true, sessionObj.ErrChan)
 	return registryName, nil
+}
+
+func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, sessionObj *utils.SessionObj) error {
+	repos, err := registry.enumerateRepoes()
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "DENIED") || strings.Contains(strings.ToLower(err.Error()), "authentication") {
+			// registry info is good, but authentication failed
+			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
+			sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+			sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
+			return fmt.Errorf("failed to retrieve repositories: authentication error: %v", err)
+		} else {
+			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
+			return fmt.Errorf("testRegistryConnect failed with error:  %v", err)
+		}
+	}
+
+	sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
+	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
+	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+
+	if len(repos) == 0 {
+		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryRetrieveReposStatus, err))
+		return fmt.Errorf("failed to retrieve repositories: got empty list of repositories")
+	}
+
+	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveReposStatus))
+	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+
+	for _, repo := range repos {
+		if err := registry.setImageToTagsMap(repo, sessionObj.Reporter); err != nil {
+			sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
+			return fmt.Errorf("setImageToTagsMap failed with err %v", err)
+		}
+	}
+
+	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
+	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+
+	params := RepositoriesAndTagsParams{
+		RegistryName:        registry.registryInfo.RegistryName,
+		CustomerGUID:        sessionObj.Reporter.GetCustomerGUID(),
+		JobID:               sessionObj.Reporter.GetJobID(),
+		RepositoriesAndTags: registry.mapImageToTags,
+	}
+
+	err = registry.SendRepositoriesAndTags(params)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (actionHandler *ActionHandler) scanRegistry(registry *registryScan, sessionObj *utils.SessionObj) error {
