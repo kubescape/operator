@@ -724,10 +724,13 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 	if err != nil {
 		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
 	}
+	utils.ClusterConfig.EventReceiverRestURL = strings.Replace(utils.ClusterConfig.EventReceiverRestURL, "https://", "", 1)
+	utils.ClusterConfig.EventReceiverRestURL = strings.Replace(utils.ClusterConfig.EventReceiverRestURL, "http://", "", 1)
+
 	bodyReader := bytes.NewReader(reqBody)
 	urlQuery := url.URL{
 		Scheme: "http",
-		Host:   strings.TrimPrefix(utils.ClusterConfig.EventReceiverRestURL, "http://"),
+		Host:   utils.ClusterConfig.EventReceiverRestURL,
 		Path:   "k8s/repositoriesToTags",
 	}
 	query := url.Values{
