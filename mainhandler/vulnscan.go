@@ -138,7 +138,6 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.S
 	}
 	err = actionHandler.testRegistryConnect(registryScan, sessionObj)
 	if err != nil {
-		sessionObj.Reporter.SetDetails("testRegistryConnect")
 		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: %v", err.Error())
 		return err
 	}
