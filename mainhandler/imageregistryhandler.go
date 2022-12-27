@@ -76,10 +76,10 @@ type registryScan struct {
 }
 
 type RepositoriesAndTagsParams struct {
-	RepositoriesAndTags map[string][]string `json:"repositoriesAndTags"`
-	CustomerGUID        string              `json:"customerGUID"`
-	RegistryName        string              `json:"registryName"`
-	JobID               string              `json:"jobID"`
+	Repositories []armotypes.Repository `json:"repositories"`
+	CustomerGUID string                 `json:"customerGUID"`
+	RegistryName string                 `json:"registryName"`
+	JobID        string                 `json:"jobID"`
 }
 
 type registryCreds struct {
@@ -720,7 +720,7 @@ func (registryScan *registryScan) setHostnameAndProject() {
 }
 
 func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAndTagsParams) error {
-	reqBody, err := json.Marshal(params.RepositoriesAndTags)
+	reqBody, err := json.Marshal(params.Repositories)
 	if err != nil {
 		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
 	}
@@ -738,7 +738,7 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 	urlQuery := url.URL{
 		Scheme: scheme,
 		Host:   eventReceiverRestURL,
-		Path:   "k8s/repositoriesToTags",
+		Path:   "k8s/registryRepositories",
 	}
 	query := url.Values{
 		"jobID":        []string{params.JobID},

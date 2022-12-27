@@ -188,8 +188,9 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveReposStatus))
 	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
 
-	for _, repo := range repos {
-		if err := registry.setImageToTagsMap(repo, sessionObj.Reporter); err != nil {
+	// check that we can pull tags. One is enough
+	if len(repos) > 0 {
+		if err := registry.setImageToTagsMap(repos[0], sessionObj.Reporter); err != nil {
 			sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
 			return fmt.Errorf("setImageToTagsMap failed with err %v", err)
 		}
@@ -198,11 +199,18 @@ func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
 	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
 
+	var repositories []armotypes.Repository
+	for _, repo := range repos {
+		repositories = append(repositories, armotypes.Repository{
+			RepositoryName: repo,
+		})
+	}
+
 	params := RepositoriesAndTagsParams{
-		RegistryName:        registry.registryInfo.RegistryName,
-		CustomerGUID:        sessionObj.Reporter.GetCustomerGUID(),
-		JobID:               sessionObj.Reporter.GetJobID(),
-		RepositoriesAndTags: registry.mapImageToTags,
+		RegistryName: registry.registryInfo.RegistryName,
+		CustomerGUID: sessionObj.Reporter.GetCustomerGUID(),
+		JobID:        sessionObj.Reporter.GetJobID(),
+		Repositories: repositories,
 	}
 
 	err = registry.SendRepositoriesAndTags(params)
