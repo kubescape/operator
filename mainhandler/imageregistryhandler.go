@@ -37,6 +37,7 @@ type AuthMethods string
 const (
 	registryScanConfigmap                   = "kubescape-registry-scan"
 	registryNameField                       = "registryName"
+	secretNameField                         = "secret"
 	imagesToScanLimit                       = 500
 	registriesAuthFieldInSecret             = "registriesAuth"
 	accessTokenAuth             AuthMethods = "accesstoken"
@@ -52,7 +53,7 @@ type registryScanConfig struct {
 	Exclude  []string `json:"exclude,omitempty"`
 }
 type registryAuth struct {
-	Registry      string `json:"registry"`
+	Registry      string `json:"registry,omitempty"`
 	AuthMethod    string `json:"auth_method,omitempty"`
 	Username      string `json:"username,omitempty"`
 	Password      string `json:"password,omitempty"`
@@ -209,11 +210,11 @@ func (rs *registryScan) filterRepositories(repos []string) []string {
 	}
 	filteredRepos := []string{}
 	for _, repo := range repos {
-		if rs.registry.projectID != "" {
-			if !strings.Contains(repo, rs.registry.projectID+"/") {
-				continue
-			}
-		}
+		// if rs.registry.projectID != "" {
+		// 	if !strings.Contains(repo, rs.registry.projectID+"/") {
+		// 		continue
+		// 	}
+		// }
 		if len(rs.registryInfo.Include) != 0 && slices.Contains(rs.registryInfo.Include, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
 			filteredRepos = append(filteredRepos, repo)
 		}
@@ -232,6 +233,32 @@ func (rs *registryScan) filterRepositories(repos []string) []string {
 		}
 	}
 	return filteredRepos
+}
+
+func (registryScan *registryScan) createTriggerRequestSecret(k8sAPI *k8sinterface.KubernetesApi, name, registryName string) error {
+
+	secret := corev1.Secret{}
+	secret.Name = name
+	secret.StringData = make(map[string]string)
+	registryAuth := []registryAuth{
+		{
+			Registry:   registryName,
+			Username:   registryScan.registryInfo.AuthMethod.Username,
+			Password:   registryScan.registryInfo.AuthMethod.Password,
+			AuthMethod: registryScan.registryInfo.AuthMethod.Type,
+		},
+	}
+	registryAuthBytes, err := json.Marshal(registryAuth)
+	if err != nil {
+		return err
+	}
+
+	secret.StringData[registriesAuthFieldInSecret] = string(registryAuthBytes)
+	if _, err := k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Create(context.Background(), &secret, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	registryScan.registryInfo.SecretName = name
+	return nil
 }
 
 func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name, registryName string, webSocketScanCMD apis.Command) error {
@@ -255,7 +282,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	// command will be mounted into cronjob by using this configmap
 	configMap.Data[requestBodyFile] = string(command)
 
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	glog.Infof("createTriggerRequestConfigMap: created configmap: %s", name)
@@ -473,10 +500,12 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 func (registryScan *registryScan) getRegistryScanCommand(registryName string) (string, error) {
 	scanRegistryCommand := apis.Command{}
 	scanRegistryCommand.CommandName = apis.TypeScanRegistry
-	registryInfo := map[string]string{registryNameField: registryName}
 
-	scanRegistryCommand.Args = map[string]interface{}{armotypes.RegistryInfoArgKey: registryInfo}
-	scanRegistryCommand.Args[armotypes.RegistryInfoArgKey] = registryInfo
+	scanRegistryCommand.Args = map[string]interface{}{}
+	registryScan.registryInfo.AuthMethod = armotypes.AuthMethod{
+		Type: registryScan.registryInfo.AuthMethod.Type,
+	}
+	scanRegistryCommand.Args[armotypes.RegistryInfoArgKey] = registryScan.registryInfo
 
 	scanRegistryCommands := apis.Commands{}
 	scanRegistryCommands.Commands = append(scanRegistryCommands.Commands, scanRegistryCommand)
@@ -531,38 +560,45 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 		return fmt.Errorf("could not decode registry info into registryInfo struct")
 	}
 	registryScan.registryInfo.Kind = registryScan.registryInfo.RegistryProvider
-	registryScan.setHostnameAndProject()
 	return nil
 }
 
-// checks if registry scan info is in command, or we need to fallback to secret and configmap
-func (registryScan *registryScan) isParseRegistryFromCommand(command apis.Command) bool {
-	registryInfo, ok := command.Args[armotypes.RegistryInfoArgKey].(map[string]interface{})
-	if !ok {
-		return false
+func (registryScan *registryScan) validateRegistryInfo() error {
+	if registryScan.registryInfo.RegistryProvider == "" {
+		return fmt.Errorf("registry provider cannot be empty")
 	}
-	if _, ok = registryInfo["registryProvider"]; !ok {
-		return false
+	if len(registryScan.registryInfo.Exclude) > 0 && len(registryScan.registryInfo.Include) > 0 {
+		return fmt.Errorf("cannot have both exclude and include lists")
 	}
-	return true
+	if registryScan.registryInfo.RegistryName == "" {
+		return fmt.Errorf("registry name cannot be empty")
+	}
+	return nil
 }
 
-func (registryScan *registryScan) parseRegistryFromCluster(sessionObj *utils.SessionObj) error {
-	// this will parse only registryName
-	err := registryScan.parseRegistryFromCommand(sessionObj)
+func (registryScan *registryScan) parseRegistry(sessionObj *utils.SessionObj) error {
+	err := registryScan.parseRegistryAuthFromSecret()
 	if err != nil {
-		return fmt.Errorf("get registry auth failed with err %v", err)
+		glog.Infof("parseRegistry: could not parse auth from secret: %v, parsing from command", err)
 	}
-	err = registryScan.parseRegistryAuthFromSecret()
-	if err != nil {
-		return fmt.Errorf("get registry auth failed with err %v", err)
-	}
-	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 
 	configMapMode, err := registryScan.getRegistryConfig(&registryScan.registryInfo)
 	if err != nil {
-		return fmt.Errorf("get registry(%s) config failed with err %v", registryScan.registryInfo.RegistryName, err)
+		glog.Infof("parseRegistry: could not get registry config: %v", err)
 	}
+
+	err = registryScan.parseRegistryFromCommand(sessionObj)
+	if err != nil {
+		return fmt.Errorf("get registry auth failed with err %v", err)
+	}
+
+	err = registryScan.validateRegistryInfo()
+	if err != nil {
+		return fmt.Errorf("parseRegistry: err %v", err)
+	}
+
+	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
+
 	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryScan.registryInfo.RegistryName, configMapMode) // systest depedendent
 	registryScan.setHostnameAndProject()
 	return nil
@@ -583,7 +619,7 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 	}
 
 	// create cronJob
-	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		glog.Infof("setRegistryScanCronJob: cronjob: %s creation failed. err: %s", name, err.Error())
 		return err
 	}
@@ -698,6 +734,13 @@ func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *arm
 }
 
 func (registryScan *registryScan) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
+	if registryScan.registryInfo.SecretName != "" {
+		secret, err := registryScan.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", registryScan.registryInfo.SecretName)
+		if err == nil && secret != nil {
+			return secret, err
+		}
+	}
+
 	secret, err := registryScan.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", armotypes.RegistryScanSecretName)
 	if err == nil && secret != nil {
 		return secret, err

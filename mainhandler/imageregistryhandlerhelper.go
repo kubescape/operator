@@ -44,26 +44,40 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 }
 
 func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.SessionObj) error {
-	registryScan := NewRegistryScan(actionHandler.k8sAPI)
+	// 1 - If we have credentials, create secret with it.
+	// 2 - Create configmap with command to trigger operator. Command includes secret name (if there were credentials).
+	// 3 - Create cronjob which will send request to operator to trigger scan using the configmap data.
 
-	// parse registry name from command
-	registryName, err := actionHandler.parseRegistryNameArg(sessionObj)
+	if getCronTabSchedule(sessionObj.Command) == "" {
+		return fmt.Errorf("schedule cannot be empty")
+	}
+
+	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
-		glog.Infof("setRegistryScanCronJob: error parsing registry name from command: %s", err.Error())
-		return err
+		glog.Errorf("in parseRegistryCommand: error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("loadRegistryScan")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
 	// name is registryScanConfigmap name + random string - configmap and cronjob
-	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", registryScanConfigmap, rand.NewSource(time.Now().UnixNano()).Int63()))
+	nameSuffix := rand.NewSource(time.Now().UnixNano()).Int63()
+	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", registryScanConfigmap, nameSuffix))
+	if registryScan.registryInfo.AuthMethod.Type != "public" {
+		err = registryScan.createTriggerRequestSecret(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName)
+		if err != nil {
+			glog.Infof("setRegistryScanCronJob: error creating configmap : %s", err.Error())
+			return err
+		}
+	}
 
 	// create configmap with POST data to trigger websocket
-	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
+	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName, sessionObj.Command)
 	if err != nil {
 		glog.Infof("setRegistryScanCronJob: error creating configmap : %s", err.Error())
 		return err
 	}
 
-	err = registryScan.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryName, sessionObj.Command)
+	err = registryScan.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName, sessionObj.Command)
 	if err != nil {
 		glog.Infof("setRegistryScanCronJob: error creating cronjob : %s", err.Error())
 		return err

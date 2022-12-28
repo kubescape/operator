@@ -46,7 +46,7 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 }
 
 func getCronJobTemplate(k8sAPI *k8sinterface.KubernetesApi, name string) (*v1.CronJob, error) {
-	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Get(context.Background(), name, metav1.GetOptions{})
+	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
