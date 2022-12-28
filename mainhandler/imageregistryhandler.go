@@ -126,7 +126,7 @@ func makeRegistryAuth(registryName string) registryAuth {
 
 func (rs *registryScan) isPrivate() bool {
 	//TODO: support registry token
-	return rs.registryInfo.AuthMethod.Type != "public"
+	return rs.registryInfo.AuthMethod.Password != ""
 }
 
 func (rs *registryScan) registryCredentials() *registryCreds {
