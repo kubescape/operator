@@ -127,7 +127,7 @@ func makeRegistryAuth(registryName string) registryAuth {
 
 func (rs *registryScan) isPrivate() bool {
 	//TODO: support registry token
-	return rs.registryInfo.AuthMethod.Type != "public"
+	return rs.registryInfo.AuthMethod.Password != ""
 }
 
 func (rs *registryScan) registryCredentials() *registryCreds {
@@ -274,7 +274,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	}
 
 	// command is POST request to trigger websocket
-	command, err := registryScan.getRegistryScanCommand(registryName)
+	command, err := registryScan.getCommandForConfigMap()
 	if err != nil {
 		return err
 	}
@@ -298,13 +298,18 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 		return err
 	}
 	glog.Infof("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos))
+
+	reposToTags := make(chan map[string][]string, len(repos))
 	for _, repo := range repos {
-		if err := registryScan.setImageToTagsMap(repo, reporter); err != nil {
-			reporter.SetDetails("setImageToTagsMap failed")
-			glog.Errorf("setImageToTagsMap failed with registry: %s repo: %s due to ERROR:: %s", registryScan.registry.hostname, repo, err.Error())
-			return err
+		go registryScan.setImageToTagsMap(repo, reporter, reposToTags)
+	}
+	for i := 0; i < len(repos); i++ {
+		res := <-reposToTags
+		for k, v := range res {
+			registryScan.mapImageToTags[k] = v
 		}
 	}
+
 	if registryScan.isExceedScanLimit(imagesToScanLimit) {
 		registryScan.filterScanLimit(imagesToScanLimit)
 		errMsg := fmt.Sprintf("more than %d images provided. scanning only first %d images", imagesToScanLimit, imagesToScanLimit)
@@ -321,7 +326,7 @@ func (registryScan *registryScan) getImagesForScanning(reporter datastructures.I
 	return nil
 }
 
-func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datastructures.IReporter) error {
+func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datastructures.IReporter, c chan map[string][]string) error {
 	glog.Infof("Fetching repository %s tags", repo)
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
@@ -366,7 +371,9 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 				}
 			}
 		}
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		c <- map[string][]string{
+			registryScan.registry.hostname + "/" + repo: tags,
+		}
 
 	} else { //fallback to list images lexicographically
 		glog.Errorf("get latestTags failed for repository %s with error:%s/n fetching lexicographical list of tags", repo, err.Error())
@@ -388,7 +395,9 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 				break
 			}
 		}
-		registryScan.mapImageToTags[registryScan.registry.hostname+"/"+repo] = tags
+		c <- map[string][]string{
+			registryScan.registry.hostname + "/" + repo: tags,
+		}
 	}
 	return nil
 }
@@ -497,11 +506,13 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 	return repos, nil
 }
 
-func (registryScan *registryScan) getRegistryScanCommand(registryName string) (string, error) {
+func (registryScan *registryScan) getCommandForConfigMap() (string, error) {
 	scanRegistryCommand := apis.Command{}
 	scanRegistryCommand.CommandName = apis.TypeScanRegistry
 
 	scanRegistryCommand.Args = map[string]interface{}{}
+
+	// credentials will not be in configmap
 	registryScan.registryInfo.AuthMethod = armotypes.AuthMethod{
 		Type: registryScan.registryInfo.AuthMethod.Type,
 	}
@@ -559,14 +570,10 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	if err != nil {
 		return fmt.Errorf("could not decode registry info into registryInfo struct")
 	}
-	registryScan.registryInfo.Kind = registryScan.registryInfo.RegistryProvider
 	return nil
 }
 
 func (registryScan *registryScan) validateRegistryInfo() error {
-	if registryScan.registryInfo.RegistryProvider == "" {
-		return fmt.Errorf("registry provider cannot be empty")
-	}
 	if len(registryScan.registryInfo.Exclude) > 0 && len(registryScan.registryInfo.Include) > 0 {
 		return fmt.Errorf("cannot have both exclude and include lists")
 	}
@@ -576,30 +583,50 @@ func (registryScan *registryScan) validateRegistryInfo() error {
 	return nil
 }
 
+func (registryScan *registryScan) setRegistryKind() {
+	registryScan.registryInfo.RegistryProvider = registryScan.getRegistryProvider()
+	registryScan.registryInfo.Kind = registryScan.registryInfo.RegistryProvider
+}
+
+func (registryScan *registryScan) getRegistryProvider() string {
+	if strings.Contains(registryScan.registryInfo.RegistryName, ".dkr.ecr") {
+		return "ecr"
+	}
+	if strings.Contains(registryScan.registryInfo.RegistryName, "gcr.io") {
+		return "gcr"
+	}
+	if strings.Contains(registryScan.registryInfo.RegistryName, "quay.io") {
+		return "quay.io"
+	}
+	return ""
+}
+
+// parse registry information from secret, configmap and command, giving priority to command
 func (registryScan *registryScan) parseRegistry(sessionObj *utils.SessionObj) error {
 	err := registryScan.parseRegistryAuthFromSecret()
 	if err != nil {
 		glog.Infof("parseRegistry: could not parse auth from secret: %v, parsing from command", err)
+	} else {
+		sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
 	}
 
 	configMapMode, err := registryScan.getRegistryConfig(&registryScan.registryInfo)
 	if err != nil {
 		glog.Infof("parseRegistry: could not get registry config: %v", err)
 	}
+	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryScan.registryInfo.RegistryName, configMapMode) // systest depedendent
 
 	err = registryScan.parseRegistryFromCommand(sessionObj)
 	if err != nil {
 		return fmt.Errorf("get registry auth failed with err %v", err)
 	}
 
-	err = registryScan.validateRegistryInfo()
+	registryScan.setRegistryKind()
+
 	if err != nil {
 		return fmt.Errorf("parseRegistry: err %v", err)
 	}
 
-	sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
-
-	glog.Infof("scanRegistries:registry(%s) %s configmap  successful", registryScan.registryInfo.RegistryName, configMapMode) // systest depedendent
 	registryScan.setHostnameAndProject()
 	return nil
 }
@@ -631,6 +658,7 @@ func (registryScan *registryScan) parseRegistryAuthFromSecret() error {
 	if err != nil {
 		return err
 	}
+
 	secretData := secret.GetData()
 	var registriesAuth []registryAuth
 	registriesAuthStr, ok := secretData[registriesAuthFieldInSecret].(string)
@@ -670,6 +698,7 @@ func (registryScan *registryScan) parseRegistryAuthFromSecret() error {
 		}
 
 	}
+
 	//no auth found for registry return a default one
 	auth := makeRegistryAuth(registryScan.registryInfo.RegistryName)
 	registryScan.setRegistryInfoFromAuth(auth, &registryScan.registryInfo)
@@ -734,6 +763,7 @@ func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *arm
 }
 
 func (registryScan *registryScan) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
+	// check if secret was sent as part of command (newer versions)
 	if registryScan.registryInfo.SecretName != "" {
 		secret, err := registryScan.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", registryScan.registryInfo.SecretName)
 		if err == nil && secret != nil {
@@ -741,6 +771,7 @@ func (registryScan *registryScan) getRegistryScanSecret() (k8sinterface.IWorkloa
 		}
 	}
 
+	// check if secret exists in cluster (backward compatibility)
 	secret, err := registryScan.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", armotypes.RegistryScanSecretName)
 	if err == nil && secret != nil {
 		return secret, err
@@ -799,4 +830,12 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to send request, reason: %v", err)
 	}
 	return nil
+}
+
+func (registryScan *registryScan) setSecretName(secretName string) {
+	registryScan.registryInfo.SecretName = secretName
+}
+
+func (registryScan *registryScan) setRegistryName(registryName string) {
+	registryScan.registryInfo.RegistryName = registryName
 }

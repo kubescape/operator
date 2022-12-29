@@ -1,0 +1,12 @@
+{
+    "commands": [
+        {
+            "CommandName": "deleteRegistryScanCronJob",
+            "args": {
+                "jobParams": {
+                    "name": "kubescape-registry-scan-4924508290975795459"
+                }
+            }
+        }
+    ]
+}

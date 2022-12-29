@@ -84,16 +84,16 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob() error {
 		return fmt.Errorf("deleteVulnScanCronJob: CronTabSchedule not found")
 	}
 
-	return actionHandler.deleteCronjob(scanJobParams.JobName)
+	return actionHandler.deleteCronjob(scanJobParams.JobName, utils.Namespace)
 
 }
 
-func (actionHandler *ActionHandler) deleteCronjob(name string) error {
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+func (actionHandler *ActionHandler) deleteCronjob(name, namespace string) error {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil

@@ -1,0 +1,25 @@
+{
+    "commands": [
+        {
+            "commandName": "scanRegistry",
+            "jobTracking": {
+                "timestamp": "0001-01-01T00:00:00Z"
+            },
+            "args": {
+                "registryInfo-v1": {
+                    "registryName": "quay.io/kubescape",
+                    "registryProvider": "quay.io",
+                    "depth": 1,
+                    "exclude": [
+                    ],
+                    "kind": "quay.io",
+                    "isHTTPs": false,
+                    "skipTLSVerify": false,
+                    "authMethod": {
+                        "type": "public"
+                    }
+                }
+            }
+        }
+    ]
+}

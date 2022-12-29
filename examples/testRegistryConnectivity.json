@@ -1,0 +1,22 @@
+{
+    "commands": [
+        {
+            "commandName": "testRegistryConnectivity",
+            "jobTracking": {
+            },
+            "args": {
+                "registryInfo-v1": {
+                    "registryName": "quay.io/kubescape",
+                    "registryProvider": "quay.io",
+                    "depth": 4,
+                    "kind": "quay.io",
+                    "isHTTPs": true,
+                    "skipTLSVerify": false,
+                    "authMethod": {
+                        "type": "public"
+                    }
+                }
+            }
+        }
+    ]
+}

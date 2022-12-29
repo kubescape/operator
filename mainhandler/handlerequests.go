@@ -140,13 +140,11 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) err
 	logCommandInfo := fmt.Sprintf("Running %s command, id: '%s'", c.CommandName, c.GetID())
 
 	glog.Infof(logCommandInfo)
+
+	glog.Infof("Command args: %v", c.Args)
 	switch c.CommandName {
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(sessionObj)
-	case apis.TypeScanRegistry:
-		return actionHandler.scanRegistries(sessionObj)
-	case apis.TypeTestRegistryConnectivity:
-		return actionHandler.testRegistryConnectivity(sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan()
 	case apis.TypeSetKubescapeCronJob:
@@ -163,8 +161,12 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) err
 		return actionHandler.deleteVulnScanCronJob()
 	case apis.TypeSetRegistryScanCronJob:
 		return actionHandler.setRegistryScanCronJob(sessionObj)
+	case apis.TypeScanRegistry:
+		return actionHandler.scanRegistries(sessionObj)
+	case apis.TypeTestRegistryConnectivity:
+		return actionHandler.testRegistryConnectivity(sessionObj)
 	case apis.TypeUpdateRegistryScanCronJob:
-		return actionHandler.updateRegistryScanCronJob()
+		return actionHandler.updateRegistryScanCronJob(sessionObj)
 	case apis.TypeDeleteRegistryScanCronJob:
 		return actionHandler.deleteRegistryScanCronJob()
 	default:

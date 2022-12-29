@@ -2,27 +2,86 @@ package mainhandler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/docker/docker/api/types"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
-	jobParams := actionHandler.command.GetCronJobParams()
-	if jobParams == nil {
-		glog.Infof("updateRegistryScanCronJob: failed to get jobParams")
-		return fmt.Errorf("failed to get failed to get jobParams")
+func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, secretName string, authConfig *types.AuthConfig) error {
+	secretObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	if err != nil {
+		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+	var registriesAuth []registryAuth
+	registriesAuthStr, ok := secretObj.Data[registriesAuthFieldInSecret]
+	if !ok {
+		return fmt.Errorf("failed to get registriesAuthFieldInSecret")
+	}
+	err = json.Unmarshal(registriesAuthStr, &registriesAuth)
+
+	if err != nil || len(registriesAuth) != 1 {
+		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	if authConfig.Username != "" {
+		registriesAuth[0].Username = authConfig.Username
+	}
+	if authConfig.Password != "" {
+		registriesAuth[0].Password = authConfig.Password
+	}
+
+	authMarshal, err := json.Marshal(registriesAuth)
 	if err != nil {
-		glog.Infof("updateRegistryScanCronJob: failed to get cronjob: %s", jobParams.JobName)
+		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+	secretObj.Data[registriesAuthFieldInSecret] = authMarshal
+	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Update(context.Background(), secretObj, metav1.UpdateOptions{})
+	if err != nil {
+		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+
+	return nil
+}
+
+func (actionHandler *ActionHandler) updateConfigMap(sessionObj *utils.SessionObj, configMapName string, registryScan *registryScan) error {
+	configMapObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Get(context.Background(), configMapName, metav1.GetOptions{})
+	if err != nil {
+		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+	command, err := registryScan.getCommandForConfigMap()
+	if err != nil {
+		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+	configMapObj.Data[requestBodyFile] = string(command)
+
+	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Update(context.Background(), configMapObj, metav1.UpdateOptions{})
+	if err != nil {
+		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+	return nil
+}
+
+func (actionHandler *ActionHandler) updateCronJob(sessionObj *utils.SessionObj, cronJobName string) error {
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Get(context.Background(), cronJobName, metav1.GetOptions{})
+	if err != nil {
 		return err
 	}
 
@@ -34,17 +93,65 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob() error {
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
-	glog.Infof("updateRegistryScanCronJob: cronjob: %v updated successfully", jobParams.JobName)
+	return nil
+}
+
+func (actionHandler *ActionHandler) updateRegistryScanCronJob(sessionObj *utils.SessionObj) error {
+	// parse command
+	jobParams := actionHandler.command.GetCronJobParams()
+	if jobParams == nil {
+		glog.Infof("In updateRegistryScanCronJob failed with error: jobParams is nil")
+		sessionObj.Reporter.SetDetails("GetCronJobParams")
+		return fmt.Errorf("jobParams is nil")
+	}
+
+	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
+	if err != nil {
+		glog.Errorf("In updateRegistryScanCronJob: loadRegistryScan failed with error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("loadRegistryScan")
+		return err
+	}
+
+	name := jobParams.JobName
+
+	// if there is password, get secret and update it (same name)
+	if registryScan.isPrivate() && (registryScan.authConfig().Password != "" || registryScan.authConfig().Username != "") {
+		err = actionHandler.updateSecret(sessionObj, name, registryScan.authConfig())
+		if err != nil {
+			glog.Errorf("In updateRegistryScanCronJob: updateSecret failed with error: %v", err.Error())
+			sessionObj.Reporter.SetDetails("updateSecret")
+			return err
+		}
+		glog.Infof("updateRegistryScanCronJob: secret: %v updated successfully", name)
+	}
+
+	err = actionHandler.updateConfigMap(sessionObj, name, registryScan)
+	if err != nil {
+		glog.Errorf("In updateRegistryScanCronJob: updateConfigMap failed with error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("updateConfigMap")
+		return err
+	}
+	glog.Infof("updateRegistryScanCronJob: configmap: %v updated successfully", name)
+
+	if jobParams.CronTabSchedule != "" {
+		err = actionHandler.updateCronJob(sessionObj, name)
+		if err != nil {
+			glog.Errorf("In updateRegistryScanCronJob: updateCronJob failed with error: %v", err.Error())
+			sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
+			return err
+		}
+		glog.Infof("updateRegistryScanCronJob: cronjob: %v updated successfully", name)
+	}
 	return nil
 
 }
 
 func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.SessionObj) error {
-	// 1 - If we have credentials, create secret with it.
+	// 1 - If command has credentials on it, create secret with it.
 	// 2 - Create configmap with command to trigger operator. Command includes secret name (if there were credentials).
 	// 3 - Create cronjob which will send request to operator to trigger scan using the configmap data.
 
@@ -54,36 +161,41 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.Ses
 
 	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
-		glog.Errorf("in parseRegistryCommand: error: %v", err.Error())
+		glog.Errorf("In parseRegistryCommand: error: %v", err.Error())
 		sessionObj.Reporter.SetDetails("loadRegistryScan")
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
-	// name is registryScanConfigmap name + random string - configmap and cronjob
+	// name is registryScanConfigmap name + random string - configmap, cronjob and secret
 	nameSuffix := rand.NewSource(time.Now().UnixNano()).Int63()
 	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", registryScanConfigmap, nameSuffix))
-	if registryScan.registryInfo.AuthMethod.Type != "public" {
+	if registryScan.isPrivate() {
 		err = registryScan.createTriggerRequestSecret(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName)
 		if err != nil {
-			glog.Infof("setRegistryScanCronJob: error creating configmap : %s", err.Error())
+			glog.Infof("In setRegistryScanCronJob: createTriggerRequestSecret failed with error: %s", err.Error())
+			sessionObj.Reporter.SetDetails("createTriggerRequestSecret")
 			return err
 		}
+		glog.Info("setRegistryScanCronJob: secret created successfully")
 	}
 
 	// create configmap with POST data to trigger websocket
 	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName, sessionObj.Command)
 	if err != nil {
-		glog.Infof("setRegistryScanCronJob: error creating configmap : %s", err.Error())
+		glog.Infof("In setRegistryScanCronJob: createTriggerRequestConfigMap failed with error: %s", err.Error())
+		sessionObj.Reporter.SetDetails("createTriggerRequestConfigMap")
 		return err
 	}
+	glog.Info("setRegistryScanCronJob: configmap created successfully")
 
 	err = registryScan.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName, sessionObj.Command)
 	if err != nil {
-		glog.Infof("setRegistryScanCronJob: error creating cronjob : %s", err.Error())
+		glog.Infof("In setRegistryScanCronJob: createTriggerRequestCronJob failed with error: %s", err.Error())
+		sessionObj.Reporter.SetDetails("createTriggerRequestCronJob")
 		return err
 	}
-
 	glog.Infof("setRegistryScanCronJob: cronjob: %s created successfully", name)
+
 	return err
 }
 
@@ -94,5 +206,5 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob() error {
 		return fmt.Errorf("failed to get jobParams")
 	}
 
-	return actionHandler.deleteCronjob(jobParams.JobName)
+	return actionHandler.deleteCronjob(jobParams.JobName, armotypes.KubescapeNamespace)
 }

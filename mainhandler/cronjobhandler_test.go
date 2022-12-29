@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func getCommand(jobName, cronTabSchedule string) *apis.Command {
+func getCommandForConfigMap(jobName, cronTabSchedule string) *apis.Command {
 	jobParams := apis.CronJobParams{
 		JobName:         jobName,
 		CronTabSchedule: cronTabSchedule,
@@ -23,7 +23,7 @@ func getCommand(jobName, cronTabSchedule string) *apis.Command {
 func TestGetJobParams(t *testing.T) {
 	jobName := "aaaa"
 	cronTabSchedule := "bbbb"
-	command := getCommand(jobName, cronTabSchedule)
+	command := getCommandForConfigMap(jobName, cronTabSchedule)
 	jobParams := getJobParams(command)
 
 	assert.Equal(t, jobParams.JobName, jobName)
