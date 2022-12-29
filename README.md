@@ -1,7 +1,7 @@
 
 # Operator 
 
-The Operator component is at the heart of Kubescape as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connections, and triggers the relevant action in the cluster. Such actions could be triggering a [configuration scan](https://www.armosec.io/blog/ci-cd-security?utm_source=github&utm_medium=repository), an image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
+The Operator component is at the heart of Kubescape as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connections, and triggers the relevant action in the cluster. Such actions could be triggering a [configuration scan](https://www.armosec.io/blog/ci-cd-security/?utm_source=github&utm_medium=repository), an image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
 
 ## Running Operator
 Build Operator `go build .`  
@@ -48,7 +48,7 @@ If you running the Operator as part of the Kubescape cluster components, you nee
 The Operator provides an HTTP API.
 
 You can learn more about the API using one of the provided interactive OpenAPI UIs:
-- [SwaggerUI](https://www.armosec.io/blog/introducing-kubescape-open-api-framework?utm_source=github&utm_medium=repository), available at `/openapi/v2/swaggerui`
+- [SwaggerUI](https://www.armosec.io/blog/introducing-kubescape-open-api-framework/?utm_source=github&utm_medium=repository), available at `/openapi/v2/swaggerui`
 - RapiDoc, available at `/openapi/v2/rapi`
 - Redoc, available at `/openapi/v2/docs`
 
@@ -239,7 +239,7 @@ curl -X POST \
 	
 ## VS code configuration samples
 
-You can use the sample files below to setup your [VS code](https://www.armosec.io/blog/securing-ci-cd-pipelines-security-gates?utm_source=github&utm_medium=repository) environment for building and debugging purposes.
+You can use the sample files below to setup your [VS code](https://www.armosec.io/blog/securing-ci-cd-pipelines-security-gates/?utm_source=github&utm_medium=repository) environment for building and debugging purposes.
 
 <details><summary>.vscode/launch.json</summary>
 
