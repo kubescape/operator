@@ -2,10 +2,8 @@ module github.com/kubescape/operator
 
 go 1.18
 
-replace github.com/armosec/armoapi-go => /home/daniel/armo/armoapi-go
-
 require (
-	github.com/armosec/armoapi-go v0.0.129
+	github.com/armosec/armoapi-go v0.0.139
 	github.com/armosec/cluster-notifier-api-go v0.0.3
 	github.com/armosec/logger-go v0.0.13
 	github.com/armosec/opa-utils v0.0.166
