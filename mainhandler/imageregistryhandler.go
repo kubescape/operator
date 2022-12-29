@@ -37,7 +37,7 @@ type AuthMethods string
 const (
 	registryScanConfigmap                   = "kubescape-registry-scan"
 	registryNameField                       = "registryName"
-	secretNameField                         = "secret"
+	secretNameField                         = "secretName"
 	imagesToScanLimit                       = 500
 	registriesAuthFieldInSecret             = "registriesAuth"
 	accessTokenAuth             AuthMethods = "accesstoken"
