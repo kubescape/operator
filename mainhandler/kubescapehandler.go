@@ -86,7 +86,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob() error {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName)
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, utils.Namespace)
 		if err != nil {
 			return err
 		}

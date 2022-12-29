@@ -638,7 +638,7 @@ func (registryScan *registryScan) parseRegistry(sessionObj *utils.SessionObj) er
 func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterface.KubernetesApi, name, registryName string, command apis.Command) error {
 
 	// cronjob template is stored as configmap in cluster
-	jobTemplateObj, err := getCronJobTemplate(k8sAPI, registryCronjobTemplate)
+	jobTemplateObj, err := getCronJobTemplate(k8sAPI, registryCronjobTemplate, armotypes.KubescapeNamespace)
 	if err != nil {
 		glog.Infof("setRegistryScanCronJob: error retrieving cronjob template : %s", err.Error())
 		return err

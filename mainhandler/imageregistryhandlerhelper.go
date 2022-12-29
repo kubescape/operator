@@ -18,9 +18,7 @@ import (
 func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, secretName string, authConfig *types.AuthConfig) error {
 	secretObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
 	if err != nil {
-		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
-		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+		return err
 	}
 	var registriesAuth []registryAuth
 	registriesAuthStr, ok := secretObj.Data[registriesAuthFieldInSecret]
@@ -29,28 +27,24 @@ func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, s
 	}
 	err = json.Unmarshal(registriesAuthStr, &registriesAuth)
 
-	if err != nil || len(registriesAuth) != 1 {
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+	if err != nil {
+		return err
+	}
+	if len(registriesAuth) != 1 {
+		return fmt.Errorf("registriesAuth length is: %v and not 1", len(registriesAuth))
 	}
 
-	if authConfig.Username != "" {
-		registriesAuth[0].Username = authConfig.Username
-	}
-	if authConfig.Password != "" {
-		registriesAuth[0].Password = authConfig.Password
-	}
+	registriesAuth[0].Username = authConfig.Username
+	registriesAuth[0].Password = authConfig.Password
 
 	authMarshal, err := json.Marshal(registriesAuth)
 	if err != nil {
-		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+		return err
 	}
 	secretObj.Data[registriesAuthFieldInSecret] = authMarshal
 	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Update(context.Background(), secretObj, metav1.UpdateOptions{})
 	if err != nil {
-		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
-		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+		return err
 	}
 
 	return nil
@@ -59,22 +53,17 @@ func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, s
 func (actionHandler *ActionHandler) updateConfigMap(sessionObj *utils.SessionObj, configMapName string, registryScan *registryScan) error {
 	configMapObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Get(context.Background(), configMapName, metav1.GetOptions{})
 	if err != nil {
-		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
-		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+		return err
 	}
 	command, err := registryScan.getCommandForConfigMap()
 	if err != nil {
-		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+		return err
 	}
 	configMapObj.Data[requestBodyFile] = string(command)
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Update(context.Background(), configMapObj, metav1.UpdateOptions{})
 	if err != nil {
-		glog.Errorf("in updateRegistryScanCronJob: error: %v", err.Error())
-		sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
-		return fmt.Errorf("scanRegistries failed with err %v", err)
+		return err
 	}
 	return nil
 }
