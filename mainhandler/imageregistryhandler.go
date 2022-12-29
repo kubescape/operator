@@ -102,12 +102,16 @@ func errorWithDocumentationRef(errorMessage string) error {
 }
 
 func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
+	var depth *int
+	var isHTTPs *bool
+	*depth = 1
+	*isHTTPs = true
 	return registryScan{
 		registry:       registry{},
 		mapImageToTags: make(map[string][]string),
 		registryInfo: armotypes.RegistryInfo{
-			Depth:   1,
-			IsHTTPs: true,
+			Depth:   depth,
+			IsHTTPs: isHTTPs,
 		},
 		k8sAPI: k8sAPI,
 	}
@@ -115,7 +119,7 @@ func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 
 func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error) {
 	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryInfo.AuthMethod.Username, Password: rs.registryInfo.AuthMethod.Password, RegistryToken: rs.registryInfo.RegistryToken}, rs.registry.hostname,
-		regCommon.MakeRegistryOptions(false, !*&rs.registryInfo.IsHTTPs, *&rs.registryInfo.SkipTLSVerify, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
+		regCommon.MakeRegistryOptions(false, !*rs.registryInfo.IsHTTPs, *rs.registryInfo.SkipTLSVerify, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
 }
 
 func makeRegistryAuth(registryName string) registryAuth {
@@ -341,7 +345,7 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 	if registryScan.isPrivate() {
 		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
 	}
-	if latestTags, err := iRegistry.GetLatestTags(repo, tagsDepth, options...); err == nil {
+	if latestTags, err := iRegistry.GetLatestTags(repo, *tagsDepth, options...); err == nil {
 		tags := []string{}
 		for _, tag := range latestTags {
 			// filter out signature tags
@@ -353,9 +357,9 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 			if tagsForDigestLen == 1 {
 				tags = append(tags, tagsForDigest[0])
 			} else {
-				if tagsForDigestLen > tagsDepth {
-					tags = append(tags, tagsForDigest[:tagsDepth]...)
-					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:tagsDepth], ","))
+				if tagsForDigestLen > *tagsDepth {
+					tags = append(tags, tagsForDigest[:*tagsDepth]...)
+					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:*tagsDepth], ","))
 					if reporter != nil {
 						errChan := make(chan error)
 						err := errorWithDocumentationRef(errMsg)
@@ -385,9 +389,9 @@ func (registryScan *registryScan) setImageToTagsMap(repo string, reporter datast
 			if !latestTagFound {
 				latestTagFound = slices.Contains(tagsPage, "latest")
 			}
-			tags = updateTagsCandidates(tags, tagsPage, tagsDepth, latestTagFound)
+			tags = updateTagsCandidates(tags, tagsPage, *tagsDepth, latestTagFound)
 
-			if tagsDepth == 1 && latestTagFound {
+			if *tagsDepth == 1 && latestTagFound {
 				break
 			}
 
@@ -709,8 +713,8 @@ func (registryScan *registryScan) setRegistryInfoFromAuth(auth registryAuth, reg
 	registryInfo.AuthMethod.Type = auth.AuthMethod
 	registryInfo.AuthMethod.Username = auth.Username
 	registryInfo.AuthMethod.Password = auth.Password
-	registryInfo.SkipTLSVerify = *auth.SkipTLSVerify
-	registryInfo.IsHTTPs = !*auth.Insecure
+	registryInfo.SkipTLSVerify = auth.SkipTLSVerify
+	*registryInfo.IsHTTPs = !*auth.Insecure
 	registryInfo.Kind = string(auth.Kind)
 }
 
@@ -756,7 +760,7 @@ func (registryScan *registryScan) getRegistryConfig(registryInfo *armotypes.Regi
 func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *armotypes.RegistryInfo, registryConfig registryScanConfig) {
 	// default is one
 	if registryConfig.Depth != 0 {
-		registryInfo.Depth = registryConfig.Depth
+		*registryInfo.Depth = registryConfig.Depth
 	}
 	registryInfo.Include = registryConfig.Include
 	registryInfo.Exclude = registryConfig.Exclude
