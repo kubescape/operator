@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
@@ -195,5 +196,31 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob() error {
 		return fmt.Errorf("failed to get jobParams")
 	}
 
-	return actionHandler.deleteCronjob(jobParams.JobName, armotypes.KubescapeNamespace)
+	name := jobParams.JobName
+
+	err := actionHandler.k8sAPI.KubernetesClient.BatchV1beta1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	if err != nil {
+		glog.Infof("deleteRegistryScanCronJob: deleteCronJob failed with error: %v", err.Error())
+		return err
+	}
+	glog.Infof("deleteRegistryScanCronJob: cronjob: %v deleted successfully", name)
+
+	// delete secret (if exists)
+	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	if err != nil {
+		// if secret not found, it means was configured without credentials
+		if !strings.Contains(err.Error(), "not found") {
+			glog.Infof("deleteRegistryScanCronJob: deleteSecret failed with error: %v", err.Error())
+		}
+	}
+	glog.Infof("deleteRegistryScanCronJob: secret: %v deleted successfully", name)
+
+	// delete configmap
+	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	if err != nil {
+		glog.Infof("deleteRegistryScanCronJob: deleteConfigMap failed with error: %v", err.Error())
+	}
+	glog.Infof("deleteRegistryScanCronJob: configmap: %v deleted successfully", name)
+
+	return nil
 }

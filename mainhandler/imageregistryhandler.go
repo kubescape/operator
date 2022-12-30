@@ -102,8 +102,8 @@ func errorWithDocumentationRef(errorMessage string) error {
 }
 
 func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
-	var depth *int
-	var isHTTPs *bool
+	depth := new(int)
+	isHTTPs := new(bool)
 	*depth = 1
 	*isHTTPs = true
 	return registryScan{
