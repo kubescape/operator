@@ -226,12 +226,12 @@ func (rs *registryScan) filterRepositories(repos []string) []string {
 			if !slices.Contains(rs.registryInfo.Exclude, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
 				filteredRepos = append(filteredRepos, repo)
 			} else {
-				repomsg := rs.registry.hostname + "/"
+				repoMsg := rs.registry.hostname + "/"
 				if rs.registry.projectID != "" {
-					repomsg += rs.registry.projectID + "/"
+					repoMsg += rs.registry.projectID + "/"
 				}
-				repomsg += repo
-				glog.Warningf("image registry scan::%s was excluded", repomsg) // systest dependent
+				repoMsg += repo
+				glog.Warningf("image registry scan::%s was excluded", repoMsg) // systest dependent
 			}
 
 		}
