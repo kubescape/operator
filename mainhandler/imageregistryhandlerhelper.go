@@ -91,7 +91,6 @@ func (actionHandler *ActionHandler) updateCronJob(sessionObj *utils.SessionObj, 
 }
 
 func (actionHandler *ActionHandler) updateRegistryScanCronJob(sessionObj *utils.SessionObj) error {
-	// parse command
 	jobParams := actionHandler.command.GetCronJobParams()
 	if jobParams == nil {
 		glog.Infof("In updateRegistryScanCronJob failed with error: jobParams is nil")
@@ -141,9 +140,9 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(sessionObj *utils.
 }
 
 func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.SessionObj) error {
-	// 1 - If command has credentials on it, create secret with it.
-	// 2 - Create configmap with command to trigger operator. Command includes secret name (if there were credentials).
-	// 3 - Create cronjob which will send request to operator to trigger scan using the configmap data.
+	// If command has credentials on it, create secret with it.
+	// Create configmap with command to trigger operator. Command includes secret name (if there were credentials).
+	// Create cronjob which will send request to operator to trigger scan using the configmap (and secret) data.
 
 	if getCronTabSchedule(sessionObj.Command) == "" {
 		return fmt.Errorf("schedule cannot be empty")
@@ -190,6 +189,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.Ses
 }
 
 func (actionHandler *ActionHandler) deleteRegistryScanCronJob() error {
+	// Delete cronjob, configmap and secret (if exists)
 	jobParams := actionHandler.command.GetCronJobParams()
 	if jobParams == nil {
 		glog.Infof("updateRegistryScanCronJob: failed to get jobParams")
@@ -205,7 +205,7 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob() error {
 	}
 	glog.Infof("deleteRegistryScanCronJob: cronjob: %v deleted successfully", name)
 
-	// delete secret (if exists)
+	// delete secret
 	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
 		// if secret not found, it means was configured without credentials

@@ -289,7 +289,6 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-	glog.Infof("createTriggerRequestConfigMap: created configmap: %s", name)
 	return nil
 }
 
@@ -640,7 +639,6 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 	// cronjob template is stored as configmap in cluster
 	jobTemplateObj, err := getCronJobTemplate(k8sAPI, registryCronjobTemplate, armotypes.KubescapeNamespace)
 	if err != nil {
-		glog.Infof("setRegistryScanCronJob: error retrieving cronjob template : %s", err.Error())
 		return err
 	}
 
@@ -651,7 +649,6 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 
 	// create cronJob
 	if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
-		glog.Infof("setRegistryScanCronJob: cronjob: %s creation failed. err: %s", name, err.Error())
 		return err
 	}
 	return nil
