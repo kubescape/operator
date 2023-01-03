@@ -103,15 +103,18 @@ func errorWithDocumentationRef(errorMessage string) error {
 
 func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 	depth := new(int)
-	IsHTTPS := new(bool)
+	isHTTPS := new(bool)
+	skipTlsVerify := new(bool)
 	*depth = 1
-	*IsHTTPS = true
+	*isHTTPS = true
+	*skipTlsVerify = false
 	return registryScan{
 		registry:       registry{},
 		mapImageToTags: make(map[string][]string),
 		registryInfo: armotypes.RegistryInfo{
-			Depth:   depth,
-			IsHTTPS: IsHTTPS,
+			Depth:         depth,
+			IsHTTPS:       isHTTPS,
+			SkipTLSVerify: skipTlsVerify,
 		},
 		k8sAPI: k8sAPI,
 	}
@@ -576,16 +579,6 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	return nil
 }
 
-func (registryScan *registryScan) validateRegistryInfo() error {
-	if len(registryScan.registryInfo.Exclude) > 0 && len(registryScan.registryInfo.Include) > 0 {
-		return fmt.Errorf("cannot have both exclude and include lists")
-	}
-	if registryScan.registryInfo.RegistryName == "" {
-		return fmt.Errorf("registry name cannot be empty")
-	}
-	return nil
-}
-
 func (registryScan *registryScan) setRegistryKind() {
 	registryScan.registryInfo.RegistryProvider = registryScan.getRegistryProvider()
 	registryScan.registryInfo.Kind = registryScan.registryInfo.RegistryProvider
@@ -830,6 +823,24 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 	if err != nil {
 		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to send request, reason: %v", err)
 	}
+	return nil
+}
+
+func (registryScan *registryScan) validateRegistryScanInformation() error {
+	if registryScan.registryInfo.RegistryName == "" {
+		return fmt.Errorf("registry name is missing")
+	}
+
+	if registryScan.isPrivate() {
+		if registryScan.registryInfo.AuthMethod.Password == "" || registryScan.registryInfo.AuthMethod.Username == "" {
+			return fmt.Errorf("username or password is missing")
+		}
+	}
+
+	if len(registryScan.registryInfo.Exclude) > 0 && len(registryScan.registryInfo.Include) > 0 {
+		return fmt.Errorf("cannot have both exclude and include lists")
+	}
+
 	return nil
 }
 

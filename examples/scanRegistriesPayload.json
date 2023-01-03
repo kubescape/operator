@@ -13,7 +13,7 @@
                     "exclude": [
                     ],
                     "kind": "quay.io",
-                    "isHTTPs": false,
+                    "isHTTPS": false,
                     "skipTLSVerify": false,
                     "authMethod": {
                         "type": "public"

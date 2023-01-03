@@ -115,17 +115,22 @@ func (actionHandler *ActionHandler) scanRegistries(sessionObj *utils.SessionObj)
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
+	err = registryScan.validateRegistryScanInformation()
+	if err != nil {
+		glog.Errorf("in parseRegistryCommand: error: %v", err.Error())
+		sessionObj.Reporter.SetDetails("validateRegistryScanInformation")
+		return fmt.Errorf("scanRegistries failed with err %v", err)
+	}
+
 	return actionHandler.scanRegistry(registryScan, sessionObj)
 }
 
 func (actionHandler *ActionHandler) loadRegistryScan(sessionObj *utils.SessionObj) (*registryScan, error) {
 	registryScan := NewRegistryScan(actionHandler.k8sAPI)
 	var err error
-	regName, err := actionHandler.parseRegistryName(sessionObj)
-	if err != nil {
-		return nil, err
+	if regName := actionHandler.parseRegistryName(sessionObj); regName != "" {
+		registryScan.setRegistryName(regName)
 	}
-	registryScan.setRegistryName(regName)
 
 	// for scan triggered by cronjob, we get the secret name
 	if sessionObj.Command.CommandName == apis.TypeScanRegistry {
@@ -149,11 +154,19 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(sessionObj *utils.S
 		return err
 	}
 
+	err = registryScan.validateRegistryScanInformation()
+	if err != nil {
+		sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
+		glog.Errorf("in testRegistryConnectivity: validateRegistryScanInformation failed with error: %v", err.Error())
+		return err
+	}
+
 	err = actionHandler.testRegistryConnect(registryScan, sessionObj)
 	if err != nil {
 		glog.Errorf("in testRegistryConnectivity: testRegistryConnect failed with error: %v", err.Error())
 		return err
 	}
+
 	return nil
 }
 
@@ -166,20 +179,20 @@ func (actionHandler *ActionHandler) parseSecretName(sessionObj *utils.SessionObj
 	return secretName
 }
 
-func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionObj) (string, error) {
+func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionObj) string {
 	registryInfo, ok := sessionObj.Command.Args[armotypes.RegistryInfoArgKey].(map[string]interface{})
 	if !ok {
-		return "", fmt.Errorf("could not parse registry info")
+		return ""
 	}
 	registryName, ok := registryInfo[registryNameField].(string)
 	if !ok {
-		return "", fmt.Errorf("could not parse registry name")
+		return ""
 	}
 
 	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", apitypes.AttributeRegistryName,
 		registryName))
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), true, sessionObj.ErrChan)
-	return registryName, nil
+	return registryName
 }
 
 func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, sessionObj *utils.SessionObj) error {

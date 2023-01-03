@@ -98,14 +98,13 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(sessionObj *utils.
 		return fmt.Errorf("jobParams is nil")
 	}
 
+	name := jobParams.JobName
 	registryScan, err := actionHandler.loadRegistryScan(sessionObj)
 	if err != nil {
+		// could be old update command. On this case, there is no secret and configmap
 		glog.Errorf("In updateRegistryScanCronJob: loadRegistryScan failed with error: %v", err.Error())
-		sessionObj.Reporter.SetDetails("loadRegistryScan")
-		return err
+		return actionHandler.updateCronTabSchedule(name, jobParams.CronTabSchedule, sessionObj)
 	}
-
-	name := jobParams.JobName
 
 	// if there is password, get secret and update it (same name)
 	if registryScan.isPrivate() && (registryScan.authConfig().Password != "" || registryScan.authConfig().Username != "") {
@@ -126,8 +125,12 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(sessionObj *utils.
 	}
 	glog.Infof("updateRegistryScanCronJob: configmap: %v updated successfully", name)
 
-	if jobParams.CronTabSchedule != "" {
-		err = actionHandler.updateCronJob(sessionObj, name)
+	return actionHandler.updateCronTabSchedule(name, jobParams.CronTabSchedule, sessionObj)
+}
+
+func (actionHandler *ActionHandler) updateCronTabSchedule(name, schedule string, sessionObj *utils.SessionObj) error {
+	if schedule != "" {
+		err := actionHandler.updateCronJob(sessionObj, name)
 		if err != nil {
 			glog.Errorf("In updateRegistryScanCronJob: updateCronJob failed with error: %v", err.Error())
 			sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
@@ -136,7 +139,6 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(sessionObj *utils.
 		glog.Infof("updateRegistryScanCronJob: cronjob: %v updated successfully", name)
 	}
 	return nil
-
 }
 
 func (actionHandler *ActionHandler) setRegistryScanCronJob(sessionObj *utils.SessionObj) error {

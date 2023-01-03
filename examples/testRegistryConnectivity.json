@@ -10,7 +10,7 @@
                     "registryProvider": "quay.io",
                     "depth": 4,
                     "kind": "quay.io",
-                    "isHTTPs": true,
+                    "isHTTPS": true,
                     "skipTLSVerify": false,
                     "authMethod": {
                         "type": "public"
