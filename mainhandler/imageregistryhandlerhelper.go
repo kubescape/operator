@@ -197,11 +197,13 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob() error {
 	}
 
 	name := jobParams.JobName
-
-	err := actionHandler.k8sAPI.KubernetesClient.BatchV1beta1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
-		glog.Infof("deleteRegistryScanCronJob: deleteCronJob failed with error: %v", err.Error())
-		return err
+		err = actionHandler.k8sAPI.KubernetesClient.BatchV1beta1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+		if err != nil {
+			glog.Infof("deleteRegistryScanCronJob: deleteCronJob failed with error: %v", err.Error())
+			return err
+		}
 	}
 	glog.Infof("deleteRegistryScanCronJob: cronjob: %v deleted successfully", name)
 

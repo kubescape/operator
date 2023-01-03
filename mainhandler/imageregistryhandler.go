@@ -103,15 +103,15 @@ func errorWithDocumentationRef(errorMessage string) error {
 
 func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 	depth := new(int)
-	isHTTPs := new(bool)
+	IsHTTPS := new(bool)
 	*depth = 1
-	*isHTTPs = true
+	*IsHTTPS = true
 	return registryScan{
 		registry:       registry{},
 		mapImageToTags: make(map[string][]string),
 		registryInfo: armotypes.RegistryInfo{
 			Depth:   depth,
-			IsHTTPs: isHTTPs,
+			IsHTTPS: IsHTTPS,
 		},
 		k8sAPI: k8sAPI,
 	}
@@ -119,7 +119,7 @@ func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 
 func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error) {
 	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryInfo.AuthMethod.Username, Password: rs.registryInfo.AuthMethod.Password, RegistryToken: rs.registryInfo.RegistryToken}, rs.registry.hostname,
-		regCommon.MakeRegistryOptions(false, !*rs.registryInfo.IsHTTPs, *rs.registryInfo.SkipTLSVerify, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
+		regCommon.MakeRegistryOptions(false, !*rs.registryInfo.IsHTTPS, *rs.registryInfo.SkipTLSVerify, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
 }
 
 func makeRegistryAuth(registryName string) registryAuth {
@@ -711,7 +711,7 @@ func (registryScan *registryScan) setRegistryInfoFromAuth(auth registryAuth, reg
 	registryInfo.AuthMethod.Username = auth.Username
 	registryInfo.AuthMethod.Password = auth.Password
 	registryInfo.SkipTLSVerify = auth.SkipTLSVerify
-	*registryInfo.IsHTTPs = !*auth.Insecure
+	*registryInfo.IsHTTPS = !*auth.Insecure
 	registryInfo.Kind = string(auth.Kind)
 }
 

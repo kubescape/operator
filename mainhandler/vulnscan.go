@@ -89,7 +89,7 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 					apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
 					apitypes.AttributeRepository:    repositoryName,
 					apitypes.AttributeTag:           tag,
-					apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPs,
+					apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
 					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
 					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
 				},
