@@ -2,11 +2,11 @@
     "commands": [
         {
             "CommandName": "scanRegistry",
-            "args": {
+             "args": {
                 "registryInfo-v1": {
-                    "registryName": "quay.io/armosec"
+                    "registryName": "quay.io/kubescape"
                 }
-            }
+             }
         }
     ]
 }

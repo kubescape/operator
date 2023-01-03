@@ -1,0 +1,28 @@
+{
+    "commands": [
+        {
+            "CommandName": "updateRegistryScanCronJob",
+            "args": {
+                "jobParams": {
+                    "name": "kubescape-registry-scan-6185063278658353525",
+                    "cronTabSchedule": "* 2 * 2 *"
+                },
+                "registryInfo-v1": {
+                    "registryName": "quay.io/kubescape",
+                    "registryProvider": "quay.io",
+                    "depth": 1,
+                    "exclude": [
+                    ],
+                    "kind": "quay.io",
+                    "isHTTPS": false,
+                    "skipTLSVerify": false,
+                    "authMethod": {
+                        "type": "private",
+                        "username": "user",
+                        "password": "pass"
+                    }
+                }
+            }
+        }
+    ]
+}

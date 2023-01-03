@@ -1,0 +1,15 @@
+{
+    "commands": [
+        {
+            "commandName": "setRegistryScanCronJob",
+            "args": {
+                "jobParams": {
+                    "cronTabSchedule": "5 5 * * *"
+                },
+                "registryInfo-v1": {
+                    "registryName": "quay.io/kubescape"
+                }
+            }
+        }
+    ]
+}
