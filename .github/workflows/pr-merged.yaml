@@ -1,78 +1,47 @@
 name: build
-
 on:
-  push:
-    branches: [ master ]
+  pull_request:
+    types: [closed]
+    branches: 
+    - 'master'
+    - 'main'
     paths-ignore:
-      # Do not run the pipeline if only Markdown files changed
-      - '**.md'
+      - '**.md' ### Ignore running when README.MD changed.
+      - '.github/workflows/*' ### Ignore running when files under path: .github/workflows/* changed.
+
+  # push:
+  #   tags:
+  #     - 'v*'
+
 jobs:
-  test:
-    name: Create cross-platform release build, tag and upload binaries 
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.18
-
-      - name: Test pkg
-        run: go test -v ./...
-
-      - name: Build
-        env:
-          CGO_ENABLED: 0
-        run: go build -v ./...
-  tag:
-    name: Create tag
-    runs-on: ubuntu-latest
-    needs: test
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - name: Create a tag
-        id: create_tag
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v0.0.${{ github.run_number }}
-          release_name: Release v0.0.${{ github.run_number }}
-          draft: false
-          prerelease: false
-  
-  build-docker:
-    name: Build docker container, tag and upload to registry
-    needs: tag
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      packages: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set image version
-        id: image-version
-        run: echo '::set-output name=IMAGE_VERSION::v0.0.${{ github.run_number }}'
-
-      - name: Set image name
-        id: image-name
-        run: echo '::set-output name=IMAGE_NAME::quay.io/${{ github.repository_owner }}/operator'
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to Quay.io
-        env: # Or as an environment variable
-          QUAY_PASSWORD: ${{ secrets.QUAYIO_REGISTRY_PASSWORD }}
-          QUAY_USERNAME: ${{ secrets.QUAYIO_REGISTRY_USERNAME }}
-        run: docker login -u="${QUAY_USERNAME}" -p="${QUAY_PASSWORD}" quay.io
-
-      - name: Build the Docker image
-        run: docker buildx build . --file build/Dockerfile --tag ${{ steps.image-name.outputs.IMAGE_NAME }}:${{ steps.image-version.outputs.IMAGE_VERSION }} --tag ${{ steps.image-name.outputs.IMAGE_NAME }}:latest --build-arg image_version=${{ steps.image-version.outputs.IMAGE_VERSION }} --push --platform linux/amd64,linux/arm64
+  pr-merged:
+    if: ${{ github.event.pull_request.merged == true }} ## Skip if not merged to master
+    uses: kubescape/workflows/.github/workflows/incluster-comp-pr-merged.yaml@main
+    with:
+      IMAGE_NAME: quay.io/${{ github.repository_owner }}/operator
+      IMAGE_TAG: v0.0.${{ github.run_number }}
+      COMPONENT_NAME: operator
+      CGO_ENABLED: 0
+      GO111MODULE: ""
+      BUILD_PLATFORM: linux/amd64,linux/arm64
+      GO_VERSION: "1.18"
+      REQUIRED_TESTS: '[
+                        "vulnerability_scanning", 
+                        "vulnerability_scanning_trigger_scan_on_new_image", 
+                        "vulnerability_scanning_trigger_scan_public_registry", 
+                        "vulnerability_scanning_trigger_scan_public_registry_excluded", 
+                        "vulnerability_scanning_trigger_scan_private_quay_registry", 
+                        "vulnerability_scanning_triggering_with_cron_job", 
+                        "registry_scanning_triggering_with_cron_job", 
+                        "ks_microservice_ns_creation",
+                        "ks_microservice_on_demand", 
+                        "ks_microservice_mitre_framework_on_demand", 
+                        "ks_microservice_nsa_and_mitre_framework_demand", 
+                        "ks_microservice_triggering_with_cron_job", 
+                        "ks_microservice_update_cronjob_schedule", 
+                        "ks_microservice_delete_cronjob", 
+                        "ks_microservice_create_2_cronjob_mitre_and_nsa"
+                        ]'   
+    HELM_E2E_TEST: true
+    COSIGN: true   
+    secrets: inherit
