@@ -106,4 +106,5 @@ func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notif
 		return nil, err
 	}
 	return notif, nil
+	
 }
