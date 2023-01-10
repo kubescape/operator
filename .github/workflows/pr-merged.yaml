@@ -44,4 +44,4 @@ jobs:
                         ]'   
       HELM_E2E_TEST: true
       COSIGN: true   
-      secrets: inherit
+    secrets: inherit
