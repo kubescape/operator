@@ -42,6 +42,6 @@ jobs:
                         "ks_microservice_delete_cronjob", 
                         "ks_microservice_create_2_cronjob_mitre_and_nsa"
                         ]'   
-    HELM_E2E_TEST: true
-    COSIGN: true   
-    secrets: inherit
+      HELM_E2E_TEST: true
+      COSIGN: true   
+      secrets: inherit
