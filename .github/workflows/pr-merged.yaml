@@ -19,7 +19,7 @@ jobs:
     uses: kubescape/workflows/.github/workflows/incluster-comp-pr-merged.yaml@main
     with:
       IMAGE_NAME: quay.io/${{ github.repository_owner }}/operator
-      IMAGE_TAG: v0.0.${{ github.run_number }}
+      IMAGE_TAG: v0.1.${{ github.run_number }}
       COMPONENT_NAME: operator
       CGO_ENABLED: 0
       GO111MODULE: ""
