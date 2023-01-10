@@ -98,6 +98,7 @@ func decodeJsonNotification(bytesNotification []byte) (*notificationserver.Notif
 		return nil, err
 	}
 	return notif, nil
+	
 }
 
 func decodeBsonNotification(bytesNotification []byte) (*notificationserver.Notification, error) {
