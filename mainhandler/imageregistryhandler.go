@@ -513,7 +513,7 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 		if len(repos) >= imagesToScanLimit {
 			break
 		}
-		if nextPage == nil {
+		if nextPage == nil || nextPage.Cursor == "" {
 			break
 		}
 		glog.Infof("Found %d repositories in registry %s, nextPage is %v\n", len(repos), registryScan.registry.hostname, nextPage)
