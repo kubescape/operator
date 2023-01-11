@@ -49,15 +49,15 @@ func TestFilterRepositories(t *testing.T) {
 
 	registryScan.registry = registry{
 		hostname:  "quay.io",
-		projectID: "armosec",
+		projectID: "project",
 	}
-	repos := []string{"repo1", "project/repo2", "repo3", "project/repo4"}
+	repos := []string{"project/repo1", "project/repo2", "project/repo3", "project/repo4"}
 	registryScan.registryInfo.Include = append(registryScan.registryInfo.Include, "repo1", "project/repo2")
 	filtered := registryScan.filterRepositories(repos)
-	assert.True(t, reflect.DeepEqual(registryScan.registryInfo.Include, filtered))
+	assert.True(t, reflect.DeepEqual([]string{"project/repo1", "project/repo2"}, filtered))
 
 	registryScan.registryInfo.Include = []string{}
 	registryScan.registryInfo.Exclude = append(registryScan.registryInfo.Exclude, "repo1", "project/repo2")
 	filtered = registryScan.filterRepositories(repos)
-	assert.True(t, reflect.DeepEqual([]string{"repo3", "project/repo4"}, filtered))
+	assert.True(t, reflect.DeepEqual([]string{"project/repo3", "project/repo4"}, filtered))
 }
