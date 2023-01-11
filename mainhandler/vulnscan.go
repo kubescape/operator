@@ -196,7 +196,7 @@ func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionO
 }
 
 func (actionHandler *ActionHandler) testRegistryConnect(registry *registryScan, sessionObj *utils.SessionObj) error {
-	repos, err := registry.enumerateRepoes()
+	repos, err := registry.enumerateRepos()
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "DENIED") || strings.Contains(strings.ToLower(err.Error()), "authentication") || strings.Contains(strings.ToLower(err.Error()), "empty token") {
 			// registry info is good, but authentication failed

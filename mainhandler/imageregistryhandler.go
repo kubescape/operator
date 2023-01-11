@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/kubescape/operator/utils"
-	"github.com/mitchellh/mapstructure"
 
 	regCommon "github.com/armosec/registryx/common"
 	regInterfaces "github.com/armosec/registryx/interfaces"
@@ -222,11 +221,18 @@ func (rs *registryScan) filterRepositories(repos []string) []string {
 		// 		continue
 		// 	}
 		// }
-		if len(rs.registryInfo.Include) != 0 && slices.Contains(rs.registryInfo.Include, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
-			filteredRepos = append(filteredRepos, repo)
+		if len(rs.registryInfo.Include) != 0 {
+			if slices.Contains(rs.registryInfo.Include, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
+				filteredRepos = append(filteredRepos, repo)
+				continue
+			}
+			if slices.Contains(rs.registryInfo.Include, repo) {
+				filteredRepos = append(filteredRepos, repo)
+				continue
+			}
 		}
 		if len(rs.registryInfo.Exclude) != 0 {
-			if !slices.Contains(rs.registryInfo.Exclude, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) {
+			if !slices.Contains(rs.registryInfo.Exclude, strings.Replace(repo, rs.registry.projectID+"/", "", -1)) && !slices.Contains(rs.registryInfo.Exclude, repo) {
 				filteredRepos = append(filteredRepos, repo)
 			} else {
 				repoMsg := rs.registry.hostname + "/"
@@ -298,16 +304,17 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 func (registryScan *registryScan) getImagesForScanning(reporter datastructures.IReporter) error {
 	glog.Infof("getImagesForScanning: enumerating repoes...")
 	errChan := make(chan error)
-	repos, err := registryScan.enumerateRepoes()
+	repos, err := registryScan.enumerateRepos()
 	if err != nil {
-		reporter.SetDetails("enumerateRepoes failed")
+		reporter.SetDetails("enumerateRepos failed")
 		return err
 	}
 	glog.Infof("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos))
 
 	reposToTags := make(chan map[string][]string, len(repos))
 	for _, repo := range repos {
-		go registryScan.setImageToTagsMap(repo, reporter, reposToTags)
+		currentRepo := repo
+		go registryScan.setImageToTagsMap(currentRepo, reporter, reposToTags)
 	}
 	for i := 0; i < len(repos); i++ {
 		res := <-reposToTags
@@ -463,7 +470,7 @@ func (registryScan *registryScan) filterScanLimit(limit int) {
 	registryScan.mapImageToTags = filteredImages
 }
 
-func (registryScan *registryScan) enumerateRepoes() ([]string, error) {
+func (registryScan *registryScan) enumerateRepos() ([]string, error) {
 	// token sometimes includes a lot of dots, so we need to remove them
 	i := strings.Index(registryScan.registryInfo.AuthMethod.Password, ".....")
 	if i != -1 {
@@ -508,6 +515,8 @@ func (registryScan *registryScan) listReposInRegistry() ([]string, error) {
 		if nextPage == nil {
 			break
 		}
+		glog.Infof("Found %d repositories in registry %s, nextPage is %v\n", len(repos), registryScan.registry.hostname, nextPage)
+
 	}
 	return repos, nil
 }
@@ -572,9 +581,14 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	if !ok {
 		return fmt.Errorf("could not parse registry info")
 	}
-	err := mapstructure.Decode(registryInfo, &registryScan.registryInfo)
+	registryMarshalled, err := json.Marshal(registryInfo)
 	if err != nil {
-		return fmt.Errorf("could not decode registry info into registryInfo struct")
+		return fmt.Errorf("could not marshal registry info: err: %v", err.Error())
+	}
+	glog.Infof("registryInfo: %v\n", registryMarshalled)
+	err = json.Unmarshal(registryMarshalled, &registryScan.registryInfo)
+	if err != nil {
+		return fmt.Errorf("could not decode registry info into registryInfo struct: err: %v", err.Error())
 	}
 	return nil
 }
@@ -586,6 +600,7 @@ func (registryScan *registryScan) setRegistryKind() {
 
 func (registryScan *registryScan) getRegistryProvider() string {
 	if strings.Contains(registryScan.registryInfo.RegistryName, ".dkr.ecr") {
+
 		return "ecr"
 	}
 	if strings.Contains(registryScan.registryInfo.RegistryName, "gcr.io") {
