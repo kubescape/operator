@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/kubescape/operator/utils"
+	"github.com/mitchellh/mapstructure"
 
 	regCommon "github.com/armosec/registryx/common"
 	regInterfaces "github.com/armosec/registryx/interfaces"
@@ -581,13 +582,9 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	if !ok {
 		return fmt.Errorf("could not parse registry info")
 	}
-	registryMarshalled, err := json.Marshal(registryInfo)
+	err := mapstructure.Decode(registryInfo, &registryScan.registryInfo)
 	if err != nil {
-		return fmt.Errorf("could not marshal registry info: err: %v", err.Error())
-	}
-	err = json.Unmarshal(registryMarshalled, &registryScan.registryInfo)
-	if err != nil {
-		return fmt.Errorf("could not decode registry info into registryInfo struct: err: %v", err.Error())
+		return fmt.Errorf("could not decode registry info into registryInfo struct")
 	}
 	logRegistryInfoArgs(registryInfo)
 	return nil
