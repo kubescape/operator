@@ -585,12 +585,22 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	if err != nil {
 		return fmt.Errorf("could not marshal registry info: err: %v", err.Error())
 	}
-	glog.Infof("registryInfo: %v\n", registryMarshalled)
 	err = json.Unmarshal(registryMarshalled, &registryScan.registryInfo)
 	if err != nil {
 		return fmt.Errorf("could not decode registry info into registryInfo struct: err: %v", err.Error())
 	}
+	logRegistryInfoArgs(registryInfo)
 	return nil
+}
+
+func logRegistryInfoArgs(registryInfo map[string]interface{}) {
+	var logMsg string
+	for k, v := range registryInfo {
+		if k != "authMethod" {
+			logMsg += fmt.Sprintf("%v: %v ", k, v)
+		}
+	}
+	glog.Infof("registryInfo args: %v", logMsg)
 }
 
 func (registryScan *registryScan) setRegistryKind() {
