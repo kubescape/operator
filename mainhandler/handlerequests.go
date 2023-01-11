@@ -141,7 +141,6 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) err
 
 	glog.Infof(logCommandInfo)
 
-	glog.Infof("Command args: %v", c.Args)
 	switch c.CommandName {
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(sessionObj)
