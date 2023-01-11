@@ -1,6 +1,7 @@
 package mainhandler
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -43,8 +44,17 @@ import (
 
 // }
 
+func NewMockKuberneetsAPI() *k8sinterface.KubernetesApi {
+	return &k8sinterface.KubernetesApi{
+		KubernetesClient: nil,
+		DynamicClient:    nil,
+		DiscoveryClient:  nil,
+		Context:          context.Background(),
+	}
+}
+
 func TestFilterRepositories(t *testing.T) {
-	k8sAPI := k8sinterface.NewKubernetesApi()
+	k8sAPI := NewMockKuberneetsAPI()
 	registryScan := NewRegistryScan(k8sAPI)
 
 	registryScan.registry = registry{
