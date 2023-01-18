@@ -12,9 +12,9 @@ import (
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
-	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/golang/glog"
+	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

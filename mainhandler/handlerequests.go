@@ -11,8 +11,8 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 
-	utilsmetav1 "github.com/armosec/opa-utils/httpserver/meta/v1"
 	uuid "github.com/google/uuid"
+	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
