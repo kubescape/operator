@@ -5,8 +5,8 @@ import (
 
 	"github.com/kubescape/operator/utils"
 
-	utilsapisv1 "github.com/armosec/opa-utils/httpserver/apis/v1"
 	"github.com/armosec/utils-go/boolutils"
+	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
 
