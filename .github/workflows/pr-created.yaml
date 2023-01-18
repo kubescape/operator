@@ -6,8 +6,10 @@ on:
     - 'master'
     - 'main'
     paths-ignore:
-      - '**/README.md' ### Ignore running when README.MD changed.
-      - '.github/workflows/*' ### Ignore running when files under path: .github/workflows/* changed.
+      - '**.md' ### Ignore running when .md files change
+      - '**.yaml' ### Ignore running when .md files change
+      - '**.json' ### Ignore running when .md files change
+      - '.github/*' ### Ignore running when files under path: .github/* changed.
 
 concurrency:
   group: ${{ github.head_ref }}
