@@ -1,10 +1,14 @@
 package mainhandler
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
+	"go.opentelemetry.io/otel"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"
@@ -16,7 +20,6 @@ import (
 
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-	"github.com/golang/glog"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
@@ -45,7 +48,7 @@ func init() {
 	var err error
 	k8sNamesRegex, err = regexp.Compile("[^A-Za-z0-9-]+")
 	if err != nil {
-		glog.Fatal(err)
+		logger.L().Fatal(err.Error(), helpers.Error(err))
 	}
 
 	actionNeedToBeWaitOnStartUp[apis.TypeScanImages] = waitForVulnScanReady
@@ -75,17 +78,18 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 }
 
 // HandlePostmanRequest Parse received commands and run the command
-func (mainHandler *MainHandler) HandleRequest() []error {
+func (mainHandler *MainHandler) HandleRequest(ctx context.Context) []error {
 	// recover
 	defer func() {
 		if err := recover(); err != nil {
-			glog.Errorf("RECOVER in HandleRequest, reason: %v", err)
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("RECOVER in HandleRequest, reason: %v", err))
 		}
 	}()
 
-	go mainHandler.handleCommandResponse()
+	go mainHandler.handleCommandResponse(ctx)
 	for {
 		sessionObj := <-*mainHandler.sessionObj
+		ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 
 		// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
 		sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
@@ -100,24 +104,27 @@ func (mainHandler *MainHandler) HandleRequest() []error {
 		}
 
 		if isToItemizeScopeCommand {
-			mainHandler.HandleScopedRequest(&sessionObj) // this might be a heavy action, do not send to a goroutine
+			mainHandler.HandleScopedRequest(ctx, &sessionObj) // this might be a heavy action, do not send to a goroutine
 		} else {
 			// handle requests
-			mainHandler.HandleSingleRequest(&sessionObj)
+			mainHandler.HandleSingleRequest(ctx, &sessionObj)
 		}
+		span.End()
 		close(sessionObj.ErrChan)
 	}
 }
 
-func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *utils.SessionObj) {
+func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) {
+	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
+	defer span.End()
 
 	status := "SUCCESS"
 
 	actionHandler := NewActionHandler(mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
-	glog.Infof("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID())
+	logger.L().Info(fmt.Sprintf("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID()))
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
-	err := actionHandler.runCommand(sessionObj)
+	err := actionHandler.runCommand(ctx, sessionObj)
 	if err != nil {
 		actionHandler.reporter.SendError(err, true, true, sessionObj.ErrChan)
 		status = "FAIL"
@@ -128,10 +135,10 @@ func (mainHandler *MainHandler) HandleSingleRequest(sessionObj *utils.SessionObj
 	if err != nil {
 		donePrint += fmt.Sprintf(", reason: %s", err.Error())
 	}
-	glog.Infof(donePrint)
+	logger.L().Info(donePrint)
 }
 
-func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) error {
+func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *utils.SessionObj) error {
 	c := sessionObj.Command
 	if pkgwlid.IsWlid(c.GetID()) {
 		actionHandler.wlid = c.GetID()
@@ -139,45 +146,48 @@ func (actionHandler *ActionHandler) runCommand(sessionObj *utils.SessionObj) err
 
 	logCommandInfo := fmt.Sprintf("Running %s command, id: '%s'", c.CommandName, c.GetID())
 
-	glog.Infof(logCommandInfo)
+	logger.L().Info(logCommandInfo)
 
 	switch c.CommandName {
 	case apis.TypeScanImages:
-		return actionHandler.scanWorkload(sessionObj)
+		return actionHandler.scanWorkload(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
-		return actionHandler.kubescapeScan()
+		return actionHandler.kubescapeScan(ctx)
 	case apis.TypeSetKubescapeCronJob:
-		return actionHandler.setKubescapeCronJob()
+		return actionHandler.setKubescapeCronJob(ctx)
 	case apis.TypeUpdateKubescapeCronJob:
-		return actionHandler.updateKubescapeCronJob()
+		return actionHandler.updateKubescapeCronJob(ctx)
 	case apis.TypeDeleteKubescapeCronJob:
-		return actionHandler.deleteKubescapeCronJob()
+		return actionHandler.deleteKubescapeCronJob(ctx)
 	case apis.TypeSetVulnScanCronJob:
-		return actionHandler.setVulnScanCronJob()
+		return actionHandler.setVulnScanCronJob(ctx)
 	case apis.TypeUpdateVulnScanCronJob:
-		return actionHandler.updateVulnScanCronJob()
+		return actionHandler.updateVulnScanCronJob(ctx)
 	case apis.TypeDeleteVulnScanCronJob:
-		return actionHandler.deleteVulnScanCronJob()
+		return actionHandler.deleteVulnScanCronJob(ctx)
 	case apis.TypeSetRegistryScanCronJob:
-		return actionHandler.setRegistryScanCronJob(sessionObj)
+		return actionHandler.setRegistryScanCronJob(ctx, sessionObj)
 	case apis.TypeScanRegistry:
-		return actionHandler.scanRegistries(sessionObj)
+		return actionHandler.scanRegistries(ctx, sessionObj)
 	case apis.TypeTestRegistryConnectivity:
-		return actionHandler.testRegistryConnectivity(sessionObj)
+		return actionHandler.testRegistryConnectivity(ctx, sessionObj)
 	case apis.TypeUpdateRegistryScanCronJob:
-		return actionHandler.updateRegistryScanCronJob(sessionObj)
+		return actionHandler.updateRegistryScanCronJob(ctx, sessionObj)
 	case apis.TypeDeleteRegistryScanCronJob:
-		return actionHandler.deleteRegistryScanCronJob()
+		return actionHandler.deleteRegistryScanCronJob(ctx)
 	default:
-		glog.Errorf("Command %s not found", c.CommandName)
+		logger.L().Ctx(ctx).Error(fmt.Sprintf("Command %s not found", c.CommandName))
 	}
 	return nil
 }
 
 // HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
-func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj) {
+func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, sessionObj *utils.SessionObj) {
+	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleScopedRequest")
+	defer span.End()
+
 	if sessionObj.Command.GetID() == "" {
-		glog.Errorf("Received empty id")
+		logger.L().Ctx(ctx).Error("Received empty id")
 		return
 	}
 
@@ -197,17 +207,17 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj
 		namespaces = append(namespaces, "")
 	}
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
-	glog.Infof(info)
+	logger.L().Info(info)
 	sessionObj.Reporter.SendDetails(info, true, sessionObj.ErrChan)
 	ids, errs := mainHandler.getIDs(namespaces, labels, fields, []string{"pods"})
 	for i := range errs {
-		glog.Warningf(errs[i].Error())
+		logger.L().Ctx(ctx).Warning(errs[i].Error())
 		sessionObj.Reporter.SendError(errs[i], true, true, sessionObj.ErrChan)
 	}
 
 	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
 
-	glog.Infof("ids found: '%v'", ids)
+	logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
 	go func() { // send to goroutine so the channel will be released release the channel
 		for i := range ids {
 			cmd := sessionObj.Command.DeepCopy()
@@ -228,16 +238,16 @@ func (mainHandler *MainHandler) HandleScopedRequest(sessionObj *utils.SessionObj
 			cmd.WildSid = ""
 			cmd.Designators = make([]apitypes.PortalDesignator, 0)
 			// send specific command to the channel
-			newSessionObj := utils.NewSessionObj(cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+			newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 			if err != nil {
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
-				glog.Error(err)
+				logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 				sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
 				continue
 			}
 
-			glog.Infof("triggering id: '%s'", newSessionObj.Command.GetID())
+			logger.L().Info(fmt.Sprintf("triggering id: '%s'", newSessionObj.Command.GetID()))
 			*mainHandler.sessionObj <- *newSessionObj
 		}
 	}()
@@ -269,13 +279,13 @@ func (mainHandler *MainHandler) getIDs(namespaces []string, labels, fields map[s
 }
 
 // HandlePostmanRequest Parse received commands and run the command
-func (mainHandler *MainHandler) StartupTriggerActions(actions []apis.Command) {
+func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actions []apis.Command) {
 
 	for i := range actions {
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc()
-			sessionObj := utils.NewSessionObj(&actions[index], "Websocket", "", uuid.NewString(), 1)
+			sessionObj := utils.NewSessionObj(ctx, &actions[index], "Websocket", "", uuid.NewString(), 1)
 			*mainHandler.sessionObj <- *sessionObj
 		}(i)
 	}

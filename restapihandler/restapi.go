@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/docs"
 	"github.com/kubescape/operator/utils"
 
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 type HTTPHandler struct {
@@ -37,6 +38,7 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
 	}
 	rtr := mux.NewRouter()
+	rtr.Use(otelmux.Middleware("operator-http"))
 	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
 
 	openAPIUIHandler := docs.NewOpenAPIUIHandler()
@@ -44,7 +46,7 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 
 	server.Handler = rtr
 
-	glog.Infof("Waiting for REST API to receive notifications, port: %s", utils.RestAPIPort)
+	logger.L().Info("Waiting for REST API to receive notifications, port: " + utils.RestAPIPort)
 
 	// listen
 	if resthandler.keyPair != nil {
