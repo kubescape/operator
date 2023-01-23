@@ -44,7 +44,7 @@ import (
 
 // }
 
-func NewMockKuberneetsAPI() *k8sinterface.KubernetesApi {
+func NewMockKubernetesAPI() *k8sinterface.KubernetesApi {
 	return &k8sinterface.KubernetesApi{
 		KubernetesClient: nil,
 		DynamicClient:    nil,
@@ -54,7 +54,7 @@ func NewMockKuberneetsAPI() *k8sinterface.KubernetesApi {
 }
 
 func TestFilterRepositories(t *testing.T) {
-	k8sAPI := NewMockKuberneetsAPI()
+	k8sAPI := NewMockKubernetesAPI()
 	registryScan := NewRegistryScan(k8sAPI)
 
 	registryScan.registry = registry{
@@ -63,11 +63,11 @@ func TestFilterRepositories(t *testing.T) {
 	}
 	repos := []string{"project/repo1", "project/repo2", "project/repo3", "project/repo4"}
 	registryScan.registryInfo.Include = append(registryScan.registryInfo.Include, "repo1", "project/repo2")
-	filtered := registryScan.filterRepositories(repos)
+	filtered := registryScan.filterRepositories(context.TODO(), repos)
 	assert.True(t, reflect.DeepEqual([]string{"project/repo1", "project/repo2"}, filtered))
 
 	registryScan.registryInfo.Include = []string{}
 	registryScan.registryInfo.Exclude = append(registryScan.registryInfo.Exclude, "repo1", "project/repo2")
-	filtered = registryScan.filterRepositories(repos)
+	filtered = registryScan.filterRepositories(context.TODO(), repos)
 	assert.True(t, reflect.DeepEqual([]string{"project/repo3", "project/repo4"}, filtered))
 }

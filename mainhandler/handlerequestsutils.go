@@ -5,9 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/utils"
-
-	"github.com/golang/glog"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
@@ -82,7 +81,7 @@ func waitForVulnScanReady() {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
-			glog.Info("vuln scan is ready")
+			logger.L().Info("vuln scan is ready")
 			break
 		}
 
@@ -103,7 +102,7 @@ func waitForKubescapeReady() {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
-			glog.Info("kubescape service is ready")
+			logger.L().Info("kubescape service is ready")
 			break
 		}
 

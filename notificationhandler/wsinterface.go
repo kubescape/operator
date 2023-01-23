@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
+	"github.com/kubescape/go-logger"
 )
 
 // IWebsocketActions -
@@ -48,7 +48,7 @@ func (wa *WebsocketActions) ReadMessage() (int, []byte, error) {
 
 // DefaultDialer -
 func (wa *WebsocketActions) DefaultDialer(requestHeader http.Header) (*http.Response, error) {
-	glog.Infof("Connecting websocket to '%s'", wa.host)
+	logger.L().Info("Connecting websocket to " + wa.host)
 	wa.mutex.Lock()
 	defer wa.mutex.Unlock()
 	conn, res, err := websocket.DefaultDialer.Dial(wa.host, nil)
@@ -64,7 +64,7 @@ func (wa *WebsocketActions) DefaultDialer(requestHeader http.Header) (*http.Resp
 	}
 	if err == nil {
 		wa.conn = conn
-		glog.Infof("Successfully connected websocket to '%s'", wa.host)
+		logger.L().Info("Successfully connected websocket to " + wa.host)
 	} else {
 		err = fmt.Errorf("failed dialing to: '%s', reason: '%s'", wa.host, err.Error())
 	}
