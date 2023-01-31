@@ -1,13 +1,15 @@
 package notificationhandler
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
-	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 )
 
@@ -25,16 +27,16 @@ func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHand
 	}
 }
 
-func (notification *NotificationHandler) WebsocketConnection() error {
+func (notification *NotificationHandler) WebsocketConnection(ctx context.Context) error {
 	if utils.ClusterConfig.GatewayWebsocketURL == "" {
 		return nil
 	}
 	retries := 0
 	for {
-		if err := notification.setupWebsocket(); err != nil {
+		if err := notification.setupWebsocket(ctx); err != nil {
 			retries += 1
 			time.Sleep(time.Duration(retries*2) * time.Second)
-			glog.Warningf("In WebsocketConnection, warning: %s, retry: %d", err.Error(), retries)
+			logger.L().Ctx(ctx).Warning("In WebsocketConnection", helpers.Error(err), helpers.Int("retry", retries))
 		} else {
 			retries = 0
 		}
@@ -42,31 +44,31 @@ func (notification *NotificationHandler) WebsocketConnection() error {
 }
 
 // Websocket main function
-func (notification *NotificationHandler) setupWebsocket() error {
+func (notification *NotificationHandler) setupWebsocket(ctx context.Context) error {
 	errs := make(chan error)
 	_, err := notification.connector.DefaultDialer(nil)
 	if err != nil {
-		glog.Errorf("In SetupWebsocket: %v", err)
+		logger.L().Ctx(ctx).Error("In SetupWebsocket", helpers.Error(err))
 		return err
 	}
 	defer notification.connector.Close()
 	go func() {
-		if err := notification.websocketPingMessage(); err != nil {
-			glog.Error(err)
+		if err := notification.websocketPingMessage(ctx); err != nil {
+			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 			errs <- err
 		}
 	}()
 	go func() {
-		glog.Infof("Waiting for websocket to receive notifications")
-		if err := notification.websocketReceiveNotification(); err != nil {
-			glog.Error(err)
+		logger.L().Info("Waiting for websocket to receive notifications")
+		if err := notification.websocketReceiveNotification(ctx); err != nil {
+			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 			errs <- err
 		}
 	}()
 
 	return <-errs
 }
-func (notification *NotificationHandler) websocketReceiveNotification() error {
+func (notification *NotificationHandler) websocketReceiveNotification(ctx context.Context) error {
 	for {
 		messageType, messageBytes, err := notification.connector.ReadMessage()
 		if err != nil {
@@ -82,26 +84,26 @@ func (notification *NotificationHandler) websocketReceiveNotification() error {
 				if err != nil {
 					notif, err = decodeBsonNotification(messageBytes)
 					if err != nil {
-						glog.Errorf("failed to handle notification: %s, %v", messageBytes, err)
+						logger.L().Ctx(ctx).Error("failed to handle notification", helpers.String("messageBytes", string(messageBytes)), helpers.Error(err))
 						continue
 					}
 				}
 			default:
 				notif, err = decodeBsonNotification(messageBytes)
 				if err != nil {
-					glog.Errorf("failed to handle notification as BSON: %s, %v", messageBytes, err)
+					logger.L().Ctx(ctx).Error("failed to handle notification as BSON", helpers.String("messageBytes", string(messageBytes)), helpers.Error(err))
 					continue
 				}
 			}
 
-			err := notification.handleNotification(notif)
+			err := notification.handleNotification(ctx, notif)
 			if err != nil {
-				glog.Errorf("failed to handle notification: %s, reason: %s", messageBytes, err.Error())
+				logger.L().Ctx(ctx).Error("failed to handle notification", helpers.String("messageBytes", string(messageBytes)), helpers.Error(err))
 			}
 		case websocket.CloseMessage:
 			return fmt.Errorf("websocket closed by server, message: %s", string(messageBytes))
 		default:
-			glog.Infof("Unrecognized message received. received: %d", messageType)
+			logger.L().Info(fmt.Sprintf("Unrecognized message received. received: %d", messageType))
 		}
 	}
 }

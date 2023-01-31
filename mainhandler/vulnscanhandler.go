@@ -7,15 +7,18 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/utils"
+	"go.opentelemetry.io/otel"
 
-	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const VulnScanCronjobTemplateName = "kubevuln-cronjob-template"
 
-func (actionHandler *ActionHandler) setVulnScanCronJob() error {
+func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setVulnScanCronJob")
+	defer span.End()
 
 	req := getVulnScanRequest(&actionHandler.command)
 
@@ -38,7 +41,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 
 	// add namespace annotation
 	namespace := getNamespaceFromVulnScanCommand(&actionHandler.command)
-	glog.Infof("setVulnScanCronJob: command namespace - '%s'", namespace)
+	logger.L().Info(fmt.Sprintf("setVulnScanCronJob: command namespace - '%s'", namespace))
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKeyDeprecated] = namespace // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKey] = namespace
 
@@ -49,7 +52,10 @@ func (actionHandler *ActionHandler) setVulnScanCronJob() error {
 	return nil
 }
 
-func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
+func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateVulnScanCronJob")
+	defer span.End()
+
 	scanJobParams := getJobParams(&actionHandler.command)
 	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
 		return fmt.Errorf("updateVulnScanCronJob: CronTabSchedule not found")
@@ -77,7 +83,9 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob() error {
 	return nil
 }
 
-func (actionHandler *ActionHandler) deleteVulnScanCronJob() error {
+func (actionHandler *ActionHandler) deleteVulnScanCronJob(ctx context.Context) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteVulnScanCronJob")
+	defer span.End()
 
 	scanJobParams := getJobParams(&actionHandler.command)
 	if scanJobParams == nil || scanJobParams.JobName == "" {

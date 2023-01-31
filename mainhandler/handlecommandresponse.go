@@ -1,10 +1,11 @@
 package mainhandler
 
 import (
+	"context"
 	"time"
 )
 
-type HandleCommandResponseCallBack func(payload interface{}) (bool, *time.Duration)
+type HandleCommandResponseCallBack func(ctx context.Context, payload interface{}) (bool, *time.Duration)
 
 const (
 	MaxLimitationInsertToCommandResponseChannelGoRoutine = 10
@@ -67,11 +68,11 @@ func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool() {
 	}
 }
 
-func (mainHandler *MainHandler) handleCommandResponse() {
+func (mainHandler *MainHandler) handleCommandResponse(ctx context.Context) {
 	mainHandler.createInsertCommandsResponseThreadPool()
 	for {
 		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
-		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(data.payload)
+		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, data.payload)
 		if data.isCommandResponseNeedToBeRehandled {
 			insertNewCommandResponseData(mainHandler.commandResponseChannel, data)
 		}

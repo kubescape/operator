@@ -1,19 +1,20 @@
 package notificationhandler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"gopkg.in/mgo.v2/bson"
-
-	"github.com/golang/glog"
 )
 
 func parseNotificationCommand(notification interface{}) (*apis.Commands, error) {
@@ -35,7 +36,7 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 	return cmds, err
 }
 
-func (notification *NotificationHandler) handleNotification(notif *notificationserver.Notification) error {
+func (notification *NotificationHandler) handleNotification(ctx context.Context, notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"] // TODO: move target "dest" so it will be a constant
 	switch dst {
 	case "trigger", "kubescape": // the "kubescape" is for backward compatibility
@@ -44,7 +45,7 @@ func (notification *NotificationHandler) handleNotification(notif *notifications
 			return err
 		}
 		for _, cmd := range cmds.Commands {
-			sessionObj := utils.NewSessionObj(&cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
+			sessionObj := utils.NewSessionObj(ctx, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			*notification.sessionObj <- *sessionObj
 		}
 	}
@@ -82,11 +83,11 @@ func initNotificationServerURL() string {
 	return urlObj.String()
 }
 
-func (notification *NotificationHandler) websocketPingMessage() error {
+func (notification *NotificationHandler) websocketPingMessage(ctx context.Context) error {
 	for {
 		time.Sleep(30 * time.Second)
 		if err := notification.connector.WritePingMessage(); err != nil {
-			glog.Errorf("PING, %s", err.Error())
+			logger.L().Ctx(ctx).Error("PING", helpers.Error(err))
 			return fmt.Errorf("PING, %s", err.Error())
 		}
 	}
