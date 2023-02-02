@@ -83,4 +83,5 @@ func initHttpHandlers() {
 	mainhandler.KubescapeHttpClient = utils.InitKubescapeHttpClient()
 	mainhandler.VulnScanHttpClient = utils.InitVulnScanHttpClient()
 	utils.ReporterHttpClient = utils.InitReporterHttpClient()
+
 }
