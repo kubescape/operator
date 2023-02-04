@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,6 +44,7 @@ const (
 	testRegistryAuthenticationStatus testRegistryConnectivityStatus = "registryAuthentication"
 	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
+	containerToImageIdsArg                                          = "containerToImageIDs"
 )
 
 func getVulnScanURL() *url.URL {
@@ -283,11 +286,30 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	if err != nil {
 		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
 	}
+
 	pod := actionHandler.getPodByWLID(workload)
+
 	if pod == nil {
 		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
 		return nil
 	}
+	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
+	if val, ok := actionHandler.command.Args[containerToImageIdsArg].(map[string]string); !ok {
+		if len(pod.Status.ContainerStatuses) == 0 {
+			mapContainerToImageID, err = actionHandler.getContainerToImageIDsMap(workload)
+			if err != nil {
+				fmt.Println("not good")
+			}
+		} else {
+			for contIdx := range pod.Status.ContainerStatuses {
+				imageID := pod.Status.ContainerStatuses[contIdx].ImageID
+				mapContainerToImageID[pod.Status.ContainerStatuses[contIdx].Name] = watcher.GetImageID(imageID)
+			}
+		}
+	} else {
+		mapContainerToImageID = val
+	}
+
 	// get all images of workload
 	errs := ""
 	containers, err := listWorkloadImages(workload)
@@ -295,29 +317,26 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
 
-	// we want running pod in order to have the image hash
-	// actionHandler.getRunningPodDescription(pod)
-
 	for i := range containers {
-
+		imgID := ""
+		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
+			fmt.Println("not good")
+		} else {
+			imgID = val
+		}
 		websocketScanCommand := &apis.WebsocketScanCommand{
 			Wlid:          actionHandler.wlid,
 			ImageTag:      containers[i].image,
 			ContainerName: containers[i].container,
 			Session:       apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+			ImageHash:     imgID,
 		}
+
 		if actionHandler.reporter != nil {
 
 			prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
 
 			logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID))
-		}
-		for contIdx := range pod.Status.ContainerStatuses {
-			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
-				imageNameWithHash := pod.Status.ContainerStatuses[contIdx].ImageID
-				imageNameWithHash = strings.TrimPrefix(imageNameWithHash, dockerPullableURN)
-				websocketScanCommand.ImageHash = imageNameWithHash
-			}
 		}
 		if pod != nil {
 			secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
@@ -381,6 +400,7 @@ func sendWorkloadToVulnerabilityScanner(ctx context.Context, websocketScanComman
 	if err != nil {
 		return err
 	}
+	ioutil.WriteFile("scan.json", jsonScannerC, 0644)
 	vulnURL := getVulnScanURL()
 
 	creds := websocketScanCommand.Credentials
@@ -419,6 +439,40 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		return nil
 	}
 	podObj := &corev1.Pod{Spec: *podspec}
+	if workload.GetKind() == "Pod" {
+		status, err := workload.GetPodStatus()
+		if err != nil {
+			fmt.Println("failed getting pod status")
+		} else {
+			podObj.Status = *status
+		}
+	}
+
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
 	return podObj
+}
+
+func (actionHandler *ActionHandler) getContainerToImageIDsMap(workload k8sinterface.IWorkload) (map[string]string, error) {
+	var mapContainerToImageID = make(map[string]string)
+
+	labels := workload.GetPodLabels()
+
+	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
+	if err != nil {
+		return nil, fmt.Errorf("failed listing pods for workload %s", workload.GetName())
+	}
+	if len(pods.Items) == 0 {
+		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
+	}
+	pod := pods.Items[0]
+	containerStatuses := pod.Status.ContainerStatuses
+
+	if len(containerStatuses) == 0 {
+		return nil, fmt.Errorf("no containers found for workload %s", workload.GetName())
+	}
+	for containerStatus := range containerStatuses {
+		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
+		mapContainerToImageID[pod.Status.ContainerStatuses[containerStatus].Name] = watcher.GetImageID(imageID)
+	}
+	return mapContainerToImageID, nil
 }

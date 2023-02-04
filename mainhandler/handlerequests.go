@@ -8,6 +8,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
@@ -75,6 +76,43 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: commandResponseChannel,
 	}
+}
+
+func (mainHandler *MainHandler) HandleWatchers(ctx context.Context, scanOnNewImg bool) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("RECOVER in HandleWatchers, reason: %v", err))
+		}
+	}()
+
+	watchHandler := watcher.NewWatchHandler()
+	err := watchHandler.Initialize(scanOnNewImg)
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+		return
+	}
+
+	mainHandler.TriggerScanForWorkloads(ctx, watchHandler.GetWlidsMap())
+
+	watchHandler.PodWatch(ctx, scanOnNewImg)
+}
+
+func (mainHandler *MainHandler) TriggerScanForWorkloads(ctx context.Context, wlidsToContainerToImageID map[string]map[string]string) {
+	go func() {
+		for wlid, containerToId := range wlidsToContainerToImageID {
+			cmd := &apis.Command{}
+			cmd.Wlid = wlid
+			cmd.CommandName = apis.TypeScanImages
+			cmd.Args = make(map[string]interface{})
+			for container, imgID := range containerToId {
+				cmd.Args[container] = imgID
+				logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", wlid), helpers.String("args", fmt.Sprintf("%v", containerToId)))
+				newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+				*mainHandler.sessionObj <- *newSessionObj
+			}
+		}
+	}()
+
 }
 
 // HandlePostmanRequest Parse received commands and run the command
@@ -300,9 +338,9 @@ func GetStartupActions() []apis.Command {
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
 			},
 		},
-		{
-			CommandName: apis.TypeScanImages,
-			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
-		},
+		// {
+		// 	CommandName: apis.TypeScanImages,
+		// 	WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
+		// },
 	}
 }
