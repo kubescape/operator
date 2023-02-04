@@ -18,14 +18,6 @@ func MapToString(m map[string]interface{}) []string {
 	return s
 }
 
-func BoolMapToString(m map[string]bool) []string {
-	s := []string{}
-	for i := range m {
-		s = append(s, i)
-	}
-	return s
-}
-
 type ClientMock struct {
 }
 

@@ -4,25 +4,9 @@ import (
 	"strings"
 
 	core1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const dockerPullableURN = "docker-pullable://"
-
-func convertUnstructuredObjToCustom[T any](unstructuredObj map[string]interface{}) (T, error) {
-	var convertedObj T
-
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj, &convertedObj)
-	if err != nil {
-		return convertedObj, err
-	}
-	return convertedObj, nil
-}
-
-func convertKindToDynamicKind(kind string) string {
-	lowerCaseKind := strings.ToLower(kind)
-	return lowerCaseKind + "s"
-}
 
 func extractImageIDsFromPod(pod *core1.Pod) []string {
 	imageIDs := []string{}

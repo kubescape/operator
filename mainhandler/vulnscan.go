@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"strings"
 	"time"
@@ -287,18 +286,19 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
 	}
 
-	pod := actionHandler.getPodByWLID(workload)
+	pod := actionHandler.getPodByWLID(ctx, workload)
 
 	if pod == nil {
 		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
 		return nil
 	}
 	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
+	// look for container to ImageID map in the command args, if not found, look for it in the wl. If not found, get it from the pod
 	if val, ok := actionHandler.command.Args[containerToImageIdsArg].(map[string]string); !ok {
 		if len(pod.Status.ContainerStatuses) == 0 {
 			mapContainerToImageID, err = actionHandler.getContainerToImageIDsMap(workload)
 			if err != nil {
-				fmt.Println("not good")
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err))
 			}
 		} else {
 			for contIdx := range pod.Status.ContainerStatuses {
@@ -320,7 +320,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	for i := range containers {
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
-			fmt.Println("not good")
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("failed to get image ID for container %s", containers[i].container))
 		} else {
 			imgID = val
 		}
@@ -400,7 +400,6 @@ func sendWorkloadToVulnerabilityScanner(ctx context.Context, websocketScanComman
 	if err != nil {
 		return err
 	}
-	ioutil.WriteFile("scan.json", jsonScannerC, 0644)
 	vulnURL := getVulnScanURL()
 
 	creds := websocketScanCommand.Credentials
@@ -431,7 +430,7 @@ func sendWorkloadToVulnerabilityScanner(ctx context.Context, websocketScanComman
 	return nil
 }
 
-func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) *corev1.Pod {
+func (actionHandler *ActionHandler) getPodByWLID(ctx context.Context, workload k8sinterface.IWorkload) *corev1.Pod {
 	var err error
 
 	podspec, err := workload.GetPodSpec()
@@ -442,7 +441,7 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 	if workload.GetKind() == "Pod" {
 		status, err := workload.GetPodStatus()
 		if err != nil {
-			fmt.Println("failed getting pod status")
+			logger.L().Ctx(ctx).Error("failed getting pod status", helpers.String("wlid", actionHandler.wlid), helpers.Error(err))
 		} else {
 			podObj.Status = *status
 		}
