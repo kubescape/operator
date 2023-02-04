@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -44,6 +45,15 @@ func main() {
 		defer logger.ShutdownOtel(ctx)
 	}
 
+	scanOnNewImg := false
+	if scanOnNewImgStr, present := os.LookupEnv("ACTIVATE_CVE_SCAN_ON_NEW_IMAGE_FEATURE"); present {
+		scanOnNewBool, err := strconv.ParseBool(scanOnNewImgStr)
+		if err != nil {
+			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+		}
+		scanOnNewImg = scanOnNewBool
+	}
+
 	initHttpHandlers()
 
 	sessionObj := make(chan utils.SessionObj)
@@ -70,6 +80,7 @@ func main() {
 
 	isReadinessReady = true
 
+	go mainHandler.HandleWatchers(ctx, scanOnNewImg)
 	// wait for requests to come from the websocket or from the REST API
 	mainHandler.HandleRequest(ctx)
 
