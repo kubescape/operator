@@ -338,9 +338,5 @@ func GetStartupActions() []apis.Command {
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
 			},
 		},
-		// {
-		// 	CommandName: apis.TypeScanImages,
-		// 	WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
-		// },
 	}
 }
