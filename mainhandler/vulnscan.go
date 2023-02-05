@@ -43,7 +43,6 @@ const (
 	testRegistryAuthenticationStatus testRegistryConnectivityStatus = "registryAuthentication"
 	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
-	containerToImageIdsArg                                          = "containerToImageIDs"
 )
 
 func getVulnScanURL() *url.URL {
@@ -294,7 +293,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
 
 	// look for container to imageID map in the command args. If not found, look for it in the wl. If not found, get it from the pod
-	if val, ok := actionHandler.command.Args[containerToImageIdsArg].(map[string]string); !ok {
+	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
 		// get from pod
 		if len(pod.Status.ContainerStatuses) == 0 {
 			mapContainerToImageID, err = actionHandler.getContainerToImageIDsMap(workload)
