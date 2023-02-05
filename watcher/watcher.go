@@ -153,6 +153,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, scanNewWorkloads bool) {
 	}
 }
 
+// returns a watcher watching from current resource version
 func (wh *WatchHandler) getPodWatcher() (watch.Interface, error) {
 	podsWatch, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").Watch(context.TODO(), v1.ListOptions{
 		ResourceVersion: wh.currentResourceVersion,
@@ -273,7 +274,7 @@ func (wh *WatchHandler) watchPodsTriggerScanOnNewWorkloads(ctx context.Context) 
 				if _, ok := wh.wlidsMap[parentWlid]; !ok {
 					// new WLID
 					containerNameToImageID := make(map[string]string)
-					// add <container> : <imageID> to map
+					// add <container> : <imageID> to wlids map
 					for _, containerStatus := range pod.Status.ContainerStatuses {
 						containerNameToImageID[containerStatus.Name] = GetImageID(containerStatus.ImageID)
 					}
