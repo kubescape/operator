@@ -168,12 +168,15 @@ func (wh *WatchHandler) PodWatch(ctx context.Context) {
 				break
 			}
 
-			if pod, ok := wh.getPodFromEventIfRunning(ctx, event); ok {
-				if !ScanOnNewImage {
-					wh.handleEventsNoScanOnNewWorkloads(ctx, pod)
-				} else {
-					wh.handleEventsTriggerScanOnNewWorkloads(ctx, pod)
-				}
+			pod, ok := wh.getPodFromEventIfRunning(ctx, event)
+			if !ok {
+				continue
+			}
+
+			if !ScanOnNewImage {
+				wh.handleEventsNoScanOnNewWorkloads(ctx, pod)
+			} else {
+				wh.handleEventsTriggerScanOnNewWorkloads(ctx, pod)
 			}
 		}
 	}
