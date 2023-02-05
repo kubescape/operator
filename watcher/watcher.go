@@ -181,6 +181,7 @@ func (wh *WatchHandler) getNewImages(pod *core1.Pod) []string {
 	return newImgs
 }
 
+// returns pod and true if event status is modified, pod is exists and is running
 func (wh *WatchHandler) getPodFromEventIfRunning(event watch.Event) (*core1.Pod, bool) {
 	if event.Type != watch.Modified {
 		return nil, false
@@ -193,8 +194,7 @@ func (wh *WatchHandler) getPodFromEventIfRunning(event watch.Event) (*core1.Pod,
 		}
 	}
 
-	// check that Pod exists
-	// when deleting a Pod we get MODIFIED events with Running status
+	// check that Pod exists (when deleting a Pod we get MODIFIED events with Running status)
 	_, err := wh.k8sAPI.GetWorkload(pod.GetNamespace(), "pod", pod.GetName())
 	if err != nil {
 		return nil, false
@@ -244,6 +244,7 @@ func (wh *WatchHandler) watchPodsNoScanOnNewWorkloads(ctx context.Context) {
 
 // pod watcher that triggers scan on new workloads
 func (wh *WatchHandler) watchPodsTriggerScanOnNewWorkloads(ctx context.Context) {
+	logger.L().Ctx(ctx).Debug("starting pod watch")
 	for {
 		podsWatch, err := wh.getPodWatcher()
 		if err != nil {

@@ -20,6 +20,11 @@ import (
 	logger "github.com/kubescape/go-logger"
 )
 
+const (
+	otelCollectorEnvVar   = "OTEL_COLLECTOR_SVC"
+	scanOnNewImagesEnvVar = "ACTIVATE_CVE_SCAN_ON_NEW_IMAGE_FEATURE"
+)
+
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
 	ctx := context.Background()
@@ -37,7 +42,7 @@ func main() {
 	}
 
 	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
-	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present {
+	if otelHost, present := os.LookupEnv(otelCollectorEnvVar); present {
 		ctx = logger.InitOtel("operator",
 			os.Getenv(utils.ReleaseBuildTagEnvironmentVariable),
 			utils.ClusterConfig.AccountID,
@@ -46,7 +51,7 @@ func main() {
 	}
 
 	scanOnNewImg := false
-	if scanOnNewImgStr, present := os.LookupEnv("ACTIVATE_CVE_SCAN_ON_NEW_IMAGE_FEATURE"); present {
+	if scanOnNewImgStr, present := os.LookupEnv(scanOnNewImagesEnvVar); present {
 		scanOnNewBool, err := strconv.ParseBool(scanOnNewImgStr)
 		if err != nil {
 			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))

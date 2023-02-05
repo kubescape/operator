@@ -293,7 +293,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
 
-	// look for container to imageID map in the command args, if not found, look for it in the wl. If not found, get it from the pod
+	// look for container to imageID map in the command args. If not found, look for it in the wl. If not found, get it from the pod
 	if val, ok := actionHandler.command.Args[containerToImageIdsArg].(map[string]string); !ok {
 		// get from pod
 		if len(pod.Status.ContainerStatuses) == 0 {
@@ -468,14 +468,16 @@ func (actionHandler *ActionHandler) getContainerToImageIDsMap(workload k8sinterf
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
 	pod := pods.Items[0]
-	containerStatuses := pod.Status.ContainerStatuses
 
+	containerStatuses := pod.Status.ContainerStatuses
 	if len(containerStatuses) == 0 {
 		return nil, fmt.Errorf("no containers found for workload %s", workload.GetName())
 	}
+
 	for containerStatus := range containerStatuses {
 		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
 		mapContainerToImageID[pod.Status.ContainerStatuses[containerStatus].Name] = watcher.GetImageID(imageID)
 	}
+
 	return mapContainerToImageID, nil
 }
