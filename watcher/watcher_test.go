@@ -157,7 +157,7 @@ func TestAddTowlidsMap(t *testing.T) {
 			"container1": "alpine@sha256:1",
 		},
 	}
-	wh.addToWidsMap("wlid2", "container2", "alpine@sha256:1")
+	wh.addToWlidsMap("wlid2", "container2", "alpine@sha256:1")
 
 	assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), map[string]map[string]string{
 		"wlid": {
