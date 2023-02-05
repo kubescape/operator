@@ -14,15 +14,11 @@ import (
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/operator/watcher"
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
 	logger "github.com/kubescape/go-logger"
-)
-
-const (
-	otelCollectorEnvVar   = "OTEL_COLLECTOR_SVC"
-	scanOnNewImagesEnvVar = "ACTIVATE_CVE_SCAN_ON_NEW_IMAGE_FEATURE"
 )
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
@@ -42,7 +38,7 @@ func main() {
 	}
 
 	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
-	if otelHost, present := os.LookupEnv(otelCollectorEnvVar); present {
+	if otelHost, present := os.LookupEnv(utils.OtelCollectorEnvVar); present {
 		ctx = logger.InitOtel("operator",
 			os.Getenv(utils.ReleaseBuildTagEnvironmentVariable),
 			utils.ClusterConfig.AccountID,
@@ -50,13 +46,12 @@ func main() {
 		defer logger.ShutdownOtel(ctx)
 	}
 
-	scanOnNewImg := false
-	if scanOnNewImgStr, present := os.LookupEnv(scanOnNewImagesEnvVar); present {
+	if scanOnNewImgStr, present := os.LookupEnv(utils.ScanOnNewImagesEnvVar); present {
 		scanOnNewBool, err := strconv.ParseBool(scanOnNewImgStr)
 		if err != nil {
 			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 		}
-		scanOnNewImg = scanOnNewBool
+		watcher.ScanOnNewImage = scanOnNewBool
 	}
 
 	initHttpHandlers()
@@ -85,7 +80,7 @@ func main() {
 
 	isReadinessReady = true
 
-	go mainHandler.HandleWatchers(ctx, scanOnNewImg)
+	go mainHandler.HandleWatchers(ctx)
 	// wait for requests to come from the websocket or from the REST API
 	mainHandler.HandleRequest(ctx)
 

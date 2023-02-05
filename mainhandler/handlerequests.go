@@ -78,7 +78,7 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 	}
 }
 
-func (mainHandler *MainHandler) HandleWatchers(ctx context.Context, scanOnNewImg bool) {
+func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.L().Ctx(ctx).Error(fmt.Sprintf("RECOVER in HandleWatchers, reason: %v", err))
@@ -88,35 +88,45 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context, scanOnNewImg
 	watchHandler := watcher.NewWatchHandler()
 
 	// build imageIDs and wlids maps
-	err := watchHandler.Initialize(scanOnNewImg)
+	err := watchHandler.Initialize(ctx)
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 		return
 	}
 
 	// scan all workloads in cluster
-	mainHandler.TriggerScanForWorkloads(ctx, watchHandler.GetWlidsMap())
+	mainHandler.triggerScanForWorkloads(ctx, watchHandler.GetWlidsMap())
 
 	// start watching
-	watchHandler.PodWatch(ctx, scanOnNewImg)
+	watchHandler.PodWatch(ctx)
 }
 
-func (mainHandler *MainHandler) TriggerScanForWorkloads(ctx context.Context, wlidsToContainerToImageID map[string]map[string]string) {
-	go func() {
-		for wlid, containerToId := range wlidsToContainerToImageID {
-			cmd := &apis.Command{}
-			cmd.Wlid = wlid
-			cmd.CommandName = apis.TypeScanImages
-			cmd.Args = make(map[string]interface{})
-			for container, imgID := range containerToId {
-				cmd.Args[container] = imgID
-				logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", wlid), helpers.String("args", fmt.Sprintf("%v", containerToId)))
-				newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
-				*mainHandler.sessionObj <- *newSessionObj
-			}
-		}
-	}()
+func (mainHandler *MainHandler) triggerScanForWorkloads(ctx context.Context, wlidsToContainerToImageID map[string]map[string]string) {
+	commandsList := mainHandler.buildScanCommandList(ctx, wlidsToContainerToImageID)
+	go mainHandler.insertCommandsToChannel(ctx, commandsList)
+}
 
+func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
+	for _, cmd := range commandsList {
+		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+		*mainHandler.sessionObj <- *newSessionObj
+	}
+}
+
+func (mainHandler *MainHandler) buildScanCommandList(ctx context.Context, wlidsToContainerToImageID map[string]map[string]string) []*apis.Command {
+	commandsList := make([]*apis.Command, 0)
+	for wlid, containerToId := range wlidsToContainerToImageID {
+		cmd := &apis.Command{}
+		cmd.Wlid = wlid
+		cmd.CommandName = apis.TypeScanImages
+		cmd.Args = make(map[string]interface{})
+		for container, imgID := range containerToId {
+			cmd.Args[container] = imgID
+			logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", wlid), helpers.String("args", fmt.Sprintf("%v", containerToId)))
+			commandsList = append(commandsList, cmd)
+		}
+	}
+	return commandsList
 }
 
 // HandlePostmanRequest Parse received commands and run the command

@@ -305,7 +305,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 			// get from wl
 			for contIdx := range pod.Status.ContainerStatuses {
 				imageID := pod.Status.ContainerStatuses[contIdx].ImageID
-				mapContainerToImageID[pod.Status.ContainerStatuses[contIdx].Name] = watcher.GetImageID(imageID)
+				mapContainerToImageID[pod.Status.ContainerStatuses[contIdx].Name] = watcher.ExtractImageID(imageID)
 			}
 		}
 	} else {
@@ -324,6 +324,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
 			logger.L().Ctx(ctx).Error(fmt.Sprintf("failed to get image ID for container %s", containers[i].container))
+			continue
 		} else {
 			imgID = val
 		}
@@ -476,7 +477,7 @@ func (actionHandler *ActionHandler) getContainerToImageIDsMap(workload k8sinterf
 
 	for containerStatus := range containerStatuses {
 		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
-		mapContainerToImageID[pod.Status.ContainerStatuses[containerStatus].Name] = watcher.GetImageID(imageID)
+		mapContainerToImageID[pod.Status.ContainerStatuses[containerStatus].Name] = watcher.ExtractImageID(imageID)
 	}
 
 	return mapContainerToImageID, nil
