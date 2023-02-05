@@ -9,6 +9,7 @@ import (
 const KubescapeScanV1 = "scanV1"
 const KubescapeRequestPathV1 = "v1/scan"
 const KubescapeRequestStatusV1 = "v1/status"
+const ContainerToImageIdsArg = "containerToImageIDs"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
