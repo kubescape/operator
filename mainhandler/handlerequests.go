@@ -108,6 +108,7 @@ func (mainHandler *MainHandler) triggerScanForWorkloads(ctx context.Context, wli
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
 	for _, cmd := range commandsList {
+		logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
 		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
 		*mainHandler.sessionObj <- *newSessionObj
 	}
@@ -122,7 +123,6 @@ func (mainHandler *MainHandler) buildScanCommandList(ctx context.Context, wlidsT
 		cmd.Args = make(map[string]interface{})
 		for container, imgID := range containerToId {
 			cmd.Args[container] = imgID
-			logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", wlid), helpers.String("args", fmt.Sprintf("%v", containerToId)))
 			commandsList = append(commandsList, cmd)
 		}
 	}

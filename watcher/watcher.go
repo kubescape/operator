@@ -49,7 +49,7 @@ func (wh *WatchHandler) addToImageIDsMap(imageID string) {
 	}
 }
 
-func (wh *WatchHandler) addToWidsMap(wlid string, containerName string, imageID string) {
+func (wh *WatchHandler) addToWlidsMap(wlid string, containerName string, imageID string) {
 	wh.wlidsMapMutex.Lock()
 	defer wh.wlidsMapMutex.Unlock()
 	if _, ok := wh.wlidsMap[wlid]; !ok {
@@ -86,7 +86,7 @@ func (wh *WatchHandler) buildwlidsMap(ctx context.Context, pods *core1.PodList) 
 			continue
 		}
 		for _, containerStatus := range pod.Status.ContainerStatuses {
-			wh.addToWidsMap(parentWlid, containerStatus.Name, ExtractImageID(containerStatus.ImageID))
+			wh.addToWlidsMap(parentWlid, containerStatus.Name, ExtractImageID(containerStatus.ImageID))
 		}
 	}
 }
@@ -268,7 +268,7 @@ func (wh *WatchHandler) handleEventsTriggerScanOnNewWorkloads(ctx context.Contex
 
 		// add <container> : <imageID> to wlids map
 		for _, containerStatus := range pod.Status.ContainerStatuses {
-			wh.addToWidsMap(parentWlid, containerStatus.Name, ExtractImageID(containerStatus.ImageID))
+			wh.addToWlidsMap(parentWlid, containerStatus.Name, ExtractImageID(containerStatus.ImageID))
 		}
 		wh.triggerWorkloadScan()
 	}
