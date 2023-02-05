@@ -86,14 +86,18 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context, scanOnNewImg
 	}()
 
 	watchHandler := watcher.NewWatchHandler()
+
+	// build imageIDs and wlids maps
 	err := watchHandler.Initialize(scanOnNewImg)
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 		return
 	}
 
+	// scan all workloads in cluster
 	mainHandler.TriggerScanForWorkloads(ctx, watchHandler.GetWlidsMap())
 
+	// start watching
 	watchHandler.PodWatch(ctx, scanOnNewImg)
 }
 

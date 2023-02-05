@@ -287,26 +287,29 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 
 	pod := actionHandler.getPodByWLID(ctx, workload)
-
 	if pod == nil {
 		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
 		return nil
 	}
 	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
-	// look for container to ImageID map in the command args, if not found, look for it in the wl. If not found, get it from the pod
+
+	// look for container to imageID map in the command args, if not found, look for it in the wl. If not found, get it from the pod
 	if val, ok := actionHandler.command.Args[containerToImageIdsArg].(map[string]string); !ok {
+		// get from pod
 		if len(pod.Status.ContainerStatuses) == 0 {
 			mapContainerToImageID, err = actionHandler.getContainerToImageIDsMap(workload)
 			if err != nil {
 				logger.L().Ctx(ctx).Error(fmt.Sprintf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err))
 			}
 		} else {
+			// get from wl
 			for contIdx := range pod.Status.ContainerStatuses {
 				imageID := pod.Status.ContainerStatuses[contIdx].ImageID
 				mapContainerToImageID[pod.Status.ContainerStatuses[contIdx].Name] = watcher.GetImageID(imageID)
 			}
 		}
 	} else {
+		// get from args
 		mapContainerToImageID = val
 	}
 
@@ -451,6 +454,7 @@ func (actionHandler *ActionHandler) getPodByWLID(ctx context.Context, workload k
 	return podObj
 }
 
+// get a workload, retrieves its pod and returns a map of container name to image id
 func (actionHandler *ActionHandler) getContainerToImageIDsMap(workload k8sinterface.IWorkload) (map[string]string, error) {
 	var mapContainerToImageID = make(map[string]string)
 
