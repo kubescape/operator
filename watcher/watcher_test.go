@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestBuildImageIDsMap(t *testing.T) {
 	}
 
 	wh := NewWatchHandler()
-	wh.buildImageIDsMap(podList)
+	wh.buildImageIDsMap(&podList)
 
 	expectedImageIDsMap := map[string]bool{
 		"alpine@sha256:1": true,
@@ -117,7 +118,7 @@ func TestBuildwlidsMap(t *testing.T) {
 	}
 
 	wh := NewWatchHandler()
-	wh.buildwlidsMap(podList)
+	wh.buildwlidsMap(context.TODO(), &podList)
 
 	expectedwlidsMap := map[string]map[string]string{
 		pkgwlid.GetWLID("", podList.Items[0].GetNamespace(), "pod", podList.Items[0].GetName()): {
@@ -156,7 +157,7 @@ func TestAddTowlidsMap(t *testing.T) {
 			"container1": "alpine@sha256:1",
 		},
 	}
-	wh.addTowlidsMap("wlid2", "container2", "alpine@sha256:1")
+	wh.addToWidsMap("wlid2", "container2", "alpine@sha256:1")
 
 	assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), map[string]map[string]string{
 		"wlid": {

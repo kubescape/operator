@@ -12,11 +12,11 @@ func extractImageIDsFromPod(pod *core1.Pod) []string {
 	imageIDs := []string{}
 	for containerStatus := range pod.Status.ContainerStatuses {
 		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
-		imageIDs = append(imageIDs, GetImageID(imageID))
+		imageIDs = append(imageIDs, ExtractImageID(imageID))
 	}
 	return imageIDs
 }
 
-func GetImageID(imageID string) string {
+func ExtractImageID(imageID string) string {
 	return strings.TrimPrefix(imageID, dockerPullableURN)
 }
