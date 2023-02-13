@@ -43,6 +43,81 @@ func NewWatchHandler() *WatchHandler {
 	}
 }
 
+// returns wlids map
+func (wh *WatchHandler) GetWlidsMap() map[string]map[string]string {
+	return wh.wlidsMap
+}
+
+// returns imageIDs map
+func (wh *WatchHandler) GetImagesIDsToWlidMap() map[string][]string {
+	return wh.imagesIDToWlidsMap
+}
+
+// list all pods, build imageIDsToWlidsMap and wlidsMap
+// set current resource version for pod watcher
+func (wh *WatchHandler) Initialize(ctx context.Context) error {
+	// list all Pods and extract their image IDs
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
+	if err != nil {
+		return err
+	}
+
+	wh.buildImageIDsToWlidsMap(ctx, podsList)
+	wh.buildWlidsMap(ctx, podsList)
+
+	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
+
+	return nil
+}
+
+// watch for sbom changes, and trigger scans accordingly
+func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	// TODO: implement
+}
+
+// watch for pods changes, and trigger scans accordingly
+func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	logger.L().Ctx(ctx).Debug("starting pod watch")
+	for {
+		podsWatch, err := wh.getPodWatcher()
+		if err != nil {
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getPodWatcher, err :%s", err.Error()), helpers.Error(err))
+			time.Sleep(retryInterval)
+			continue
+		}
+		wh.handlePodWatcher(ctx, podsWatch, sessionObjChan)
+	}
+}
+
+func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
+	// TODO: Implement
+	return []string{}, nil
+}
+
+// returns a list of imageIDs that are not in storage
+func (wh *WatchHandler) GetImageIDsForSBOMCalculation() ([]string, error) {
+	newImageIDs := []string{}
+	imageIDsFromStorage, err := wh.ListImageIDsFromStorage()
+	if err != nil {
+		return newImageIDs, err
+	}
+
+	for imageID := range wh.GetImagesIDsToWlidMap() {
+		if !slices.Contains(imageIDsFromStorage, imageID) {
+			newImageIDs = append(newImageIDs, imageID)
+		}
+	}
+	return newImageIDs, nil
+}
+
+func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
+	return wh.imagesIDToWlidsMap[imageID]
+}
+
+func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]string {
+	return wh.wlidsMap[wlid]
+}
+
 func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) {
 	if len(wlids) == 0 {
 		return
@@ -245,79 +320,4 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
 		*sessionObjChan <- *newSessionObj
 	}
-}
-
-// returns wlids map
-func (wh *WatchHandler) GetWlidsMap() map[string]map[string]string {
-	return wh.wlidsMap
-}
-
-// returns imageIDs map
-func (wh *WatchHandler) GetImagesIDsToWlidMap() map[string][]string {
-	return wh.imagesIDToWlidsMap
-}
-
-// list all pods, build imageIDsMap and wlidsMap
-// set current resource version for pod watcher
-func (wh *WatchHandler) Initialize(ctx context.Context) error {
-	// list all Pods and extract their image IDs
-	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
-	if err != nil {
-		return err
-	}
-
-	wh.buildImageIDsToWlidsMap(ctx, podsList)
-	wh.buildWlidsMap(ctx, podsList)
-
-	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
-
-	return nil
-}
-
-// watch for sbom changes, and trigger scans accordingly
-func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
-	// TODO: implement
-}
-
-// watch for pods changes, and trigger scans accordingly
-func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
-	logger.L().Ctx(ctx).Debug("starting pod watch")
-	for {
-		podsWatch, err := wh.getPodWatcher()
-		if err != nil {
-			logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getPodWatcher, err :%s", err.Error()), helpers.Error(err))
-			time.Sleep(retryInterval)
-			continue
-		}
-		wh.handlePodWatcher(ctx, podsWatch, sessionObjChan)
-	}
-}
-
-func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
-	// TODO: Implement
-	return []string{}, nil
-}
-
-// returns a list of imageIDs that are not in storage
-func (wh *WatchHandler) GetImageIDsForSBOMCalculation() ([]string, error) {
-	newImageIDs := []string{}
-	imageIDsFromStorage, err := wh.ListImageIDsFromStorage()
-	if err != nil {
-		return newImageIDs, err
-	}
-
-	for imageID := range wh.GetImagesIDsToWlidMap() {
-		if !slices.Contains(imageIDsFromStorage, imageID) {
-			newImageIDs = append(newImageIDs, imageID)
-		}
-	}
-	return newImageIDs, nil
-}
-
-func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
-	return wh.imagesIDToWlidsMap[imageID]
-}
-
-func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]string {
-	return wh.wlidsMap[wlid]
 }

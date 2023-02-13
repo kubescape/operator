@@ -10,7 +10,6 @@ import (
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
-	"k8s.io/utils/strings/slices"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"
@@ -107,26 +106,11 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}
 	// insert commands to channel
-	go mainHandler.insertCommandsToChannel(ctx, commandsList)
+	mainHandler.insertCommandsToChannel(ctx, commandsList)
 
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
-	go watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
-}
-
-func convertImageIDMapToWlidMap(imageIDToWlidToContainerMap map[string]map[string]string, excludeList []string) map[string]map[string]string {
-	mapWlidToContainerToImageID := make(map[string]map[string]string)
-	for imageID, wlidToContainer := range imageIDToWlidToContainerMap {
-		if !slices.Contains(excludeList, imageID) {
-			for wlid := range wlidToContainer {
-				if _, ok := mapWlidToContainerToImageID[wlid]; !ok {
-					mapWlidToContainerToImageID[wlid] = make(map[string]string)
-				}
-				mapWlidToContainerToImageID[wlid][wlidToContainer[wlid]] = imageID
-			}
-		}
-	}
-	return mapWlidToContainerToImageID
+	watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
