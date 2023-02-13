@@ -395,7 +395,6 @@ func sendWorkloadToSBOMCalculation(ctx context.Context, websocketScanCommand *ap
 
 func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
 	return sendWorkloadWithCredentials(ctx, getVulnScanURL(), websocketScanCommand)
-
 }
 
 func getPodByWLID(ctx context.Context, workload k8sinterface.IWorkload) *corev1.Pod {
@@ -524,7 +523,7 @@ func (actionHandler *ActionHandler) calculateSBOM(ctx context.Context, sessionOb
 
 	containers, err := listWorkloadImages(workload)
 	if err != nil {
-		err = fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
+		err = fmt.Errorf("failed to listWorkloadImages, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 		logger.L().Ctx(ctx).Error(err.Error())
 		return err
 	}
