@@ -8,38 +8,369 @@ import (
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestBuildImageIDsMap(t *testing.T) {
-	podList := core1.PodList{
-		Items: []core1.Pod{
-			{
+func TestBuildImageIDsToWlidsMap(t *testing.T) {
+
+	tests := []struct {
+		name                string
+		podList             core1.PodList
+		expectedImageIDsMap map[string][]string
+	}{
+		{
+			name: "remove prefix docker-pullable://",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:1",
+									Name:    "container1",
+								},
+							},
+						},
+					}}},
+			expectedImageIDsMap: map[string][]string{
+				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
+			},
+		},
+		{
+			name: "image id without docker-pullable:// prefix",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "alpine@sha256:1",
+									Name:    "container1",
+								},
+							},
+						},
+					}}},
+			expectedImageIDsMap: map[string][]string{
+				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
+			},
+		},
+		{
+			name: "two wlids for the same image id",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:1",
+									Name:    "container1",
+								},
+							},
+						},
+					},
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test2",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:1",
+									Name:    "container2",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedImageIDsMap: map[string][]string{
+				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test"), pkgwlid.GetWLID("", "default", "pod", "test2")},
+			},
+		},
+		{
+			name: "two wlids two image ids",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:1",
+									Name:    "container1",
+								},
+							},
+						},
+					},
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test2",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:2",
+									Name:    "container2",
+								},
+							},
+						},
+					}}},
+			expectedImageIDsMap: map[string][]string{
+				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
+				"alpine@sha256:2": {pkgwlid.GetWLID("", "default", "pod", "test2")},
+			},
+		},
+		{
+			name: "one wlid two image ids",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "test",
+							Namespace: "default",
+						},
+						TypeMeta: v1.TypeMeta{
+							Kind: "pod",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:1",
+									Name:    "container1",
+								},
+								{
+									ImageID: "docker-pullable://alpine@sha256:2",
+									Name:    "container2",
+								},
+							},
+						},
+					}}},
+			expectedImageIDsMap: map[string][]string{
+				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
+				"alpine@sha256:2": {pkgwlid.GetWLID("", "default", "pod", "test")},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		wh := NewWatchHandler()
+		t.Run(tt.name, func(t *testing.T) {
+			wh.buildImageIDsToWlidsMap(context.TODO(), &tt.podList)
+			assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), tt.expectedImageIDsMap))
+		})
+	}
+}
+
+func TestBuildWlidsMap(t *testing.T) {
+
+	tests := []struct {
+		name             string
+		podList          core1.PodList
+		expectedwlidsMap map[string]map[string]string
+	}{
+		{
+			name: "imageID with docker-pullable prefix",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "pod1",
+							Namespace: "namespace1",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:1",
+									Name:    "container1",
+								},
+							},
+						},
+					}},
+			},
+			expectedwlidsMap: map[string]map[string]string{
+				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
+					"container1": "alpine@sha256:1",
+				},
+			},
+		},
+		{
+			name: "imageID without docker-pullable prefix",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "pod1",
+							Namespace: "namespace1",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "alpine@sha256:1",
+									Name:    "container1",
+								},
+							},
+						},
+					}},
+			},
+			expectedwlidsMap: map[string]map[string]string{
+				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
+					"container1": "alpine@sha256:1",
+				},
+			},
+		},
+		{
+			name: "two containers for same wlid",
+			podList: core1.PodList{
+				Items: []core1.Pod{
+					{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "pod3",
+							Namespace: "namespace3",
+						},
+						Status: core1.PodStatus{
+							ContainerStatuses: []core1.ContainerStatus{
+								{
+									ImageID: "docker-pullable://alpine@sha256:3",
+									Name:    "container3",
+								},
+								{
+									ImageID: "docker-pullable://alpine@sha256:4",
+									Name:    "container4",
+								},
+							},
+						},
+					},
+				}},
+			expectedwlidsMap: map[string]map[string]string{
+				pkgwlid.GetWLID("", "namespace3", "pod", "pod3"): {
+					"container3": "alpine@sha256:3",
+					"container4": "alpine@sha256:4",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		wh := NewWatchHandler()
+		t.Run(tt.name, func(t *testing.T) {
+			wh.buildWlidsMap(context.TODO(), &tt.podList)
+			assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), tt.expectedwlidsMap))
+		})
+	}
+}
+
+func TestAddToImageIDToWlidsMap(t *testing.T) {
+	wh := NewWatchHandler()
+
+	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid1")
+	wh.addToImageIDToWlidsMap("alpine@sha256:2", "wlid2")
+	// add the new wlid to the same imageID
+	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid3")
+
+	assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), map[string][]string{
+		"alpine@sha256:1": {"wlid1", "wlid3"},
+		"alpine@sha256:2": {"wlid2"},
+	}))
+}
+
+func TestAddTowlidsMap(t *testing.T) {
+	wh := NewWatchHandler()
+
+	wh.addToWlidsMap("wlid1", "container1", "alpine@sha256:1")
+	wh.addToWlidsMap("wlid2", "container2", "alpine@sha256:2")
+
+	assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), map[string]map[string]string{
+		"wlid1": {
+			"container1": "alpine@sha256:1",
+		},
+		"wlid2": {
+			"container2": "alpine@sha256:2",
+		},
+	}))
+}
+
+func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
+	wh := NewWatchHandler()
+	wh.imagesIDToWlidsMap = map[string][]string{
+		"alpine@sha256:1": {"wlid"},
+		"alpine@sha256:2": {"wlid"},
+		"alpine@sha256:3": {"wlid"},
+	}
+
+	tests := []struct {
+		name     string
+		pod      *core1.Pod
+		expected map[string]string
+	}{
+		{
+			name: "no new images",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod1",
+					Namespace: "namespace1",
+				},
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
-					},
-				},
-			},
-			{
-				Status: core1.PodStatus{
-					ContainerStatuses: []core1.ContainerStatus{
 						{
-							ImageID: "alpine@sha256:2",
-							Name:    "container-no-docker-pullable",
+							ImageID: "docker-pullable://alpine@sha256:2",
+							Name:    "container2",
 						},
 					},
 				},
 			},
-			{
+			expected: map[string]string{},
+		},
+		{
+			name: "one new image",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod2",
+					Namespace: "namespace2",
+				},
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
-							ImageID: "docker-pullable://alpine@sha256:3",
-							Name:    "container3",
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "container1",
 						},
 						{
 							ImageID: "docker-pullable://alpine@sha256:4",
@@ -48,28 +379,53 @@ func TestBuildImageIDsMap(t *testing.T) {
 					},
 				},
 			},
+			expected: map[string]string{
+				"container4": "alpine@sha256:4",
+			},
+		},
+		{
+			name: "two new images",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod3",
+					Namespace: "namespace3",
+				},
+				Status: core1.PodStatus{
+					ContainerStatuses: []core1.ContainerStatus{
+						{
+							ImageID: "docker-pullable://alpine@sha256:4",
+							Name:    "container4",
+						},
+						{
+							ImageID: "docker-pullable://alpine@sha256:5",
+							Name:    "container5",
+						},
+					},
+				},
+			},
+			expected: map[string]string{
+				"container4": "alpine@sha256:4",
+				"container5": "alpine@sha256:5",
+			},
 		},
 	}
-
-	wh := NewWatchHandler()
-	wh.buildImageIDsMap(&podList)
-
-	expectedImageIDsMap := map[string]bool{
-		"alpine@sha256:1": true,
-		"alpine@sha256:2": true,
-		"alpine@sha256:3": true,
-		"alpine@sha256:4": true,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.True(t, reflect.DeepEqual(wh.getNewImageIDsToContainerFromPod(tt.pod), tt.expected))
+		})
 	}
-
-	assert.True(t, reflect.DeepEqual(wh.GetImageIDsMap(), expectedImageIDsMap))
-
 }
 
-func TestBuildwlidsMap(t *testing.T) {
-	podList := core1.PodList{
-		Items: []core1.Pod{
-			{
-				ObjectMeta: metav1.ObjectMeta{
+func TestExtractImageIDsToContainersFromPod(t *testing.T) {
+	tests := []struct {
+		name     string
+		pod      *core1.Pod
+		expected map[string]string
+	}{
+		{
+			name: "one container",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
 					Name:      "pod1",
 					Namespace: "namespace1",
 				},
@@ -82,139 +438,93 @@ func TestBuildwlidsMap(t *testing.T) {
 					},
 				},
 			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
+			expected: map[string]string{
+				"alpine@sha256:1": "container1",
+			},
+		},
+		{
+			name: "two containers",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
 					Name:      "pod2",
 					Namespace: "namespace2",
 				},
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
-							ImageID: "alpine@sha256:2",
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "container1",
+						},
+						{
+							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
 						},
 					},
 				},
 			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pod3",
-					Namespace: "namespace3",
+			expected: map[string]string{
+				"alpine@sha256:1": "container1",
+				"alpine@sha256:2": "container2",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.True(t, reflect.DeepEqual(extractImageIDsToContainersFromPod(tt.pod), tt.expected))
+		})
+	}
+}
+
+func TestExtractImageIDsFromPod(t *testing.T) {
+	tests := []struct {
+		name     string
+		pod      *core1.Pod
+		expected []string
+	}{
+		{
+			name: "one container",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod1",
+					Namespace: "namespace1",
 				},
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
-							ImageID: "docker-pullable://alpine@sha256:3",
-							Name:    "container3",
-						},
-						{
-							ImageID: "docker-pullable://alpine@sha256:4",
-							Name:    "container4",
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "container1",
 						},
 					},
 				},
 			},
-		},
-	}
-
-	wh := NewWatchHandler()
-	wh.buildwlidsMap(context.TODO(), &podList)
-
-	expectedwlidsMap := map[string]map[string]string{
-		pkgwlid.GetWLID("", podList.Items[0].GetNamespace(), "pod", podList.Items[0].GetName()): {
-			"container1": "alpine@sha256:1",
-		},
-		pkgwlid.GetWLID("", podList.Items[1].GetNamespace(), "pod", podList.Items[1].GetName()): {
-			"container2": "alpine@sha256:2",
-		},
-		pkgwlid.GetWLID("", podList.Items[2].GetNamespace(), "pod", podList.Items[2].GetName()): {
-			"container3": "alpine@sha256:3",
-			"container4": "alpine@sha256:4",
-		},
-	}
-
-	assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), expectedwlidsMap))
-
-}
-
-func TestAddToImageIDsMap(t *testing.T) {
-	wh := NewWatchHandler()
-	wh.imagesIDsMap = map[string]bool{
-		"alpine@sha256:1": true,
-	}
-	wh.addToImageIDsMap("alpine@sha256:2")
-
-	assert.True(t, reflect.DeepEqual(wh.GetImageIDsMap(), map[string]bool{
-		"alpine@sha256:1": true,
-		"alpine@sha256:2": true,
-	}))
-}
-
-func TestAddTowlidsMap(t *testing.T) {
-	wh := NewWatchHandler()
-	wh.wlidsMap = map[string]map[string]string{
-		"wlid": {
-			"container1": "alpine@sha256:1",
-		},
-	}
-	wh.addToWlidsMap("wlid2", "container2", "alpine@sha256:1")
-
-	assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), map[string]map[string]string{
-		"wlid": {
-			"container1": "alpine@sha256:1",
-		},
-		"wlid2": {
-			"container2": "alpine@sha256:1",
-		},
-	}))
-
-}
-
-func TestGetNewImages(t *testing.T) {
-	wh := NewWatchHandler()
-	wh.imagesIDsMap = map[string]bool{
-		"alpine@sha256:1": true,
-		"alpine@sha256:2": true,
-		"alpine@sha256:3": true,
-	}
-
-	tests := []struct {
-		name     string
-		imageIDs []string
-		expected []string
-	}{
-		{
-			name:     "no new images",
-			imageIDs: []string{"alpine@sha256:1", "alpine@sha256:2"},
-			expected: []string{},
+			expected: []string{"alpine@sha256:1"},
 		},
 		{
-			name:     "one new image",
-			imageIDs: []string{"alpine@sha256:1", "alpine@sha256:2", "alpine@sha256:4"},
-			expected: []string{"alpine@sha256:4"},
-		},
-		{
-			name:     "new images",
-			imageIDs: []string{"alpine@sha256:7", "alpine@sha256:8", "alpine@sha256:9"},
-			expected: []string{"alpine@sha256:7", "alpine@sha256:8", "alpine@sha256:9"},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			containerStasues := []core1.ContainerStatus{}
-			for _, imgID := range test.imageIDs {
-				containerStasues = append(containerStasues, core1.ContainerStatus{
-					ImageID: imgID,
-				})
-			}
-			newImages := wh.getNewImages(&core1.Pod{
-				Status: core1.PodStatus{
-					ContainerStatuses: containerStasues,
+			name: "two containers",
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod2",
+					Namespace: "namespace2",
 				},
-			})
-
-			assert.True(t, reflect.DeepEqual(newImages, test.expected))
+				Status: core1.PodStatus{
+					ContainerStatuses: []core1.ContainerStatus{
+						{
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "container1",
+						},
+						{
+							ImageID: "docker-pullable://alpine@sha256:2",
+							Name:    "container2",
+						},
+					},
+				},
+			},
+			expected: []string{"alpine@sha256:1", "alpine@sha256:2"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.True(t, reflect.DeepEqual(extractImageIDsFromPod(tt.pod), tt.expected))
 		})
 	}
 }

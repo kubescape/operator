@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -14,7 +13,6 @@ import (
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/utils"
-	"github.com/kubescape/operator/watcher"
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
@@ -44,14 +42,6 @@ func main() {
 			utils.ClusterConfig.AccountID,
 			url.URL{Host: otelHost})
 		defer logger.ShutdownOtel(ctx)
-	}
-
-	if scanOnNewImgStr, present := os.LookupEnv(utils.ScanOnNewImagesEnvVar); present {
-		scanOnNewBool, err := strconv.ParseBool(scanOnNewImgStr)
-		if err != nil {
-			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
-		}
-		watcher.ScanOnNewImage = scanOnNewBool
 	}
 
 	initHttpHandlers()

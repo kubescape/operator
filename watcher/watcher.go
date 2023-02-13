@@ -7,78 +7,88 @@ import (
 	"sync"
 	"time"
 
+	"github.com/armosec/armoapi-go/apis"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
+	"golang.org/x/exp/slices"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-var ScanOnNewImage = false
-
 const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
-	k8sAPI                 *k8sinterface.KubernetesApi
-	imagesIDsMap           map[string]bool
-	wlidsMap               map[string]map[string]string // <wlid> : <containerName> : imageID
-	imageIDsMapMutex       *sync.Mutex
-	wlidsMapMutex          *sync.Mutex
-	currentResourceVersion string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
+	k8sAPI                        *k8sinterface.KubernetesApi
+	imagesIDToWlidsMap            map[string][]string
+	wlidsMap                      map[string]map[string]string // <wlid> : <containerName> : imageID
+	imageIDsMapMutex              *sync.Mutex
+	wlidsMapMutex                 *sync.Mutex
+	currentPodListResourceVersion string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
 }
 
+// NewWatchHandler creates a new WatchHandler
 func NewWatchHandler() *WatchHandler {
 	return &WatchHandler{
-		k8sAPI:           k8sinterface.NewKubernetesApi(),
-		imagesIDsMap:     make(map[string]bool),
-		wlidsMap:         make(map[string]map[string]string),
-		imageIDsMapMutex: &sync.Mutex{},
-		wlidsMapMutex:    &sync.Mutex{},
+		k8sAPI:             k8sinterface.NewKubernetesApi(),
+		imagesIDToWlidsMap: make(map[string][]string),
+		wlidsMap:           make(map[string]map[string]string),
+		imageIDsMapMutex:   &sync.Mutex{},
+		wlidsMapMutex:      &sync.Mutex{},
 	}
 }
 
-func (wh *WatchHandler) addToImageIDsMap(imageID string) {
+func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) {
+	if len(wlids) == 0 {
+		return
+	}
+	imageID = utils.ExtractImageID(imageID)
+
 	wh.imageIDsMapMutex.Lock()
 	defer wh.imageIDsMapMutex.Unlock()
-	if _, ok := wh.imagesIDsMap[imageID]; !ok {
-		wh.imagesIDsMap[imageID] = true
+
+	if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
+		wh.imagesIDToWlidsMap[imageID] = wlids
+	} else {
+		// imageID exists, add wlid if not exists
+		for _, w := range wlids {
+			if !slices.Contains(wh.imagesIDToWlidsMap[imageID], w) {
+				wh.imagesIDToWlidsMap[imageID] = append(wh.imagesIDToWlidsMap[imageID], w)
+			}
+		}
 	}
 }
 
 func (wh *WatchHandler) addToWlidsMap(wlid string, containerName string, imageID string) {
 	wh.wlidsMapMutex.Lock()
 	defer wh.wlidsMapMutex.Unlock()
+
 	if _, ok := wh.wlidsMap[wlid]; !ok {
 		wh.wlidsMap[wlid] = make(map[string]string)
-		wh.wlidsMap[wlid][containerName] = imageID
-	} else {
-		wh.wlidsMap[wlid][containerName] = imageID
 	}
+
+	wh.wlidsMap[wlid][containerName] = imageID
 }
 
-func (wh *WatchHandler) GetWlidsMap() map[string]map[string]string {
-	return wh.wlidsMap
-}
-
-func (wh *WatchHandler) GetImageIDsMap() map[string]bool {
-	return wh.imagesIDsMap
-}
-
-func (wh *WatchHandler) buildImageIDsMap(pods *core1.PodList) {
-	for _, pod := range pods.Items {
-		for _, imageID := range extractImageIDsFromPod(&pod) {
-			if _, ok := wh.imagesIDsMap[imageID]; !ok {
-				wh.addToImageIDsMap(imageID)
-			}
+func (wh *WatchHandler) buildImageIDsToWlidsMap(ctx context.Context, podList *core1.PodList) {
+	for _, pod := range podList.Items {
+		parentWlid, err := wh.getParentIDForPod(&pod)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("Failed to get parent ID for pod", helpers.String("pod", pod.Name), helpers.String("namespace", pod.Namespace), helpers.Error(err))
+			continue
+		}
+		for _, imgID := range extractImageIDsFromPod(&pod) {
+			wh.addToImageIDToWlidsMap(imgID, parentWlid)
 		}
 	}
 }
 
-func (wh *WatchHandler) buildwlidsMap(ctx context.Context, pods *core1.PodList) {
+func (wh *WatchHandler) buildWlidsMap(ctx context.Context, pods *core1.PodList) {
 	for _, pod := range pods.Items {
 		parentWlid, err := wh.getParentIDForPod(&pod)
 		if err != nil {
@@ -86,106 +96,19 @@ func (wh *WatchHandler) buildwlidsMap(ctx context.Context, pods *core1.PodList) 
 			continue
 		}
 		for _, containerStatus := range pod.Status.ContainerStatuses {
-			wh.addToWlidsMap(parentWlid, containerStatus.Name, ExtractImageID(containerStatus.ImageID))
+			wh.addToWlidsMap(parentWlid, containerStatus.Name, utils.ExtractImageID(containerStatus.ImageID))
 		}
 	}
 }
 
-func (wh *WatchHandler) getParentIDForPod(pod *core1.Pod) (string, error) {
-	pod.TypeMeta.Kind = "Pod"
-	podMarshalled, err := json.Marshal(pod)
-	if err != nil {
-		return "", err
-	}
-	wl, err := workloadinterface.NewWorkload(podMarshalled)
-	if err != nil {
-		return "", err
-	}
-	kind, name, err := wh.k8sAPI.CalculateWorkloadParentRecursive(wl)
-	if err != nil {
-		return "", err
-	}
-	return pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, wl.GetNamespace(), kind, name), nil
-
-}
-
-// list all pods, build imageIDsMap and wlidsMap
-// set current resource version for pod watcher
-func (wh *WatchHandler) Initialize(ctx context.Context) error {
-	// list all Pods and their image IDs
-	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
-	if err != nil {
-		return err
-	}
-
-	wh.buildImageIDsMap(podsList)
-
-	if ScanOnNewImage {
-		wh.buildwlidsMap(ctx, podsList)
-	}
-
-	wh.currentResourceVersion = podsList.GetResourceVersion()
-
-	return nil
-}
-
-func (wh *WatchHandler) updateResourceVersion() error {
-	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
-	if err != nil {
-		return err
-	}
-	wh.currentResourceVersion = podsList.GetResourceVersion()
-	return nil
-}
-
-func (wh *WatchHandler) triggerSBOMCalculation(wlid string, imageIDs []string) error {
-	// TODO: send command to calculate SBOM
-	return nil
-}
-
-func (wh *WatchHandler) triggerWorkloadScan() error {
-	// TODO: send command to calculate SBOM
-	return nil
-}
-
-func (wh *WatchHandler) PodWatch(ctx context.Context) {
-	logger.L().Ctx(ctx).Debug("starting pod watch")
-	for {
-		podsWatch, err := wh.getPodWatcher()
-		if err != nil {
-			logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getPodWatcher, err :%s", err.Error()), helpers.Error(err))
-			time.Sleep(retryInterval)
-			continue
-		}
-
-		for {
-			event, ok := <-podsWatch.ResultChan()
-			if !ok {
-				err = wh.restartResourceVersion(podsWatch)
-				if err != nil {
-					logger.L().Ctx(ctx).Error(fmt.Sprintf("error to restartResourceVersion, err :%s", err.Error()), helpers.Error(err))
-				}
-				break
-			}
-
-			pod, ok := wh.getPodFromEventIfRunning(ctx, event)
-			if !ok {
-				continue
-			}
-
-			if !ScanOnNewImage {
-				wh.handleEventsNoScanOnNewWorkloads(ctx, pod)
-			} else {
-				wh.handleEventsTriggerScanOnNewWorkloads(ctx, pod)
-			}
-		}
-	}
+func (wh *WatchHandler) getSBOMWatcher() {
+	// TODO: implement
 }
 
 // returns a watcher watching from current resource version
 func (wh *WatchHandler) getPodWatcher() (watch.Interface, error) {
 	podsWatch, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").Watch(context.TODO(), v1.ListOptions{
-		ResourceVersion: wh.currentResourceVersion,
+		ResourceVersion: wh.currentPodListResourceVersion,
 	})
 	if err != nil {
 		return nil, err
@@ -199,15 +122,27 @@ func (wh *WatchHandler) restartResourceVersion(podWatch watch.Interface) error {
 	return wh.updateResourceVersion()
 }
 
-func (wh *WatchHandler) getNewImages(pod *core1.Pod) []string {
-	newImgs := make([]string, 0)
-	for _, imageID := range extractImageIDsFromPod(pod) {
-		if _, ok := wh.imagesIDsMap[imageID]; !ok {
-			wh.addToImageIDsMap(imageID)
-			newImgs = append(newImgs, imageID)
+func (wh *WatchHandler) updateResourceVersion() error {
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
+	if err != nil {
+		return err
+	}
+	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
+	return nil
+}
+
+// returns a map of <imageID> : <containerName> for imageIDs in pod that are not in the map
+func (wh *WatchHandler) getNewImageIDsToContainerFromPod(pod *core1.Pod) map[string]string {
+	containerToimageID := make(map[string]string)
+	imageIDsToContainers := extractImageIDsToContainersFromPod(pod)
+
+	for imageID, container := range imageIDsToContainers {
+		if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
+			containerToimageID[container] = imageID
 		}
 	}
-	return newImgs
+
+	return containerToimageID
 }
 
 // returns pod and true if event status is modified, pod is exists and is running
@@ -235,44 +170,154 @@ func (wh *WatchHandler) getPodFromEventIfRunning(ctx context.Context, event watc
 	return pod, true
 }
 
-// pod watcher that does not  trigger scan on new workloads
-func (wh *WatchHandler) handleEventsNoScanOnNewWorkloads(ctx context.Context, pod *core1.Pod) {
-	newImgs := wh.getNewImages(pod)
-	if len(newImgs) == 0 {
-		return
-	}
-
-	parentWlid, err := wh.getParentIDForPod(pod)
+func (wh *WatchHandler) getParentIDForPod(pod *core1.Pod) (string, error) {
+	pod.TypeMeta.Kind = "Pod"
+	podMarshalled, err := json.Marshal(pod)
 	if err != nil {
-		logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getParentIDForPod, err :%s", err.Error()), helpers.Error(err))
-		return
+		return "", err
 	}
-	wh.triggerSBOMCalculation(parentWlid, newImgs)
+	wl, err := workloadinterface.NewWorkload(podMarshalled)
+	if err != nil {
+		return "", err
+	}
+	kind, name, err := wh.k8sAPI.CalculateWorkloadParentRecursive(wl)
+	if err != nil {
+		return "", err
+	}
+	return pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, wl.GetNamespace(), kind, name), nil
+
 }
 
-// pod watcher that triggers scan on new workloads
-func (wh *WatchHandler) handleEventsTriggerScanOnNewWorkloads(ctx context.Context, pod *core1.Pod) {
-	parentWlid, err := wh.getParentIDForPod(pod)
+func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.Interface, sessionObjChan *chan utils.SessionObj) {
+	var err error
+	for {
+		event, ok := <-podsWatch.ResultChan()
+		if !ok {
+			err = wh.restartResourceVersion(podsWatch)
+			if err != nil {
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error to restartResourceVersion, err :%s", err.Error()), helpers.Error(err))
+			}
+			return
+		}
+
+		pod, ok := wh.getPodFromEventIfRunning(ctx, event)
+		if !ok {
+			continue
+		}
+
+		parentWlid, err := wh.getParentIDForPod(pod)
+		if err != nil {
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getParentIDForPod, err :%s", err.Error()), helpers.Error(err))
+			continue
+		}
+
+		var isNewWlid bool
+		if _, ok := wh.wlidsMap[parentWlid]; !ok {
+			isNewWlid = true
+		}
+
+		newContainersToImageIDs := wh.getNewImageIDsToContainerFromPod(pod)
+
+		if len(newContainersToImageIDs) > 0 {
+			// new image, add to respective maps
+			for container, imgID := range newContainersToImageIDs {
+				wh.addToWlidsMap(parentWlid, container, imgID)
+				if isNewWlid {
+					wh.addToWlidsMap(parentWlid, container, imgID)
+				}
+			}
+		}
+
+		var cmd *apis.Command
+		if len(newContainersToImageIDs) > 0 {
+			// new image, trigger SBOM
+			cmd = getSBOMCalculationCommand(parentWlid, newContainersToImageIDs)
+		} else {
+			// old image
+			if !isNewWlid {
+				continue
+			}
+			// new workload, trigger CVE
+			cmd = getCVEScanCommand(parentWlid, extractImageIDsToContainersFromPod(pod))
+		}
+
+		// add command to channel
+		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+		*sessionObjChan <- *newSessionObj
+	}
+}
+
+// returns wlids map
+func (wh *WatchHandler) GetWlidsMap() map[string]map[string]string {
+	return wh.wlidsMap
+}
+
+// returns imageIDs map
+func (wh *WatchHandler) GetImagesIDsToWlidMap() map[string][]string {
+	return wh.imagesIDToWlidsMap
+}
+
+// list all pods, build imageIDsMap and wlidsMap
+// set current resource version for pod watcher
+func (wh *WatchHandler) Initialize(ctx context.Context) error {
+	// list all Pods and extract their image IDs
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
 	if err != nil {
-		logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getParentIDForPod, err :%s", err.Error()), helpers.Error(err))
-		return
+		return err
 	}
 
-	newImgs := wh.getNewImages(pod)
+	wh.buildImageIDsToWlidsMap(ctx, podsList)
+	wh.buildWlidsMap(ctx, podsList)
 
-	_, ok := wh.wlidsMap[parentWlid]
-	if ok {
-		if len(newImgs) > 0 {
-			// old WLID, new image
-			wh.triggerSBOMCalculation(parentWlid, newImgs)
-		}
-	} else {
-		// new WLID
+	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
 
-		// add <container> : <imageID> to wlids map
-		for _, containerStatus := range pod.Status.ContainerStatuses {
-			wh.addToWlidsMap(parentWlid, containerStatus.Name, ExtractImageID(containerStatus.ImageID))
+	return nil
+}
+
+// watch for sbom changes, and trigger scans accordingly
+func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	// TODO: implement
+}
+
+// watch for pods changes, and trigger scans accordingly
+func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	logger.L().Ctx(ctx).Debug("starting pod watch")
+	for {
+		podsWatch, err := wh.getPodWatcher()
+		if err != nil {
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getPodWatcher, err :%s", err.Error()), helpers.Error(err))
+			time.Sleep(retryInterval)
+			continue
 		}
-		wh.triggerWorkloadScan()
+		wh.handlePodWatcher(ctx, podsWatch, sessionObjChan)
 	}
+}
+
+func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
+	// TODO: Implement
+	return []string{}, nil
+}
+
+// returns a list of imageIDs that are not in storage
+func (wh *WatchHandler) GetImageIDsForSBOMCalculation() ([]string, error) {
+	newImageIDs := []string{}
+	imageIDsFromStorage, err := wh.ListImageIDsFromStorage()
+	if err != nil {
+		return newImageIDs, err
+	}
+
+	for imageID := range wh.GetImagesIDsToWlidMap() {
+		if !slices.Contains(imageIDsFromStorage, imageID) {
+			newImageIDs = append(newImageIDs, imageID)
+		}
+	}
+	return newImageIDs, nil
+}
+
+func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
+	return wh.imagesIDToWlidsMap[imageID]
+}
+
+func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]string {
+	return wh.wlidsMap[wlid]
 }

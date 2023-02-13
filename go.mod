@@ -2,6 +2,8 @@ module github.com/kubescape/operator
 
 go 1.19
 
+replace github.com/armosec/armoapi-go => /home/daniel/armo/armoapi-go
+
 require (
 	github.com/armosec/armoapi-go v0.0.140
 	github.com/armosec/cluster-notifier-api-go v0.0.3
@@ -11,7 +13,6 @@ require (
 	github.com/armosec/utils-k8s-go v0.0.12
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/go-openapi/runtime v0.24.1
-	github.com/golang/glog v1.0.0
 	github.com/google/go-containerregistry v0.11.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
@@ -23,6 +24,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux v0.37.0
 	go.opentelemetry.io/otel v1.11.2
+	golang.org/x/exp v0.0.0-20230116083435-1de6713980de
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	k8s.io/api v0.25.3
 	k8s.io/apimachinery v0.25.3
@@ -91,6 +93,7 @@ require (
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
+	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
@@ -143,7 +146,6 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
-	golang.org/x/exp v0.0.0-20230116083435-1de6713980de // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/oauth2 v0.3.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect

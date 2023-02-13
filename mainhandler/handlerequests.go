@@ -10,6 +10,7 @@ import (
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
+	"k8s.io/utils/strings/slices"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"
@@ -87,23 +88,45 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 
 	watchHandler := watcher.NewWatchHandler()
 
-	// build imageIDs and wlids maps
-	err := watchHandler.Initialize(ctx)
-	if err != nil {
+	if err := watchHandler.Initialize(ctx); err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 		return
 	}
 
-	// scan all workloads in cluster
-	mainHandler.triggerScanForWorkloads(ctx, watchHandler.GetWlidsMap())
+	newImageIDs, err := watchHandler.GetImageIDsForSBOMCalculation()
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+	}
+
+	// get commands for scanning new images
+	commandsList := []*apis.Command{}
+	for _, imageID := range newImageIDs {
+		for _, wlid := range watchHandler.GetWlidsForImageID(imageID) {
+			cmd := buildScanCommandForWorkload(ctx, wlid, watchHandler.GetContainerToImageIDForWlid(wlid), apis.TypeCalculateSBOM)
+			commandsList = append(commandsList, cmd)
+		}
+	}
+	// insert commands to channel
+	go mainHandler.insertCommandsToChannel(ctx, commandsList)
 
 	// start watching
-	watchHandler.PodWatch(ctx)
+	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
+	go watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
 }
 
-func (mainHandler *MainHandler) triggerScanForWorkloads(ctx context.Context, wlidsToContainerToImageID map[string]map[string]string) {
-	commandsList := mainHandler.buildScanCommandList(ctx, wlidsToContainerToImageID)
-	go mainHandler.insertCommandsToChannel(ctx, commandsList)
+func convertImageIDMapToWlidMap(imageIDToWlidToContainerMap map[string]map[string]string, excludeList []string) map[string]map[string]string {
+	mapWlidToContainerToImageID := make(map[string]map[string]string)
+	for imageID, wlidToContainer := range imageIDToWlidToContainerMap {
+		if !slices.Contains(excludeList, imageID) {
+			for wlid := range wlidToContainer {
+				if _, ok := mapWlidToContainerToImageID[wlid]; !ok {
+					mapWlidToContainerToImageID[wlid] = make(map[string]string)
+				}
+				mapWlidToContainerToImageID[wlid][wlidToContainer[wlid]] = imageID
+			}
+		}
+	}
+	return mapWlidToContainerToImageID
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
@@ -114,19 +137,12 @@ func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, com
 	}
 }
 
-func (mainHandler *MainHandler) buildScanCommandList(ctx context.Context, wlidsToContainerToImageID map[string]map[string]string) []*apis.Command {
-	commandsList := make([]*apis.Command, 0)
-	for wlid, containerToId := range wlidsToContainerToImageID {
-		cmd := &apis.Command{}
-		cmd.Wlid = wlid
-		cmd.CommandName = apis.TypeScanImages
-		cmd.Args = make(map[string]interface{})
-		for container, imgID := range containerToId {
-			cmd.Args[container] = imgID
-			commandsList = append(commandsList, cmd)
-		}
+func buildScanCommandForWorkload(ctx context.Context, wlid string, mapContainerToImageID map[string]string, command apis.NotificationPolicyType) *apis.Command {
+	return &apis.Command{
+		Wlid:        wlid,
+		CommandName: command,
+		Args:        map[string]interface{}{utils.ContainerToImageIdsArg: mapContainerToImageID},
 	}
-	return commandsList
 }
 
 // HandlePostmanRequest Parse received commands and run the command
@@ -201,6 +217,8 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	logger.L().Info(logCommandInfo)
 
 	switch c.CommandName {
+	case apis.TypeCalculateSBOM:
+		return actionHandler.calculateSBOM(ctx, sessionObj)
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:

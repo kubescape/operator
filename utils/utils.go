@@ -2,6 +2,7 @@ package utils
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/armosec/utils-go/httputils"
 )
@@ -10,6 +11,7 @@ const KubescapeScanV1 = "scanV1"
 const KubescapeRequestPathV1 = "v1/scan"
 const KubescapeRequestStatusV1 = "v1/status"
 const ContainerToImageIdsArg = "containerToImageIDs"
+const dockerPullableURN = "docker-pullable://"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
@@ -49,4 +51,8 @@ func InitReporterHttpClient() httputils.IHttpClient {
 		return &ClientMock{}
 	}
 	return &http.Client{}
+}
+
+func ExtractImageID(imageID string) string {
+	return strings.TrimPrefix(imageID, dockerPullableURN)
 }
