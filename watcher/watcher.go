@@ -286,20 +286,13 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			continue
 		}
 
-		var isNewWlid bool
-		if _, ok := wh.wlidsMap[parentWlid]; !ok {
-			isNewWlid = true
-		}
-
 		newContainersToImageIDs := wh.getNewImageIDsToContainerFromPod(pod)
 
 		if len(newContainersToImageIDs) > 0 {
 			// new image, add to respective maps
 			for container, imgID := range newContainersToImageIDs {
 				wh.addToWlidsMap(parentWlid, container, imgID)
-				if isNewWlid {
-					wh.addToWlidsMap(parentWlid, container, imgID)
-				}
+				wh.addToWlidsMap(parentWlid, container, imgID)
 			}
 		}
 
@@ -309,7 +302,8 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			cmd = getSBOMCalculationCommand(parentWlid, newContainersToImageIDs)
 		} else {
 			// old image
-			if !isNewWlid {
+			if _, ok := wh.wlidsMap[parentWlid]; ok {
+				// old workload, no need to trigger CVE
 				continue
 			}
 			// new workload, trigger CVE
