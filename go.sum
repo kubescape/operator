@@ -124,6 +124,8 @@ github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
+github.com/armosec/armoapi-go v0.0.165 h1:rzPsZUAO1T2zlj7PcRvKw+X3VxAZxVwSJepQ4oXJCAk=
+github.com/armosec/armoapi-go v0.0.165/go.mod h1:5MQAHYUFm1JrTSgb4+EglR5vNsrqUD0krh/5xWm2RdI=
 github.com/armosec/cluster-notifier-api-go v0.0.3 h1:noJ6IL/Bnkn2hnNLFvMwIMaZsxY9DJ+3MEQi3i/DAQI=
 github.com/armosec/cluster-notifier-api-go v0.0.3/go.mod h1:7J+XboqvPNAPABtkH2ecITg8/23fP4YXvtAa5wJONQU=
 github.com/armosec/gojay v1.2.15 h1:sSB2vnAvacUNkw9nzUYZKcPzhJOyk6/5LK2JCNdmoZY=
