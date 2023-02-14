@@ -191,17 +191,17 @@ func (wh *WatchHandler) updateResourceVersion() error {
 }
 
 // returns a map of <imageID> : <containerName> for imageIDs in pod that are not in the map
-func (wh *WatchHandler) getNewImageIDsToContainerFromPod(pod *core1.Pod) map[string]string {
-	newImageIDsToContainer := make(map[string]string)
+func (wh *WatchHandler) getNewContainerToImageIDsFromPod(pod *core1.Pod) map[string]string {
+	newContainerToImageIDs := make(map[string]string)
 	imageIDsToContainers := extractImageIDsToContainersFromPod(pod)
 
 	for imageID, container := range imageIDsToContainers {
 		if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
-			newImageIDsToContainer[container] = imageID
+			newContainerToImageIDs[container] = imageID
 		}
 	}
 
-	return newImageIDsToContainer
+	return newContainerToImageIDs
 }
 
 // returns pod and true if event status is modified, pod is exists and is running
@@ -270,7 +270,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			continue
 		}
 
-		newContainersToImageIDs := wh.getNewImageIDsToContainerFromPod(pod)
+		newContainersToImageIDs := wh.getNewContainerToImageIDsFromPod(pod)
 
 		var cmd *apis.Command
 		if len(newContainersToImageIDs) > 0 {

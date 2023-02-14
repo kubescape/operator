@@ -421,7 +421,7 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.True(t, reflect.DeepEqual(wh.getNewImageIDsToContainerFromPod(tt.pod), tt.expected))
+			assert.True(t, reflect.DeepEqual(wh.getNewContainerToImageIDsFromPod(tt.pod), tt.expected))
 		})
 	}
 }
