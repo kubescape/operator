@@ -1,14 +1,10 @@
 package watcher
 
 import (
-	"fmt"
-
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/operator/utils"
 	core1 "k8s.io/api/core/v1"
 )
-
-const dockerPullableURN = "docker-pullable://"
 
 func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string]string {
 	imageIDsToContainers := make(map[string]string)
@@ -42,8 +38,4 @@ func getCVEScanCommand(wlid string, containerToimageID map[string]string) *apis.
 		CommandName: apis.TypeScanImages,
 		Args:        map[string]interface{}{utils.ContainerToImageIdsArg: containerToimageID},
 	}
-}
-
-func GenerateInstanceID(parentApiVersion, namespace, kind, name, resourceVersion, containerName string) string {
-	return fmt.Sprintf("apiVersion-%s/namespace-%s/kind-%s/name-%s/resourceVersion-%s/containerName-%s", parentApiVersion, namespace, kind, name, resourceVersion, containerName)
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
-	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
 
 	corev1 "k8s.io/api/core/v1"
@@ -357,9 +356,12 @@ func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *api
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
 }
 
+// send workload to the kubevuln with credentials
 func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, websocketScanCommand *apis.WebsocketScanCommand) error {
-	// send workload to the scanner
 	jsonScannerC, err := json.Marshal(websocketScanCommand)
+	if err != nil {
+		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
+	}
 	creds := websocketScanCommand.Credentials
 	credsList := websocketScanCommand.Credentialslist
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
@@ -464,7 +466,7 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		ImageHash:     utils.ExtractImageID(imageID),
 	}
 	if command == apis.TypeScanImages {
-		instanceID := watcher.GenerateInstanceID(pod.APIVersion, pod.Kind, pod.Namespace, pod.Name, pod.ResourceVersion, container.container)
+		instanceID := utils.GenerateInstanceID(pod.APIVersion, pod.Kind, pod.Namespace, pod.Name, pod.ResourceVersion, container.container)
 		websocketScanCommand.InstanceID = &instanceID
 	}
 

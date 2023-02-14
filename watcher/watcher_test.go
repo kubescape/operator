@@ -11,7 +11,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestBuildImageIDsToWlidsMap(t *testing.T) {
+func TestBuildImageIDsToWlidsToContainerToImageIDMap(t *testing.T) {
 
 	tests := []struct {
 		name                string
@@ -190,18 +190,18 @@ func TestBuildImageIDsToWlidsMap(t *testing.T) {
 	for _, tt := range tests {
 		wh := NewWatchHandler()
 		t.Run(tt.name, func(t *testing.T) {
-			wh.buildImageIDsToWlidsMap(context.TODO(), &tt.podList)
+			wh.buildImageIDsToWlidsToContainerToImageIDMap(context.TODO(), &tt.podList)
 			assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), tt.expectedImageIDsMap))
 		})
 	}
 }
 
-func TestBuildWlidsMap(t *testing.T) {
+func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
 
 	tests := []struct {
-		name             string
-		podList          core1.PodList
-		expectedwlidsMap map[string]map[string]string
+		name                                 string
+		podList                              core1.PodList
+		expectedwlidsToContainerToImageIDMap map[string]map[string]string
 	}{
 		{
 			name: "imageID with docker-pullable prefix",
@@ -222,7 +222,7 @@ func TestBuildWlidsMap(t *testing.T) {
 						},
 					}},
 			},
-			expectedwlidsMap: map[string]map[string]string{
+			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
 					"container1": "alpine@sha256:1",
 				},
@@ -247,7 +247,7 @@ func TestBuildWlidsMap(t *testing.T) {
 						},
 					}},
 			},
-			expectedwlidsMap: map[string]map[string]string{
+			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
 					"container1": "alpine@sha256:1",
 				},
@@ -276,7 +276,7 @@ func TestBuildWlidsMap(t *testing.T) {
 						},
 					},
 				}},
-			expectedwlidsMap: map[string]map[string]string{
+			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
 				pkgwlid.GetWLID("", "namespace3", "pod", "pod3"): {
 					"container3": "alpine@sha256:3",
 					"container4": "alpine@sha256:4",
@@ -288,19 +288,19 @@ func TestBuildWlidsMap(t *testing.T) {
 	for _, tt := range tests {
 		wh := NewWatchHandler()
 		t.Run(tt.name, func(t *testing.T) {
-			wh.buildWlidsMap(context.TODO(), &tt.podList)
-			assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), tt.expectedwlidsMap))
+			wh.buildWlidsToContainerToImageIDMap(context.TODO(), &tt.podList)
+			assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), tt.expectedwlidsToContainerToImageIDMap))
 		})
 	}
 }
 
-func TestAddToImageIDToWlidsMap(t *testing.T) {
+func TestAddToImageIDToWlidsToContainerToImageIDMap(t *testing.T) {
 	wh := NewWatchHandler()
 
-	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid1")
-	wh.addToImageIDToWlidsMap("alpine@sha256:2", "wlid2")
+	wh.addToImageIDToWlidsToContainerToImageIDMap("alpine@sha256:1", "wlid1")
+	wh.addToImageIDToWlidsToContainerToImageIDMap("alpine@sha256:2", "wlid2")
 	// add the new wlid to the same imageID
-	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid3")
+	wh.addToImageIDToWlidsToContainerToImageIDMap("alpine@sha256:1", "wlid3")
 
 	assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), map[string][]string{
 		"alpine@sha256:1": {"wlid1", "wlid3"},
@@ -308,13 +308,13 @@ func TestAddToImageIDToWlidsMap(t *testing.T) {
 	}))
 }
 
-func TestAddTowlidsMap(t *testing.T) {
+func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 	wh := NewWatchHandler()
 
-	wh.addToWlidsMap("wlid1", "container1", "alpine@sha256:1")
-	wh.addToWlidsMap("wlid2", "container2", "alpine@sha256:2")
+	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
+	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
 
-	assert.True(t, reflect.DeepEqual(wh.GetWlidsMap(), map[string]map[string]string{
+	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), map[string]map[string]string{
 		"wlid1": {
 			"container1": "alpine@sha256:1",
 		},
@@ -326,7 +326,7 @@ func TestAddTowlidsMap(t *testing.T) {
 
 func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	wh := NewWatchHandler()
-	wh.imagesIDToWlidsMap = map[string][]string{
+	wh.imagesIDToWlidsToContainerToImageIDMap = map[string][]string{
 		"alpine@sha256:1": {"wlid"},
 		"alpine@sha256:2": {"wlid"},
 		"alpine@sha256:3": {"wlid"},

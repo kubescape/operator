@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -55,4 +56,8 @@ func InitReporterHttpClient() httputils.IHttpClient {
 
 func ExtractImageID(imageID string) string {
 	return strings.TrimPrefix(imageID, dockerPullableURN)
+}
+
+func GenerateInstanceID(parentApiVersion, namespace, kind, name, resourceVersion, containerName string) string {
+	return fmt.Sprintf("apiVersion-%s/namespace-%s/kind-%s/name-%s/resourceVersion-%s/containerName-%s", parentApiVersion, namespace, kind, name, resourceVersion, containerName)
 }
