@@ -8,6 +8,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
@@ -74,6 +75,57 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 		command:                sessionObj.Command,
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: commandResponseChannel,
+	}
+}
+
+func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("RECOVER in HandleWatchers, reason: %v", err))
+		}
+	}()
+
+	watchHandler := watcher.NewWatchHandler()
+
+	if err := watchHandler.Initialize(ctx); err != nil {
+		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+		return
+	}
+
+	newImageIDs, err := watchHandler.GetImageIDsForSBOMCalculation()
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+	}
+
+	// get commands for scanning new images
+	commandsList := []*apis.Command{}
+	for _, imageID := range newImageIDs {
+		for _, wlid := range watchHandler.GetWlidsForImageID(imageID) {
+			cmd := buildScanCommandForWorkload(ctx, wlid, watchHandler.GetContainerToImageIDForWlid(wlid), apis.TypeCalculateSBOM)
+			commandsList = append(commandsList, cmd)
+		}
+	}
+	// insert commands to channel
+	mainHandler.insertCommandsToChannel(ctx, commandsList)
+
+	// start watching
+	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
+	watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
+}
+
+func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
+	for _, cmd := range commandsList {
+		logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
+		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+		*mainHandler.sessionObj <- *newSessionObj
+	}
+}
+
+func buildScanCommandForWorkload(ctx context.Context, wlid string, mapContainerToImageID map[string]string, command apis.NotificationPolicyType) *apis.Command {
+	return &apis.Command{
+		Wlid:        wlid,
+		CommandName: command,
+		Args:        map[string]interface{}{utils.ContainerToImageIdsArg: mapContainerToImageID},
 	}
 }
 
@@ -149,6 +201,8 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	logger.L().Info(logCommandInfo)
 
 	switch c.CommandName {
+	case apis.TypeCalculateSBOM:
+		return actionHandler.calculateSBOM(ctx, sessionObj)
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
@@ -299,10 +353,6 @@ func GetStartupActions() []apis.Command {
 			Args: map[string]interface{}{
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
 			},
-		},
-		{
-			CommandName: apis.TypeScanImages,
-			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
 		},
 	}
 }
