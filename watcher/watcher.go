@@ -112,7 +112,7 @@ func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]str
 	return wh.wlidsToContainerToImageIDMap[wlid]
 }
 
-func (wh *WatchHandler) addToImageIDToWlidsToContainerToImageIDMap(imageID string, wlids ...string) {
+func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) {
 	if len(wlids) == 0 {
 		return
 	}
@@ -152,7 +152,7 @@ func (wh *WatchHandler) buildMaps(ctx context.Context, podList *core1.PodList) {
 			continue
 		}
 		for _, imgID := range extractImageIDsFromPod(&podList.Items[i]) {
-			wh.addToImageIDToWlidsToContainerToImageIDMap(imgID, parentWlid)
+			wh.addToImageIDToWlidsMap(imgID, parentWlid)
 		}
 		for _, containerStatus := range podList.Items[i].Status.ContainerStatuses {
 			wh.addToWlidsToContainerToImageIDMap(parentWlid, containerStatus.Name, utils.ExtractImageID(containerStatus.ImageID))
@@ -272,16 +272,13 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 
 		newContainersToImageIDs := wh.getNewImageIDsToContainerFromPod(pod)
 
+		var cmd *apis.Command
 		if len(newContainersToImageIDs) > 0 {
 			// new image, add to respective maps
 			for container, imgID := range newContainersToImageIDs {
-				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
+				wh.addToImageIDToWlidsMap(imgID, parentWlid)
 				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
 			}
-		}
-
-		var cmd *apis.Command
-		if len(newContainersToImageIDs) > 0 {
 			// new image, trigger SBOM
 			cmd = getSBOMCalculationCommand(parentWlid, newContainersToImageIDs)
 		} else {

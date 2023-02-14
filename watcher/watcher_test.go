@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"reflect"
+	"sync"
 	"testing"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
@@ -11,8 +12,16 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestbuildImageIDsToWlidsMap(t *testing.T) {
+func NewWatchHandlerMock() *WatchHandler {
+	return &WatchHandler{
+		imagesIDToWlidsMap:                make(map[string][]string),
+		wlidsToContainerToImageIDMap:      make(map[string]map[string]string),
+		imageIDsMapMutex:                  &sync.Mutex{},
+		wlidsToContainerToImageIDMapMutex: &sync.Mutex{},
+	}
+}
 
+func TestBuildImageIDsToWlidsMap(t *testing.T) {
 	tests := []struct {
 		name                string
 		podList             core1.PodList
@@ -188,16 +197,15 @@ func TestbuildImageIDsToWlidsMap(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		wh := NewWatchHandler()
+		wh := NewWatchHandlerMock()
 		t.Run(tt.name, func(t *testing.T) {
-			wh.buildImageIDsToWlidsMap(context.TODO(), &tt.podList)
+			wh.buildMaps(context.TODO(), &tt.podList)
 			assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), tt.expectedImageIDsMap))
 		})
 	}
 }
 
 func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
-
 	tests := []struct {
 		name                                 string
 		podList                              core1.PodList
@@ -286,21 +294,22 @@ func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		wh := NewWatchHandler()
+		wh := NewWatchHandlerMock()
 		t.Run(tt.name, func(t *testing.T) {
-			wh.buildWlidsToContainerToImageIDMap(context.TODO(), &tt.podList)
-			assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), tt.expectedwlidsToContainerToImageIDMap))
+			wh.buildMaps(context.TODO(), &tt.podList)
+			got := wh.GetWlidsToContainerToImageIDMap()
+			assert.True(t, reflect.DeepEqual(got, tt.expectedwlidsToContainerToImageIDMap))
 		})
 	}
 }
 
-func TestAddToImageIDToWlidsToContainerToImageIDMap(t *testing.T) {
-	wh := NewWatchHandler()
+func TestAddToImageIDToWlidsMap(t *testing.T) {
+	wh := NewWatchHandlerMock()
 
-	wh.addToImageIDToWlidsToContainerToImageIDMap("alpine@sha256:1", "wlid1")
-	wh.addToImageIDToWlidsToContainerToImageIDMap("alpine@sha256:2", "wlid2")
+	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid1")
+	wh.addToImageIDToWlidsMap("alpine@sha256:2", "wlid2")
 	// add the new wlid to the same imageID
-	wh.addToImageIDToWlidsToContainerToImageIDMap("alpine@sha256:1", "wlid3")
+	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid3")
 
 	assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), map[string][]string{
 		"alpine@sha256:1": {"wlid1", "wlid3"},
@@ -309,7 +318,7 @@ func TestAddToImageIDToWlidsToContainerToImageIDMap(t *testing.T) {
 }
 
 func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
-	wh := NewWatchHandler()
+	wh := NewWatchHandlerMock()
 
 	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
 	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
@@ -325,8 +334,8 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 }
 
 func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
-	wh, err := NewWatchHandler(context.TODO())
-	assert.NoError(t, err)
+	wh := NewWatchHandlerMock()
+
 	wh.imagesIDToWlidsMap = map[string][]string{
 		"alpine@sha256:1": {"wlid"},
 		"alpine@sha256:2": {"wlid"},

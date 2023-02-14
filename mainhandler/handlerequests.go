@@ -100,10 +100,16 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	// get commands for scanning new images
 	commandsList := []*apis.Command{}
 	for _, imageID := range newImageIDs {
-		for _, wlid := range watchHandler.GetWlidsForImageID(imageID) {
-			cmd := buildScanCommandForWorkload(ctx, wlid, watchHandler.GetContainerToImageIDForWlid(wlid), apis.TypeCalculateSBOM)
-			commandsList = append(commandsList, cmd)
+		wlidsForImage := watchHandler.GetWlidsForImageID(imageID)
+		if len(wlidsForImage) == 0 {
+			logger.L().Ctx(ctx).Error(fmt.Sprintf("Image %s is not used by any workload", imageID))
+			continue
 		}
+
+		// scan each image only once
+		cmd := buildScanCommandForWorkload(ctx, wlidsForImage[0], watchHandler.GetContainerToImageIDForWlid(wlidsForImage[0]), apis.TypeCalculateSBOM)
+		commandsList = append(commandsList, cmd)
+
 	}
 	// insert commands to channel
 	mainHandler.insertCommandsToChannel(ctx, commandsList)
