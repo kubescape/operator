@@ -24,13 +24,13 @@ func TestGetPodByWLID(t *testing.T) {
 		expectedNamespace string
 	}{
 		{
-			name:              "TestGetPodByWLID",
+			name:              "pod with status",
 			workloadObj:       podJson,
 			expectedPhase:     v1.PodPhase("Running"),
 			expectedNamespace: "default",
 		},
 		{
-			name:              "TestGetPodByWLID",
+			name:              "workload no status",
 			workloadObj:       deploymentJson,
 			expectedPhase:     v1.PodPhase(""),
 			expectedNamespace: "test",
