@@ -46,7 +46,7 @@ func main() {
 
 	initHttpHandlers()
 
-	sessionObj := make(chan utils.SessionObj)
+	sessionObj := make(chan utils.SessionObj, 50)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
