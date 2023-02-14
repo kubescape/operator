@@ -11,7 +11,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestBuildImageIDsToWlidsToContainerToImageIDMap(t *testing.T) {
+func TestbuildImageIDsToWlidsMap(t *testing.T) {
 
 	tests := []struct {
 		name                string
@@ -190,7 +190,7 @@ func TestBuildImageIDsToWlidsToContainerToImageIDMap(t *testing.T) {
 	for _, tt := range tests {
 		wh := NewWatchHandler()
 		t.Run(tt.name, func(t *testing.T) {
-			wh.buildImageIDsToWlidsToContainerToImageIDMap(context.TODO(), &tt.podList)
+			wh.buildImageIDsToWlidsMap(context.TODO(), &tt.podList)
 			assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), tt.expectedImageIDsMap))
 		})
 	}
@@ -325,8 +325,9 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 }
 
 func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
-	wh := NewWatchHandler()
-	wh.imagesIDToWlidsToContainerToImageIDMap = map[string][]string{
+	wh, err := NewWatchHandler(context.TODO())
+	assert.NoError(t, err)
+	wh.imagesIDToWlidsMap = map[string][]string{
 		"alpine@sha256:1": {"wlid"},
 		"alpine@sha256:2": {"wlid"},
 		"alpine@sha256:3": {"wlid"},

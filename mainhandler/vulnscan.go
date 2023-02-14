@@ -305,7 +305,9 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 			// get from wl
 			mapContainerToImageID, err = actionHandler.getContainerToImageIDsFromWorkload(workload)
 			if err != nil {
-				logger.L().Ctx(ctx).Error(fmt.Sprintf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err))
+				err = fmt.Errorf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err)
+				logger.L().Ctx(ctx).Error(err.Error())
+				return err
 			}
 		} else {
 			// get from pod

@@ -85,14 +85,14 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}()
 
-	watchHandler := watcher.NewWatchHandler()
+	watchHandler, err := watcher.NewWatchHandler(ctx)
 
-	if err := watchHandler.Initialize(ctx); err != nil {
+	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 		return
 	}
 
-	newImageIDs, err := watchHandler.GetImageIDsForSBOMCalculation()
+	newImageIDs, err := watchHandler.ListImageIDsNotInStorage()
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 	}
@@ -115,9 +115,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
 	for _, cmd := range commandsList {
-		logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
-		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
-		*mainHandler.sessionObj <- *newSessionObj
+		utils.AddCommandToChannel(ctx, cmd, mainHandler.sessionObj)
 	}
 }
 

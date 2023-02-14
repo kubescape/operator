@@ -1,11 +1,16 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
+	"github.com/google/uuid"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 )
 
 const KubescapeScanV1 = "scanV1"
@@ -60,4 +65,9 @@ func ExtractImageID(imageID string) string {
 
 func GenerateInstanceID(parentApiVersion, namespace, kind, name, resourceVersion, containerName string) string {
 	return fmt.Sprintf("apiVersion-%s/namespace-%s/kind-%s/name-%s/resourceVersion-%s/containerName-%s", parentApiVersion, namespace, kind, name, resourceVersion, containerName)
+}
+func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan SessionObj) {
+	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
+	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+	*channel <- *newSessionObj
 }
