@@ -24,36 +24,36 @@ import (
 const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
-	k8sAPI                        *k8sinterface.KubernetesApi
-	imagesIDToWlidsMap            map[string][]string
-	wlidsMap                      map[string]map[string]string // <wlid> : <containerName> : imageID
-	imageIDsMapMutex              *sync.Mutex
-	wlidsMapMutex                 *sync.Mutex
-	currentPodListResourceVersion string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
+	k8sAPI                                 *k8sinterface.KubernetesApi
+	imagesIDToWlidsToContainerToImageIDMap map[string][]string
+	wlidsToContainerToImageIDMap           map[string]map[string]string // <wlid> : <containerName> : imageID
+	imageIDsMapMutex                       *sync.Mutex
+	wlidsToContainerToImageIDMapMutex      *sync.Mutex
+	currentPodListResourceVersion          string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
 }
 
 // NewWatchHandler creates a new WatchHandler
 func NewWatchHandler() *WatchHandler {
 	return &WatchHandler{
-		k8sAPI:             k8sinterface.NewKubernetesApi(),
-		imagesIDToWlidsMap: make(map[string][]string),
-		wlidsMap:           make(map[string]map[string]string),
-		imageIDsMapMutex:   &sync.Mutex{},
-		wlidsMapMutex:      &sync.Mutex{},
+		k8sAPI:                                 k8sinterface.NewKubernetesApi(),
+		imagesIDToWlidsToContainerToImageIDMap: make(map[string][]string),
+		wlidsToContainerToImageIDMap:           make(map[string]map[string]string),
+		imageIDsMapMutex:                       &sync.Mutex{},
+		wlidsToContainerToImageIDMapMutex:      &sync.Mutex{},
 	}
 }
 
 // returns wlids map
-func (wh *WatchHandler) GetWlidsMap() map[string]map[string]string {
-	return wh.wlidsMap
+func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() map[string]map[string]string {
+	return wh.wlidsToContainerToImageIDMap
 }
 
 // returns imageIDs map
 func (wh *WatchHandler) GetImagesIDsToWlidMap() map[string][]string {
-	return wh.imagesIDToWlidsMap
+	return wh.imagesIDToWlidsToContainerToImageIDMap
 }
 
-// list all pods, build imageIDsToWlidsMap and wlidsMap
+// list all pods, build imageIDsToWlidsToContainerToImageIDMap and wlidsToContainerToImageIDMap
 // set current resource version for pod watcher
 func (wh *WatchHandler) Initialize(ctx context.Context) error {
 	// list all Pods and extract their image IDs
@@ -62,8 +62,8 @@ func (wh *WatchHandler) Initialize(ctx context.Context) error {
 		return err
 	}
 
-	wh.buildImageIDsToWlidsMap(ctx, podsList)
-	wh.buildWlidsMap(ctx, podsList)
+	wh.buildImageIDsToWlidsToContainerToImageIDMap(ctx, podsList)
+	wh.buildWlidsToContainerToImageIDMap(ctx, podsList)
 
 	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
 
@@ -111,14 +111,14 @@ func (wh *WatchHandler) GetImageIDsForSBOMCalculation() ([]string, error) {
 }
 
 func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
-	return wh.imagesIDToWlidsMap[imageID]
+	return wh.imagesIDToWlidsToContainerToImageIDMap[imageID]
 }
 
 func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]string {
-	return wh.wlidsMap[wlid]
+	return wh.wlidsToContainerToImageIDMap[wlid]
 }
 
-func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) {
+func (wh *WatchHandler) addToImageIDToWlidsToContainerToImageIDMap(imageID string, wlids ...string) {
 	if len(wlids) == 0 {
 		return
 	}
@@ -127,30 +127,30 @@ func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) 
 	wh.imageIDsMapMutex.Lock()
 	defer wh.imageIDsMapMutex.Unlock()
 
-	if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
-		wh.imagesIDToWlidsMap[imageID] = wlids
+	if _, ok := wh.imagesIDToWlidsToContainerToImageIDMap[imageID]; !ok {
+		wh.imagesIDToWlidsToContainerToImageIDMap[imageID] = wlids
 	} else {
 		// imageID exists, add wlid if not exists
 		for _, w := range wlids {
-			if !slices.Contains(wh.imagesIDToWlidsMap[imageID], w) {
-				wh.imagesIDToWlidsMap[imageID] = append(wh.imagesIDToWlidsMap[imageID], w)
+			if !slices.Contains(wh.imagesIDToWlidsToContainerToImageIDMap[imageID], w) {
+				wh.imagesIDToWlidsToContainerToImageIDMap[imageID] = append(wh.imagesIDToWlidsToContainerToImageIDMap[imageID], w)
 			}
 		}
 	}
 }
 
-func (wh *WatchHandler) addToWlidsMap(wlid string, containerName string, imageID string) {
-	wh.wlidsMapMutex.Lock()
-	defer wh.wlidsMapMutex.Unlock()
+func (wh *WatchHandler) addToWlidsToContainerToImageIDMap(wlid string, containerName string, imageID string) {
+	wh.wlidsToContainerToImageIDMapMutex.Lock()
+	defer wh.wlidsToContainerToImageIDMapMutex.Unlock()
 
-	if _, ok := wh.wlidsMap[wlid]; !ok {
-		wh.wlidsMap[wlid] = make(map[string]string)
+	if _, ok := wh.wlidsToContainerToImageIDMap[wlid]; !ok {
+		wh.wlidsToContainerToImageIDMap[wlid] = make(map[string]string)
 	}
 
-	wh.wlidsMap[wlid][containerName] = imageID
+	wh.wlidsToContainerToImageIDMap[wlid][containerName] = imageID
 }
 
-func (wh *WatchHandler) buildImageIDsToWlidsMap(ctx context.Context, podList *core1.PodList) {
+func (wh *WatchHandler) buildImageIDsToWlidsToContainerToImageIDMap(ctx context.Context, podList *core1.PodList) {
 	for _, pod := range podList.Items {
 		parentWlid, err := wh.getParentIDForPod(&pod)
 		if err != nil {
@@ -158,12 +158,12 @@ func (wh *WatchHandler) buildImageIDsToWlidsMap(ctx context.Context, podList *co
 			continue
 		}
 		for _, imgID := range extractImageIDsFromPod(&pod) {
-			wh.addToImageIDToWlidsMap(imgID, parentWlid)
+			wh.addToImageIDToWlidsToContainerToImageIDMap(imgID, parentWlid)
 		}
 	}
 }
 
-func (wh *WatchHandler) buildWlidsMap(ctx context.Context, pods *core1.PodList) {
+func (wh *WatchHandler) buildWlidsToContainerToImageIDMap(ctx context.Context, pods *core1.PodList) {
 	for _, pod := range pods.Items {
 		parentWlid, err := wh.getParentIDForPod(&pod)
 		if err != nil {
@@ -171,7 +171,7 @@ func (wh *WatchHandler) buildWlidsMap(ctx context.Context, pods *core1.PodList) 
 			continue
 		}
 		for _, containerStatus := range pod.Status.ContainerStatuses {
-			wh.addToWlidsMap(parentWlid, containerStatus.Name, utils.ExtractImageID(containerStatus.ImageID))
+			wh.addToWlidsToContainerToImageIDMap(parentWlid, containerStatus.Name, utils.ExtractImageID(containerStatus.ImageID))
 		}
 	}
 }
@@ -208,16 +208,16 @@ func (wh *WatchHandler) updateResourceVersion() error {
 
 // returns a map of <imageID> : <containerName> for imageIDs in pod that are not in the map
 func (wh *WatchHandler) getNewImageIDsToContainerFromPod(pod *core1.Pod) map[string]string {
-	containerToimageID := make(map[string]string)
+	newImageIDsToContainer := make(map[string]string)
 	imageIDsToContainers := extractImageIDsToContainersFromPod(pod)
 
 	for imageID, container := range imageIDsToContainers {
-		if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
-			containerToimageID[container] = imageID
+		if _, ok := wh.imagesIDToWlidsToContainerToImageIDMap[imageID]; !ok {
+			newImageIDsToContainer[container] = imageID
 		}
 	}
 
-	return containerToimageID
+	return newImageIDsToContainer
 }
 
 // returns pod and true if event status is modified, pod is exists and is running
@@ -291,8 +291,8 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 		if len(newContainersToImageIDs) > 0 {
 			// new image, add to respective maps
 			for container, imgID := range newContainersToImageIDs {
-				wh.addToWlidsMap(parentWlid, container, imgID)
-				wh.addToWlidsMap(parentWlid, container, imgID)
+				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
+				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
 			}
 		}
 
@@ -302,7 +302,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			cmd = getSBOMCalculationCommand(parentWlid, newContainersToImageIDs)
 		} else {
 			// old image
-			if _, ok := wh.wlidsMap[parentWlid]; ok {
+			if _, ok := wh.wlidsToContainerToImageIDMap[parentWlid]; ok {
 				// old workload, no need to trigger CVE
 				continue
 			}
