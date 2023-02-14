@@ -319,17 +319,14 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 
 	// get all images of workload
-	errs := ""
 	containers, err := listWorkloadImages(workload)
 	if err != nil {
 		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
 
-	errs += actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeScanImages)
-	if errs != "" {
-		return fmt.Errorf(errs)
-	}
-	return nil
+	err = actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeScanImages)
+
+	return err
 }
 
 func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *apis.WebsocketScanCommand, actionHandler *ActionHandler) {
@@ -532,16 +529,13 @@ func (actionHandler *ActionHandler) calculateSBOM(ctx context.Context, sessionOb
 		return err
 	}
 
-	errs := actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeCalculateSBOM)
+	err = actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeCalculateSBOM)
 
-	if errs != "" {
-		return fmt.Errorf(errs)
-	}
-	return nil
+	return err
 
 }
 
-func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context, containers []ContainerData, mapContainerToImageID map[string]string, pod *corev1.Pod, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) string {
+func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context, containers []ContainerData, mapContainerToImageID map[string]string, pod *corev1.Pod, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) error {
 	errs := ""
 	for i := range containers {
 		imgID := ""
@@ -564,7 +558,8 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 			logger.L().Error("scanning failed", helpers.String("image", websocketScanCommand.ImageTag), helpers.Error(err))
 		}
 	}
-	return errs
+
+	return fmt.Errorf(errs)
 
 }
 
