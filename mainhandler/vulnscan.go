@@ -527,9 +527,7 @@ func (actionHandler *ActionHandler) calculateSBOM(ctx context.Context, sessionOb
 		return err
 	}
 
-	err = actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeCalculateSBOM)
-
-	return err
+	return actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeCalculateSBOM)
 
 }
 
