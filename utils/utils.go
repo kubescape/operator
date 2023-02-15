@@ -1,14 +1,23 @@
 package utils
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
+	"github.com/google/uuid"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 )
 
 const KubescapeScanV1 = "scanV1"
 const KubescapeRequestPathV1 = "v1/scan"
 const KubescapeRequestStatusV1 = "v1/status"
+const ContainerToImageIdsArg = "containerToImageIDs"
+const dockerPullableURN = "docker-pullable://"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
@@ -48,4 +57,18 @@ func InitReporterHttpClient() httputils.IHttpClient {
 		return &ClientMock{}
 	}
 	return &http.Client{}
+}
+
+func ExtractImageID(imageID string) string {
+	return strings.TrimPrefix(imageID, dockerPullableURN)
+}
+
+func GenerateInstanceID(parentApiVersion, namespace, kind, name, resourceVersion, containerName string) string {
+	instanceID := fmt.Sprintf("apiVersion-%s/namespace-%s/kind-%s/name-%s/resourceVersion-%s/container-%s", parentApiVersion, namespace, kind, name, resourceVersion, containerName)
+	return strings.ToLower(instanceID)
+}
+func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan SessionObj) {
+	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
+	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+	*channel <- *newSessionObj
 }

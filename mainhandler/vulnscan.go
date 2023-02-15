@@ -28,9 +28,8 @@ import (
 )
 
 const (
-	dockerPullableURN        = "docker-pullable://"
-	cmDefaultMode     cmMode = "default"
-	cmLoadedMode      cmMode = "loaded"
+	cmDefaultMode cmMode = "default"
+	cmLoadedMode  cmMode = "loaded"
 )
 
 type cmMode string
@@ -44,20 +43,29 @@ const (
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
 )
 
-func getVulnScanURL() *url.URL {
-	vulnURL := url.URL{}
-	vulnURL.Scheme = "http"
-	vulnURL.Host = utils.ClusterConfig.KubevulnURL
-	vulnURL.Path = fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath)
-	return &vulnURL
+func getSBOMCalculationURL() *url.URL {
+	return &url.URL{
+		Scheme: "http",
+		Host:   utils.ClusterConfig.KubevulnURL,
+		Path:   fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.SBOMCalculationCommandPath),
+	}
 }
+
+func getVulnScanURL() *url.URL {
+	return &url.URL{
+		Scheme: "http",
+		Host:   utils.ClusterConfig.KubevulnURL,
+		Path:   fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath),
+	}
+}
+
 func sendAllImagesToVulnScan(ctx context.Context, webSocketScanCMDList []*apis.WebsocketScanCommand) error {
 	var err error
 	errs := make([]error, 0)
 	for _, webSocketScanCMD := range webSocketScanCMDList {
-		err = sendWorkloadToVulnerabilityScanner(ctx, webSocketScanCMD)
+		err = sendWorkloadToCVEScan(ctx, webSocketScanCMD)
 		if err != nil {
-			logger.L().Ctx(ctx).Error("sendWorkloadToVulnerabilityScanner failed", helpers.Error(err))
+			logger.L().Ctx(ctx).Error("sendWorkloadToCVEScan failed", helpers.Error(err))
 			errs = append(errs, err)
 		}
 	}
@@ -283,70 +291,40 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	if err != nil {
 		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
 	}
-	pod := actionHandler.getPodByWLID(workload)
+
+	pod := getPodByWLID(ctx, workload)
 	if pod == nil {
 		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
 		return nil
 	}
+	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
+
+	// look for container to imageID map in the command args. If not found, look for it in the wl. If not found, get it from the pod
+	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
+		if len(pod.Status.ContainerStatuses) == 0 {
+			// get from wl
+			mapContainerToImageID, err = actionHandler.getContainerToImageIDsFromWorkload(workload)
+			if err != nil {
+				err = fmt.Errorf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err)
+				logger.L().Ctx(ctx).Error(err.Error())
+				return err
+			}
+		} else {
+			// get from pod
+			mapContainerToImageID = getContainerToImageIDsFromPod(pod)
+		}
+	} else {
+		// get from args
+		mapContainerToImageID = val
+	}
+
 	// get all images of workload
-	errs := ""
 	containers, err := listWorkloadImages(workload)
 	if err != nil {
 		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
 
-	// we want running pod in order to have the image hash
-	// actionHandler.getRunningPodDescription(pod)
-
-	for i := range containers {
-
-		websocketScanCommand := &apis.WebsocketScanCommand{
-			Wlid:          actionHandler.wlid,
-			ImageTag:      containers[i].image,
-			ContainerName: containers[i].container,
-			Session:       apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
-		}
-		if actionHandler.reporter != nil {
-
-			prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
-
-			logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID))
-		}
-		for contIdx := range pod.Status.ContainerStatuses {
-			if pod.Status.ContainerStatuses[contIdx].Name == containers[i].container {
-				imageNameWithHash := pod.Status.ContainerStatuses[contIdx].ImageID
-				imageNameWithHash = strings.TrimPrefix(imageNameWithHash, dockerPullableURN)
-				websocketScanCommand.ImageHash = imageNameWithHash
-			}
-		}
-		if pod != nil {
-			secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
-			if err != nil {
-				logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
-			} else if len(secrets) > 0 {
-				for secretName := range secrets {
-					websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
-				}
-
-				/*
-					the websocketScanCommand.Credentials is deprecated, still use it for backward computability
-				*/
-				if len(websocketScanCommand.Credentialslist) != 0 {
-					websocketScanCommand.Credentials = &websocketScanCommand.Credentialslist[0]
-				}
-			}
-		}
-		if err := sendWorkloadToVulnerabilityScanner(ctx, websocketScanCommand); err != nil {
-			logger.L().Ctx(ctx).Error("scanning failed", helpers.String("image", websocketScanCommand.ImageTag), helpers.Error(err))
-			errs += fmt.Sprintf("failed scanning, wlid: '%s', image: '%s', container: %s, reason: %s", actionHandler.wlid, containers[i].image, containers[i].container, err.Error())
-
-		}
-
-	}
-	if errs != "" {
-		return fmt.Errorf(errs)
-	}
-	return nil
+	return actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeScanImages)
 }
 
 func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *apis.WebsocketScanCommand, actionHandler *ActionHandler) {
@@ -375,22 +353,20 @@ func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *api
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
 }
 
-func sendWorkloadToVulnerabilityScanner(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
-
+// send workload to the kubevuln with credentials
+func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, websocketScanCommand *apis.WebsocketScanCommand) error {
 	jsonScannerC, err := json.Marshal(websocketScanCommand)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
 	}
-	vulnURL := getVulnScanURL()
-
 	creds := websocketScanCommand.Credentials
 	credsList := websocketScanCommand.Credentialslist
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s with credentials: %v", vulnURL.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds))
+	logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s with credentials: %v", scanUrl.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds))
 
-	resp, err := httputils.HttpPost(VulnScanHttpClient, vulnURL.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
+	resp, err := httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
 	refusedNum := 0
-	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = httputils.HttpPost(VulnScanHttpClient, vulnURL.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC) {
+	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC) {
 		logger.L().Ctx(ctx).Error("failed posting to vulnerability scanner", helpers.String("query", websocketScanCommand.ImageTag), helpers.Error(err))
 		time.Sleep(5 * time.Second)
 		refusedNum++
@@ -409,9 +385,18 @@ func sendWorkloadToVulnerabilityScanner(ctx context.Context, websocketScanComman
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'received bad status code: %d'", websocketScanCommand.ImageTag, resp.StatusCode)
 	}
 	return nil
+
 }
 
-func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) *corev1.Pod {
+func sendWorkloadToSBOMCalculation(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getSBOMCalculationURL(), websocketScanCommand)
+}
+
+func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getVulnScanURL(), websocketScanCommand)
+}
+
+func getPodByWLID(ctx context.Context, workload k8sinterface.IWorkload) *corev1.Pod {
 	var err error
 
 	podspec, err := workload.GetPodSpec()
@@ -419,6 +404,173 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		return nil
 	}
 	podObj := &corev1.Pod{Spec: *podspec}
+	if workload.GetKind() == "Pod" {
+		status, err := workload.GetPodStatus()
+		if err != nil {
+			logger.L().Ctx(ctx).Error("failed getting pod status", helpers.String("wlid", workload.GetID()), helpers.Error(err))
+		} else {
+			podObj.Status = *status
+		}
+	}
+
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
 	return podObj
+}
+
+func getContainerToImageIDsFromPod(pod *corev1.Pod) map[string]string {
+	mapContainerToImageID := make(map[string]string)
+	for contIdx := range pod.Status.ContainerStatuses {
+		imageID := pod.Status.ContainerStatuses[contIdx].ImageID
+		mapContainerToImageID[pod.Status.ContainerStatuses[contIdx].Name] = utils.ExtractImageID(imageID)
+	}
+	return mapContainerToImageID
+}
+
+// get a workload, retrieves its pod and returns a map of container name to image id
+func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(workload k8sinterface.IWorkload) (map[string]string, error) {
+	var mapContainerToImageID = make(map[string]string)
+
+	labels := workload.GetPodLabels()
+
+	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
+	if err != nil {
+		return nil, fmt.Errorf("failed listing pods for workload %s", workload.GetName())
+	}
+	if len(pods.Items) == 0 {
+		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
+	}
+	pod := pods.Items[0]
+
+	containerStatuses := pod.Status.ContainerStatuses
+	if len(containerStatuses) == 0 {
+		return nil, fmt.Errorf("no containers found for workload %s", workload.GetName())
+	}
+
+	for containerStatus := range containerStatuses {
+		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
+		mapContainerToImageID[pod.Status.ContainerStatuses[containerStatus].Name] = utils.ExtractImageID(imageID)
+	}
+
+	return mapContainerToImageID, nil
+}
+
+func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *corev1.Pod, imageID string, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) (*apis.WebsocketScanCommand, error) {
+	websocketScanCommand := &apis.WebsocketScanCommand{
+		Wlid:          actionHandler.wlid,
+		ImageTag:      container.image,
+		ContainerName: container.container,
+		Session:       apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+		ImageHash:     utils.ExtractImageID(imageID),
+	}
+	if command == apis.TypeScanImages {
+		instanceID := utils.GenerateInstanceID(pod.APIVersion, pod.Kind, pod.Namespace, pod.Name, pod.ResourceVersion, container.container)
+		websocketScanCommand.InstanceID = &instanceID
+	}
+
+	if actionHandler.reporter != nil {
+		prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
+		logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID))
+	}
+
+	if pod != nil {
+		secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
+		if err != nil {
+			return nil, err
+		} else if len(secrets) > 0 {
+			for secretName := range secrets {
+				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
+			}
+
+			/*
+				the websocketScanCommand.Credentials is deprecated, still use it for backward computability
+			*/
+			if len(websocketScanCommand.Credentialslist) != 0 {
+				websocketScanCommand.Credentials = &websocketScanCommand.Credentialslist[0]
+			}
+		}
+	}
+
+	return websocketScanCommand, nil
+}
+
+func (actionHandler *ActionHandler) calculateSBOM(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.calculateSBOM")
+	defer span.End()
+
+	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
+
+	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
+		err := fmt.Errorf("failed to get container to imageID map from command args. command: %v", actionHandler.command)
+		logger.L().Ctx(ctx).Error(err.Error())
+		return err
+	} else {
+		mapContainerToImageID = val
+	}
+
+	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
+	if err != nil {
+		err = fmt.Errorf("failed to get workload from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
+		logger.L().Ctx(ctx).Error(err.Error())
+		return err
+	}
+
+	pod := getPodByWLID(ctx, workload)
+	if pod == nil {
+		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
+		return nil
+	}
+
+	containers, err := listWorkloadImages(workload)
+	if err != nil {
+		err = fmt.Errorf("failed to listWorkloadImages, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
+		logger.L().Ctx(ctx).Error(err.Error())
+		return err
+	}
+
+	return actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeCalculateSBOM)
+
+}
+
+func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context, containers []ContainerData, mapContainerToImageID map[string]string, pod *corev1.Pod, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) error {
+	errs := ""
+	for i := range containers {
+		imgID := ""
+		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
+			errs += fmt.Sprintf("failed to get image ID for container %s", containers[i].container)
+			logger.L().Error(fmt.Sprintf("failed to get image ID for container %s", containers[i].container))
+			continue
+		} else {
+			imgID = val
+		}
+		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command)
+		if err != nil {
+			errs += err.Error()
+			logger.L().Error("failed to get command", helpers.String("image", containers[i].image), helpers.Error(err))
+			continue
+		}
+
+		if err := sendCommandToScanner(ctx, websocketScanCommand, command); err != nil {
+			errs += err.Error()
+			logger.L().Error("scanning failed", helpers.String("image", websocketScanCommand.ImageTag), helpers.Error(err))
+		}
+	}
+
+	if errs != "" {
+		return fmt.Errorf(errs)
+	}
+
+	return nil
+}
+
+func sendCommandToScanner(ctx context.Context, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
+	var err error
+	switch command {
+	case apis.TypeScanImages:
+		err = sendWorkloadToCVEScan(ctx, webSocketScanCommand)
+	case apis.TypeCalculateSBOM:
+		err = sendWorkloadToSBOMCalculation(ctx, webSocketScanCommand)
+	default:
+		err = fmt.Errorf("unknown command: %s", command)
+	}
+	return err
 }

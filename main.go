@@ -46,7 +46,7 @@ func main() {
 
 	initHttpHandlers()
 
-	sessionObj := make(chan utils.SessionObj)
+	sessionObj := make(chan utils.SessionObj, 50)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
@@ -70,6 +70,7 @@ func main() {
 
 	isReadinessReady = true
 
+	go mainHandler.HandleWatchers(ctx)
 	// wait for requests to come from the websocket or from the REST API
 	mainHandler.HandleRequest(ctx)
 
@@ -83,5 +84,4 @@ func initHttpHandlers() {
 	mainhandler.KubescapeHttpClient = utils.InitKubescapeHttpClient()
 	mainhandler.VulnScanHttpClient = utils.InitVulnScanHttpClient()
 	utils.ReporterHttpClient = utils.InitReporterHttpClient()
-
 }
