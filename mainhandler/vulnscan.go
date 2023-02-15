@@ -559,7 +559,11 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 		}
 	}
 
-	return fmt.Errorf(errs)
+	if errs != "" {
+		return fmt.Errorf(errs)
+	}
+
+	return nil
 }
 
 func sendCommandToScanner(ctx context.Context, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
