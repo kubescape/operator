@@ -288,7 +288,11 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 				continue
 			}
 			// new workload, trigger CVE
-			cmd = getCVEScanCommand(parentWlid, extractImageIDsToContainersFromPod(pod))
+			containersToImageIds := extractContainersToImageIDsFromPod(pod)
+			for container, imgID := range containersToImageIds {
+				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
+			}
+			cmd = getCVEScanCommand(parentWlid, containersToImageIds)
 		}
 
 		utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
