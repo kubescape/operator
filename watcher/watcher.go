@@ -105,11 +105,25 @@ func (wh *WatchHandler) ListImageIDsNotInStorage() ([]string, error) {
 }
 
 func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
-	return wh.imagesIDToWlidsMap[imageID]
+	wh.imageIDsMapMutex.Lock()
+	defer wh.imageIDsMapMutex.Unlock()
+
+	wlids, ok := wh.imagesIDToWlidsMap[imageID]
+	if !ok {
+		return []string{}
+	}
+	return wlids
 }
 
 func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]string {
-	return wh.wlidsToContainerToImageIDMap[wlid]
+	wh.wlidsToContainerToImageIDMapMutex.Lock()
+	defer wh.wlidsToContainerToImageIDMapMutex.Unlock()
+
+	containerToImageIds, ok := wh.wlidsToContainerToImageIDMap[wlid]
+	if !ok {
+		return map[string]string{}
+	}
+	return containerToImageIds
 }
 
 func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) {
