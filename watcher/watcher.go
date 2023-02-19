@@ -20,14 +20,14 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-const (
-	retryInterval = 3 * time.Second
-)
+type WlidsToContainerToImageIDMap map[string]map[string]string // <wlid> : <containerName> : imageID
+
+const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
 	imagesIDToWlidsMap                map[string][]string
-	wlidsToContainerToImageIDMap      map[string]map[string]string // <wlid> : <containerName> : imageID
+	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	imageIDsMapMutex                  *sync.Mutex
 	wlidsToContainerToImageIDMapMutex *sync.Mutex
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
@@ -51,7 +51,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 		return err
 	}
 
-	// reset maps
+	// clean up
 	wh.cleanUpIDs()
 
 	// build maps, retrieve current instanceIDs
@@ -122,7 +122,7 @@ func NewWatchHandler(ctx context.Context) (*WatchHandler, error) {
 	wh := &WatchHandler{
 		k8sAPI:                            k8sinterface.NewKubernetesApi(),
 		imagesIDToWlidsMap:                make(map[string][]string),
-		wlidsToContainerToImageIDMap:      make(map[string]map[string]string),
+		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		imageIDsMapMutex:                  &sync.Mutex{},
 		wlidsToContainerToImageIDMapMutex: &sync.Mutex{},
 	}
@@ -180,7 +180,7 @@ func (wh *WatchHandler) IsImageIDInMap(imageID string) bool {
 }
 
 // returns wlids map
-func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() map[string]map[string]string {
+func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImageIDMap {
 	return wh.wlidsToContainerToImageIDMap
 }
 
@@ -229,7 +229,7 @@ func (wh *WatchHandler) cleanUpWlidsToContainerToImageIDMap() {
 	wh.wlidsToContainerToImageIDMapMutex.Lock()
 	defer wh.wlidsToContainerToImageIDMapMutex.Unlock()
 
-	wh.wlidsToContainerToImageIDMap = make(map[string]map[string]string)
+	wh.wlidsToContainerToImageIDMap = make(WlidsToContainerToImageIDMap)
 }
 
 func (wh *WatchHandler) ListInstanceIDsFromStorage() ([]string, error) {

@@ -45,8 +45,9 @@ func LoadEnvironmentVariables(ctx context.Context) (err error) {
 		dur, err := time.ParseDuration(cleanUpDelay)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("could not set cleanUpRoutineInterval from environment variable", helpers.Error(err))
+		} else {
+			CleanUpRoutineInterval = dur
 		}
-		CleanUpRoutineInterval = dur
 	}
 
 	return nil

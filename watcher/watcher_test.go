@@ -211,7 +211,7 @@ func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
 	tests := []struct {
 		name                                 string
 		podList                              core1.PodList
-		expectedwlidsToContainerToImageIDMap map[string]map[string]string
+		expectedwlidsToContainerToImageIDMap WlidsToContainerToImageIDMap
 	}{
 		{
 			name: "imageID with docker-pullable prefix",
@@ -232,7 +232,7 @@ func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
 						},
 					}},
 			},
-			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
+			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
 					"container1": "alpine@sha256:1",
 				},
@@ -257,7 +257,7 @@ func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
 						},
 					}},
 			},
-			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
+			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
 					"container1": "alpine@sha256:1",
 				},
@@ -286,7 +286,7 @@ func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
 						},
 					},
 				}},
-			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
+			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
 				pkgwlid.GetWLID("", "namespace3", "pod", "pod3"): {
 					"container3": "alpine@sha256:3",
 					"container4": "alpine@sha256:4",
@@ -325,7 +325,7 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
 	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
 
-	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), map[string]map[string]string{
+	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
 		"wlid1": {
 			"container1": "alpine@sha256:1",
 		},
