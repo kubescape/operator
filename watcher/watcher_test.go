@@ -2,11 +2,13 @@ package watcher
 
 import (
 	"context"
+	_ "embed"
 	"reflect"
 	"sync"
 	"testing"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -535,6 +537,138 @@ func TestExtractImageIDsFromPod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.True(t, reflect.DeepEqual(extractImageIDsFromPod(tt.pod), tt.expected))
+		})
+	}
+}
+
+func TestCleanUpImagesIDToWlidsMap(t *testing.T) {
+	wh := NewWatchHandlerMock()
+	wh.imagesIDToWlidsMap = map[string][]string{
+		"alpine@sha256:1": {"pod1"},
+		"alpine@sha256:2": {"pod2"},
+		"alpine@sha256:3": {"pod3"},
+	}
+	wh.cleanUpImagesIDToWlidsMap()
+
+	assert.Equal(t, len(wh.imagesIDToWlidsMap), 0)
+}
+
+func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
+	wh := NewWatchHandlerMock()
+	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
+		"pod1": {"container1": "alpine@sha256:1"},
+		"pod2": {"container2": "alpine@sha256:2"},
+		"pod3": {"container3": "alpine@sha256:3"},
+	}
+	wh.cleanUpWlidsToContainerToImageIDMap()
+
+	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
+}
+
+func TestCleanUpMaps(t *testing.T) {
+	wh := NewWatchHandlerMock()
+	wh.imagesIDToWlidsMap = map[string][]string{
+		"alpine@sha256:1": {"pod1"},
+		"alpine@sha256:2": {"pod2"},
+		"alpine@sha256:3": {"pod3"},
+	}
+	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
+		"pod1": {"container1": "alpine@sha256:1"},
+		"pod2": {"container2": "alpine@sha256:2"},
+		"pod3": {"container3": "alpine@sha256:3"},
+	}
+	wh.cleanUpMaps()
+
+	assert.Equal(t, len(wh.imagesIDToWlidsMap), 0)
+	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
+}
+
+//go:embed testdata/deployment-two-containers.json
+var deploymentTwoContainersJson []byte
+
+//go:embed testdata/deployment.json
+var deploymentJson []byte
+
+func TestGetInstanceIDsAndBuildMapsFromParentWlid(t *testing.T) {
+	tests := []struct {
+		name                                 string
+		wlid                                 string
+		parentWorkloadObj                    []byte
+		pod                                  *core1.Pod
+		expectedwlidsToContainerToImageIDMap map[string]map[string]string
+		expectedImagesIDToWlidsMap           map[string][]string
+		expectedInstanceIDs                  []string
+	}{
+		{
+			name:              "two instanceIDs one wlid",
+			wlid:              "deployment",
+			parentWorkloadObj: deploymentTwoContainersJson,
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod",
+					Namespace: "test",
+				},
+				Status: core1.PodStatus{
+					ContainerStatuses: []core1.ContainerStatus{
+						{
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "nginx",
+						},
+						{
+							ImageID: "docker-pullable://alpine@sha256:2",
+							Name:    "nginx2",
+						},
+					},
+				},
+			},
+			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
+				"deployment": {"nginx": "alpine@sha256:1", "nginx2": "alpine@sha256:2"},
+			},
+			expectedImagesIDToWlidsMap: map[string][]string{
+				"alpine@sha256:1": {"deployment"},
+				"alpine@sha256:2": {"deployment"},
+			},
+			expectedInstanceIDs: []string{
+				"apiversion-apps/v1/namespace-test/kind-deployment/name-nginx-deployment/resourceversion-59145/container-nginx",
+				"apiversion-apps/v1/namespace-test/kind-deployment/name-nginx-deployment/resourceversion-59145/container-nginx2"},
+		},
+		{
+			name:              "one instanceID",
+			wlid:              "deployment",
+			parentWorkloadObj: deploymentJson,
+			pod: &core1.Pod{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "pod",
+					Namespace: "test",
+				},
+				Status: core1.PodStatus{
+					ContainerStatuses: []core1.ContainerStatus{
+						{
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "nginx",
+						},
+					},
+				},
+			},
+			expectedwlidsToContainerToImageIDMap: map[string]map[string]string{
+				"deployment": {"nginx": "alpine@sha256:1"},
+			},
+			expectedImagesIDToWlidsMap: map[string][]string{
+				"alpine@sha256:1": {"deployment"},
+			},
+			expectedInstanceIDs: []string{
+				"apiversion-apps/v1/namespace-test/kind-deployment/name-nginx-deployment/resourceversion-59145/container-nginx"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wh := NewWatchHandlerMock()
+			workload, err := workloadinterface.NewWorkload(tt.parentWorkloadObj)
+			assert.NoError(t, err)
+			instanceIDs := wh.getInstanceIDsAndBuildMapsFromParentWlid(tt.wlid, workload, tt.pod)
+			assert.Equal(t, tt.expectedwlidsToContainerToImageIDMap, wh.wlidsToContainerToImageIDMap)
+			assert.Equal(t, tt.expectedImagesIDToWlidsMap, wh.imagesIDToWlidsMap)
+			assert.Equal(t, tt.expectedInstanceIDs, instanceIDs)
 		})
 	}
 }

@@ -20,7 +20,10 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-const retryInterval = 3 * time.Second
+const (
+	retryInterval          = 3 * time.Second
+	cleanUpRoutineInterval = 10 * time.Minute
+)
 
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
@@ -29,6 +32,87 @@ type WatchHandler struct {
 	imageIDsMapMutex                  *sync.Mutex
 	wlidsToContainerToImageIDMapMutex *sync.Mutex
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
+}
+
+// remove unused imageIDs and instanceIDs from storage
+func (wh *WatchHandler) cleanUp(ctx context.Context) error {
+	storageImageIDs, err := wh.ListImageIDsFromStorage()
+	if err != nil {
+		logger.L().Ctx(ctx).Error("error to ListImageIDsFromStorage", helpers.Error(err))
+	}
+
+	storageInstanceIDs, err := wh.ListInstanceIDsFromStorage()
+	if err != nil {
+		logger.L().Ctx(ctx).Error("error to ListInstanceIDsFromStorage", helpers.Error(err))
+	}
+
+	// list Pods, extract their imageIDs and instanceIDs
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
+	if err != nil {
+		return err
+	}
+
+	// reset maps
+	wh.cleanUpMaps()
+	currentInstanceIDs := wh.getInstanceIDsAndBuildMaps(ctx, podsList)
+
+	// image IDs in storage that are not in current map should be deleted
+	imageIDsForDeletion := make([]string, 0)
+	for _, imageID := range storageImageIDs {
+		if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
+			imageIDsForDeletion = append(imageIDsForDeletion, imageID)
+		}
+	}
+	if err = wh.deleteImageIDsFromStorage(imageIDsForDeletion); err != nil {
+		logger.L().Ctx(ctx).Error("error to deleteImageIDsFromStorage", helpers.Error(err))
+	}
+
+	// instance IDs in storage that are not in current map should be deleted
+	instanceIDsForDeletion := make([]string, 0)
+	for _, instanceID := range storageInstanceIDs {
+		if !slices.Contains(currentInstanceIDs, instanceID) {
+			instanceIDsForDeletion = append(instanceIDsForDeletion, instanceID)
+		}
+	}
+
+	return wh.deleteInstanceIDsFromStorage(instanceIDsForDeletion)
+}
+
+// build internal maps from PodList, generate instanceIDs and return them.
+// Not using 'buildMaps' because we don't want to list Pods twice
+func (wh *WatchHandler) getInstanceIDsAndBuildMaps(ctx context.Context, podList *core1.PodList) []string {
+	instanceIDs := make([]string, 0)
+
+	for i := range podList.Items {
+		wl, err := wh.getParentWorkloadForPod(&podList.Items[i])
+		if err != nil {
+			logger.L().Ctx(ctx).Error("error to getParentWorkloadForPod", helpers.Error(err))
+			continue
+		}
+
+		parentWlid := pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, wl.GetNamespace(), wl.GetKind(), wl.GetName())
+
+		if _, found := wh.wlidsToContainerToImageIDMap[parentWlid]; found {
+			continue
+		}
+
+		newInstanceIDs := wh.getInstanceIDsAndBuildMapsFromParentWlid(parentWlid, wl, &podList.Items[i])
+		instanceIDs = append(instanceIDs, newInstanceIDs...)
+	}
+
+	return instanceIDs
+}
+
+func (wh *WatchHandler) getInstanceIDsAndBuildMapsFromParentWlid(wlid string, wl k8sinterface.IWorkload, pod *core1.Pod) []string {
+	instanceIDs := make([]string, 0)
+	imgIDsToContainers := extractImageIDsToContainersFromPod(pod)
+	for imgID, containerName := range imgIDsToContainers {
+		wh.addToImageIDToWlidsMap(imgID, wlid)
+		wh.addToWlidsToContainerToImageIDMap(wlid, containerName, imgID)
+		instanceID := utils.GenerateInstanceID(wl.GetApiVersion(), wl.GetNamespace(), wl.GetKind(), wl.GetName(), wl.GetResourceVersion(), containerName)
+		instanceIDs = append(instanceIDs, instanceID)
+	}
+	return instanceIDs
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
@@ -51,7 +135,38 @@ func NewWatchHandler(ctx context.Context) (*WatchHandler, error) {
 	wh.buildMaps(ctx, podsList)
 
 	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
+
+	wh.startCleanerRoutine(ctx)
+
 	return wh, nil
+}
+
+// start routine which cleans up unused imageIDs and instanceIDs from storage, and triggers relevancy scan
+func (wh *WatchHandler) startCleanerRoutine(ctx context.Context) {
+	go func() {
+		for {
+			time.Sleep(cleanUpRoutineInterval)
+			wh.cleanUp(ctx)
+			// must be called after cleanUP, since we can have two instanceIDs with same wlid
+			wh.triggerRelevancyScan(ctx)
+		}
+	}()
+}
+
+func (wh *WatchHandler) triggerRelevancyScan(ctx context.Context) {
+	// TODO: implement
+	// list new SBOM's from storage
+	// for each, trigger scan
+}
+
+func (wh *WatchHandler) deleteImageIDsFromStorage(imageIDs []string) error {
+	// TODO: Implement
+	return nil
+}
+
+func (wh *WatchHandler) deleteInstanceIDsFromStorage(imageIDs []string) error {
+	// TODO: Implement
+	return nil
 }
 
 // returns wlids map
@@ -84,6 +199,30 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils
 }
 
 func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
+	// TODO: Implement
+	return []string{}, nil
+}
+
+func (wh *WatchHandler) cleanUpMaps() {
+	wh.cleanUpImagesIDToWlidsMap()
+	wh.cleanUpWlidsToContainerToImageIDMap()
+}
+
+func (wh *WatchHandler) cleanUpImagesIDToWlidsMap() {
+	wh.imageIDsMapMutex.Lock()
+	defer wh.imageIDsMapMutex.Unlock()
+
+	wh.imagesIDToWlidsMap = make(map[string][]string)
+}
+
+func (wh *WatchHandler) cleanUpWlidsToContainerToImageIDMap() {
+	wh.wlidsToContainerToImageIDMapMutex.Lock()
+	defer wh.wlidsToContainerToImageIDMapMutex.Unlock()
+
+	wh.wlidsToContainerToImageIDMap = make(map[string]map[string]string)
+}
+
+func (wh *WatchHandler) ListInstanceIDsFromStorage() ([]string, error) {
 	// TODO: Implement
 	return []string{}, nil
 }
@@ -259,6 +398,27 @@ func (wh *WatchHandler) getParentIDForPod(pod *core1.Pod) (string, error) {
 	}
 	return pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, wl.GetNamespace(), kind, name), nil
 
+}
+
+func (wh *WatchHandler) getParentWorkloadForPod(pod *core1.Pod) (workloadinterface.IWorkload, error) {
+	pod.TypeMeta.Kind = "Pod"
+	podMarshalled, err := json.Marshal(pod)
+	if err != nil {
+		return nil, err
+	}
+	wl, err := workloadinterface.NewWorkload(podMarshalled)
+	if err != nil {
+		return nil, err
+	}
+	kind, name, err := wh.k8sAPI.CalculateWorkloadParentRecursive(wl)
+	if err != nil {
+		return nil, err
+	}
+	parentWorkload, err := wh.k8sAPI.GetWorkload(wl.GetNamespace(), kind, name)
+	if err != nil {
+		return nil, err
+	}
+	return parentWorkload, nil
 }
 
 func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.Interface, sessionObjChan *chan utils.SessionObj) {
