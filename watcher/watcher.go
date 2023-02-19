@@ -55,7 +55,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 	wh.cleanUpIDs()
 
 	// build maps, retrieve current instanceIDs
-	currentInstanceIDs := wh.getInstanceIDsAndBuildMaps(ctx, podsList)
+	currentInstanceIDs := wh.listInstanceIDsAndBuildMaps(ctx, podsList)
 
 	// image IDs in storage that are not in current map should be deleted
 	imageIDsForDeletion := make([]string, 0)
@@ -81,7 +81,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 
 // build internal maps from PodList, generate instanceIDs and return them.
 // Not using 'buildMaps' because we don't want to list Pods twice
-func (wh *WatchHandler) getInstanceIDsAndBuildMaps(ctx context.Context, podList *core1.PodList) []string {
+func (wh *WatchHandler) listInstanceIDsAndBuildMaps(ctx context.Context, podList *core1.PodList) []string {
 	instanceIDs := make([]string, 0)
 
 	for i := range podList.Items {
@@ -97,14 +97,14 @@ func (wh *WatchHandler) getInstanceIDsAndBuildMaps(ctx context.Context, podList 
 			continue
 		}
 
-		newInstanceIDs := wh.getInstanceIDsAndBuildMapsFromParentWlid(parentWlid, wl, &podList.Items[i])
+		newInstanceIDs := wh.listInstanceIDsAndBuildMapsFromParentWlid(parentWlid, wl, &podList.Items[i])
 		instanceIDs = append(instanceIDs, newInstanceIDs...)
 	}
 
 	return instanceIDs
 }
 
-func (wh *WatchHandler) getInstanceIDsAndBuildMapsFromParentWlid(wlid string, wl k8sinterface.IWorkload, pod *core1.Pod) []string {
+func (wh *WatchHandler) listInstanceIDsAndBuildMapsFromParentWlid(wlid string, wl k8sinterface.IWorkload, pod *core1.Pod) []string {
 	instanceIDs := make([]string, 0)
 	imgIDsToContainers := extractImageIDsToContainersFromPod(pod)
 	for imgID, containerName := range imgIDsToContainers {

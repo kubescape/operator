@@ -589,7 +589,7 @@ var deploymentTwoContainersJson []byte
 //go:embed testdata/deployment.json
 var deploymentJson []byte
 
-func TestGetInstanceIDsAndBuildMapsFromParentWlid(t *testing.T) {
+func TestlistInstanceIDsAndBuildMapsFromParentWlid(t *testing.T) {
 	tests := []struct {
 		name                                 string
 		wlid                                 string
@@ -665,7 +665,7 @@ func TestGetInstanceIDsAndBuildMapsFromParentWlid(t *testing.T) {
 			wh := NewWatchHandlerMock()
 			workload, err := workloadinterface.NewWorkload(tt.parentWorkloadObj)
 			assert.NoError(t, err)
-			instanceIDs := wh.getInstanceIDsAndBuildMapsFromParentWlid(tt.wlid, workload, tt.pod)
+			instanceIDs := wh.listInstanceIDsAndBuildMapsFromParentWlid(tt.wlid, workload, tt.pod)
 			assert.Equal(t, tt.expectedwlidsToContainerToImageIDMap, wh.wlidsToContainerToImageIDMap)
 			assert.Equal(t, tt.expectedImagesIDToWlidsMap, wh.imagesIDToWlidsMap)
 			assert.Equal(t, tt.expectedInstanceIDs, instanceIDs)
