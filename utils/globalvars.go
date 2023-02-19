@@ -1,20 +1,25 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 )
 
 var (
-	Namespace   string = "default" // default namespace
-	RestAPIPort string = "4002"    // default port
+	Namespace              string        = "default" // default namespace
+	RestAPIPort            string        = "4002"    // default port
+	CleanUpRoutineInterval time.Duration = 10 * time.Minute
 )
 
 var ClusterConfig = &utilsmetadata.ClusterConfig{}
 
-func LoadEnvironmentVariables() (err error) {
+func LoadEnvironmentVariables(ctx context.Context) (err error) {
 	pathToConfig := os.Getenv(ConfigEnvironmentVariable) // if empty, will load config from default path
 	ClusterConfig, err = utilsmetadata.LoadConfig(pathToConfig)
 	if err != nil {
@@ -34,6 +39,14 @@ func LoadEnvironmentVariables() (err error) {
 
 	if port := os.Getenv(PortEnvironmentVariable); port != "" {
 		RestAPIPort = port // override default port
+	}
+
+	if cleanUpDelay := os.Getenv(CleanUpDelayEnvironmentVariable); cleanUpDelay != "" {
+		dur, err := time.ParseDuration(cleanUpDelay)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("could not set cleanUpRoutineInterval from environment variable", helpers.Error(err))
+		}
+		CleanUpRoutineInterval = dur
 	}
 
 	return nil

@@ -21,8 +21,7 @@ import (
 )
 
 const (
-	retryInterval          = 3 * time.Second
-	cleanUpRoutineInterval = 10 * time.Minute
+	retryInterval = 3 * time.Second
 )
 
 type WatchHandler struct {
@@ -54,12 +53,14 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 
 	// reset maps
 	wh.cleanUpMaps()
+
+	// build maps, retrieve current instanceIDs
 	currentInstanceIDs := wh.getInstanceIDsAndBuildMaps(ctx, podsList)
 
 	// image IDs in storage that are not in current map should be deleted
 	imageIDsForDeletion := make([]string, 0)
 	for _, imageID := range storageImageIDs {
-		if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
+		if !wh.IsImageIDInMap(imageID) {
 			imageIDsForDeletion = append(imageIDsForDeletion, imageID)
 		}
 	}
@@ -136,16 +137,16 @@ func NewWatchHandler(ctx context.Context) (*WatchHandler, error) {
 
 	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
 
-	wh.startCleanerRoutine(ctx)
+	wh.startCleanUpAndTriggerScanRoutine(ctx)
 
 	return wh, nil
 }
 
-// start routine which cleans up unused imageIDs and instanceIDs from storage, and triggers relevancy scan
-func (wh *WatchHandler) startCleanerRoutine(ctx context.Context) {
+// start routine which cleans up unused imageIDs and instanceIDs from storage, and  triggers relevancy scan
+func (wh *WatchHandler) startCleanUpAndTriggerScanRoutine(ctx context.Context) {
 	go func() {
 		for {
-			time.Sleep(cleanUpRoutineInterval)
+			time.Sleep(utils.CleanUpRoutineInterval)
 			wh.cleanUp(ctx)
 			// must be called after cleanUp, since we can have two instanceIDs with same wlid
 			wh.triggerRelevancyScan(ctx)
@@ -167,6 +168,15 @@ func (wh *WatchHandler) deleteImageIDsFromStorage(imageIDs []string) error {
 func (wh *WatchHandler) deleteInstanceIDsFromStorage(imageIDs []string) error {
 	// TODO: Implement
 	return nil
+}
+
+// returns true if imageID is in map
+func (wh *WatchHandler) IsImageIDInMap(imageID string) bool {
+	wh.imageIDsMapMutex.Lock()
+	defer wh.imageIDsMapMutex.Unlock()
+
+	_, ok := wh.imagesIDToWlidsMap[imageID]
+	return ok
 }
 
 // returns wlids map
@@ -349,7 +359,7 @@ func (wh *WatchHandler) getNewContainerToImageIDsFromPod(pod *core1.Pod) map[str
 	imageIDsToContainers := extractImageIDsToContainersFromPod(pod)
 
 	for imageID, container := range imageIDsToContainers {
-		if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
+		if !wh.IsImageIDInMap(imageID) {
 			newContainerToImageIDs[container] = imageID
 		}
 	}
