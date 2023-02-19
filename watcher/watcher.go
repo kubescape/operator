@@ -34,7 +34,7 @@ type WatchHandler struct {
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
 }
 
-// remove unused imageIDs and instanceIDs from storage
+// remove unused imageIDs and instanceIDs from storage. Update internal maps
 func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 	storageImageIDs, err := wh.ListImageIDsFromStorage()
 	if err != nil {
@@ -147,7 +147,7 @@ func (wh *WatchHandler) startCleanerRoutine(ctx context.Context) {
 		for {
 			time.Sleep(cleanUpRoutineInterval)
 			wh.cleanUp(ctx)
-			// must be called after cleanUP, since we can have two instanceIDs with same wlid
+			// must be called after cleanUp, since we can have two instanceIDs with same wlid
 			wh.triggerRelevancyScan(ctx)
 		}
 	}()
