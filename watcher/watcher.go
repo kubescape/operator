@@ -52,7 +52,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 	}
 
 	// reset maps
-	wh.cleanUpMaps()
+	wh.cleanUpIDs()
 
 	// build maps, retrieve current instanceIDs
 	currentInstanceIDs := wh.getInstanceIDsAndBuildMaps(ctx, podsList)
@@ -213,7 +213,7 @@ func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
 	return []string{}, nil
 }
 
-func (wh *WatchHandler) cleanUpMaps() {
+func (wh *WatchHandler) cleanUpIDs() {
 	wh.cleanUpImagesIDToWlidsMap()
 	wh.cleanUpWlidsToContainerToImageIDMap()
 }

@@ -565,7 +565,7 @@ func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
 }
 
-func TestCleanUpMaps(t *testing.T) {
+func TestcleanUpIDs(t *testing.T) {
 	wh := NewWatchHandlerMock()
 	wh.imagesIDToWlidsMap = map[string][]string{
 		"alpine@sha256:1": {"pod1"},
@@ -577,7 +577,7 @@ func TestCleanUpMaps(t *testing.T) {
 		"pod2": {"container2": "alpine@sha256:2"},
 		"pod3": {"container3": "alpine@sha256:3"},
 	}
-	wh.cleanUpMaps()
+	wh.cleanUpIDs()
 
 	assert.Equal(t, len(wh.imagesIDToWlidsMap), 0)
 	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
