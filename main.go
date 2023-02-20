@@ -30,7 +30,7 @@ func main() {
 
 	displayBuildTag()
 
-	if err := utils.LoadEnvironmentVariables(); err != nil {
+	if err := utils.LoadEnvironmentVariables(ctx); err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 		return
 	}

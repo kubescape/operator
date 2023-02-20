@@ -5,4 +5,5 @@ const (
 	NamespaceEnvironmentVariable       = "NAMESPACE"
 	ConfigEnvironmentVariable          = "CONFIG"
 	PortEnvironmentVariable            = "PORT"
+	CleanUpDelayEnvironmentVariable    = "CLEANUP_DELAY"
 )
