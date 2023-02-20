@@ -39,18 +39,20 @@ type WatchHandler struct {
 func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	storageImageIDs, err := wh.ListImageIDsFromStorage()
 	if err != nil {
+		// we should continue in order to clean up instanceIDs
 		logger.L().Ctx(ctx).Error("error to ListImageIDsFromStorage", helpers.Error(err))
 	}
 
 	storageInstanceIDs, err := wh.ListInstanceIDsFromStorage()
 	if err != nil {
+		// we should continue in order to clean up the internal maps
 		logger.L().Ctx(ctx).Error("error to ListInstanceIDsFromStorage", helpers.Error(err))
 	}
 
 	// list Pods, extract their imageIDs and instanceIDs
 	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
 	if err != nil {
-		logger.L().Ctx(ctx).Error("could not complet cleanUp routine: error to ListPods", helpers.Error(err))
+		logger.L().Ctx(ctx).Error("could not complete cleanUp routine: error to ListPods", helpers.Error(err))
 		return
 	}
 
@@ -58,7 +60,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	wh.cleanUpIDs()
 	wh.buildIDs(ctx, podsList)
 
-	// build maps, retrieve current instanceIDs
+	// get current instance IDs
 	currentInstanceIDs := wh.listInstanceIDs()
 
 	// image IDs in storage that are not in current map should be deleted
@@ -72,7 +74,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 		logger.L().Ctx(ctx).Error("error to deleteImageIDsFromStorage", helpers.Error(err))
 	}
 
-	// instance IDs in storage that are not in current map should be deleted
+	// instance IDs in storage that are not in current list should be deleted
 	instanceIDsForDeletion := make([]string, 0)
 	for _, instanceID := range storageInstanceIDs {
 		if !slices.Contains(currentInstanceIDs, instanceID) {
