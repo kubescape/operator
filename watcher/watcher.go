@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-type WlidsToContainerToImageIDMap map[string]map[string]string // <wlid> : <containerName> : imageID
+type WlidsToContainerToImageIDMap map[string]map[string]string
 
 const retryInterval = 3 * time.Second
 
@@ -36,7 +36,7 @@ type WatchHandler struct {
 }
 
 // remove unused imageIDs and instanceIDs from storage. Update internal maps
-func (wh *WatchHandler) cleanUp(ctx context.Context) error {
+func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	storageImageIDs, err := wh.ListImageIDsFromStorage()
 	if err != nil {
 		logger.L().Ctx(ctx).Error("error to ListImageIDsFromStorage", helpers.Error(err))
@@ -50,20 +50,21 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 	// list Pods, extract their imageIDs and instanceIDs
 	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
 	if err != nil {
-		return err
+		logger.L().Ctx(ctx).Error("could not complet cleanUp routine: error to ListPods", helpers.Error(err))
+		return
 	}
 
 	// reset maps - clean them and build them again
 	wh.cleanUpIDs()
-	wh.buildMaps(ctx, podsList)
+	wh.buildIDs(ctx, podsList)
 
 	// build maps, retrieve current instanceIDs
-	currentInstanceIDs := wh.ListInstanceIDs()
+	currentInstanceIDs := wh.listInstanceIDs()
 
 	// image IDs in storage that are not in current map should be deleted
 	imageIDsForDeletion := make([]string, 0)
 	for _, imageID := range storageImageIDs {
-		if !wh.IsImageIDInMap(imageID) {
+		if !wh.isImageIDInMap(imageID) {
 			imageIDsForDeletion = append(imageIDsForDeletion, imageID)
 		}
 	}
@@ -79,7 +80,9 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) error {
 		}
 	}
 
-	return wh.deleteInstanceIDsFromStorage(instanceIDsForDeletion)
+	if err = wh.deleteInstanceIDsFromStorage(instanceIDsForDeletion); err != nil {
+		logger.L().Ctx(ctx).Error("error to deleteInstanceIDsFromStorage", helpers.Error(err))
+	}
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
@@ -101,7 +104,7 @@ func NewWatchHandler(ctx context.Context) (*WatchHandler, error) {
 		return nil, err
 	}
 
-	wh.buildMaps(ctx, podsList)
+	wh.buildIDs(ctx, podsList)
 
 	wh.currentPodListResourceVersion = podsList.GetResourceVersion()
 
@@ -138,7 +141,7 @@ func (wh *WatchHandler) deleteInstanceIDsFromStorage(imageIDs []string) error {
 	return nil
 }
 
-func (wh *WatchHandler) ListInstanceIDs() []string {
+func (wh *WatchHandler) listInstanceIDs() []string {
 	wh.instanceIDsMutex.RLock()
 	defer wh.instanceIDsMutex.RUnlock()
 
@@ -146,7 +149,7 @@ func (wh *WatchHandler) ListInstanceIDs() []string {
 }
 
 // returns true if imageID is in map
-func (wh *WatchHandler) IsImageIDInMap(imageID string) bool {
+func (wh *WatchHandler) isImageIDInMap(imageID string) bool {
 	wh.imageIDsMapMutex.RLock()
 	defer wh.imageIDsMapMutex.RUnlock()
 
@@ -155,7 +158,7 @@ func (wh *WatchHandler) IsImageIDInMap(imageID string) bool {
 }
 
 // returns wlids map
-func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImageIDMap {
+func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImageIDMap {
 	wh.wlidsToContainerToImageIDMapMutex.RLock()
 	defer wh.wlidsToContainerToImageIDMapMutex.RUnlock()
 
@@ -163,7 +166,7 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 }
 
 // returns imageIDs map
-func (wh *WatchHandler) GetImagesIDsToWlidMap() map[string][]string {
+func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
 	wh.imageIDsMapMutex.RLock()
 	defer wh.imageIDsMapMutex.RUnlock()
 
@@ -226,7 +229,7 @@ func (wh *WatchHandler) ListImageIDsNotInStorage() ([]string, error) {
 		return newImageIDs, err
 	}
 
-	for imageID := range wh.GetImagesIDsToWlidMap() {
+	for imageID := range wh.getImagesIDsToWlidMap() {
 		if !slices.Contains(imageIDsFromStorage, imageID) {
 			newImageIDs = append(newImageIDs, imageID)
 		}
@@ -297,7 +300,7 @@ func (wh *WatchHandler) addToWlidsToContainerToImageIDMap(wlid string, container
 	wh.wlidsToContainerToImageIDMap[wlid][containerName] = imageID
 }
 
-func (wh *WatchHandler) buildMaps(ctx context.Context, podList *core1.PodList) {
+func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 	for i := range podList.Items {
 		wl, err := wh.getParentWorkloadForPod(&podList.Items[i])
 		if err != nil {
@@ -354,7 +357,7 @@ func (wh *WatchHandler) getNewContainerToImageIDsFromPod(pod *core1.Pod) map[str
 	imageIDsToContainers := extractImageIDsToContainersFromPod(pod)
 
 	for imageID, container := range imageIDsToContainers {
-		if !wh.IsImageIDInMap(imageID) {
+		if !wh.isImageIDInMap(imageID) {
 			newContainerToImageIDs[container] = imageID
 		}
 	}

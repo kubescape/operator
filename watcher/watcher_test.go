@@ -199,8 +199,8 @@ func NewWatchHandlerMock() *WatchHandler {
 // 	for _, tt := range tests {
 // 		wh := NewWatchHandlerMock()
 // 		t.Run(tt.name, func(t *testing.T) {
-// 			wh.buildMaps(context.TODO(), &tt.podList)
-// 			assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), tt.expectedImageIDsMap))
+// 			wh.buildIDs(context.TODO(), &tt.podList)
+// 			assert.True(t, reflect.DeepEqual(wh.getImagesIDsToWlidMap(), tt.expectedImageIDsMap))
 // 		})
 // 	}
 // }
@@ -296,8 +296,8 @@ func NewWatchHandlerMock() *WatchHandler {
 // 	for _, tt := range tests {
 // 		wh := NewWatchHandlerMock()
 // 		t.Run(tt.name, func(t *testing.T) {
-// 			wh.buildMaps(context.TODO(), &tt.podList)
-// 			got := wh.GetWlidsToContainerToImageIDMap()
+// 			wh.buildIDs(context.TODO(), &tt.podList)
+// 			got := wh.getWlidsToContainerToImageIDMap()
 // 			assert.True(t, reflect.DeepEqual(got, tt.expectedwlidsToContainerToImageIDMap))
 // 		})
 // 	}
@@ -311,7 +311,7 @@ func TestAddToImageIDToWlidsMap(t *testing.T) {
 	// add the new wlid to the same imageID
 	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid3")
 
-	assert.True(t, reflect.DeepEqual(wh.GetImagesIDsToWlidMap(), map[string][]string{
+	assert.True(t, reflect.DeepEqual(wh.getImagesIDsToWlidMap(), map[string][]string{
 		"alpine@sha256:1": {"wlid1", "wlid3"},
 		"alpine@sha256:2": {"wlid2"},
 	}))
@@ -323,7 +323,7 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
 	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
 
-	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
+	assert.True(t, reflect.DeepEqual(wh.getWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
 		"wlid1": {
 			"container1": "alpine@sha256:1",
 		},
