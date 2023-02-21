@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/utils-go/boolutils"
 	"github.com/armosec/utils-go/httputils"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -297,7 +298,9 @@ func GetStartupActions() []apis.Command {
 			CommandName: apis.TypeRunKubescape,
 			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
 			Args: map[string]interface{}{
-				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{},
+				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
+					HostScanner: boolutils.BoolPointer(false),
+				},
 			},
 		},
 		{
