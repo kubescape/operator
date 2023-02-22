@@ -1,5 +1,6 @@
-
 # Operator 
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fkubescape%2Foperator.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fkubescape%2Foperator?ref=badge_shield)
+
 
 The Operator component is at the heart of Kubescape as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connections, and triggers the relevant action in the cluster. Such actions could be triggering a [configuration scan](https://www.armosec.io/blog/ci-cd-security/?utm_source=github&utm_medium=repository), an image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
 
@@ -293,3 +294,7 @@ For example:
 </details>
 
 
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fkubescape%2Foperator.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fkubescape%2Foperator?ref=badge_large)
