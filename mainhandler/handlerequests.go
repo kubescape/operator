@@ -17,6 +17,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 
 	uuid "github.com/google/uuid"
+	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
@@ -300,6 +301,8 @@ func GetStartupActions() []apis.Command {
 			Args: map[string]interface{}{
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
 					HostScanner: boolutils.BoolPointer(false),
+					TargetType:  v1.KindFramework,
+					TargetNames: []string{"allcontrols", "nsa", "mitre"},
 				},
 			},
 		},
