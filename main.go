@@ -40,6 +40,7 @@ func main() {
 		ctx = logger.InitOtel("operator",
 			os.Getenv(utils.ReleaseBuildTagEnvironmentVariable),
 			utils.ClusterConfig.AccountID,
+			utils.ClusterConfig.ClusterName,
 			url.URL{Host: otelHost})
 		defer logger.ShutdownOtel(ctx)
 	}
