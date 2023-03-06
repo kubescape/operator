@@ -40,13 +40,15 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	storageImageIDs, err := wh.ListImageIDsFromStorage()
 	if err != nil {
 		// we should continue in order to clean up instanceIDs
-		logger.L().Ctx(ctx).Error("error to ListImageIDsFromStorage", helpers.Error(err))
+
+		// logger.L().Ctx(ctx).Error("error to ListImageIDsFromStorage", helpers.Error(err))
 	}
 
 	storageInstanceIDs, err := wh.ListInstanceIDsFromStorage()
 	if err != nil {
 		// we should continue in order to clean up the internal maps
-		logger.L().Ctx(ctx).Error("error to ListInstanceIDsFromStorage", helpers.Error(err))
+
+		// logger.L().Ctx(ctx).Error("error to ListInstanceIDsFromStorage", helpers.Error(err))
 	}
 
 	// list Pods, extract their imageIDs and instanceIDs
@@ -70,8 +72,10 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 			imageIDsForDeletion = append(imageIDsForDeletion, imageID)
 		}
 	}
+
 	if err = wh.deleteImageIDsFromStorage(imageIDsForDeletion); err != nil {
-		logger.L().Ctx(ctx).Error("error to deleteImageIDsFromStorage", helpers.Error(err))
+		//  logger.L().Ctx(ctx).Error("error to deleteImageIDsFromStorage", helpers.Error(err))
+		return
 	}
 
 	// instance IDs in storage that are not in current list should be deleted
@@ -83,7 +87,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	}
 
 	if err = wh.deleteInstanceIDsFromStorage(instanceIDsForDeletion); err != nil {
-		logger.L().Ctx(ctx).Error("error to deleteInstanceIDsFromStorage", helpers.Error(err))
+		//  logger.L().Ctx(ctx).Error("error to deleteInstanceIDsFromStorage", helpers.Error(err))
 	}
 }
 
@@ -122,7 +126,7 @@ func (wh *WatchHandler) startCleanUpAndTriggerScanRoutine(ctx context.Context) {
 			time.Sleep(utils.CleanUpRoutineInterval)
 			wh.cleanUp(ctx)
 			// must be called after cleanUp, since we can have two instanceIDs with same wlid
-			wh.triggerRelevancyScan(ctx)
+			// wh.triggerRelevancyScan(ctx)
 		}
 	}()
 }
@@ -135,12 +139,12 @@ func (wh *WatchHandler) triggerRelevancyScan(ctx context.Context) {
 
 func (wh *WatchHandler) deleteImageIDsFromStorage(imageIDs []string) error {
 	// TODO: Implement
-	return nil
+	return fmt.Errorf("not implemented")
 }
 
 func (wh *WatchHandler) deleteInstanceIDsFromStorage(imageIDs []string) error {
 	// TODO: Implement
-	return nil
+	return fmt.Errorf("not implemented")
 }
 
 func (wh *WatchHandler) listInstanceIDs() []string {
@@ -196,7 +200,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils
 
 func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
 	// TODO: Implement
-	return []string{}, nil
+	return []string{}, fmt.Errorf("not implemented")
 }
 
 func (wh *WatchHandler) cleanUpIDs() {
@@ -220,15 +224,15 @@ func (wh *WatchHandler) cleanUpWlidsToContainerToImageIDMap() {
 
 func (wh *WatchHandler) ListInstanceIDsFromStorage() ([]string, error) {
 	// TODO: Implement
-	return []string{}, nil
+	return []string{}, fmt.Errorf("not implemented")
 }
 
 // returns a list of imageIDs that are not in storage
-func (wh *WatchHandler) ListImageIDsNotInStorage() ([]string, error) {
+func (wh *WatchHandler) ListImageIDsNotInStorage(ctx context.Context) ([]string, error) {
 	newImageIDs := []string{}
 	imageIDsFromStorage, err := wh.ListImageIDsFromStorage()
 	if err != nil {
-		return newImageIDs, err
+		// logger.L().Ctx(ctx).Error(fmt.Sprintf("error to ListImageIDsFromStorage, err :%s", err.Error()), helpers.Error(err))
 	}
 
 	for imageID := range wh.getImagesIDsToWlidMap() {
