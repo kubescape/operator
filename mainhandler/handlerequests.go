@@ -92,9 +92,9 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		return
 	}
 
-	newImageIDs, err := watchHandler.ListImageIDsNotInStorage()
+	newImageIDs, err := watchHandler.ListImageIDsNotInStorage(ctx)
 	if err != nil {
-		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+		// logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 	}
 
 	// get commands for scanning new images
@@ -116,7 +116,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
-	watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
+	// watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
