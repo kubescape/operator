@@ -607,7 +607,6 @@ func (registryScan *registryScan) setRegistryKind() {
 
 func (registryScan *registryScan) getRegistryProvider() string {
 	if strings.Contains(registryScan.registryInfo.RegistryName, ".dkr.ecr") {
-
 		return "ecr"
 	}
 	if strings.Contains(registryScan.registryInfo.RegistryName, "gcr.io") {
@@ -616,7 +615,7 @@ func (registryScan *registryScan) getRegistryProvider() string {
 	if strings.Contains(registryScan.registryInfo.RegistryName, "quay.io") {
 		return "quay.io"
 	}
-	return ""
+	return registryScan.registryInfo.RegistryProvider
 }
 
 // parse registry information from secret, configmap and command, giving priority to command
