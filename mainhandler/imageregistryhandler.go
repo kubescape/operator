@@ -582,9 +582,9 @@ func (registryScan *registryScan) parseRegistryFromCommand(sessionObj *utils.Ses
 	if !ok {
 		return fmt.Errorf("could not parse registry info")
 	}
-	err := mapstructure.Decode(registryInfo, &registryScan.registryInfo)
-	if err != nil {
-		return fmt.Errorf("could not decode registry info into registryInfo struct")
+
+	if err := mapstructure.Decode(registryInfo, &registryScan.registryInfo); err != nil {
+		return fmt.Errorf("could not decode registry info into registryInfo struct, reason: %w", err)
 	}
 	logRegistryInfoArgs(registryInfo)
 	return nil
@@ -620,8 +620,7 @@ func (registryScan *registryScan) getRegistryProvider() string {
 
 // parse registry information from secret, configmap and command, giving priority to command
 func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj *utils.SessionObj) error {
-	err := registryScan.parseRegistryAuthFromSecret(ctx)
-	if err != nil {
+	if err := registryScan.parseRegistryAuthFromSecret(ctx); err != nil {
 		logger.L().Info("parseRegistry: could not parse auth from secret, parsing from command", helpers.Error(err))
 	} else {
 		sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
@@ -633,15 +632,13 @@ func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj 
 	}
 	logger.L().Info(fmt.Sprintf("scanRegistries:registry(%s) %s configmap  successful", registryScan.registryInfo.RegistryName, configMapMode)) // systest dependent
 
-	err = registryScan.parseRegistryFromCommand(sessionObj)
-	if err != nil {
-		return fmt.Errorf("get registry auth failed with err %v", err)
+	if e := registryScan.parseRegistryFromCommand(sessionObj); e != nil {
+		return fmt.Errorf("get registry auth failed with err %w", e)
 	}
 
 	registryScan.setRegistryKind()
-
 	if err != nil {
-		return fmt.Errorf("parseRegistry: err %v", err)
+		return fmt.Errorf("parseRegistry: err %w", err)
 	}
 
 	registryScan.setHostnameAndProject()
@@ -685,9 +682,9 @@ func (registryScan *registryScan) parseRegistryAuthFromSecret(ctx context.Contex
 		return fmt.Errorf("error parsing Secret: %s", err.Error())
 	}
 	registriesAuthStr = strings.Replace(string(data), "\n", "", -1)
-	err = json.Unmarshal([]byte(registriesAuthStr), &registriesAuth)
-	if err != nil {
-		return fmt.Errorf("error parsing Secret: %s", err.Error())
+
+	if e := json.Unmarshal([]byte(registriesAuthStr), &registriesAuth); e != nil {
+		return fmt.Errorf("error parsing Secret: %s", e.Error())
 	}
 	//try to find an auth with the same registry name from the request
 	for _, auth := range registriesAuth {
@@ -791,11 +788,7 @@ func (registryScan *registryScan) getRegistryScanSecret() (k8sinterface.IWorkloa
 	if err == nil && secret != nil {
 		return secret, err
 	}
-
-	// deprecated namespace
-	secret, err = registryScan.k8sAPI.GetWorkload(armotypes.ArmoSystemNamespace, "Secret", armotypes.RegistryScanSecretName)
 	return secret, err
-
 }
 
 func (registryScan *registryScan) setHostnameAndProject() {
