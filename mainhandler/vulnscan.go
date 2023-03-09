@@ -132,7 +132,6 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 
 func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessionObj *utils.SessionObj) (*registryScan, error) {
 	registryScan := NewRegistryScan(actionHandler.k8sAPI)
-	var err error
 	if regName := actionHandler.parseRegistryName(sessionObj); regName != "" {
 		registryScan.setRegistryName(regName)
 	}
@@ -143,8 +142,7 @@ func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessio
 		registryScan.setSecretName(secretName)
 	}
 
-	err = registryScan.parseRegistry(ctx, sessionObj)
-	if err != nil {
+	if err := registryScan.parseRegistry(ctx, sessionObj); err != nil {
 		return nil, err
 	}
 
