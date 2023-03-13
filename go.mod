@@ -15,7 +15,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
-	github.com/kubescape/go-logger v0.0.10
+	github.com/kubescape/go-logger v0.0.11
 	github.com/kubescape/k8s-interface v0.0.93
 	github.com/kubescape/opa-utils v0.0.224
 	github.com/mitchellh/mapstructure v1.4.3
