@@ -1,14 +1,17 @@
 package watcher
 
 import (
+	"context"
 	_ "embed"
 	"reflect"
 	"sync"
 	"testing"
 
+	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func NewWatchHandlerMock() *WatchHandler {
@@ -19,6 +22,17 @@ func NewWatchHandlerMock() *WatchHandler {
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
 	}
+}
+
+func TestNewWatchHandlerProducesValidResult(t *testing.T) {
+	ctx := context.TODO()
+	k8sClient := k8sfake.NewSimpleClientset()
+	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+
+	wh, err := NewWatchHandler(ctx, k8sAPI)
+
+	assert.NoErrorf(t, err, "Constructing should produce no errors")
+	assert.NotNilf(t, wh, "Constructing should create a non-nil object")
 }
 
 // func TestBuildImageIDsToWlidsMap(t *testing.T) {

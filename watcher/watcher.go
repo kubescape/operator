@@ -92,10 +92,10 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
-		k8sAPI:                            k8sinterface.NewKubernetesApi(),
+		k8sAPI:                            k8sAPI,
 		imagesIDToWlidsMap:                make(map[string][]string),
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		imageIDsMapMutex:                  &sync.RWMutex{},
