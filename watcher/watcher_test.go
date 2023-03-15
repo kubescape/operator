@@ -7,11 +7,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	// Kubescape storage client
+	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 )
 
 func NewWatchHandlerMock() *WatchHandler {
@@ -28,11 +32,49 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	ctx := context.TODO()
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+	storageClient := kssfake.NewSimpleClientset()
 
-	wh, err := NewWatchHandler(ctx, k8sAPI)
+	wh, err := NewWatchHandler(ctx, k8sAPI, storageClient)
 
 	assert.NoErrorf(t, err, "Constructing should produce no errors")
 	assert.NotNilf(t, wh, "Constructing should create a non-nil object")
+}
+
+func TestWatchHandlerHandleSBOM(t *testing.T) {
+	ctx := context.TODO()
+	k8sClient := k8sfake.NewSimpleClientset()
+	ksStorageClient := kssfake.NewSimpleClientset()
+
+	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+	wh, _ := NewWatchHandler(ctx, k8sAPI, ksStorageClient)
+
+	sessionObjCh := make(chan utils.SessionObj)
+	sessionObjChan := &sessionObjCh
+
+	// SBOMs use image IDs as their names
+	sbomName := "0acbac6272564700d30edebaf7d546330836f8e0065b26cd2789b83b912e049d"
+	SBOMStub := spdxv1beta1.SBOMSPDXv2p3{ObjectMeta: v1.ObjectMeta{Name: sbomName}}
+
+	// An SBOM watcher processes SBOMs as they come from the watched
+	// channel, so we need to create it
+	go func() {
+		_, err := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Create(ctx, &SBOMStub, v1.CreateOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+	}()
+
+	// Scan commands are tied to WLIDs, so we need to make sure that a
+	// watcher has the necessary WLID tied to an imageID
+	expectedWlid := SBOMStub.ObjectMeta.Name
+
+	go wh.SBOMWatch(ctx, sessionObjChan)
+	res, ok := <-sessionObjCh
+
+	assert.True(t, ok)
+	assert.Equal(t, apis.TypeScanImages, res.Command.CommandName)
+	assert.Equal(t, expectedWlid, res.Command.Wlid)
 }
 
 // func TestBuildImageIDsToWlidsMap(t *testing.T) {

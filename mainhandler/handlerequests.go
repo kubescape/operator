@@ -87,7 +87,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}()
 
-	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI)
+	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI, nil)
 
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))

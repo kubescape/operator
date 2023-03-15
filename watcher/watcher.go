@@ -14,6 +14,8 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
+	// spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"golang.org/x/exp/slices"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +28,7 @@ const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
+	storageClient                     kssc.Interface
 	imagesIDToWlidsMap                map[string][]string
 	instanceIDs                       []string
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
@@ -92,9 +95,10 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
+		storageClient:                     storageClient,
 		k8sAPI:                            k8sAPI,
 		imagesIDToWlidsMap:                make(map[string][]string),
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
@@ -181,7 +185,10 @@ func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
 
 // watch for sbom changes, and trigger scans accordingly
 func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
-	// TODO: implement
+	watcher, _ := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(ctx, v1.ListOptions{})
+	_ = <-watcher.ResultChan()
+	sessionObj := utils.SessionObj{}
+	*sessionObjChan <- sessionObj
 }
 
 // watch for pods changes, and trigger scans accordingly
