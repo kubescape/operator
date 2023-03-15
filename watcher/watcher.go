@@ -308,6 +308,11 @@ func (wh *WatchHandler) addToWlidsToContainerToImageIDMap(wlid string, container
 
 func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 	for i := range podList.Items {
+
+		if podList.Items[i].Status.Phase != core1.PodRunning {
+			continue
+		}
+
 		wl, err := wh.getParentWorkloadForPod(&podList.Items[i])
 		if err != nil {
 			logger.L().Ctx(ctx).Error("Failed to get parent ID for pod", helpers.String("pod", podList.Items[i].Name), helpers.String("namespace", podList.Items[i].Namespace), helpers.Error(err))
