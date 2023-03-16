@@ -542,6 +542,9 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 		} else {
 			imgID = val
 		}
+		// some images don't have imageID prefix, we will add it for them
+		imgID = getImageIDFromContainer(containers[i], imgID)
+
 		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command)
 		if err != nil {
 			errs += err.Error()
@@ -573,4 +576,11 @@ func sendCommandToScanner(ctx context.Context, webSocketScanCommand *apis.Websoc
 		err = fmt.Errorf("unknown command: %s", command)
 	}
 	return err
+}
+
+func getImageIDFromContainer(container ContainerData, imageID string) string {
+	if strings.HasPrefix(imageID, "sha256") {
+		imageID = container.image + "@" + imageID
+	}
+	return imageID
 }
