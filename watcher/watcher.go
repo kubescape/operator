@@ -23,7 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-var ErrUnsupportedObject = errors.New("Unsupported object type")
+var (
+	ErrUnsupportedObject = errors.New("Unsupported object type")
+	ErrUnknownImageID = errors.New("Unknown image ID")
+)
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
 
@@ -210,7 +213,11 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 		imageID := obj.ObjectMeta.Name
 		wh.imageIDsMapMutex.RLock()
 		defer wh.imageIDsMapMutex.RUnlock()
-		wlids := wh.imagesIDToWlidsMap[imageID]
+		wlids, ok := wh.imagesIDToWlidsMap[imageID]
+		if !ok {
+			errors <- ErrUnknownImageID
+			continue
+		}
 		wlid := wlids[0]
 
 		commands <- getCVEScanCommand(wlid, map[string]string{})

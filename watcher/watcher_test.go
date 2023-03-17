@@ -290,6 +290,20 @@ func TestHandleSBOMProcessesOnlyAddedEvents(t *testing.T) {
 			},
 			expectedErrors: []error{},
 		},
+		{
+			name:            "Unknown ImageID produces a matching error",
+			imageIDstoWlids: map[string][]string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "Unknown Image ID"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{},
+			expectedErrors:   []error{ErrUnknownImageID},
+		},
 	}
 
 	for _, tc := range tt {
