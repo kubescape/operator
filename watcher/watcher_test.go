@@ -619,7 +619,7 @@ func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
 }
 
-func TestcleanUpIDs(t *testing.T) {
+func Test_cleanUpIDs(t *testing.T) {
 	wh := NewWatchHandlerMock()
 	wh.imagesIDToWlidsMap = map[string][]string{
 		"alpine@sha256:1": {"pod1"},
