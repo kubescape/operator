@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -21,6 +22,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
+
+var ErrUnsupportedObject = errors.New("Unsupported object type")
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
 
@@ -187,9 +190,22 @@ func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
 //
 // Handling events is defined as dispatching scan commands that match a given
 // SBOM to the main command channel
-func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, sessionObjChan chan utils.SessionObj) {
+func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands chan<- *apis.Command, errors chan<- error) {
+	defer close(commands)
+	defer close(errors)
+
 	for event := range sbomEvents {
-		obj := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
+		obj, ok := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
+		if !ok {
+			errors <- ErrUnsupportedObject
+			continue
+		}
+
+		// We need to schedule scans only for new SBOMs, not changes to
+		// existing ones or other operations
+		if event.Type != watch.Added {
+			continue
+		}
 
 		imageID := obj.ObjectMeta.Name
 		wh.imageIDsMapMutex.RLock()
@@ -197,16 +213,20 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, sessionO
 		wlids := wh.imagesIDToWlidsMap[imageID]
 		wlid := wlids[0]
 
-		cmd := getCVEScanCommand(wlid, map[string]string{})
-
-		utils.AddCommandToChannel(context.TODO(), cmd, &sessionObjChan)
+		commands <- getCVEScanCommand(wlid, map[string]string{})
 	}
 }
 
 // watch for sbom changes, and trigger scans accordingly
 func (wh *WatchHandler) SBOMWatch(sessionObjChan *chan utils.SessionObj) {
 	watcher, _ := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
-	go wh.HandleSBOMEvents(watcher.ResultChan(), *sessionObjChan)
+	commands := make(chan *apis.Command)
+	errors := make(chan error)
+	go wh.HandleSBOMEvents(watcher.ResultChan(), commands, errors)
+
+	for cmd := range commands {
+		utils.AddCommandToChannel(context.TODO(), cmd, sessionObjChan)
+	}
 }
 
 // watch for pods changes, and trigger scans accordingly

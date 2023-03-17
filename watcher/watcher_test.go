@@ -16,6 +16,7 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	// Kubescape storage client
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 func NewWatchHandlerMock() *WatchHandler {
@@ -102,12 +103,13 @@ func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			wh, _ := NewWatchHandler(ctx, k8sAPI, ksStorageClient)
 
-			sessionObjCh := make(chan utils.SessionObj)
+			commandCh := make(chan *apis.Command)
+			errors := make(chan error)
 
 			sbomWatcher, _ := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(ctx, v1.ListOptions{})
 			sbomEvents := sbomWatcher.ResultChan()
 
-			go wh.HandleSBOMEvents(sbomEvents, sessionObjCh)
+			go wh.HandleSBOMEvents(sbomEvents, commandCh, errors)
 
 			// Handling the event is expected to transform
 			// incloming imageID in the SBOM name to a valid WLID
@@ -122,16 +124,223 @@ func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
 			sbomWatcher.Stop()
 
 			actualWlids := map[string]int{}
-			for range tc.sboms {
-				sessionObj := <- sessionObjCh
-				assert.Equalf(t, apis.TypeScanImages, sessionObj.Command.CommandName, "Should produce Scan commands")
+			for command := range commandCh {
+				assert.Equalf(t, apis.TypeScanImages, command.CommandName, "Should produce Scan commands")
 
-				actualWlids[sessionObj.Command.Wlid] += 1
+				actualWlids[command.Wlid] += 1
 			}
 
 			assert.Equalf(t, expectedWlidsCounter, actualWlids, "Produced WLIDs should match the expected.")
 		},
 		)
+	}
+}
+
+func TestHandleSBOMProcessesOnlyAddedEvents(t *testing.T) {
+	tt := []struct {
+		name             string
+		imageIDstoWlids  map[string][]string
+		inputEvents      []watch.Event
+		expectedCommands []apis.Command
+		expectedErrors   []error
+	}{
+		{
+			name: "Bookmark event gets ignored",
+			imageIDstoWlids: map[string][]string{
+				"testName": {"testWlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Bookmark,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{},
+			expectedErrors:   []error{},
+		},
+		{
+			name: "Deleted event gets ignored",
+			imageIDstoWlids: map[string][]string{
+				"testName": {"testWlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Deleted,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{},
+			expectedErrors:   []error{},
+		},
+		{
+			name: "Added event gets an appropriate result",
+			imageIDstoWlids: map[string][]string{
+				"testName": {"testWlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "testWlid",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{},
+					},
+				},
+			},
+			expectedErrors: []error{},
+		},
+		{
+			name: "Mismatched object gets an appropriate error",
+			imageIDstoWlids: map[string][]string{
+				"testName": {"testWlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &core1.Pod{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{},
+			expectedErrors:   []error{ErrUnsupportedObject},
+		},
+		{
+			name: "Skipped event does not disrupt listeners",
+			imageIDstoWlids: map[string][]string{
+				"testName": {"testWlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+				{
+					Type: watch.Bookmark,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+				{
+					Type: watch.Added,
+					Object: &core1.Pod{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "testWlid",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{},
+					},
+				},
+			},
+			expectedErrors: []error{ErrUnsupportedObject},
+		},
+		{
+			name: "Multiple added events produce matching commands",
+			imageIDstoWlids: map[string][]string{
+				"imageID-01": {"wlid-01"},
+				"imageID-02": {"wlid-02"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "imageID-01"},
+					},
+				},
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "imageID-02"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "wlid-01",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{},
+					},
+				},
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "wlid-02",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{},
+					},
+				},
+			},
+			expectedErrors: []error{},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			k8sClient := k8sfake.NewSimpleClientset()
+
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			ksStorageClient := kssfake.NewSimpleClientset()
+			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient)
+
+			wh.imagesIDToWlidsMap = tc.imageIDstoWlids
+
+			commandsCh := make(chan *apis.Command)
+			errCh := make(chan error)
+
+			sbomEvents := make(chan watch.Event)
+
+			go func() {
+				for _, event := range tc.inputEvents {
+					sbomEvents <- event
+				}
+
+				close(sbomEvents)
+			}()
+
+			go wh.HandleSBOMEvents(sbomEvents, commandsCh, errCh)
+
+			actualCommands := []apis.Command{}
+			actualErrors := []error{}
+
+			var done bool
+			for !done {
+				select {
+				case command, ok := <-commandsCh:
+					if ok {
+						actualCommands = append(actualCommands, *command)
+					} else {
+						done = true
+					}
+				case err, ok := <-errCh:
+					if ok {
+						actualErrors = append(actualErrors, err)
+					} else {
+						done = true
+					}
+				}
+			}
+
+			assert.Equalf(t, tc.expectedCommands, actualCommands, "Commands should match")
+			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
+		})
 	}
 }
 
