@@ -9,11 +9,11 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/operator/utils"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
-	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	// Kubescape storage client
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 )
@@ -40,41 +40,99 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	assert.NotNilf(t, wh, "Constructing should create a non-nil object")
 }
 
-func TestWatchHandlerHandleSBOM(t *testing.T) {
-	ctx := context.TODO()
-	k8sClient := k8sfake.NewSimpleClientset()
-	ksStorageClient := kssfake.NewSimpleClientset()
+func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
+	tt := []struct {
+		name          string
+		sbomNamespace string
+		sboms         []spdxv1beta1.SBOMSPDXv2p3
+		wlidMap       map[string][]string
+	}{
+		{
+			name:          "Valid SBOM produces matching command",
+			sbomNamespace: "sbom-test-ns",
+			sboms: []spdxv1beta1.SBOMSPDXv2p3{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "0acbac6272564700d30edebaf7d546330836f8e0065b26cd2789b83b912e049d",
+						Namespace: "sbom-test-ns",
+					},
+				},
+			},
+			wlidMap: map[string][]string{
+				"0acbac6272564700d30edebaf7d546330836f8e0065b26cd2789b83b912e049d": {
+					"wlid://test-wlid",
+				},
+			},
+		},
+		{
+			"Two valid SBOMs produce matching commands",
+			"sbom-test-ns",
+			[]spdxv1beta1.SBOMSPDXv2p3{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "0acbac6272564700d30edebaf7d546330836f8e0065b26cd2789b83b912e049d",
+						Namespace: "sbom-test-ns",
+					},
+				},
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+						Namespace: "sbom-test-ns",
+					},
+				},
+			},
+			map[string][]string{
+				"0acbac6272564700d30edebaf7d546330836f8e0065b26cd2789b83b912e049d": {
+					"wlid://test-wlid",
+				},
+				"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08": {
+					"wlid://test-wlid-02",
+				},
+			},
+		},
+	}
 
-	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-	wh, _ := NewWatchHandler(ctx, k8sAPI, ksStorageClient)
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.TODO()
 
-	sessionObjCh := make(chan utils.SessionObj)
-	sessionObjChan := &sessionObjCh
+			k8sClient := k8sfake.NewSimpleClientset()
+			ksStorageClient := kssfake.NewSimpleClientset()
 
-	// SBOMs use image IDs as their names
-	sbomName := "0acbac6272564700d30edebaf7d546330836f8e0065b26cd2789b83b912e049d"
-	SBOMStub := spdxv1beta1.SBOMSPDXv2p3{ObjectMeta: v1.ObjectMeta{Name: sbomName}}
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			wh, _ := NewWatchHandler(ctx, k8sAPI, ksStorageClient)
 
-	// An SBOM watcher processes SBOMs as they come from the watched
-	// channel, so we need to create it
-	go func() {
-		_, err := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Create(ctx, &SBOMStub, v1.CreateOptions{})
-		if err != nil {
-			panic(err)
-		}
+			sessionObjCh := make(chan utils.SessionObj)
 
-	}()
+			sbomWatcher, _ := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(ctx, v1.ListOptions{})
+			sbomEvents := sbomWatcher.ResultChan()
 
-	// Scan commands are tied to WLIDs, so we need to make sure that a
-	// watcher has the necessary WLID tied to an imageID
-	expectedWlid := SBOMStub.ObjectMeta.Name
+			go wh.HandleSBOMEvents(sbomEvents, sessionObjCh)
 
-	go wh.SBOMWatch(ctx, sessionObjChan)
-	res, ok := <-sessionObjCh
+			// Handling the event is expected to transform
+			// incloming imageID in the SBOM name to a valid WLID
+			wh.imagesIDToWlidsMap = tc.wlidMap
+			expectedWlidsCounter := map[string]int{}
 
-	assert.True(t, ok)
-	assert.Equal(t, apis.TypeScanImages, res.Command.CommandName)
-	assert.Equal(t, expectedWlid, res.Command.Wlid)
+			for _, sbom := range tc.sboms {
+				ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s(tc.sbomNamespace).Create(ctx, &sbom, v1.CreateOptions{})
+				expectedSbomWlid := tc.wlidMap[sbom.ObjectMeta.Name][0]
+				expectedWlidsCounter[expectedSbomWlid] += 1
+			}
+			sbomWatcher.Stop()
+
+			actualWlids := map[string]int{}
+			for range tc.sboms {
+				sessionObj := <- sessionObjCh
+				assert.Equalf(t, apis.TypeScanImages, sessionObj.Command.CommandName, "Should produce Scan commands")
+
+				actualWlids[sessionObj.Command.Wlid] += 1
+			}
+
+			assert.Equalf(t, expectedWlidsCounter, actualWlids, "Produced WLIDs should match the expected.")
+		},
+		)
+	}
 }
 
 // func TestBuildImageIDsToWlidsMap(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
-	// spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"golang.org/x/exp/slices"
 	core1 "k8s.io/api/core/v1"
@@ -183,12 +183,30 @@ func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
 	return wh.imagesIDToWlidsMap
 }
 
+// HandleSBOMEvents handles SBOM-related events
+//
+// Handling events is defined as dispatching scan commands that match a given
+// SBOM to the main command channel
+func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, sessionObjChan chan utils.SessionObj) {
+	for event := range sbomEvents {
+		obj := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
+
+		imageID := obj.ObjectMeta.Name
+		wh.imageIDsMapMutex.RLock()
+		defer wh.imageIDsMapMutex.RUnlock()
+		wlids := wh.imagesIDToWlidsMap[imageID]
+		wlid := wlids[0]
+
+		cmd := getCVEScanCommand(wlid, map[string]string{})
+
+		utils.AddCommandToChannel(context.TODO(), cmd, &sessionObjChan)
+	}
+}
+
 // watch for sbom changes, and trigger scans accordingly
-func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
-	watcher, _ := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(ctx, v1.ListOptions{})
-	_ = <-watcher.ResultChan()
-	sessionObj := utils.SessionObj{}
-	*sessionObjChan <- sessionObj
+func (wh *WatchHandler) SBOMWatch(sessionObjChan *chan utils.SessionObj) {
+	watcher, _ := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+	go wh.HandleSBOMEvents(watcher.ResultChan(), *sessionObjChan)
 }
 
 // watch for pods changes, and trigger scans accordingly
