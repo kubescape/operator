@@ -226,32 +226,65 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 	}
 }
 
+func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
+	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+}
+
 // watch for sbom changes, and trigger scans accordingly
 func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	inputEvents := make(chan watch.Event)
 	commands := make(chan *apis.Command)
 	errorCh := make(chan error)
+	sbomEvents := make(<-chan watch.Event)
 
-	watcher, err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
-	if err != nil {
-		panic(err)
-	}
+	// The watcher is considered unavailable by default
+	sbomWatcherUnavailable := make(chan struct{})
+	go func() {
+		sbomWatcherUnavailable <- struct{}{}
+	}()
 
-	go wh.HandleSBOMEvents(watcher.ResultChan(), commands, errorCh)
+	go wh.HandleSBOMEvents(inputEvents, commands, errorCh)
 
+	var watcher watch.Interface
+	var err error
 	for {
 		select {
-		case cmd, ok := <-commands:
-			if !ok {
-				logger.L().Ctx(ctx).Warning("commands: channel closed")
+		case sbomEvent, ok := <-sbomEvents:
+			if ok {
+				inputEvents <- sbomEvent
 			} else {
+				sbomWatcherUnavailable <- struct{}{}
+			}
+		case cmd, ok := <-commands:
+			if ok {
 				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
+			} else {
+				sbomWatcherUnavailable <- struct{}{}
 			}
 		case err, ok := <-errorCh:
-			if !ok {
-				logger.L().Ctx(ctx).Warning("errors: channel closed")
-			} else {
+			if ok {
 				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+			} else {
+				sbomWatcherUnavailable <- struct{}{}
 			}
+		case <-sbomWatcherUnavailable:
+			logger.L().Ctx(ctx).Warning("Handling unavailable SBOM watcher.")
+			if watcher != nil {
+				watcher.Stop()
+			}
+
+			watcher, err = wh.getSBOMWatcher()
+			if err != nil {
+				logger.L().Ctx(ctx).Error("Unable to create the SBOM watcher, retrying.")
+				time.Sleep(retryInterval)
+				go func() {
+					sbomWatcherUnavailable <- struct{}{}
+				}()
+			} else {
+				sbomEvents = watcher.ResultChan()
+				logger.L().Ctx(ctx).Debug("SBOM watcher successfully created.")
+			}
+
 		}
 	}
 }
@@ -402,10 +435,6 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 			wh.addToInstanceIDsList(instanceID)
 		}
 	}
-}
-
-func (wh *WatchHandler) getSBOMWatcher() {
-	// TODO: implement
 }
 
 // returns a watcher watching from current resource version

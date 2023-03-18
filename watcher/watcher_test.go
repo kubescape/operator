@@ -41,6 +41,19 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	assert.NotNilf(t, wh, "Constructing should create a non-nil object")
 }
 
+func Test_getSBOMWatcher(t *testing.T) {
+	ctx := context.TODO()
+	k8sClient := k8sfake.NewSimpleClientset()
+	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+	storageClient := kssfake.NewSimpleClientset()
+	wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient)
+
+	sbomWatcher, err := wh.getSBOMWatcher()
+
+	assert.NoErrorf(t, err, "Should get no errors")
+	assert.NotNilf(t, sbomWatcher, "Returned value should not be nil")
+}
+
 func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
 	tt := []struct {
 		name          string
