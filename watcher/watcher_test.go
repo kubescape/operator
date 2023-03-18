@@ -136,7 +136,7 @@ func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
 	}
 }
 
-func TestHandleSBOMProcessesOnlyAddedEvents(t *testing.T) {
+func TestHandleSBOMEvents(t *testing.T) {
 	tt := []struct {
 		name             string
 		imageIDstoWlids  map[string][]string
@@ -303,6 +303,50 @@ func TestHandleSBOMProcessesOnlyAddedEvents(t *testing.T) {
 			},
 			expectedCommands: []apis.Command{},
 			expectedErrors:   []error{ErrUnknownImageID},
+		},
+		{
+			name: "Missing ImageID does not disrupt further processing",
+			imageIDstoWlids: map[string][]string{
+				"imageID-01": {"test-wlid-01"},
+				"imageID-02": {"test-wlid-02"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "Unknown Image ID"},
+					},
+				},
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "imageID-01"},
+					},
+				},
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "imageID-02"},
+					},
+				},
+			},
+			expectedCommands: []apis.Command{
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "test-wlid-01",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{},
+					},
+				},
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "test-wlid-02",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{},
+					},
+				},
+			},
+			expectedErrors: []error{ErrUnknownImageID},
 		},
 	}
 

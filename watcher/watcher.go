@@ -25,7 +25,7 @@ import (
 
 var (
 	ErrUnsupportedObject = errors.New("Unsupported object type")
-	ErrUnknownImageID = errors.New("Unknown image ID")
+	ErrUnknownImageID    = errors.New("Unknown image ID")
 )
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
@@ -193,14 +193,14 @@ func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
 //
 // Handling events is defined as dispatching scan commands that match a given
 // SBOM to the main command channel
-func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands chan<- *apis.Command, errors chan<- error) {
+func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(commands)
-	defer close(errors)
+	defer close(errorCh)
 
 	for event := range sbomEvents {
 		obj, ok := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
 		if !ok {
-			errors <- ErrUnsupportedObject
+			errorCh <- ErrUnsupportedObject
 			continue
 		}
 
@@ -211,13 +211,15 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 		}
 
 		imageID := obj.ObjectMeta.Name
+
 		wh.imageIDsMapMutex.RLock()
-		defer wh.imageIDsMapMutex.RUnlock()
 		wlids, ok := wh.imagesIDToWlidsMap[imageID]
+		wh.imageIDsMapMutex.RUnlock()
 		if !ok {
-			errors <- ErrUnknownImageID
+			errorCh <- ErrUnknownImageID
 			continue
 		}
+
 		wlid := wlids[0]
 
 		commands <- getCVEScanCommand(wlid, map[string]string{})
@@ -225,14 +227,32 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 }
 
 // watch for sbom changes, and trigger scans accordingly
-func (wh *WatchHandler) SBOMWatch(sessionObjChan *chan utils.SessionObj) {
-	watcher, _ := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
 	commands := make(chan *apis.Command)
-	errors := make(chan error)
-	go wh.HandleSBOMEvents(watcher.ResultChan(), commands, errors)
+	errorCh := make(chan error)
 
-	for cmd := range commands {
-		utils.AddCommandToChannel(context.TODO(), cmd, sessionObjChan)
+	watcher, err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	go wh.HandleSBOMEvents(watcher.ResultChan(), commands, errorCh)
+
+	for {
+		select {
+		case cmd, ok := <-commands:
+			if !ok {
+				logger.L().Ctx(ctx).Warning("commands: channel closed")
+			} else {
+				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
+			}
+		case err, ok := <-errorCh:
+			if !ok {
+				logger.L().Ctx(ctx).Warning("errors: channel closed")
+			} else {
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+			}
+		}
 	}
 }
 
