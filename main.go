@@ -35,11 +35,12 @@ func main() {
 		return
 	}
 
-	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
+	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317 
 	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present {
 		ctx = logger.InitOtel("operator",
 			os.Getenv(utils.ReleaseBuildTagEnvironmentVariable),
 			utils.ClusterConfig.AccountID,
+			utils.ClusterConfig.ClusterName,
 			url.URL{Host: otelHost})
 		defer logger.ShutdownOtel(ctx)
 	}
