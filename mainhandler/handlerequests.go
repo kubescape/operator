@@ -25,7 +25,6 @@ import (
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
-	"k8s.io/client-go/rest"
 )
 
 type MainHandler struct {
@@ -89,13 +88,9 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}()
 
-	config, err := rest.InClusterConfig()
+	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
 	if err != nil {
-		panic(err)
-	}
-	ksStorageClient, err := kssc.NewForConfig(config)
-	if err != nil {
-		panic(err)
+		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
 	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI, ksStorageClient)
 
