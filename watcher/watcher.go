@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -14,10 +15,17 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"golang.org/x/exp/slices"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+)
+
+var (
+	ErrUnsupportedObject = errors.New("Unsupported object type")
+	ErrUnknownImageID    = errors.New("Unknown image ID")
 )
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
@@ -26,6 +34,7 @@ const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
+	storageClient                     kssc.Interface
 	imagesIDToWlidsMap                map[string][]string
 	instanceIDs                       []string
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
@@ -92,10 +101,11 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
-		k8sAPI:                            k8sinterface.NewKubernetesApi(),
+		storageClient:                     storageClient,
+		k8sAPI:                            k8sAPI,
 		imagesIDToWlidsMap:                make(map[string][]string),
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		imageIDsMapMutex:                  &sync.RWMutex{},
@@ -179,9 +189,104 @@ func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
 	return wh.imagesIDToWlidsMap
 }
 
+// HandleSBOMEvents handles SBOM-related events
+//
+// Handling events is defined as dispatching scan commands that match a given
+// SBOM to the main command channel
+func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands chan<- *apis.Command, errorCh chan<- error) {
+	defer close(commands)
+	defer close(errorCh)
+
+	for event := range sbomEvents {
+		obj, ok := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
+		if !ok {
+			errorCh <- ErrUnsupportedObject
+			continue
+		}
+
+		// We need to schedule scans only for new SBOMs, not changes to
+		// existing ones or other operations
+		if event.Type != watch.Added {
+			continue
+		}
+
+		imageID := obj.ObjectMeta.Name
+
+		wh.imageIDsMapMutex.RLock()
+		wlids, ok := wh.imagesIDToWlidsMap[imageID]
+		wh.imageIDsMapMutex.RUnlock()
+		if !ok {
+			errorCh <- ErrUnknownImageID
+			continue
+		}
+
+		wlid := wlids[0]
+
+		commands <- getCVEScanCommand(wlid, map[string]string{})
+	}
+}
+
+func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
+	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+}
+
 // watch for sbom changes, and trigger scans accordingly
 func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
-	// TODO: implement
+	inputEvents := make(chan watch.Event)
+	commands := make(chan *apis.Command)
+	errorCh := make(chan error)
+	sbomEvents := make(<-chan watch.Event)
+
+	// The watcher is considered unavailable by default
+	sbomWatcherUnavailable := make(chan struct{})
+	go func() {
+		sbomWatcherUnavailable <- struct{}{}
+	}()
+
+	go wh.HandleSBOMEvents(inputEvents, commands, errorCh)
+
+	var watcher watch.Interface
+	var err error
+	for {
+		select {
+		case sbomEvent, ok := <-sbomEvents:
+			if ok {
+				inputEvents <- sbomEvent
+			} else {
+				sbomWatcherUnavailable <- struct{}{}
+			}
+		case cmd, ok := <-commands:
+			if ok {
+				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
+			} else {
+				sbomWatcherUnavailable <- struct{}{}
+			}
+		case err, ok := <-errorCh:
+			if ok {
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+			} else {
+				sbomWatcherUnavailable <- struct{}{}
+			}
+		case <-sbomWatcherUnavailable:
+			logger.L().Ctx(ctx).Warning("Handling unavailable SBOM watcher.")
+			if watcher != nil {
+				watcher.Stop()
+			}
+
+			watcher, err = wh.getSBOMWatcher()
+			if err != nil {
+				logger.L().Ctx(ctx).Error("Unable to create the SBOM watcher, retrying.")
+				time.Sleep(retryInterval)
+				go func() {
+					sbomWatcherUnavailable <- struct{}{}
+				}()
+			} else {
+				sbomEvents = watcher.ResultChan()
+				logger.L().Ctx(ctx).Debug("SBOM watcher successfully created.")
+			}
+
+		}
+	}
 }
 
 // watch for pods changes, and trigger scans accordingly
@@ -330,10 +435,6 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 			wh.addToInstanceIDsList(instanceID)
 		}
 	}
-}
-
-func (wh *WatchHandler) getSBOMWatcher() {
-	// TODO: implement
 }
 
 // returns a watcher watching from current resource version

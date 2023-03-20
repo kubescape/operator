@@ -24,6 +24,7 @@ import (
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 )
 
 type MainHandler struct {
@@ -87,7 +88,11 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}()
 
-	watchHandler, err := watcher.NewWatchHandler(ctx)
+	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
+	}
+	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI, ksStorageClient)
 
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
@@ -118,7 +123,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
-	// watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
+	go watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
