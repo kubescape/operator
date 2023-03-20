@@ -418,7 +418,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 func TestSBOMWatch(t *testing.T) {
 	t.Skipf(
 		"vladklokun: blocks and deadlocks while listening on the sbomWatcher.ResultChan(). " +
-		"Does not reproduce in a live cluster on a live Watch() object",
+			"Does not reproduce in a live cluster on a live Watch() object",
 	)
 
 	k8sClient := k8sfake.NewSimpleClientset()
