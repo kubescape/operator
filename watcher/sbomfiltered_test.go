@@ -433,3 +433,18 @@ func TestSBOMFilteredHandlerHandleEvents(t *testing.T) {
 		})
 	}
 }
+
+func TestSBOMFilteredHandlerHandle(t *testing.T) {
+	tt := []struct {
+		name string
+	}{
+		{
+			name: "TODO",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+		})
+	}
+}
