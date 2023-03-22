@@ -222,7 +222,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 
 		wlid := wlids[0]
 
-		commands <- getCVEScanCommand(wlid, map[string]string{})
+		commands <- getImageScanCommand(wlid, map[string]string{})
 	}
 }
 
