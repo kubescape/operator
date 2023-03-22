@@ -14,6 +14,7 @@ import (
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+
 	// Kubescape storage client
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"k8s.io/apimachinery/pkg/watch"
@@ -418,7 +419,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 func TestSBOMWatch(t *testing.T) {
 	t.Skipf(
 		"vladklokun: blocks and deadlocks while listening on the sbomWatcher.ResultChan(). " +
-		"Does not reproduce in a live cluster on a live Watch() object",
+			"Does not reproduce in a live cluster on a live Watch() object",
 	)
 
 	k8sClient := k8sfake.NewSimpleClientset()

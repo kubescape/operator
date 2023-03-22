@@ -352,7 +352,7 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, websocke
 	creds := websocketScanCommand.Credentials
 	credsList := websocketScanCommand.Credentialslist
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s with credentials: %v", scanUrl.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, hasCreds))
+	logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s, imageHash: %s,  with credentials: %v", scanUrl.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, websocketScanCommand.ImageHash, hasCreds))
 
 	resp, err := httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
 	refusedNum := 0
@@ -417,7 +417,6 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(workload 
 	var mapContainerToImageID = make(map[string]string)
 
 	labels := workload.GetPodLabels()
-
 	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
 	if err != nil {
 		return nil, fmt.Errorf("failed listing pods for workload %s", workload.GetName())

@@ -530,7 +530,12 @@ func (wh *WatchHandler) getParentWorkloadForPod(pod *core1.Pod) (workloadinterfa
 	if err != nil {
 		return nil, err
 	}
+
 	kind, name, err := wh.k8sAPI.CalculateWorkloadParentRecursive(wl)
+	if kind == "Node" {
+		return wl, nil
+	}
+
 	if err != nil {
 		return nil, err
 	}

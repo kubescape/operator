@@ -108,7 +108,6 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
 	waitFunc()
-	logger.L().Ctx(ctx).Info("vuln scan is ready")
 
 	// get commands for scanning new images
 	commandsList := []*apis.Command{}
