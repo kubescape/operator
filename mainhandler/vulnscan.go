@@ -43,14 +43,6 @@ const (
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
 )
 
-func getSBOMCalculationURL() *url.URL {
-	return &url.URL{
-		Scheme: "http",
-		Host:   utils.ClusterConfig.KubevulnURL,
-		Path:   fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.SBOMCalculationCommandPath),
-	}
-}
-
 func getVulnScanURL() *url.URL {
 	return &url.URL{
 		Scheme: "http",
@@ -386,10 +378,6 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, websocke
 
 }
 
-func sendWorkloadToSBOMCalculation(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
-	return sendWorkloadWithCredentials(ctx, getSBOMCalculationURL(), websocketScanCommand)
-}
-
 func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
 	return sendWorkloadWithCredentials(ctx, getVulnScanURL(), websocketScanCommand)
 }
@@ -491,44 +479,6 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 	return websocketScanCommand, nil
 }
 
-func (actionHandler *ActionHandler) calculateSBOM(ctx context.Context, sessionObj *utils.SessionObj) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.calculateSBOM")
-	defer span.End()
-
-	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
-
-	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
-		err := fmt.Errorf("failed to get container to imageID map from command args. command: %v", actionHandler.command)
-		logger.L().Ctx(ctx).Error(err.Error())
-		return err
-	} else {
-		mapContainerToImageID = val
-	}
-
-	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
-	if err != nil {
-		err = fmt.Errorf("failed to get workload from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
-		logger.L().Ctx(ctx).Error(err.Error())
-		return err
-	}
-
-	pod := getPodByWLID(ctx, workload)
-	if pod == nil {
-		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
-		return nil
-	}
-
-	containers, err := listWorkloadImages(workload)
-	if err != nil {
-		err = fmt.Errorf("failed to listWorkloadImages, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
-		logger.L().Ctx(ctx).Error(err.Error())
-		return err
-	}
-
-	return actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeCalculateSBOM)
-
-}
-
 func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context, containers []ContainerData, mapContainerToImageID map[string]string, pod *corev1.Pod, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) error {
 	errs := ""
 	for i := range containers {
@@ -568,8 +518,6 @@ func sendCommandToScanner(ctx context.Context, webSocketScanCommand *apis.Websoc
 	switch command {
 	case apis.TypeScanImages:
 		err = sendWorkloadToCVEScan(ctx, webSocketScanCommand)
-	case apis.TypeCalculateSBOM:
-		err = sendWorkloadToSBOMCalculation(ctx, webSocketScanCommand)
 	default:
 		err = fmt.Errorf("unknown command: %s", command)
 	}

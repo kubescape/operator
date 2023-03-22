@@ -104,6 +104,12 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		// logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 	}
 
+	// wait for vuln scan to be ready
+	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
+	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
+	waitFunc()
+	logger.L().Ctx(ctx).Info("vuln scan is ready")
+
 	// get commands for scanning new images
 	commandsList := []*apis.Command{}
 	for _, imageID := range newImageIDs {
@@ -114,7 +120,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 
 		// scan each image only once
-		cmd := buildScanCommandForWorkload(ctx, wlidsForImage[0], watchHandler.GetContainerToImageIDForWlid(wlidsForImage[0]), apis.TypeCalculateSBOM)
+		cmd := buildScanCommandForWorkload(ctx, wlidsForImage[0], watchHandler.GetContainerToImageIDForWlid(wlidsForImage[0]), apis.TypeScanImages)
 		commandsList = append(commandsList, cmd)
 
 	}
@@ -212,8 +218,6 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	logger.L().Info(logCommandInfo)
 
 	switch c.CommandName {
-	case apis.TypeCalculateSBOM:
-		return actionHandler.calculateSBOM(ctx, sessionObj)
 	case apis.TypeScanImages:
 		return actionHandler.scanWorkload(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:

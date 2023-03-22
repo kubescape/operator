@@ -33,15 +33,7 @@ func extractImageIDsFromPod(pod *core1.Pod) []string {
 	return imageIDs
 }
 
-func getSBOMCalculationCommand(wlid string, containerToimageID map[string]string) *apis.Command {
-	return &apis.Command{
-		Wlid:        wlid,
-		CommandName: apis.TypeCalculateSBOM,
-		Args:        map[string]interface{}{utils.ContainerToImageIdsArg: containerToimageID},
-	}
-}
-
-func getCVEScanCommand(wlid string, containerToimageID map[string]string) *apis.Command {
+func getImageScanCommand(wlid string, containerToimageID map[string]string) *apis.Command {
 	return &apis.Command{
 		Wlid:        wlid,
 		CommandName: apis.TypeScanImages,

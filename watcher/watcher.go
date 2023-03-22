@@ -574,7 +574,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
 			}
 			// new image, trigger SBOM
-			cmd = getSBOMCalculationCommand(parentWlid, newContainersToImageIDs)
+			cmd = getImageScanCommand(parentWlid, newContainersToImageIDs)
 		} else {
 			// old image
 			if wh.isWlidInMap(parentWlid) {
@@ -586,7 +586,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			for container, imgID := range containersToImageIds {
 				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
 			}
-			cmd = getCVEScanCommand(parentWlid, containersToImageIds)
+			cmd = getImageScanCommand(parentWlid, containersToImageIds)
 		}
 
 		utils.AddCommandToChannel(ctx, cmd, sessionObjChan)

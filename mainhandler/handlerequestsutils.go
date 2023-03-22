@@ -2,7 +2,6 @@ package mainhandler
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kubescape/go-logger"
@@ -65,8 +64,6 @@ func isActionNeedToWait(action apis.Command) waitFunc {
 
 func waitForVulnScanReady() {
 	fullURL := getVulnScanURL()
-	// replace port
-	fullURL.Host = strings.ReplaceAll(fullURL.Host, fullURL.Port(), probes.ReadinessPort)
 	// replace path
 	fullURL.Path = fmt.Sprintf("v1/%s", probes.ReadinessPath)
 
@@ -75,7 +72,7 @@ func waitForVulnScanReady() {
 	for {
 		timer.Reset(time.Duration(1) * time.Second)
 		<-timer.C
-		resp, err := httputils.HttpHead(VulnScanHttpClient, fullURL.String(), nil)
+		resp, err := httputils.HttpGet(VulnScanHttpClient, fullURL.String(), nil)
 		if err != nil {
 			continue
 		}
