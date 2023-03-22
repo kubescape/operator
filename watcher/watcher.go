@@ -275,7 +275,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 
 			watcher, err = wh.getSBOMWatcher()
 			if err != nil {
-				logger.L().Ctx(ctx).Error("Unable to create the SBOM watcher, retrying.")
+				// logger.L().Ctx(ctx).Error("Unable to create the SBOM watcher, retrying.")
 				time.Sleep(retryInterval)
 				go func() {
 					sbomWatcherUnavailable <- struct{}{}
