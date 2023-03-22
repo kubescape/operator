@@ -9,6 +9,7 @@ require (
 	github.com/armosec/registryx v0.0.14
 	github.com/armosec/utils-go v0.0.14
 	github.com/armosec/utils-k8s-go v0.0.13
+	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/go-openapi/runtime v0.24.1
 	github.com/google/go-containerregistry v0.11.0
