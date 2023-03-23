@@ -428,11 +428,13 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 
 		imgIDsToContainers := extractImageIDsToContainersFromPod(&podList.Items[i])
 
-		for imgID, containerName := range imgIDsToContainers {
+		for imgID, containers := range imgIDsToContainers {
 			wh.addToImageIDToWlidsMap(imgID, parentWlid)
-			wh.addToWlidsToContainerToImageIDMap(parentWlid, containerName, imgID)
-			instanceID := utils.GenerateInstanceID(wl.GetApiVersion(), wl.GetNamespace(), wl.GetKind(), wl.GetName(), wl.GetResourceVersion(), containerName)
-			wh.addToInstanceIDsList(instanceID)
+			for _, containerName := range containers {
+				wh.addToWlidsToContainerToImageIDMap(parentWlid, containerName, imgID)
+				instanceID := utils.GenerateInstanceID(wl.GetApiVersion(), wl.GetNamespace(), wl.GetKind(), wl.GetName(), wl.GetResourceVersion(), containerName)
+				wh.addToInstanceIDsList(instanceID)
+			}
 		}
 	}
 }
@@ -468,9 +470,11 @@ func (wh *WatchHandler) getNewContainerToImageIDsFromPod(pod *core1.Pod) map[str
 	newContainerToImageIDs := make(map[string]string)
 	imageIDsToContainers := extractImageIDsToContainersFromPod(pod)
 
-	for imageID, container := range imageIDsToContainers {
-		if !wh.isImageIDInMap(imageID) {
-			newContainerToImageIDs[container] = imageID
+	for imageID, containers := range imageIDsToContainers {
+		for _, container := range containers {
+			if !wh.isImageIDInMap(imageID) {
+				newContainerToImageIDs[container] = imageID
+			}
 		}
 	}
 

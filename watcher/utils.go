@@ -6,12 +6,25 @@ import (
 	core1 "k8s.io/api/core/v1"
 )
 
-func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string]string {
-	imageIDsToContainers := make(map[string]string)
+func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
+	imageIDsToContainers := make(map[string][]string)
 	for containerStatus := range pod.Status.ContainerStatuses {
 		imageID := utils.ExtractImageID(pod.Status.ContainerStatuses[containerStatus].ImageID)
-		imageIDsToContainers[imageID] = pod.Status.ContainerStatuses[containerStatus].Name
+		if _, ok := imageIDsToContainers[imageID]; !ok {
+			imageIDsToContainers[imageID] = []string{}
+		}
+		imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], pod.Status.ContainerStatuses[containerStatus].Name)
 	}
+
+	for containerStatus := range pod.Status.InitContainerStatuses {
+		imageID := utils.ExtractImageID(pod.Status.InitContainerStatuses[containerStatus].ImageID)
+		if _, ok := imageIDsToContainers[imageID]; !ok {
+			imageIDsToContainers[imageID] = []string{}
+		}
+		imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], pod.Status.InitContainerStatuses[containerStatus].Name)
+
+	}
+
 	return imageIDsToContainers
 }
 
@@ -21,6 +34,12 @@ func extractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
 		imageID := utils.ExtractImageID(pod.Status.ContainerStatuses[containerStatus].ImageID)
 		containersToImageIDs[pod.Status.ContainerStatuses[containerStatus].Name] = imageID
 	}
+
+	for containerStatus := range pod.Status.InitContainerStatuses {
+		imageID := utils.ExtractImageID(pod.Status.InitContainerStatuses[containerStatus].ImageID)
+		containersToImageIDs[pod.Status.InitContainerStatuses[containerStatus].Name] = imageID
+	}
+
 	return containersToImageIDs
 }
 
@@ -30,6 +49,12 @@ func extractImageIDsFromPod(pod *core1.Pod) []string {
 		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
 		imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
 	}
+
+	for containerStatus := range pod.Status.InitContainerStatuses {
+		imageID := pod.Status.InitContainerStatuses[containerStatus].ImageID
+		imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+	}
+
 	return imageIDs
 }
 
