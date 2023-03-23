@@ -301,7 +301,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 			}
 		} else {
 			// get from pod
-			mapContainerToImageID = getContainerToImageIDsFromPod(pod)
+			mapContainerToImageID = utils.ExtractContainersToImageIDsFromPod(pod)
 		}
 	} else {
 		// get from args
@@ -401,15 +401,6 @@ func getPodByWLID(ctx context.Context, workload k8sinterface.IWorkload) *corev1.
 
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
 	return podObj
-}
-
-func getContainerToImageIDsFromPod(pod *corev1.Pod) map[string]string {
-	mapContainerToImageID := make(map[string]string)
-	for contIdx := range pod.Status.ContainerStatuses {
-		imageID := pod.Status.ContainerStatuses[contIdx].ImageID
-		mapContainerToImageID[pod.Status.ContainerStatuses[contIdx].Name] = utils.ExtractImageID(imageID)
-	}
-	return mapContainerToImageID
 }
 
 // get a workload, retrieves its pod and returns a map of container name to image id

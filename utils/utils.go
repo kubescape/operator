@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	core1 "k8s.io/api/core/v1"
 )
 
 const KubescapeScanV1 = "scanV1"
@@ -71,4 +72,19 @@ func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan S
 	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
 	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
 	*channel <- *newSessionObj
+}
+
+func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
+	containersToImageIDs := make(map[string]string)
+	for containerStatus := range pod.Status.ContainerStatuses {
+		imageID := ExtractImageID(pod.Status.ContainerStatuses[containerStatus].ImageID)
+		containersToImageIDs[pod.Status.ContainerStatuses[containerStatus].Name] = imageID
+	}
+
+	for containerStatus := range pod.Status.InitContainerStatuses {
+		imageID := ExtractImageID(pod.Status.InitContainerStatuses[containerStatus].ImageID)
+		containersToImageIDs[pod.Status.InitContainerStatuses[containerStatus].Name] = imageID
+	}
+
+	return containersToImageIDs
 }
