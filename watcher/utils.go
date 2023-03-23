@@ -28,21 +28,6 @@ func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
 	return imageIDsToContainers
 }
 
-func extractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
-	containersToImageIDs := make(map[string]string)
-	for containerStatus := range pod.Status.ContainerStatuses {
-		imageID := utils.ExtractImageID(pod.Status.ContainerStatuses[containerStatus].ImageID)
-		containersToImageIDs[pod.Status.ContainerStatuses[containerStatus].Name] = imageID
-	}
-
-	for containerStatus := range pod.Status.InitContainerStatuses {
-		imageID := utils.ExtractImageID(pod.Status.InitContainerStatuses[containerStatus].ImageID)
-		containersToImageIDs[pod.Status.InitContainerStatuses[containerStatus].Name] = imageID
-	}
-
-	return containersToImageIDs
-}
-
 func extractImageIDsFromPod(pod *core1.Pod) []string {
 	imageIDs := []string{}
 	for containerStatus := range pod.Status.ContainerStatuses {

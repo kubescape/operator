@@ -591,7 +591,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 				continue
 			}
 			// new workload, trigger CVE
-			containersToImageIds := extractContainersToImageIDsFromPod(pod)
+			containersToImageIds := utils.ExtractContainersToImageIDsFromPod(pod)
 			for container, imgID := range containersToImageIds {
 				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
 			}
