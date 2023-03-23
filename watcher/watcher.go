@@ -268,7 +268,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 				sbomWatcherUnavailable <- struct{}{}
 			}
 		case <-sbomWatcherUnavailable:
-			logger.L().Ctx(ctx).Warning("Handling unavailable SBOM watcher.")
+			// logger.L().Ctx(ctx).Warning("Handling unavailable SBOM watcher.")
 			if watcher != nil {
 				watcher.Stop()
 			}

@@ -3,12 +3,12 @@ module github.com/kubescape/operator
 go 1.19
 
 require (
-	github.com/armosec/armoapi-go v0.0.165
+	github.com/armosec/armoapi-go v0.0.172
 	github.com/armosec/cluster-notifier-api-go v0.0.3
 	github.com/armosec/logger-go v0.0.13
 	github.com/armosec/registryx v0.0.14
-	github.com/armosec/utils-go v0.0.13
-	github.com/armosec/utils-k8s-go v0.0.12
+	github.com/armosec/utils-go v0.0.14
+	github.com/armosec/utils-k8s-go v0.0.13
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/go-openapi/runtime v0.24.1
 	github.com/google/go-containerregistry v0.11.0
@@ -16,7 +16,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/kubescape/go-logger v0.0.11
-	github.com/kubescape/k8s-interface v0.0.100
+	github.com/kubescape/k8s-interface v0.0.104
 	github.com/kubescape/opa-utils v0.0.224
 	github.com/kubescape/storage v0.2.0
 	github.com/mitchellh/mapstructure v1.4.3
@@ -117,6 +117,7 @@ require (
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/stripe/stripe-go/v74 v74.8.0 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelutil v0.1.18 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.1.18 // indirect
 	github.com/uptrace/uptrace-go v1.11.8 // indirect

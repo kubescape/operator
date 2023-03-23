@@ -483,7 +483,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 	for i := range containers {
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
-			errs += fmt.Sprintf("failed to get image ID for container %s", containers[i].container)
+			errs += fmt.Sprintf("failed to get image ID for container %s, pod: %s, in namespace: %s", containers[i].container, pod.GetName(), pod.GetNamespace())
 			logger.L().Error(fmt.Sprintf("failed to get image ID for container %s", containers[i].container))
 			continue
 		} else {
