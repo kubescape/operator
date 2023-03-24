@@ -3,7 +3,6 @@ package watcher
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -21,11 +20,6 @@ import (
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-)
-
-var (
-	ErrUnsupportedObject = errors.New("Unsupported object type")
-	ErrUnknownImageID    = errors.New("Unknown image ID")
 )
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
