@@ -288,12 +288,8 @@ func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
 }
 
 func (wh *WatchHandler) cleanUpIDs() {
-	wh.cleanUpImagesIDToWlidsMap()
-	wh.cleanUpWlidsToContainerToImageIDMap()
-}
-
-func (wh *WatchHandler) cleanUpImagesIDToWlidsMap() {
 	wh.iwMap.Clear()
+	wh.cleanUpWlidsToContainerToImageIDMap()
 }
 
 func (wh *WatchHandler) cleanUpWlidsToContainerToImageIDMap() {

@@ -907,18 +907,6 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	}
 }
 
-func TestCleanUpImagesIDToWlidsMap(t *testing.T) {
-	wh := NewWatchHandlerMock()
-	wh.iwMap = NewImageIDWLIDsMapFrom(map[string][]string{
-		"alpine@sha256:1": {"pod1"},
-		"alpine@sha256:2": {"pod2"},
-		"alpine@sha256:3": {"pod3"},
-	})
-	wh.cleanUpImagesIDToWlidsMap()
-
-	assert.Equal(t, 0, len(wh.iwMap.Map()))
-}
-
 func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 	wh := NewWatchHandlerMock()
 	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
