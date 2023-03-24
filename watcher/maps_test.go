@@ -77,7 +77,7 @@ func TestImageIDWLIDsMapNewFrom(t *testing.T) {
 		{
 			name: "Non-empty starting values construct a matching map",
 			startingValues: map[string][]string{
-				"imageHash": {"wlid-01"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01"},
 			},
 		},
 	}
@@ -212,7 +212,7 @@ func TestImageIDWLIDsMapClear(t *testing.T) {
 		{
 			name: "Clearing a non-empty map should make it an empty map",
 			startingValues: map[string]wlidSet{
-				"imageHash": NewWLIDSet("wlid01", "wlid02"),
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": NewWLIDSet("wlid01", "wlid02"),
 			},
 		},
 	}
@@ -255,49 +255,49 @@ func TestImageIDWLIDsAdd(t *testing.T) {
 			name:           "Adding a full imageHash-WLIDs pair to an empty map should be reflected",
 			startingValues: map[string][]string{},
 			inputOperations: []iwMapAddOperation{
-				{"imageHash", []string{"wlid-01", "wlid-02"}},
+				{"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047", []string{"wlid-01", "wlid-02"}},
 			},
 			expectedMap: map[string][]string{
-				"imageHash": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
 			},
 		},
 		{
 			name: "Adding WLIDs to existing imageHash should extend the set of WLIDs",
 			startingValues: map[string][]string{
-				"imageHash": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
 			},
 			inputOperations: []iwMapAddOperation{
-				{"imageHash", []string{"wlid-03"}},
+				{"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047", []string{"wlid-03"}},
 			},
 			expectedMap: map[string][]string{
-				"imageHash": {"wlid-01", "wlid-02", "wlid-03"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02", "wlid-03"},
 			},
 		},
 		{
 			name:           "Adding multiple WLIDs to an empty map should store matching WLIDs",
 			startingValues: map[string][]string{},
 			inputOperations: []iwMapAddOperation{
-				{"imageHash-01", []string{"wlid-01", "wlid-02"}},
-				{"imageHash-02", []string{"wlid-03", "wlid-04"}},
+				{"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047", []string{"wlid-01", "wlid-02"}},
+				{"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048", []string{"wlid-03", "wlid-04"}},
 			},
 			expectedMap: map[string][]string{
-				"imageHash-01": {"wlid-01", "wlid-02"},
-				"imageHash-02": {"wlid-03", "wlid-04"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048": {"wlid-03", "wlid-04"},
 			},
 		},
 		{
-			name: "Adding WLIDs to a existing keys should store matching WLIDs",
+			name: "Adding WLIDs to existing keys should store matching WLIDs",
 			startingValues: map[string][]string{
-				"imageHash-01": {"wlid-01", "wlid-02"},
-				"imageHash-02": {"wlid-03", "wlid-04"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048": {"wlid-03", "wlid-04"},
 			},
 			inputOperations: []iwMapAddOperation{
-				{"imageHash-01", []string{"wlid-05", "wlid-06"}},
-				{"imageHash-02", []string{"wlid-07", "wlid-08"}},
+				{"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047", []string{"wlid-05", "wlid-06"}},
+				{"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048", []string{"wlid-07", "wlid-08"}},
 			},
 			expectedMap: map[string][]string{
-				"imageHash-01": {"wlid-01", "wlid-02", "wlid-05", "wlid-06"},
-				"imageHash-02": {"wlid-03", "wlid-04", "wlid-07", "wlid-08"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02", "wlid-05", "wlid-06"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048": {"wlid-03", "wlid-04", "wlid-07", "wlid-08"},
 			},
 		},
 	}
@@ -331,13 +331,13 @@ func TestImageIDWLIDsMapLoad(t *testing.T) {
 			name: "Retrieving a slice after storing produces a slice that contains the same elements",
 			testedLoads: []loadResult{
 				{
-					imageHash:     "imageHash",
+					imageHash:     "7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047",
 					expectedWlids: []string{"wlid-01", "wlid-02"},
 					expectedOk:    true,
 				},
 			},
 			inputSlices: map[string][]string{
-				"imageHash": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
 			},
 		},
 		{
@@ -375,8 +375,8 @@ func TestImageIDWLIDsMapRange(t *testing.T) {
 		{
 			name: "Ranging over the map has access to all values",
 			startingValues: map[string][]string{
-				"imageHash-01": {"wlid-01", "wlid-02"},
-				"imageHash-02": {"wlid-03", "wlid-04"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048": {"wlid-03", "wlid-04"},
 			},
 		},
 	}
@@ -409,9 +409,9 @@ func TestImageIDWLIDsMapRangeShortCircuit(t *testing.T) {
 		{
 			name: "Ranging over the map has access to values only before returning false",
 			startingValues: map[string][]string{
-				"imageHash-01": {"wlid-01", "wlid-02"},
-				"imageHash-02": {"wlid-03", "wlid-04"},
-				"imageHash-03": {"wlid-05", "wlid-06"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048": {"wlid-03", "wlid-04"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0049": {"wlid-05", "wlid-06"},
 			},
 			expectedVisitedLen: 1,
 		},
@@ -441,9 +441,9 @@ func TestImageIDWLIDsMapAsMap(t *testing.T) {
 		{
 			name: "Getting as map should return expected values",
 			startingValues: map[string][]string{
-				"imageHash-01": {"wlid-01", "wlid-02"},
-				"imageHash-02": {"wlid-03", "wlid-04"},
-				"imageHash-03": {"wlid-05", "wlid-06"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0047": {"wlid-01", "wlid-02"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0048": {"wlid-03", "wlid-04"},
+				"7238b08a6bad494e84ed1c632a62d39bdeed1f929950a05c1a32b6d4490a0049": {"wlid-05", "wlid-06"},
 			},
 		},
 	}
