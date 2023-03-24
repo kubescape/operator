@@ -170,11 +170,6 @@ func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
-// returns imageIDs map
-func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
-	return wh.iwMap.Map()
-}
-
 // HandleSBOMEvents handles SBOM-related events
 //
 // Handling events is defined as dispatching scan commands that match a given
