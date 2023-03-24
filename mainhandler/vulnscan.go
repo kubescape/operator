@@ -475,14 +475,13 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
 			errs += fmt.Sprintf("failed to get image ID for container %s, pod: %s, namespace: %s", containers[i].container, pod.GetName(), pod.GetNamespace())
-			logger.L().Error(fmt.Sprintf("failed to get image ID for container %s", containers[i].container))
+			logger.L().Error(fmt.Sprintf("failed to get image ID for container %s, pod: %s, namespace: %s", containers[i].container, pod.GetName(), pod.GetNamespace()))
 			continue
 		} else {
 			imgID = val
 		}
 		// some images don't have imageID prefix, we will add it for them
 		imgID = getImageIDFromContainer(containers[i], imgID)
-
 		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command)
 		if err != nil {
 			errs += err.Error()
