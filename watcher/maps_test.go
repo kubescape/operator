@@ -33,8 +33,7 @@ func TestWLIDSetNew(t *testing.T) {
 }
 
 func TestImageIDWLIDsMapNew(t *testing.T) {
-	var iwMap *imageIDWLIDMap
-	iwMap = NewImageIDWLIDsMap()
+	iwMap := NewImageIDWLIDsMap()
 
 	assert.NotNilf(t, iwMap, "Returned map should not be nil")
 }
@@ -52,10 +51,10 @@ func assertRawMapEqualsIWMap(t *testing.T, rawMap map[string][]string, iwMap *im
 	for _, k := range allKeys {
 		var rawSet, iwSet wlidSet
 
-		rawWlids, ok := rawMap[k]
+		rawWlids := rawMap[k]
 		rawSet = NewWLIDSet(rawWlids...)
 
-		iwSet, ok = iwMap.LoadSet(k)
+		iwSet, ok := iwMap.LoadSet(k)
 		if !ok {
 			iwSet = NewWLIDSet()
 		}
@@ -434,10 +433,9 @@ func TestImageIDWLIDsMapRangeShortCircuit(t *testing.T) {
 	}
 }
 
-
 func TestImageIDWLIDsMapAsMap(t *testing.T) {
-	tt := []struct{
-		name string
+	tt := []struct {
+		name           string
 		startingValues map[string][]string
 	}{
 		{
