@@ -16,84 +16,84 @@ func NewWLIDSet(values ...string) wlidSet {
 	return sets.NewSet(values...)
 }
 
-// imageIDWLIDMap maps an Image ID to a list of WLIDs that are running it
-type imageIDWLIDMap struct {
-	wlidsByImageID map[string]wlidSet
-	mu             sync.RWMutex
+// imageHashWLIDMap maps an Image Hash to a list of WLIDs that are running it
+type imageHashWLIDMap struct {
+	wlidsByImageHash map[string]wlidSet
+	mu               sync.RWMutex
 }
 
-// NewImageIDWLIDsMap returns a new ImageID to WLID map
-func NewImageIDWLIDsMap() *imageIDWLIDMap {
-	return &imageIDWLIDMap{}
+// NewImageHashWLIDsMap returns a new Image Hash to WLID map
+func NewImageHashWLIDsMap() *imageHashWLIDMap {
+	return &imageHashWLIDMap{}
 }
 
-// NewImageIDWLIDsMapFrom returns a new ImageID to WLID map populated from a map of starting values
-func NewImageIDWLIDsMapFrom(startingValues map[string][]string) *imageIDWLIDMap {
+// NewImageHashWLIDsMapFrom returns a new Image Hash to WLID map populated from a map of starting values
+func NewImageHashWLIDsMapFrom(startingValues map[string][]string) *imageHashWLIDMap {
 	resultingMap := make(map[string]wlidSet)
 
 	for k, v := range startingValues {
 		resultingMap[k] = NewWLIDSet(v...)
 	}
 
-	return &imageIDWLIDMap{wlidsByImageID: resultingMap}
+	return &imageHashWLIDMap{wlidsByImageHash: resultingMap}
 }
 
 // init initializes the underlying map of WLIDs
 //
 // NOT THREAD-SAFE! Assumes that the caller is holding a Write lock.
-func (m *imageIDWLIDMap) init() {
-	m.wlidsByImageID = make(map[string]wlidSet)
+func (m *imageHashWLIDMap) init() {
+	m.wlidsByImageHash = make(map[string]wlidSet)
 }
 
-// setUnsafe sets a given list of WLIDs for the provided image ID
+// setUnsafe sets a given list of WLIDs for the provided image hash
 //
 // NOT THREAD SAFE! Assumes that the caller is holding a Write lock.
-func (m *imageIDWLIDMap) setUnsafe(imageID string, wlids wlidSet) {
-	if m.wlidsByImageID == nil {
+func (m *imageHashWLIDMap) setUnsafe(imageHash string, wlids wlidSet) {
+	if m.wlidsByImageHash == nil {
 		m.init()
 	}
-	m.wlidsByImageID[imageID] = wlids
+	m.wlidsByImageHash[imageHash] = wlids
 }
 
-// StoreSet sets a given set of WLIDs for the provided image ID
-func (m *imageIDWLIDMap) StoreSet(imageID string, wlids wlidSet) {
+// StoreSet sets a given set of WLIDs for the provided image hash
+func (m *imageHashWLIDMap) StoreSet(imageHash string, wlids wlidSet) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.setUnsafe(imageID, wlids)
+	m.setUnsafe(imageHash, wlids)
 }
 
-// getUnsafe returns the wlidSet at given image ID
+// getUnsafe returns the wlidSet at given image hash
 //
 // NOT THREAD SAFE! Assumes the caller is holding a Read lock.
-func (m *imageIDWLIDMap) getUnsafe(imageID string) (wlidSet, bool) {
-	val, ok := m.wlidsByImageID[imageID]
+func (m *imageHashWLIDMap) getUnsafe(imageHash string) (wlidSet, bool) {
+	val, ok := m.wlidsByImageHash[imageHash]
 	return val, ok
 
 }
 
-// Load returns a slice of WLIds for a given Image ID
+// Load returns a slice of WLIds for a given Image Hash
 //
 // As the result is logically a set, it does not guarantee a stable order of its elements
-func (m *imageIDWLIDMap) Load(imageID string) ([]string, bool) {
+func (m *imageHashWLIDMap) Load(imageHash string) ([]string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	val, ok := m.getUnsafe(imageID)
+	val, ok := m.getUnsafe(imageHash)
 	if ok {
 		return val.ToSlice(), ok
 	}
 	return nil, ok
 }
 
-// LoadSet returns a copy of a set of WLIDs for the provided imageID
+// LoadSet returns a copy of a set of WLIDs for the provided image hash
 //
 // This method returns a copy so that callers will not be able to modify the
 // underlying data structures. To modify the map, use its public methods.
-func (m *imageIDWLIDMap) LoadSet(imageID string) (wlidSet, bool) {
+func (m *imageHashWLIDMap) LoadSet(imageHash string) (wlidSet, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	val, ok := m.getUnsafe(imageID)
+	val, ok := m.getUnsafe(imageHash)
 	if !ok {
 		return val, ok
 	}
@@ -101,21 +101,21 @@ func (m *imageIDWLIDMap) LoadSet(imageID string) (wlidSet, bool) {
 }
 
 // Clear clears the map and sets it to an empty map
-func (m *imageIDWLIDMap) Clear() {
+func (m *imageHashWLIDMap) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.wlidsByImageID = map[string]wlidSet{}
+	m.wlidsByImageHash = map[string]wlidSet{}
 }
 
-// Add adds a given list of WLIDs to a provided imageID
-func (m *imageIDWLIDMap) Add(imageID string, wlids ...string) {
+// Add adds a given list of WLIDs to a provided image hash
+func (m *imageHashWLIDMap) Add(imageHash string, wlids ...string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	existingWlids, ok := m.getUnsafe(imageID)
+	existingWlids, ok := m.getUnsafe(imageHash)
 	if !ok {
 		wlidSet := NewWLIDSet(wlids...)
-		m.setUnsafe(imageID, wlidSet)
+		m.setUnsafe(imageHash, wlidSet)
 
 	} else {
 		existingWlids.Append(wlids...)
@@ -123,11 +123,11 @@ func (m *imageIDWLIDMap) Add(imageID string, wlids ...string) {
 }
 
 // Range calls f sequentially over the contents of the map, using WLIDs as slice of string
-func (m *imageIDWLIDMap) Range(f func(imageID string, wlids []string) bool) {
+func (m *imageHashWLIDMap) Range(f func(imageHash string, wlids []string) bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	for imageID, wlids := range m.wlidsByImageID {
-		if !f(imageID, wlids.ToSlice()) {
+	for imageHash, wlids := range m.wlidsByImageHash {
+		if !f(imageHash, wlids.ToSlice()) {
 			return
 		}
 	}
@@ -136,11 +136,11 @@ func (m *imageIDWLIDMap) Range(f func(imageID string, wlids []string) bool) {
 // Map returns a map that corresponds to the state of the data structure at the moment of the call
 //
 // As each value is logically a set, the method does not guarantee a stable order of its elements
-func (m *imageIDWLIDMap) Map() map[string][]string {
+func (m *imageHashWLIDMap) Map() map[string][]string {
 	res := map[string][]string{}
 
-	m.Range(func(imageID string, wlids []string) bool {
-		res[imageID] = wlids
+	m.Range(func(imageHash string, wlids []string) bool {
+		res[imageHash] = wlids
 		return true
 	})
 	return res

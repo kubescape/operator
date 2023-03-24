@@ -23,7 +23,7 @@ import (
 
 func NewWatchHandlerMock() *WatchHandler {
 	return &WatchHandler{
-		iwMap:                             NewImageIDWLIDsMap(),
+		iwMap:                             NewImageHashWLIDsMap(),
 		wlidsToContainerToImageIDMap:      make(map[string]map[string]string),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
@@ -817,7 +817,7 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	wh := NewWatchHandlerMock()
 
-	wh.iwMap = NewImageIDWLIDsMapFrom(map[string][]string{
+	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
 		"alpine@sha256:1": {"wlid"},
 		"alpine@sha256:2": {"wlid"},
 		"alpine@sha256:3": {"wlid"},
@@ -921,7 +921,7 @@ func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 
 func Test_cleanUpIDs(t *testing.T) {
 	wh := NewWatchHandlerMock()
-	wh.iwMap = NewImageIDWLIDsMapFrom(map[string][]string{
+	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
 		"alpine@sha256:1": {"pod1"},
 		"alpine@sha256:2": {"pod2"},
 		"alpine@sha256:3": {"pod3"},

@@ -35,7 +35,7 @@ const retryInterval = 3 * time.Second
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
 	storageClient                     kssc.Interface
-	iwMap                             *imageIDWLIDMap
+	iwMap                             *imageHashWLIDMap
 	instanceIDs                       []string
 	instanceIDsMutex                  *sync.RWMutex
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
@@ -105,7 +105,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
 		k8sAPI:                            k8sAPI,
-		iwMap:                             NewImageIDWLIDsMapFrom(imageIDsToWLIDsMap),
+		iwMap:                             NewImageHashWLIDsMapFrom(imageIDsToWLIDsMap),
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},

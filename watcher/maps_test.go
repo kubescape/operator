@@ -33,18 +33,18 @@ func TestWLIDSetNew(t *testing.T) {
 }
 
 func TestImageIDWLIDsMapNew(t *testing.T) {
-	iwMap := NewImageIDWLIDsMap()
+	iwMap := NewImageHashWLIDsMap()
 
 	assert.NotNilf(t, iwMap, "Returned map should not be nil")
 }
 
-func assertRawMapEqualsIWMap(t *testing.T, rawMap map[string][]string, iwMap *imageIDWLIDMap) {
+func assertRawMapEqualsIWMap(t *testing.T, rawMap map[string][]string, iwMap *imageHashWLIDMap) {
 	allKeys := make([]string, 0)
 
 	for k := range rawMap {
 		allKeys = append(allKeys, k)
 	}
-	for k := range iwMap.wlidsByImageID {
+	for k := range iwMap.wlidsByImageHash {
 		allKeys = append(allKeys, k)
 	}
 
@@ -77,14 +77,14 @@ func TestImageIDWLIDsMapNewFrom(t *testing.T) {
 		{
 			name: "Non-empty starting values construct a matching map",
 			startingValues: map[string][]string{
-				"imageID": {"wlid-01"},
+				"imageHash": {"wlid-01"},
 			},
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMapFrom(tc.startingValues)
+			iwMap := NewImageHashWLIDsMapFrom(tc.startingValues)
 
 			assert.NotNilf(t, iwMap, "Returned map should not be nil")
 			assertRawMapEqualsIWMap(t, tc.startingValues, iwMap)
@@ -140,7 +140,7 @@ func TestImageIDWLIDsMapStoreSetAndLoadSet(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMap()
+			iwMap := NewImageHashWLIDsMap()
 
 			for k, v := range tc.inputKVs {
 				iwMap.StoreSet(k, v)
@@ -185,7 +185,7 @@ func TestImageIDWLIDsMapLoadSetResultImmutable(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMap()
+			iwMap := NewImageHashWLIDsMap()
 			for k, v := range tc.startingMap {
 				iwMap.StoreSet(k, v)
 			}
@@ -212,14 +212,14 @@ func TestImageIDWLIDsMapClear(t *testing.T) {
 		{
 			name: "Clearing a non-empty map should make it an empty map",
 			startingValues: map[string]wlidSet{
-				"imageID": NewWLIDSet("wlid01", "wlid02"),
+				"imageHash": NewWLIDSet("wlid01", "wlid02"),
 			},
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMap()
+			iwMap := NewImageHashWLIDsMap()
 			for k, v := range tc.startingValues {
 				iwMap.StoreSet(k, v)
 			}
@@ -241,8 +241,8 @@ func TestImageIDWLIDsMapClear(t *testing.T) {
 
 func TestImageIDWLIDsAdd(t *testing.T) {
 	type iwMapAddOperation struct {
-		imageID string
-		wlids   []string
+		imageHash string
+		wlids     []string
 	}
 
 	tt := []struct {
@@ -252,62 +252,62 @@ func TestImageIDWLIDsAdd(t *testing.T) {
 		expectedMap     map[string][]string
 	}{
 		{
-			name:           "Adding a full imageId-WLIDs pair to an empty map should be reflected",
+			name:           "Adding a full imageHash-WLIDs pair to an empty map should be reflected",
 			startingValues: map[string][]string{},
 			inputOperations: []iwMapAddOperation{
-				{"imageID", []string{"wlid-01", "wlid-02"}},
+				{"imageHash", []string{"wlid-01", "wlid-02"}},
 			},
 			expectedMap: map[string][]string{
-				"imageID": {"wlid-01", "wlid-02"},
+				"imageHash": {"wlid-01", "wlid-02"},
 			},
 		},
 		{
-			name: "Adding WLIDs to existing imageID should extend the set of WLIDs",
+			name: "Adding WLIDs to existing imageHash should extend the set of WLIDs",
 			startingValues: map[string][]string{
-				"imageID": {"wlid-01", "wlid-02"},
+				"imageHash": {"wlid-01", "wlid-02"},
 			},
 			inputOperations: []iwMapAddOperation{
-				{"imageID", []string{"wlid-03"}},
+				{"imageHash", []string{"wlid-03"}},
 			},
 			expectedMap: map[string][]string{
-				"imageID": {"wlid-01", "wlid-02", "wlid-03"},
+				"imageHash": {"wlid-01", "wlid-02", "wlid-03"},
 			},
 		},
 		{
 			name:           "Adding multiple WLIDs to an empty map should store matching WLIDs",
 			startingValues: map[string][]string{},
 			inputOperations: []iwMapAddOperation{
-				{"imageID-01", []string{"wlid-01", "wlid-02"}},
-				{"imageID-02", []string{"wlid-03", "wlid-04"}},
+				{"imageHash-01", []string{"wlid-01", "wlid-02"}},
+				{"imageHash-02", []string{"wlid-03", "wlid-04"}},
 			},
 			expectedMap: map[string][]string{
-				"imageID-01": {"wlid-01", "wlid-02"},
-				"imageID-02": {"wlid-03", "wlid-04"},
+				"imageHash-01": {"wlid-01", "wlid-02"},
+				"imageHash-02": {"wlid-03", "wlid-04"},
 			},
 		},
 		{
 			name: "Adding WLIDs to a existing keys should store matching WLIDs",
 			startingValues: map[string][]string{
-				"imageID-01": {"wlid-01", "wlid-02"},
-				"imageID-02": {"wlid-03", "wlid-04"},
+				"imageHash-01": {"wlid-01", "wlid-02"},
+				"imageHash-02": {"wlid-03", "wlid-04"},
 			},
 			inputOperations: []iwMapAddOperation{
-				{"imageID-01", []string{"wlid-05", "wlid-06"}},
-				{"imageID-02", []string{"wlid-07", "wlid-08"}},
+				{"imageHash-01", []string{"wlid-05", "wlid-06"}},
+				{"imageHash-02", []string{"wlid-07", "wlid-08"}},
 			},
 			expectedMap: map[string][]string{
-				"imageID-01": {"wlid-01", "wlid-02", "wlid-05", "wlid-06"},
-				"imageID-02": {"wlid-03", "wlid-04", "wlid-07", "wlid-08"},
+				"imageHash-01": {"wlid-01", "wlid-02", "wlid-05", "wlid-06"},
+				"imageHash-02": {"wlid-03", "wlid-04", "wlid-07", "wlid-08"},
 			},
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMapFrom(tc.startingValues)
+			iwMap := NewImageHashWLIDsMapFrom(tc.startingValues)
 
 			for _, op := range tc.inputOperations {
-				iwMap.Add(op.imageID, op.wlids...)
+				iwMap.Add(op.imageHash, op.wlids...)
 			}
 
 			assertRawMapEqualsIWMap(t, tc.expectedMap, iwMap)
@@ -317,7 +317,7 @@ func TestImageIDWLIDsAdd(t *testing.T) {
 
 func TestImageIDWLIDsMapLoad(t *testing.T) {
 	type loadResult struct {
-		imageID       string
+		imageHash     string
 		expectedWlids []string
 		expectedOk    bool
 	}
@@ -331,13 +331,13 @@ func TestImageIDWLIDsMapLoad(t *testing.T) {
 			name: "Retrieving a slice after storing produces a slice that contains the same elements",
 			testedLoads: []loadResult{
 				{
-					imageID:       "imageID",
+					imageHash:     "imageHash",
 					expectedWlids: []string{"wlid-01", "wlid-02"},
 					expectedOk:    true,
 				},
 			},
 			inputSlices: map[string][]string{
-				"imageID": {"wlid-01", "wlid-02"},
+				"imageHash": {"wlid-01", "wlid-02"},
 			},
 		},
 		{
@@ -345,7 +345,7 @@ func TestImageIDWLIDsMapLoad(t *testing.T) {
 			inputSlices: map[string][]string{},
 			testedLoads: []loadResult{
 				{
-					imageID:       "missing-key",
+					imageHash:     "missing-key",
 					expectedWlids: nil,
 					expectedOk:    false,
 				},
@@ -355,10 +355,10 @@ func TestImageIDWLIDsMapLoad(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMapFrom(tc.inputSlices)
+			iwMap := NewImageHashWLIDsMapFrom(tc.inputSlices)
 
 			for _, tl := range tc.testedLoads {
-				loadedWlids, ok := iwMap.Load(tl.imageID)
+				loadedWlids, ok := iwMap.Load(tl.imageHash)
 
 				assert.ElementsMatch(t, tl.expectedWlids, loadedWlids)
 				assert.Equal(t, tl.expectedOk, ok)
@@ -375,25 +375,25 @@ func TestImageIDWLIDsMapRange(t *testing.T) {
 		{
 			name: "Ranging over the map has access to all values",
 			startingValues: map[string][]string{
-				"imageID-01": {"wlid-01", "wlid-02"},
-				"imageID-02": {"wlid-03", "wlid-04"},
+				"imageHash-01": {"wlid-01", "wlid-02"},
+				"imageHash-02": {"wlid-03", "wlid-04"},
 			},
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMapFrom(tc.startingValues)
+			iwMap := NewImageHashWLIDsMapFrom(tc.startingValues)
 
 			visitedKeys := map[string][]string{}
-			iwMap.Range(func(imageID string, wlids []string) bool {
-				visitedKeys[imageID] = wlids
+			iwMap.Range(func(imageHash string, wlids []string) bool {
+				visitedKeys[imageHash] = wlids
 				return true
 			})
 
 			// Since
-			for imageID := range visitedKeys {
-				sort.Strings(visitedKeys[imageID])
+			for imageHash := range visitedKeys {
+				sort.Strings(visitedKeys[imageHash])
 			}
 			assert.Equal(t, tc.startingValues, visitedKeys)
 		})
@@ -409,9 +409,9 @@ func TestImageIDWLIDsMapRangeShortCircuit(t *testing.T) {
 		{
 			name: "Ranging over the map has access to values only before returning false",
 			startingValues: map[string][]string{
-				"imageID-01": {"wlid-01", "wlid-02"},
-				"imageID-02": {"wlid-03", "wlid-04"},
-				"imageID-03": {"wlid-05", "wlid-06"},
+				"imageHash-01": {"wlid-01", "wlid-02"},
+				"imageHash-02": {"wlid-03", "wlid-04"},
+				"imageHash-03": {"wlid-05", "wlid-06"},
 			},
 			expectedVisitedLen: 1,
 		},
@@ -419,12 +419,12 @@ func TestImageIDWLIDsMapRangeShortCircuit(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMapFrom(tc.startingValues)
+			iwMap := NewImageHashWLIDsMapFrom(tc.startingValues)
 
 			visitedKeys := map[string][]string{}
 
-			iwMap.Range(func(imageID string, wlids []string) bool {
-				visitedKeys[imageID] = wlids
+			iwMap.Range(func(imageHash string, wlids []string) bool {
+				visitedKeys[imageHash] = wlids
 				return false
 			})
 
@@ -441,22 +441,22 @@ func TestImageIDWLIDsMapAsMap(t *testing.T) {
 		{
 			name: "Getting as map should return expected values",
 			startingValues: map[string][]string{
-				"imageID-01": {"wlid-01", "wlid-02"},
-				"imageID-02": {"wlid-03", "wlid-04"},
-				"imageID-03": {"wlid-05", "wlid-06"},
+				"imageHash-01": {"wlid-01", "wlid-02"},
+				"imageHash-02": {"wlid-03", "wlid-04"},
+				"imageHash-03": {"wlid-05", "wlid-06"},
 			},
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			iwMap := NewImageIDWLIDsMapFrom(tc.startingValues)
+			iwMap := NewImageHashWLIDsMapFrom(tc.startingValues)
 
 			iwAsMap := iwMap.Map()
 
 			// Ensure consistent ordering of WLIDs
-			for imageID := range iwAsMap {
-				sort.Strings(iwAsMap[imageID])
+			for imageHash := range iwAsMap {
+				sort.Strings(iwAsMap[imageHash])
 			}
 			assert.Equal(t, tc.startingValues, iwAsMap)
 		})
