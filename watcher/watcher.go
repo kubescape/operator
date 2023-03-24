@@ -76,7 +76,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	// image IDs in storage that are not in current map should be deleted
 	imageIDsForDeletion := make([]string, 0)
 	for _, imageID := range storageImageIDs {
-		if !wh.isImageIDInMap(imageID) {
+		if _, imageIDinMap := wh.iwMap.Load(imageID); !imageIDinMap {
 			imageIDsForDeletion = append(imageIDsForDeletion, imageID)
 		}
 	}
@@ -160,12 +160,6 @@ func (wh *WatchHandler) listInstanceIDs() []string {
 	defer wh.instanceIDsMutex.RUnlock()
 
 	return wh.instanceIDs
-}
-
-// returns true if imageID is in map
-func (wh *WatchHandler) isImageIDInMap(imageID string) bool {
-	_, ok := wh.iwMap.LoadSet(imageID)
-	return ok
 }
 
 // returns wlids map
@@ -457,7 +451,7 @@ func (wh *WatchHandler) getNewContainerToImageIDsFromPod(pod *core1.Pod) map[str
 
 	for imageID, containers := range imageIDsToContainers {
 		for _, container := range containers {
-			if !wh.isImageIDInMap(imageID) {
+			if _, imageIDinMap := wh.iwMap.Load(imageID); !imageIDinMap {
 				newContainerToImageIDs[container] = imageID
 			}
 		}
