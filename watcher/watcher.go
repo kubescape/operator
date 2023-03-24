@@ -35,11 +35,10 @@ const retryInterval = 3 * time.Second
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
 	storageClient                     kssc.Interface
-	imagesIDToWlidsMap                map[string][]string
+	iwMap                             *imageIDWLIDMap
 	instanceIDs                       []string
-	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
-	imageIDsMapMutex                  *sync.RWMutex
 	instanceIDsMutex                  *sync.RWMutex
+	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	wlidsToContainerToImageIDMapMutex *sync.RWMutex
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
 }
@@ -101,14 +100,13 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
 		k8sAPI:                            k8sAPI,
-		imagesIDToWlidsMap:                make(map[string][]string),
+		iwMap:                             NewImageIDWLIDsMapFrom(imageIDsToWLIDsMap),
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
-		imageIDsMapMutex:                  &sync.RWMutex{},
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
 		instanceIDs:                       make([]string, 0),
@@ -166,10 +164,7 @@ func (wh *WatchHandler) listInstanceIDs() []string {
 
 // returns true if imageID is in map
 func (wh *WatchHandler) isImageIDInMap(imageID string) bool {
-	wh.imageIDsMapMutex.RLock()
-	defer wh.imageIDsMapMutex.RUnlock()
-
-	_, ok := wh.imagesIDToWlidsMap[imageID]
+	_, ok := wh.iwMap.LoadSet(imageID)
 	return ok
 }
 
@@ -183,10 +178,7 @@ func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImag
 
 // returns imageIDs map
 func (wh *WatchHandler) getImagesIDsToWlidMap() map[string][]string {
-	wh.imageIDsMapMutex.RLock()
-	defer wh.imageIDsMapMutex.RUnlock()
-
-	return wh.imagesIDToWlidsMap
+	return wh.iwMap.Map()
 }
 
 // HandleSBOMEvents handles SBOM-related events
@@ -212,9 +204,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 
 		imageID := obj.ObjectMeta.Name
 
-		wh.imageIDsMapMutex.RLock()
-		wlids, ok := wh.imagesIDToWlidsMap[imageID]
-		wh.imageIDsMapMutex.RUnlock()
+		wlids, ok := wh.iwMap.Load(imageID)
 		if !ok {
 			errorCh <- ErrUnknownImageID
 			continue
@@ -314,10 +304,7 @@ func (wh *WatchHandler) cleanUpIDs() {
 }
 
 func (wh *WatchHandler) cleanUpImagesIDToWlidsMap() {
-	wh.imageIDsMapMutex.Lock()
-	defer wh.imageIDsMapMutex.Unlock()
-
-	wh.imagesIDToWlidsMap = make(map[string][]string)
+	wh.iwMap.Clear()
 }
 
 func (wh *WatchHandler) cleanUpWlidsToContainerToImageIDMap() {
@@ -340,19 +327,17 @@ func (wh *WatchHandler) ListImageIDsNotInStorage(ctx context.Context) ([]string,
 		// logger.L().Ctx(ctx).Error(fmt.Sprintf("error to ListImageIDsFromStorage, err :%s", err.Error()), helpers.Error(err))
 	}
 
-	for imageID := range wh.getImagesIDsToWlidMap() {
+	wh.iwMap.Range(func(imageID string, wlids []string) bool {
 		if !slices.Contains(imageIDsFromStorage, imageID) {
 			newImageIDs = append(newImageIDs, imageID)
 		}
-	}
+		return true
+	})
 	return newImageIDs, nil
 }
 
 func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
-	wh.imageIDsMapMutex.RLock()
-	defer wh.imageIDsMapMutex.RUnlock()
-
-	wlids, ok := wh.imagesIDToWlidsMap[imageID]
+	wlids, ok := wh.iwMap.Load(imageID)
 	if !ok {
 		return []string{}
 	}
@@ -384,20 +369,7 @@ func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) 
 		return
 	}
 	imageID = utils.ExtractImageID(imageID)
-
-	wh.imageIDsMapMutex.Lock()
-	defer wh.imageIDsMapMutex.Unlock()
-
-	if _, ok := wh.imagesIDToWlidsMap[imageID]; !ok {
-		wh.imagesIDToWlidsMap[imageID] = wlids
-	} else {
-		// imageID exists, add wlid if not exists
-		for _, w := range wlids {
-			if !slices.Contains(wh.imagesIDToWlidsMap[imageID], w) {
-				wh.imagesIDToWlidsMap[imageID] = append(wh.imagesIDToWlidsMap[imageID], w)
-			}
-		}
-	}
+	wh.iwMap.Add(imageID, wlids...)
 }
 
 func (wh *WatchHandler) addToWlidsToContainerToImageIDMap(wlid string, containerName string, imageID string) {
