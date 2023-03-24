@@ -24,8 +24,8 @@ import (
 )
 
 var (
-	ErrUnsupportedObject = errors.New("Unsupported object type")
-	ErrUnknownImageID    = errors.New("Unknown image ID")
+	ErrUnsupportedObject = errors.New("unsupported object type")
+	ErrUnknownImageHash  = errors.New("unknown image hash")
 )
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
@@ -191,11 +191,11 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 			continue
 		}
 
-		imageID := obj.ObjectMeta.Name
+		imageHash := obj.ObjectMeta.Name
 
-		wlids, ok := wh.iwMap.Load(imageID)
+		wlids, ok := wh.iwMap.Load(imageHash)
 		if !ok {
-			errorCh <- ErrUnknownImageID
+			errorCh <- ErrUnknownImageHash
 			continue
 		}
 
@@ -312,17 +312,17 @@ func (wh *WatchHandler) ListImageIDsNotInStorage(ctx context.Context) ([]string,
 		// logger.L().Ctx(ctx).Error(fmt.Sprintf("error to ListImageIDsFromStorage, err :%s", err.Error()), helpers.Error(err))
 	}
 
-	wh.iwMap.Range(func(imageID string, wlids []string) bool {
-		if !slices.Contains(imageIDsFromStorage, imageID) {
-			newImageIDs = append(newImageIDs, imageID)
+	wh.iwMap.Range(func(imageHash string, wlids []string) bool {
+		if !slices.Contains(imageIDsFromStorage, imageHash) {
+			newImageIDs = append(newImageIDs, imageHash)
 		}
 		return true
 	})
 	return newImageIDs, nil
 }
 
-func (wh *WatchHandler) GetWlidsForImageID(imageID string) []string {
-	wlids, ok := wh.iwMap.Load(imageID)
+func (wh *WatchHandler) GetWlidsForImageHash(imageHash string) []string {
+	wlids, ok := wh.iwMap.Load(imageHash)
 	if !ok {
 		return []string{}
 	}
@@ -353,7 +353,7 @@ func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) 
 	if len(wlids) == 0 {
 		return
 	}
-	imageID = utils.ExtractImageID(imageID)
+	imageID, _ = extractImageHash(imageID)
 	wh.iwMap.Add(imageID, wlids...)
 }
 
