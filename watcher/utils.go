@@ -8,20 +8,24 @@ import (
 
 func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
 	imageIDsToContainers := make(map[string][]string)
-	for containerStatus := range pod.Status.ContainerStatuses {
-		imageID := utils.ExtractImageID(pod.Status.ContainerStatuses[containerStatus].ImageID)
-		if _, ok := imageIDsToContainers[imageID]; !ok {
-			imageIDsToContainers[imageID] = []string{}
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := utils.ExtractImageID(containerStatus.ImageID)
+			if _, ok := imageIDsToContainers[imageID]; !ok {
+				imageIDsToContainers[imageID] = []string{}
+			}
+			imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], containerStatus.Name)
 		}
-		imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], pod.Status.ContainerStatuses[containerStatus].Name)
 	}
 
-	for containerStatus := range pod.Status.InitContainerStatuses {
-		imageID := utils.ExtractImageID(pod.Status.InitContainerStatuses[containerStatus].ImageID)
-		if _, ok := imageIDsToContainers[imageID]; !ok {
-			imageIDsToContainers[imageID] = []string{}
+	for _, containerStatus := range pod.Status.InitContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := utils.ExtractImageID(containerStatus.ImageID)
+			if _, ok := imageIDsToContainers[imageID]; !ok {
+				imageIDsToContainers[imageID] = []string{}
+			}
+			imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], containerStatus.Name)
 		}
-		imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], pod.Status.InitContainerStatuses[containerStatus].Name)
 
 	}
 
@@ -30,14 +34,18 @@ func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
 
 func extractImageIDsFromPod(pod *core1.Pod) []string {
 	imageIDs := []string{}
-	for containerStatus := range pod.Status.ContainerStatuses {
-		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
-		imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := containerStatus.ImageID
+			imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+		}
 	}
 
-	for containerStatus := range pod.Status.InitContainerStatuses {
-		imageID := pod.Status.InitContainerStatuses[containerStatus].ImageID
-		imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+	for _, containerStatus := range pod.Status.InitContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := containerStatus.ImageID
+			imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+		}
 	}
 
 	return imageIDs

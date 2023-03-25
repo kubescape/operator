@@ -76,14 +76,18 @@ func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan S
 
 func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
 	containersToImageIDs := make(map[string]string)
-	for containerStatus := range pod.Status.ContainerStatuses {
-		imageID := ExtractImageID(pod.Status.ContainerStatuses[containerStatus].ImageID)
-		containersToImageIDs[pod.Status.ContainerStatuses[containerStatus].Name] = imageID
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := ExtractImageID(containerStatus.ImageID)
+			containersToImageIDs[containerStatus.Name] = imageID
+		}
 	}
 
-	for containerStatus := range pod.Status.InitContainerStatuses {
-		imageID := ExtractImageID(pod.Status.InitContainerStatuses[containerStatus].ImageID)
-		containersToImageIDs[pod.Status.InitContainerStatuses[containerStatus].Name] = imageID
+	for _, containerStatus := range pod.Status.InitContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := ExtractImageID(containerStatus.ImageID)
+			containersToImageIDs[containerStatus.Name] = imageID
+		}
 	}
 
 	return containersToImageIDs
