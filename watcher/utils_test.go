@@ -25,6 +25,9 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
@@ -43,10 +46,16 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
 						},
@@ -68,10 +77,16 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					InitContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
 						},
@@ -93,10 +108,16 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container2",
 						},
@@ -132,6 +153,9 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
@@ -150,10 +174,16 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					ContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
 						},
@@ -172,10 +202,16 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 				Status: core1.PodStatus{
 					InitContainerStatuses: []core1.ContainerStatus{
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
+							State: core1.ContainerState{
+								Running: &core1.ContainerStateRunning{},
+							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
 						},
