@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 
@@ -22,24 +23,58 @@ import (
 
 func NewWatchHandlerMock() *WatchHandler {
 	return &WatchHandler{
-		imagesIDToWlidsMap:                make(map[string][]string),
+		iwMap:                             NewImageHashWLIDsMap(),
 		wlidsToContainerToImageIDMap:      make(map[string]map[string]string),
-		imageIDsMapMutex:                  &sync.RWMutex{},
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
 	}
 }
 
 func TestNewWatchHandlerProducesValidResult(t *testing.T) {
-	ctx := context.TODO()
-	k8sClient := k8sfake.NewSimpleClientset()
-	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-	storageClient := kssfake.NewSimpleClientset()
+	tt := []struct {
+		name string
+		imageIDsToWLIDSsMap map[string][]string
+		expectedIWMap map[string][]string
+	}{
+		{
+			name: "Creating with provided empty map returns matching empty map",
+			imageIDsToWLIDSsMap: map[string][]string{},
+			expectedIWMap: map[string][]string{},
+		},
+		{
+			name: "Creating with provided nil map returns matching empty map",
+			imageIDsToWLIDSsMap: nil,
+			expectedIWMap: map[string][]string{},
+		},
+		{
+			name: "Creating with provided non-empty map returns matching map",
+			imageIDsToWLIDSsMap: map[string][]string{
+				"imageid-01": {"wlid-01"},
+			},
+			expectedIWMap: map[string][]string{
+				"imageid-01": {"wlid-01"},
+			},
+		},
+	}
 
-	wh, err := NewWatchHandler(ctx, k8sAPI, storageClient)
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.TODO()
+			k8sClient := k8sfake.NewSimpleClientset()
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			storageClient := kssfake.NewSimpleClientset()
 
-	assert.NoErrorf(t, err, "Constructing should produce no errors")
-	assert.NotNilf(t, wh, "Constructing should create a non-nil object")
+			wh, err := NewWatchHandler(ctx, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap)
+
+			actualMap := wh.iwMap.Map()
+			for imageID := range actualMap {
+				sort.Strings(actualMap[imageID])
+			}
+			assert.NoErrorf(t, err, "Constructing should produce no errors")
+			assert.NotNilf(t, wh, "Constructing should create a non-nil object")
+			assert.Equal(t, tc.expectedIWMap, actualMap)
+		})
+	}
 }
 
 func Test_getSBOMWatcher(t *testing.T) {
@@ -47,7 +82,7 @@ func Test_getSBOMWatcher(t *testing.T) {
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	storageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient)
+	wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, nil)
 
 	sbomWatcher, err := wh.getSBOMWatcher()
 
@@ -115,7 +150,7 @@ func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
 			ksStorageClient := kssfake.NewSimpleClientset()
 
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-			wh, _ := NewWatchHandler(ctx, k8sAPI, ksStorageClient)
+			wh, _ := NewWatchHandler(ctx, k8sAPI, ksStorageClient, tc.wlidMap)
 
 			commandCh := make(chan *apis.Command)
 			errors := make(chan error)
@@ -127,7 +162,6 @@ func TestHandleSBOMProducesMatchingCommands(t *testing.T) {
 
 			// Handling the event is expected to transform
 			// incloming imageID in the SBOM name to a valid WLID
-			wh.imagesIDToWlidsMap = tc.wlidMap
 			expectedWlidsCounter := map[string]int{}
 
 			for _, sbom := range tc.sboms {
@@ -370,9 +404,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			ksStorageClient := kssfake.NewSimpleClientset()
-			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient)
-
-			wh.imagesIDToWlidsMap = tc.imageIDstoWlids
+			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, tc.imageIDstoWlids)
 
 			commandsCh := make(chan *apis.Command)
 			errCh := make(chan error)
@@ -424,16 +456,14 @@ func TestSBOMWatch(t *testing.T) {
 
 	k8sClient := k8sfake.NewSimpleClientset()
 
-	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-	ksStorageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient)
-
 	expectedWlid := "some-imageID"
 	imageIDsToWlids := map[string][]string{
 		"some-imageID": {expectedWlid},
 	}
 
-	wh.imagesIDToWlidsMap = imageIDsToWlids
+	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+	ksStorageClient := kssfake.NewSimpleClientset()
+	wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, imageIDsToWlids)
 
 	sessionObjCh := make(chan utils.SessionObj)
 	sessionObjChPtr := &sessionObjCh
@@ -757,10 +787,15 @@ func TestAddToImageIDToWlidsMap(t *testing.T) {
 	// add the new wlid to the same imageID
 	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid3")
 
-	assert.True(t, reflect.DeepEqual(wh.getImagesIDsToWlidMap(), map[string][]string{
+	actualMap := wh.iwMap.Map()
+	for imageID := range actualMap {
+		sort.Strings(actualMap[imageID])
+	}
+
+	assert.Equal(t, map[string][]string{
 		"alpine@sha256:1": {"wlid1", "wlid3"},
 		"alpine@sha256:2": {"wlid2"},
-	}))
+	}, actualMap)
 }
 
 func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
@@ -782,11 +817,11 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	wh := NewWatchHandlerMock()
 
-	wh.imagesIDToWlidsMap = map[string][]string{
+	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
 		"alpine@sha256:1": {"wlid"},
 		"alpine@sha256:2": {"wlid"},
 		"alpine@sha256:3": {"wlid"},
-	}
+	})
 
 	tests := []struct {
 		name     string
@@ -885,21 +920,9 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.True(t, reflect.DeepEqual(wh.getNewContainerToImageIDsFromPod(tt.pod), tt.expected))
+			assert.Equal(t, tt.expected, wh.getNewContainerToImageIDsFromPod(tt.pod))
 		})
 	}
-}
-
-func TestCleanUpImagesIDToWlidsMap(t *testing.T) {
-	wh := NewWatchHandlerMock()
-	wh.imagesIDToWlidsMap = map[string][]string{
-		"alpine@sha256:1": {"pod1"},
-		"alpine@sha256:2": {"pod2"},
-		"alpine@sha256:3": {"pod3"},
-	}
-	wh.cleanUpImagesIDToWlidsMap()
-
-	assert.Equal(t, len(wh.imagesIDToWlidsMap), 0)
 }
 
 func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
@@ -916,11 +939,11 @@ func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 
 func Test_cleanUpIDs(t *testing.T) {
 	wh := NewWatchHandlerMock()
-	wh.imagesIDToWlidsMap = map[string][]string{
+	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
 		"alpine@sha256:1": {"pod1"},
 		"alpine@sha256:2": {"pod2"},
 		"alpine@sha256:3": {"pod3"},
-	}
+	})
 	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
 		"pod1": {"container1": "alpine@sha256:1"},
 		"pod2": {"container2": "alpine@sha256:2"},
@@ -928,8 +951,8 @@ func Test_cleanUpIDs(t *testing.T) {
 	}
 	wh.cleanUpIDs()
 
-	assert.Equal(t, len(wh.imagesIDToWlidsMap), 0)
-	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
+	assert.Equal(t, 0, len(wh.iwMap.Map()))
+	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
 }
 
 //go:embed testdata/deployment-two-containers.json
