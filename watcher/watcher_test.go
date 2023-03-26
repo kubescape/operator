@@ -32,19 +32,19 @@ func NewWatchHandlerMock() *WatchHandler {
 
 func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	tt := []struct {
-		name string
+		name                string
 		imageIDsToWLIDSsMap map[string][]string
-		expectedIWMap map[string][]string
+		expectedIWMap       map[string][]string
 	}{
 		{
-			name: "Creating with provided empty map returns matching empty map",
+			name:                "Creating with provided empty map returns matching empty map",
 			imageIDsToWLIDSsMap: map[string][]string{},
-			expectedIWMap: map[string][]string{},
+			expectedIWMap:       map[string][]string{},
 		},
 		{
-			name: "Creating with provided nil map returns matching empty map",
+			name:                "Creating with provided nil map returns matching empty map",
 			imageIDsToWLIDSsMap: nil,
-			expectedIWMap: map[string][]string{},
+			expectedIWMap:       map[string][]string{},
 		},
 		{
 			name: "Creating with provided non-empty map returns matching map",
@@ -350,7 +350,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				},
 			},
 			expectedCommands: []apis.Command{},
-			expectedErrors:   []error{ErrUnknownImageID},
+			expectedErrors:   []error{ErrUnknownImageHash},
 		},
 		{
 			name: "Missing ImageID does not disrupt further processing",
@@ -394,7 +394,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedErrors: []error{ErrUnknownImageID},
+			expectedErrors: []error{ErrUnknownImageHash},
 		},
 	}
 
@@ -779,23 +779,48 @@ func TestSBOMWatch(t *testing.T) {
 // 	}
 // }
 
-func TestAddToImageIDToWlidsMap(t *testing.T) {
-	wh := NewWatchHandlerMock()
-
-	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid1")
-	wh.addToImageIDToWlidsMap("alpine@sha256:2", "wlid2")
-	// add the new wlid to the same imageID
-	wh.addToImageIDToWlidsMap("alpine@sha256:1", "wlid3")
-
-	actualMap := wh.iwMap.Map()
-	for imageID := range actualMap {
-		sort.Strings(actualMap[imageID])
+func Test_addToImageIDToWlidsMap(t *testing.T) {
+	type inputOperation struct {
+		imageID string
+		wlid    string
 	}
 
-	assert.Equal(t, map[string][]string{
-		"alpine@sha256:1": {"wlid1", "wlid3"},
-		"alpine@sha256:2": {"wlid2"},
-	}, actualMap)
+	tt := []struct {
+		name            string
+		inputOperations []inputOperation
+		expectedMap     map[string][]string
+	}{
+		{
+			name: "Adding imageName@hashType:imageHash keys with wlids produces expected maps",
+			inputOperations: []inputOperation{
+				{"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid1"},
+				{"alpine@sha256:486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7", "wlid2"},
+				// add the new wlid to the same imageID
+				{"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid3"},
+			},
+			expectedMap: map[string][]string{
+				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid1", "wlid3"},
+				"486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7": {"wlid2"},
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := NewWatchHandlerMock()
+
+			for _, op := range tc.inputOperations {
+				wh.addToImageIDToWlidsMap(op.imageID, op.wlid)
+			}
+
+			actualMap := wh.iwMap.Map()
+			for imageID := range actualMap {
+				sort.Strings(actualMap[imageID])
+			}
+
+			assert.Equal(t, tc.expectedMap, actualMap)
+		})
+	}
 }
 
 func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
