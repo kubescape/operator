@@ -12,6 +12,7 @@ import (
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
@@ -398,12 +399,20 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 
 		imgIDsToContainers := extractImageIDsToContainersFromPod(&podList.Items[i])
 
+		instanceID, err := instanceidhandler.GenerateInstanceID(wl)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("Failed to generate instance ID for pod", helpers.String("pod", podList.Items[i].Name), helpers.String("namespace", podList.Items[i].Namespace), helpers.Error(err))
+			continue
+		}
+
+		for i := range instanceID {
+			wh.addToInstanceIDsList(instanceID[i].GetStringFormatted())
+		}
+
 		for imgID, containers := range imgIDsToContainers {
 			wh.addToImageIDToWlidsMap(imgID, parentWlid)
 			for _, containerName := range containers {
 				wh.addToWlidsToContainerToImageIDMap(parentWlid, containerName, imgID)
-				instanceID := utils.GenerateInstanceID(wl.GetApiVersion(), wl.GetNamespace(), wl.GetKind(), wl.GetName(), wl.GetResourceVersion(), containerName)
-				wh.addToInstanceIDsList(instanceID)
 			}
 		}
 	}
