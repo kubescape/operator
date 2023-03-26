@@ -289,9 +289,9 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
 
-	// look for container to imageID map in the command args. If not found, look for it in the wl. If not found, get it from the pod
+	// look for container to imageID map in the command args. If not found, look for it on Pod
 	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
-		if len(pod.Status.ContainerStatuses) == 0 {
+		if workload.GetKind() != "Pod" {
 			// get from wl
 			mapContainerToImageID, err = actionHandler.getContainerToImageIDsFromWorkload(workload)
 			if err != nil {
@@ -474,8 +474,14 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 	for i := range containers {
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
+			// convert Pod to json
+			podJSON, err := json.Marshal(pod)
+			if err != nil {
+				logger.L().Ctx(ctx).Error("daniel: failed to marshal pod", helpers.String("container", containers[i].container), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+			} else {
+				logger.L().Ctx(ctx).Error("daniel: failed to get image ID for container", helpers.String("container", containers[i].container), helpers.String("namespace", pod.GetNamespace()), helpers.String("podJSON", string(podJSON)))
+			}
 			errs += fmt.Sprintf("failed to get image ID for container %s, pod: %s, namespace: %s", containers[i].container, pod.GetName(), pod.GetNamespace())
-			logger.L().Error(fmt.Sprintf("failed to get image ID for container %s, pod: %s, namespace: %s", containers[i].container, pod.GetName(), pod.GetNamespace()))
 			continue
 		} else {
 			imgID = val
