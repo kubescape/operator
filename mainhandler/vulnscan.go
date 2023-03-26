@@ -308,6 +308,11 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		mapContainerToImageID = val
 	}
 
+	if len(mapContainerToImageID) == 0 {
+		logger.L().Debug(fmt.Sprintf("workload %s has no running containers, skipping", actionHandler.wlid))
+		return nil
+	}
+
 	// get all images of workload
 	containers, err := listWorkloadImages(workload)
 	if err != nil {
@@ -417,14 +422,11 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(workload 
 	}
 	pod := pods.Items[0]
 
-	containerStatuses := pod.Status.ContainerStatuses
-	if len(containerStatuses) == 0 {
-		return nil, fmt.Errorf("no containers found for workload %s", workload.GetName())
-	}
-
-	for containerStatus := range containerStatuses {
-		imageID := pod.Status.ContainerStatuses[containerStatus].ImageID
-		mapContainerToImageID[pod.Status.ContainerStatuses[containerStatus].Name] = utils.ExtractImageID(imageID)
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := containerStatus.ImageID
+			mapContainerToImageID[containerStatus.Name] = utils.ExtractImageID(imageID)
+		}
 	}
 
 	return mapContainerToImageID, nil
@@ -474,18 +476,12 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 	for i := range containers {
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
-			// convert Pod to json
-			podJSON, err := json.Marshal(pod)
-			if err != nil {
-				logger.L().Ctx(ctx).Error("daniel: failed to marshal pod", helpers.String("container", containers[i].container), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
-			} else {
-				logger.L().Ctx(ctx).Error("daniel: failed to get image ID for container", helpers.String("container", containers[i].container), helpers.String("namespace", pod.GetNamespace()), helpers.String("podJSON", string(podJSON)))
-			}
-			errs += fmt.Sprintf("failed to get image ID for container %s, pod: %s, namespace: %s", containers[i].container, pod.GetName(), pod.GetNamespace())
+			logger.L().Ctx(ctx).Debug("container %s is not running, skipping", helpers.String("container", containers[i].container))
 			continue
 		} else {
 			imgID = val
 		}
+
 		// some images don't have imageID prefix, we will add it for them
 		imgID = getImageIDFromContainer(containers[i], imgID)
 		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command)
