@@ -17,7 +17,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/kubescape/go-logger v0.0.11
-	github.com/kubescape/k8s-interface v0.0.112
+	github.com/kubescape/k8s-interface v0.0.114-0.20230326195717-d11a8f35efc2
 	github.com/kubescape/opa-utils v0.0.224
 	github.com/kubescape/storage v0.2.0
 	github.com/mitchellh/mapstructure v1.4.3

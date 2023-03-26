@@ -19,11 +19,11 @@ import (
 	uuid "github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/armotypes"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/kubescape/k8s-interface/cloudsupport"
+	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
@@ -177,7 +177,7 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(ctx context.Context
 }
 
 func (actionHandler *ActionHandler) parseSecretName(sessionObj *utils.SessionObj) string {
-	registryInfo, ok := sessionObj.Command.Args[armotypes.RegistryInfoArgKey].(map[string]interface{})
+	registryInfo, ok := sessionObj.Command.Args[apitypes.RegistryInfoArgKey].(map[string]interface{})
 	if !ok {
 		return ""
 	}
@@ -186,7 +186,7 @@ func (actionHandler *ActionHandler) parseSecretName(sessionObj *utils.SessionObj
 }
 
 func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionObj) string {
-	registryInfo, ok := sessionObj.Command.Args[armotypes.RegistryInfoArgKey].(map[string]interface{})
+	registryInfo, ok := sessionObj.Command.Args[apitypes.RegistryInfoArgKey].(map[string]interface{})
 	if !ok {
 		return ""
 	}
@@ -241,9 +241,9 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
 	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
 
-	var repositories []armotypes.Repository
+	var repositories []apitypes.Repository
 	for _, repo := range repos {
-		repositories = append(repositories, armotypes.Repository{
+		repositories = append(repositories, apitypes.Repository{
 			RepositoryName: repo,
 		})
 	}
@@ -287,6 +287,15 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
 		return nil
 	}
+
+	// get pod instanceID
+	instancesID, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
+	if err != nil {
+		err = fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.Name, workload, err)
+		return err
+	}
+
+	// get container to imageID map
 	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
 
 	// look for container to imageID map in the command args. If not found, look for it on Pod
@@ -314,7 +323,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 
 	// get all images of workload
-	containers, err := listWorkloadImages(workload)
+	containers, err := listWorkloadImages(workload, instancesID)
 	if err != nil {
 		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}
@@ -437,12 +446,10 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		Wlid:          actionHandler.wlid,
 		ImageTag:      container.image,
 		ContainerName: container.container,
+		InstanceID:    &container.id,
 		Session:       apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 		ImageHash:     utils.ExtractImageID(imageID),
-	}
-	if command == apis.TypeScanImages {
-		instanceID := utils.GenerateInstanceID(pod.APIVersion, pod.Kind, pod.Namespace, pod.Name, pod.ResourceVersion, container.container)
-		websocketScanCommand.InstanceID = &instanceID
+		JobID:         sessionObj.Reporter.GetJobID(),
 	}
 
 	if actionHandler.reporter != nil {
