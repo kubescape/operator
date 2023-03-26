@@ -446,10 +446,14 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		Wlid:          actionHandler.wlid,
 		ImageTag:      container.image,
 		ContainerName: container.container,
-		InstanceID:    &container.id,
 		Session:       apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 		ImageHash:     utils.ExtractImageID(imageID),
 		JobID:         sessionObj.Reporter.GetJobID(),
+	}
+
+	// Add instanceID only if container is not empty
+	if container.id != "" {
+		websocketScanCommand.InstanceID = &container.id
 	}
 
 	if actionHandler.reporter != nil {
