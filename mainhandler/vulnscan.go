@@ -538,7 +538,6 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		Wlid:          actionHandler.wlid,
 		ContainerName: container.container,
 		ImageHash:     utils.ExtractImageID(imageID),
-		JobID:         sessionObj.Reporter.GetJobID(),
 	}
 
 	// Add instanceID only if container is not empty
