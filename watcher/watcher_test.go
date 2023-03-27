@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
@@ -90,215 +91,70 @@ func Test_getSBOMWatcher(t *testing.T) {
 
 func TestHandleSBOMEvents(t *testing.T) {
 	tt := []struct {
-		name             string
-		imageIDstoWlids  map[string][]string
-		inputEvents      []watch.Event
-		expectedCommands []apis.Command
-		expectedErrors   []error
+		name              string
+		imageIDstoWlids   map[string][]string
+		inputEvents       []watch.Event
+		expectedSBOMNames []string
+		expectedErrors    []error
 	}{
 		{
-			name: "Bookmark event gets ignored",
-			imageIDstoWlids: map[string][]string{
-				"testName": {"testWlid"},
-			},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Bookmark,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-			},
-			expectedCommands: []apis.Command{},
-			expectedErrors:   []error{},
-		},
-		{
-			name: "Deleted event gets ignored",
-			imageIDstoWlids: map[string][]string{
-				"testName": {"testWlid"},
-			},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Deleted,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-			},
-			expectedCommands: []apis.Command{},
-			expectedErrors:   []error{},
-		},
-		{
-			name: "Added event gets an appropriate result",
-			imageIDstoWlids: map[string][]string{
-				"testName": {"testWlid"},
-			},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-			},
-			expectedCommands: []apis.Command{
-				{
-					CommandName: apis.TypeScanImages,
-					Wlid:        "testWlid",
-					Args: map[string]interface{}{
-						utils.ContainerToImageIdsArg: map[string]string{},
-					},
-				},
-			},
-			expectedErrors: []error{},
-		},
-		{
-			name: "Mismatched object gets an appropriate error",
-			imageIDstoWlids: map[string][]string{
-				"testName": {"testWlid"},
-			},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &core1.Pod{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-			},
-			expectedCommands: []apis.Command{},
-			expectedErrors:   []error{ErrUnsupportedObject},
-		},
-		{
-			name: "Skipped event does not disrupt listeners",
-			imageIDstoWlids: map[string][]string{
-				"testName": {"testWlid"},
-			},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-				{
-					Type: watch.Bookmark,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-				{
-					Type: watch.Added,
-					Object: &core1.Pod{
-						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-					},
-				},
-			},
-			expectedCommands: []apis.Command{
-				{
-					CommandName: apis.TypeScanImages,
-					Wlid:        "testWlid",
-					Args: map[string]interface{}{
-						utils.ContainerToImageIdsArg: map[string]string{},
-					},
-				},
-			},
-			expectedErrors: []error{ErrUnsupportedObject},
-		},
-		{
-			name: "Multiple added events produce matching commands",
-			imageIDstoWlids: map[string][]string{
-				"imageID-01": {"wlid-01"},
-				"imageID-02": {"wlid-02"},
-			},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "imageID-01"},
-					},
-				},
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "imageID-02"},
-					},
-				},
-			},
-			expectedCommands: []apis.Command{
-				{
-					CommandName: apis.TypeScanImages,
-					Wlid:        "wlid-01",
-					Args: map[string]interface{}{
-						utils.ContainerToImageIdsArg: map[string]string{},
-					},
-				},
-				{
-					CommandName: apis.TypeScanImages,
-					Wlid:        "wlid-02",
-					Args: map[string]interface{}{
-						utils.ContainerToImageIdsArg: map[string]string{},
-					},
-				},
-			},
-			expectedErrors: []error{},
-		},
-		{
-			name:            "Unknown ImageID produces a matching error",
+			name:            "New SBOM with unrecognized imageHash as name gets deleted",
 			imageIDstoWlids: map[string][]string{},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "Unknown Image ID"},
+						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
 					},
 				},
 			},
-			expectedCommands: []apis.Command{},
-			expectedErrors:   []error{ErrUnknownImageHash},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{},
 		},
 		{
-			name: "Missing ImageID does not disrupt further processing",
-			imageIDstoWlids: map[string][]string{
-				"imageID-01": {"test-wlid-01"},
-				"imageID-02": {"test-wlid-02"},
-			},
+			name:            "Non-SBOM objects get ignored",
+			imageIDstoWlids: map[string][]string{},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "Unknown Image ID"},
-					},
-				},
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "imageID-01"},
-					},
-				},
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "imageID-02"},
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{Name: "testName"},
 					},
 				},
 			},
-			expectedCommands: []apis.Command{
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{ErrUnsupportedObject},
+		},
+		{
+			name:            "Modified SBOM with unrecognized imageHash as name gets deleted",
+			imageIDstoWlids: map[string][]string{},
+			inputEvents: []watch.Event{
 				{
-					CommandName: apis.TypeScanImages,
-					Wlid:        "test-wlid-01",
-					Args: map[string]interface{}{
-						utils.ContainerToImageIdsArg: map[string]string{},
-					},
-				},
-				{
-					CommandName: apis.TypeScanImages,
-					Wlid:        "test-wlid-02",
-					Args: map[string]interface{}{
-						utils.ContainerToImageIdsArg: map[string]string{},
+					Type: watch.Modified,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
 					},
 				},
 			},
-			expectedErrors: []error{ErrUnknownImageHash},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{},
+		},
+		{
+			name:            "Deleted SBOM with unrecognized imageHash gets ignored",
+			imageIDstoWlids: map[string][]string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Deleted,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
+					},
+				},
+			},
+			// Since the fake client does not receive a delete
+			// request, it will still have the original value
+			// stored.
+			expectedSBOMNames: []string{"testName"},
+			expectedErrors:    []error{},
 		},
 	}
 
@@ -306,11 +162,15 @@ func TestHandleSBOMEvents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 
+			objects := []runtime.Object{}
+			for _, event := range tc.inputEvents {
+				objects = append(objects, event.Object)
+			}
+
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-			ksStorageClient := kssfake.NewSimpleClientset()
+			ksStorageClient := kssfake.NewSimpleClientset(objects...)
 			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, tc.imageIDstoWlids)
 
-			commandsCh := make(chan *apis.Command)
 			errCh := make(chan error)
 
 			sbomEvents := make(chan watch.Event)
@@ -323,20 +183,13 @@ func TestHandleSBOMEvents(t *testing.T) {
 				close(sbomEvents)
 			}()
 
-			go wh.HandleSBOMEvents(sbomEvents, commandsCh, errCh)
+			go wh.HandleSBOMEvents(sbomEvents, errCh)
 
-			actualCommands := []apis.Command{}
 			actualErrors := []error{}
 
 			var done bool
 			for !done {
 				select {
-				case command, ok := <-commandsCh:
-					if ok {
-						actualCommands = append(actualCommands, *command)
-					} else {
-						done = true
-					}
 				case err, ok := <-errCh:
 					if ok {
 						actualErrors = append(actualErrors, err)
@@ -346,7 +199,14 @@ func TestHandleSBOMEvents(t *testing.T) {
 				}
 			}
 
-			assert.Equalf(t, tc.expectedCommands, actualCommands, "Commands should match")
+			storedObjects, _ := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").List(context.TODO(), v1.ListOptions{})
+
+			remainingSBOMNames := []string{}
+			for _, obj := range storedObjects.Items {
+				remainingSBOMNames = append(remainingSBOMNames, obj.ObjectMeta.Name)
+			}
+
+			assert.Equalf(t, tc.expectedSBOMNames, remainingSBOMNames, "Commands should match")
 			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
 		})
 	}

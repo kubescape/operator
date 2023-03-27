@@ -176,8 +176,7 @@ func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImag
 //
 // Handling events is defined as dispatching scan commands that match a given
 // SBOM to the main command channel
-func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands chan<- *apis.Command, errorCh chan<- error) {
-	defer close(commands)
+func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh chan<- error) {
 	defer close(errorCh)
 
 	for event := range sbomEvents {
@@ -187,23 +186,21 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, commands
 			continue
 		}
 
-		// We need to schedule scans only for new SBOMs, not changes to
-		// existing ones or other operations
-		if event.Type != watch.Added {
+		// We don’t need to try deleting SBOMs that have been deleted
+		if event.Type == watch.Deleted {
 			continue
 		}
 
 		imageHash := obj.ObjectMeta.Name
 
-		wlids, ok := wh.iwMap.Load(imageHash)
-		if !ok {
-			errorCh <- ErrUnknownImageHash
+		_, imageHashOk := wh.iwMap.Load(imageHash)
+		if !imageHashOk {
+			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
 			continue
 		}
-
-		wlid := wlids[0]
-
-		commands <- getImageScanCommand(wlid, map[string]string{})
 	}
 }
 
@@ -224,7 +221,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 		sbomWatcherUnavailable <- struct{}{}
 	}()
 
-	go wh.HandleSBOMEvents(inputEvents, commands, errorCh)
+	go wh.HandleSBOMEvents(inputEvents, errorCh)
 
 	var watcher watch.Interface
 	var err error
@@ -249,14 +246,12 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 				sbomWatcherUnavailable <- struct{}{}
 			}
 		case <-sbomWatcherUnavailable:
-			// logger.L().Ctx(ctx).Warning("Handling unavailable SBOM watcher.")
 			if watcher != nil {
 				watcher.Stop()
 			}
 
 			watcher, err = wh.getSBOMWatcher()
 			if err != nil {
-				// logger.L().Ctx(ctx).Error("Unable to create the SBOM watcher, retrying.")
 				time.Sleep(retryInterval)
 				go func() {
 					sbomWatcherUnavailable <- struct{}{}
