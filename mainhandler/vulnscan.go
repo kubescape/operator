@@ -424,8 +424,8 @@ func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *api
 
 	websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
 	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-	websocketScanCommand.JobID = uuid.NewString()
-	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
+	websocketScanCommand.SetJobID(uuid.NewString())
+	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.GetJobID())
 }
 
 // send workload to the kubevuln with credentials
@@ -544,10 +544,9 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 	if container.id != "" {
 		websocketScanCommand.InstanceID = &container.id
 	}
-
 	if actionHandler.reporter != nil {
 		prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
-		logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID))
+		logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.GetJobID()))
 	}
 
 	if pod != nil {
