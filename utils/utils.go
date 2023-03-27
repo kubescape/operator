@@ -64,10 +64,6 @@ func ExtractImageID(imageID string) string {
 	return strings.TrimPrefix(imageID, dockerPullableURN)
 }
 
-func GenerateInstanceID(parentApiVersion, namespace, kind, name, resourceVersion, containerName string) string {
-	instanceID := fmt.Sprintf("apiVersion-%s/namespace-%s/kind-%s/name-%s/resourceVersion-%s/container-%s", parentApiVersion, namespace, kind, name, resourceVersion, containerName)
-	return strings.ToLower(instanceID)
-}
 func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan SessionObj) {
 	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
 	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)

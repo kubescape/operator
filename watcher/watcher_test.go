@@ -11,14 +11,12 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
-
-	// Kubescape storage client
-	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"k8s.io/apimachinery/pkg/watch"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func NewWatchHandlerMock() *WatchHandler {
