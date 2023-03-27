@@ -1,7 +1,7 @@
 package mainhandler
 
 import (
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	"github.com/kubescape/k8s-interface/instanceidhandler"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 )
 
@@ -12,7 +12,7 @@ type ContainerData struct {
 	id        string
 }
 
-func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []*instanceidhandler.InstanceID) ([]ContainerData, error) {
+func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []instanceidhandler.IInstanceID) ([]ContainerData, error) {
 
 	containersData := []ContainerData{}
 
@@ -48,10 +48,10 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []*instance
 }
 
 // getContainer returns the container ID
-func getContainerID(instancesID []*instanceidhandler.InstanceID, container string) string {
+func getContainerID(instancesID []instanceidhandler.IInstanceID, container string) string {
 	for i := range instancesID {
 		if instancesID[i].GetContainerName() == container {
-			return instancesID[i].GetStringFormatted()
+			return instancesID[i].GetHashed()
 		}
 	}
 	return ""

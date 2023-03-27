@@ -296,7 +296,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 
 	// get container to imageID map
-	mapContainerToImageID := make(map[string]string) // map of container name to image ID. Container name is unique per pod
+	var mapContainerToImageID map[string]string // map of container name to image ID. Container name is unique per pod
 
 	// look for container to imageID map in the command args. If not found, look for it on Pod
 	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {

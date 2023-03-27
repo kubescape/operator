@@ -12,7 +12,8 @@ import (
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	"github.com/kubescape/k8s-interface/instanceidhandler"
+	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
@@ -341,12 +342,13 @@ func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]str
 	return containerToImageIds
 }
 
-func (wh *WatchHandler) addToInstanceIDsList(instanceID string) {
+func (wh *WatchHandler) addToInstanceIDsList(instanceID instanceidhandler.IInstanceID) {
 	wh.instanceIDsMutex.Lock()
 	defer wh.instanceIDsMutex.Unlock()
+	h := instanceID.GetHashed()
 
-	if !slices.Contains(wh.instanceIDs, instanceID) {
-		wh.instanceIDs = append(wh.instanceIDs, instanceID)
+	if !slices.Contains(wh.instanceIDs, h) {
+		wh.instanceIDs = append(wh.instanceIDs, h)
 	}
 }
 
@@ -399,14 +401,14 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 
 		imgIDsToContainers := extractImageIDsToContainersFromPod(&podList.Items[i])
 
-		instanceID, err := instanceidhandler.GenerateInstanceID(wl)
+		instanceID, err := instanceidhandlerv1.GenerateInstanceID(wl)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("Failed to generate instance ID for pod", helpers.String("pod", podList.Items[i].Name), helpers.String("namespace", podList.Items[i].Namespace), helpers.Error(err))
 			continue
 		}
 
 		for i := range instanceID {
-			wh.addToInstanceIDsList(instanceID[i].GetStringFormatted())
+			wh.addToInstanceIDsList(instanceID[i])
 		}
 
 		for imgID, containers := range imgIDsToContainers {
