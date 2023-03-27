@@ -517,6 +517,7 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		ImageScanParams: apis.ImageScanParams{
 			Session:  apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 			ImageTag: container.image,
+			JobID:    sessionObj.Reporter.GetJobID(),
 		},
 		Wlid:          actionHandler.wlid,
 		ContainerName: container.container,
