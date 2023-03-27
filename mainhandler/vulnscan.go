@@ -80,27 +80,6 @@ func sendAllImagesToRegistryScan(ctx context.Context, registryScanCMDList []*api
 	return nil
 }
 
-func sendAllImagesToVulnScan(ctx context.Context, webSocketScanCMDList []*apis.WebsocketScanCommand) error {
-	var err error
-	errs := make([]error, 0)
-	for _, webSocketScanCMD := range webSocketScanCMDList {
-		err = sendWorkloadToCVEScan(ctx, webSocketScanCMD)
-		if err != nil {
-			logger.L().Ctx(ctx).Error("sendWorkloadToCVEScan failed", helpers.Error(err))
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		err = fmt.Errorf("sendAllImagesToVulnScan errors: ")
-		for errIdx := range errs {
-			err = fmt.Errorf("%s; %w", err, errs[errIdx])
-		}
-		return err
-	}
-	return nil
-}
-
 func convertImagesToRegistryScanCommand(registry *registryScan, sessionObj *utils.SessionObj) []*apis.RegistryScanCommand {
 	images := registry.mapImageToTags
 
@@ -139,45 +118,6 @@ func convertImagesToRegistryScanCommand(registry *registryScan, sessionObj *util
 
 	return registryScanCMDList
 
-}
-
-func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *utils.SessionObj) []*apis.WebsocketScanCommand {
-	images := registry.mapImageToTags
-
-	webSocketScanCMDList := make([]*apis.WebsocketScanCommand, 0)
-	for repository, tags := range images {
-		// registry/project/repo --> repo
-		repositoryName := strings.Replace(repository, registry.registry.hostname+"/", "", -1)
-		if registry.registry.projectID != "" {
-			repositoryName = strings.Replace(repositoryName, registry.registry.projectID+"/", "", -1)
-		}
-		for _, tag := range tags {
-			websocketScanCommand := &apis.WebsocketScanCommand{
-				ImageScanParams: apis.ImageScanParams{
-					ParentJobID: sessionObj.Reporter.GetJobID(),
-					JobID:       uuid.NewString(),
-					ImageTag:    repository + ":" + tag,
-					Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
-					Args: map[string]interface{}{
-						apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
-						apitypes.AttributeRepository:    repositoryName,
-						apitypes.AttributeTag:           tag,
-						apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
-						apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
-						apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
-					},
-				},
-			}
-			// Check if auth is empty (used for public registries)
-			authConfig := registry.authConfig()
-			if authConfig != nil {
-				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, *authConfig)
-			}
-			webSocketScanCMDList = append(webSocketScanCMDList, websocketScanCommand)
-		}
-	}
-
-	return webSocketScanCMDList
 }
 
 func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionObj *utils.SessionObj) error {
@@ -428,11 +368,7 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	creds := command.GetCreds()
 	credsList := command.GetCredentialsList()
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	if command.GetImageHash() == "" {
-		logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s, with credentials: %v", scanUrl.String(), command.GetWlid(), command.GetImageTag(), hasCreds))
-	} else {
-		logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s, imageHash: %s,  with credentials: %v", scanUrl.String(), command.GetWlid(), command.GetImageTag(), command.GetImageHash(), hasCreds))
-	}
+	logger.L().Info("scan request", helpers.String("url", scanUrl.String()), helpers.String("wlid", command.GetWlid()), helpers.String("instanceID", ""), helpers.String("imageTag", command.GetImageTag()), helpers.String("imageHash", command.GetImageHash()), helpers.Interface("credentials", hasCreds))
 
 	resp, err := httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
 	refusedNum := 0
@@ -479,7 +415,7 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		}
 		return pod, nil
 	}
-  
+
 	labels := workload.GetPodLabels()
 	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
 	if err != nil {

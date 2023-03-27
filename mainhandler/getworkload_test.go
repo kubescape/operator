@@ -47,13 +47,13 @@ func Test_getContainer(t *testing.T) {
 			ins.SetContainerName(tt.instanceID.containerName)
 
 			got := getContainerID([]instanceidhandler.IInstanceID{ins}, tt.wantContainer)
-			if tt.found && got == "" {
+			if tt.found && got == nil {
 				t.Errorf("getContainer() = %v, want %v", got, tt.wantContainer)
 			}
-			if !tt.found && got != "" {
+			if !tt.found && got != nil {
 				t.Errorf("getContainer() = %v, want %v", got, tt.wantContainer)
 			}
-			if got != tt.want {
+			if got != nil && got.GetHashed() != tt.want {
 				t.Errorf("getContainer() = %v, want %v", got, tt.want)
 			}
 		})

@@ -1,6 +1,8 @@
 package mainhandler
 
 import (
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 )
@@ -21,13 +23,19 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 		return containersData, err
 	}
 	for i := range containers {
+		c := ""
+		id := getContainerID(instanceIDs, containers[i].Name)
+		if id != nil {
+			c = id.GetHashed()
+		}
 		containersData = append(containersData,
 			ContainerData{
 				image:     containers[i].Image,
 				container: containers[i].Name,
-				id:        getContainerID(instanceIDs, containers[i].Name),
+				id:        c,
 			},
 		)
+		logger.L().Debug("instanceID", helpers.String("str", id.GetStringFormatted()), helpers.String("id", id.GetHashed()), helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
 	}
 	initContainers, err := workload.GetInitContainers()
 	if err != nil {
@@ -48,11 +56,11 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 }
 
 // getContainer returns the container ID
-func getContainerID(instanceIDs []instanceidhandler.IInstanceID, container string) string {
+func getContainerID(instanceIDs []instanceidhandler.IInstanceID, container string) instanceidhandler.IInstanceID {
 	for i := range instanceIDs {
 		if instanceIDs[i].GetContainerName() == container {
-			return instanceIDs[i].GetHashed()
+			return instanceIDs[i]
 		}
 	}
-	return ""
+	return nil
 }
