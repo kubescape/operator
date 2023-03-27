@@ -289,7 +289,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 
 	// get pod instanceID
-	instancesID, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
+	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
 	if err != nil {
 		err = fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.Name, workload, err)
 		return err
@@ -323,7 +323,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	}
 
 	// get all images of workload
-	containers, err := listWorkloadImages(workload, instancesID)
+	containers, err := listWorkloadImages(workload, instanceIDs)
 	if err != nil {
 		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
 	}

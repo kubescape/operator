@@ -12,7 +12,7 @@ type ContainerData struct {
 	id        string
 }
 
-func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []instanceidhandler.IInstanceID) ([]ContainerData, error) {
+func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instanceidhandler.IInstanceID) ([]ContainerData, error) {
 
 	containersData := []ContainerData{}
 
@@ -25,7 +25,7 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []instancei
 			ContainerData{
 				image:     containers[i].Image,
 				container: containers[i].Name,
-				id:        getContainerID(instancesID, containers[i].Name),
+				id:        getContainerID(instanceIDs, containers[i].Name),
 			},
 		)
 	}
@@ -38,7 +38,7 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []instancei
 			ContainerData{
 				image:     initContainers[i].Image,
 				container: initContainers[i].Name,
-				// id:        getContainer(instancesID, containers[i].Name), // TODO: Currently not supported in the k8s-interface
+				// id:        getContainer(instanceIDs, containers[i].Name), // TODO: Currently not supported in the k8s-interface
 			},
 		)
 	}
@@ -48,10 +48,10 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instancesID []instancei
 }
 
 // getContainer returns the container ID
-func getContainerID(instancesID []instanceidhandler.IInstanceID, container string) string {
-	for i := range instancesID {
-		if instancesID[i].GetContainerName() == container {
-			return instancesID[i].GetHashed()
+func getContainerID(instanceIDs []instanceidhandler.IInstanceID, container string) string {
+	for i := range instanceIDs {
+		if instanceIDs[i].GetContainerName() == container {
+			return instanceIDs[i].GetHashed()
 		}
 	}
 	return ""
