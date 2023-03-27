@@ -414,6 +414,11 @@ func getPodByWLID(ctx context.Context, workload k8sinterface.IWorkload) *corev1.
 	}
 
 	podObj.ObjectMeta.Namespace = workload.GetNamespace()
+	podObj.ObjectMeta.OwnerReferences, err = workload.GetOwnerReferences()
+	if err != nil {
+		return nil
+	}
+	podObj.SetName(workload.GetName())
 	podObj.APIVersion = "v1"
 	podObj.Kind = "Pod"
 	return podObj
