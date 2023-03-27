@@ -47,8 +47,37 @@ func getVulnScanURL() *url.URL {
 	return &url.URL{
 		Scheme: "http",
 		Host:   utils.ClusterConfig.KubevulnURL,
-		Path:   fmt.Sprintf("%s/%s", apis.WebsocketScanCommandVersion, apis.WebsocketScanCommandPath),
+		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.ContainerScanCommandPath),
 	}
+}
+
+func getRegistryScanURL() *url.URL {
+	return &url.URL{
+		Scheme: "http",
+		Host:   utils.ClusterConfig.KubevulnURL,
+		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.RegistryScanCommandPath),
+	}
+}
+
+func sendAllImagesToRegistryScan(ctx context.Context, registryScanCMDList []*apis.RegistryScanCommand) error {
+	var err error
+	errs := make([]error, 0)
+	for _, registryScanCMD := range registryScanCMDList {
+		err = sendWorkloadToRegistryScan(ctx, registryScanCMD)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("sendWorkloadToRegistryScan failed", helpers.Error(err))
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		err = fmt.Errorf("sendAllImagesToRegistryScan errors: ")
+		for errIdx := range errs {
+			err = fmt.Errorf("%s; %w", err, errs[errIdx])
+		}
+		return err
+	}
+	return nil
 }
 
 func sendAllImagesToVulnScan(ctx context.Context, webSocketScanCMDList []*apis.WebsocketScanCommand) error {
@@ -72,6 +101,46 @@ func sendAllImagesToVulnScan(ctx context.Context, webSocketScanCMDList []*apis.W
 	return nil
 }
 
+func convertImagesToRegistryScanCommand(registry *registryScan, sessionObj *utils.SessionObj) []*apis.RegistryScanCommand {
+	images := registry.mapImageToTags
+
+	registryScanCMDList := make([]*apis.RegistryScanCommand, 0)
+	for repository, tags := range images {
+		// registry/project/repo --> repo
+		repositoryName := strings.Replace(repository, registry.registry.hostname+"/", "", -1)
+		if registry.registry.projectID != "" {
+			repositoryName = strings.Replace(repositoryName, registry.registry.projectID+"/", "", -1)
+		}
+		for _, tag := range tags {
+			registryScanCommand := &apis.ImageScanParams{
+				ParentJobID: sessionObj.Reporter.GetJobID(),
+				JobID:       uuid.NewString(),
+				ImageTag:    repository + ":" + tag,
+				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+				Args: map[string]interface{}{
+					apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
+					apitypes.AttributeRepository:    repositoryName,
+					apitypes.AttributeTag:           tag,
+					apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
+					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
+					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
+				},
+			}
+			// Check if auth is empty (used for public registries)
+			authConfig := registry.authConfig()
+			if authConfig != nil {
+				registryScanCommand.Credentialslist = append(registryScanCommand.Credentialslist, *authConfig)
+			}
+			registryScanCMDList = append(registryScanCMDList, &apis.RegistryScanCommand{
+				ImageScanParams: *registryScanCommand,
+			})
+		}
+	}
+
+	return registryScanCMDList
+
+}
+
 func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *utils.SessionObj) []*apis.WebsocketScanCommand {
 	images := registry.mapImageToTags
 
@@ -84,17 +153,19 @@ func convertImagesToWebsocketScanCommand(registry *registryScan, sessionObj *uti
 		}
 		for _, tag := range tags {
 			websocketScanCommand := &apis.WebsocketScanCommand{
-				ParentJobID: sessionObj.Reporter.GetJobID(),
-				JobID:       uuid.NewString(),
-				ImageTag:    repository + ":" + tag,
-				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
-				Args: map[string]interface{}{
-					apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
-					apitypes.AttributeRepository:    repositoryName,
-					apitypes.AttributeTag:           tag,
-					apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
-					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
-					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
+				ImageScanParams: apis.ImageScanParams{
+					ParentJobID: sessionObj.Reporter.GetJobID(),
+					JobID:       uuid.NewString(),
+					ImageTag:    repository + ":" + tag,
+					Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+					Args: map[string]interface{}{
+						apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
+						apitypes.AttributeRepository:    repositoryName,
+						apitypes.AttributeTag:           tag,
+						apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
+						apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
+						apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
+					},
 				},
 			}
 			// Check if auth is empty (used for public registries)
@@ -267,10 +338,10 @@ func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *
 	if err != nil {
 		return fmt.Errorf("GetImagesForScanning failed with err %v", err)
 	}
-	webSocketScanCMDList := convertImagesToWebsocketScanCommand(registry, sessionObj)
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(webSocketScanCMDList), registry.registry), true, sessionObj.ErrChan)
+	registryScanCMDList := convertImagesToRegistryScanCommand(registry, sessionObj)
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), true, sessionObj.ErrChan)
 
-	return sendAllImagesToVulnScan(ctx, webSocketScanCMDList)
+	return sendAllImagesToRegistryScan(ctx, registryScanCMDList)
 }
 
 func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj *utils.SessionObj) error {
@@ -343,43 +414,52 @@ func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *api
 
 	websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
 	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
-	websocketScanCommand.JobID = uuid.NewString()
-	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.JobID)
+	websocketScanCommand.SetJobID(uuid.NewString())
+	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.GetJobID())
 }
 
 // send workload to the kubevuln with credentials
-func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, websocketScanCommand *apis.WebsocketScanCommand) error {
-	jsonScannerC, err := json.Marshal(websocketScanCommand)
+func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command apis.ImageScanCommand) error {
+	jsonScannerC, err := json.Marshal(command)
 	if err != nil {
 		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
 	}
-	creds := websocketScanCommand.Credentials
-	credsList := websocketScanCommand.Credentialslist
+
+	creds := command.GetCreds()
+	credsList := command.GetCredentialsList()
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s, imageHash: %s,  with credentials: %v", scanUrl.String(), websocketScanCommand.Wlid, websocketScanCommand.ImageTag, websocketScanCommand.ImageHash, hasCreds))
+	if command.GetImageHash() == "" {
+		logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s, with credentials: %v", scanUrl.String(), command.GetWlid(), command.GetImageTag(), hasCreds))
+	} else {
+		logger.L().Info(fmt.Sprintf("requesting scan. url: %s wlid: %s image: %s, imageHash: %s,  with credentials: %v", scanUrl.String(), command.GetWlid(), command.GetImageTag(), command.GetImageHash(), hasCreds))
+	}
 
 	resp, err := httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
 	refusedNum := 0
 	for ; refusedNum < 5 && err != nil && strings.Contains(err.Error(), "connection refused"); resp, err = httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC) {
-		logger.L().Ctx(ctx).Error("failed posting to vulnerability scanner", helpers.String("query", websocketScanCommand.ImageTag), helpers.Error(err))
+		logger.L().Ctx(ctx).Error("failed posting to vulnerability scanner", helpers.String("query", command.GetImageTag()), helpers.Error(err))
 		time.Sleep(5 * time.Second)
 		refusedNum++
 	}
 	if err != nil {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", websocketScanCommand.ImageTag, err.Error())
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", command.GetImageTag(), err.Error())
 	}
 	if resp == nil {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", websocketScanCommand.ImageTag)
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'empty response'", command.GetImageTag())
 	}
 	if resp.Body != nil {
 		defer resp.Body.Close()
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 203 {
-		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'received bad status code: %d'", websocketScanCommand.ImageTag, resp.StatusCode)
+		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: 'received bad status code: %d'", command.GetImageTag(), resp.StatusCode)
 	}
 	return nil
 
+}
+
+func sendWorkloadToRegistryScan(ctx context.Context, registryScanCommand *apis.RegistryScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getRegistryScanURL(), registryScanCommand)
 }
 
 func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.WebsocketScanCommand) error {
@@ -399,6 +479,7 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		}
 		return pod, nil
 	}
+  
 	labels := workload.GetPodLabels()
 	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
 	if err != nil {
@@ -426,22 +507,23 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(pod *core
 
 func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *corev1.Pod, imageID string, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) (*apis.WebsocketScanCommand, error) {
 	websocketScanCommand := &apis.WebsocketScanCommand{
+		ImageScanParams: apis.ImageScanParams{
+			Session:  apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+			ImageTag: container.image,
+			JobID:    sessionObj.Reporter.GetJobID(),
+		},
 		Wlid:          actionHandler.wlid,
-		ImageTag:      container.image,
 		ContainerName: container.container,
-		Session:       apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 		ImageHash:     utils.ExtractImageID(imageID),
-		JobID:         sessionObj.Reporter.GetJobID(),
 	}
 
 	// Add instanceID only if container is not empty
 	if container.id != "" {
 		websocketScanCommand.InstanceID = &container.id
 	}
-
 	if actionHandler.reporter != nil {
 		prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
-		logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.JobID))
+		logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.GetJobID()))
 	}
 
 	if pod != nil {
@@ -450,7 +532,7 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 			return nil, err
 		} else if len(secrets) > 0 {
 			for secretName := range secrets {
-				websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
+				websocketScanCommand.ImageScanParams.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
 			}
 
 			/*
