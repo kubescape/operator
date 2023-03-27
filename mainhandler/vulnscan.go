@@ -282,16 +282,10 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
 	}
 
-	pod := getPodByWLID(ctx, workload)
-	if pod == nil {
-		logger.L().Info(fmt.Sprintf("workload %s has no podSpec, skipping", actionHandler.wlid))
-		return nil
-	}
-
-	// get pod instanceID
-	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
+	pod, err := actionHandler.getPodByWLID(workload)
 	if err != nil {
-		err = fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.Name, workload, err)
+		err = fmt.Errorf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err)
+		logger.L().Ctx(ctx).Error(err.Error())
 		return err
 	}
 
@@ -300,21 +294,17 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 
 	// look for container to imageID map in the command args. If not found, look for it on Pod
 	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
-		if workload.GetKind() != "Pod" {
-			// get from wl
-			mapContainerToImageID, err = actionHandler.getContainerToImageIDsFromWorkload(workload)
-			if err != nil {
-				err = fmt.Errorf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err)
-				logger.L().Ctx(ctx).Error(err.Error())
-				return err
-			}
-		} else {
-			// get from pod
-			mapContainerToImageID = utils.ExtractContainersToImageIDsFromPod(pod)
-		}
+		mapContainerToImageID = actionHandler.getContainerToImageIDsFromWorkload(pod)
 	} else {
 		// get from args
 		mapContainerToImageID = val
+	}
+
+	// get pod instanceID
+	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
+	if err != nil {
+		err = fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.GetName(), workload, err)
+		return err
 	}
 
 	if len(mapContainerToImageID) == 0 {
@@ -396,31 +386,19 @@ func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.Webso
 	return sendWorkloadWithCredentials(ctx, getVulnScanURL(), websocketScanCommand)
 }
 
-func getPodByWLID(ctx context.Context, workload k8sinterface.IWorkload) *corev1.Pod {
-	var err error
-
-	podspec, err := workload.GetPodSpec()
-	if err != nil {
-		return nil
-	}
-	podObj := &corev1.Pod{Spec: *podspec}
+func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) (*corev1.Pod, error) {
+	// if the workload is a pod, we can get the pod directly by parsing the workload
+	var pod *corev1.Pod
 	if workload.GetKind() == "Pod" {
-		status, err := workload.GetPodStatus()
+		w, err := json.Marshal(workload.GetObject())
 		if err != nil {
-			logger.L().Ctx(ctx).Error("failed getting pod status", helpers.String("wlid", workload.GetID()), helpers.Error(err))
-		} else {
-			podObj.Status = *status
+			return nil, err
 		}
+		if err := json.Unmarshal(w, pod); err != nil {
+			return nil, err
+		}
+		return pod, nil
 	}
-
-	podObj.ObjectMeta.Namespace = workload.GetNamespace()
-	return podObj
-}
-
-// get a workload, retrieves its pod and returns a map of container name to image id
-func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(workload k8sinterface.IWorkload) (map[string]string, error) {
-	var mapContainerToImageID = make(map[string]string)
-
 	labels := workload.GetPodLabels()
 	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
 	if err != nil {
@@ -429,7 +407,12 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(workload 
 	if len(pods.Items) == 0 {
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
-	pod := pods.Items[0]
+	return &pods.Items[0], nil
+}
+
+// get a workload, retrieves its pod and returns a map of container name to image id
+func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(pod *corev1.Pod) map[string]string {
+	var mapContainerToImageID = make(map[string]string)
 
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {
@@ -438,7 +421,7 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(workload 
 		}
 	}
 
-	return mapContainerToImageID, nil
+	return mapContainerToImageID
 }
 
 func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *corev1.Pod, imageID string, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) (*apis.WebsocketScanCommand, error) {
