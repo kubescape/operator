@@ -314,8 +314,7 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	// get pod instanceID
 	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
 	if err != nil {
-		err = fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.GetName(), workload, err)
-		return err
+		return fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.GetName(), workload.GetID(), err)
 	}
 
 	if len(mapContainerToImageID) == 0 {
@@ -424,6 +423,7 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 	if len(pods.Items) == 0 {
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
+	logger.L().Debug("number pod found for workload", helpers.String("workload", workload.GetID()), helpers.Int("numPods", len(pods.Items)))
 	return &pods.Items[0], nil
 }
 
