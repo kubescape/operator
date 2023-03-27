@@ -186,24 +186,20 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	status := "SUCCESS"
-
 	actionHandler := NewActionHandler(mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
 	logger.L().Info(fmt.Sprintf("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID()))
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(ctx, sessionObj)
 	if err != nil {
+		logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
 		actionHandler.reporter.SendError(err, true, true, sessionObj.ErrChan)
-		status = "FAIL"
-	} else {
-		actionHandler.reporter.SendStatus(reporterlib.JobDone, true, sessionObj.ErrChan)
+		return
 	}
-	donePrint := fmt.Sprintf("Done command %s, wlid: %s, status: %s", sessionObj.Command.CommandName, sessionObj.Command.GetID(), status)
-	if err != nil {
-		donePrint += fmt.Sprintf(", reason: %s", err.Error())
-	}
-	logger.L().Info(donePrint)
+
+	actionHandler.reporter.SendStatus(reporterlib.JobDone, true, sessionObj.ErrChan)
+	logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+
 }
 
 func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *utils.SessionObj) error {
