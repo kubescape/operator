@@ -102,7 +102,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
@@ -111,7 +111,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
-		instanceIDs:                       make([]string, 0),
+		instanceIDs:                       instanceIDs,
 	}
 
 	// list all Pods and extract their image IDs
@@ -172,10 +172,53 @@ func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
+func labelsToInstanceID(labels map[string]string) (string, error) {
+	apiVersion, apiVersionOK := labels["kubescape.io/workload-api-version"]
+	workloadNamespace, namespaceOk := labels["kubescape.io/workload-namespace"]
+	kind, kindOk := labels["kubescape.io/workload-kind"]
+	name, nameOk := labels["kubescape.io/workload-name"]
+	containerName, containerNameOk := labels["kubescape.io/workload-container-name"]
+
+	allLabelsOk := apiVersionOK && namespaceOk && kindOk && nameOk && containerNameOk
+	if !allLabelsOk {
+		return "", ErrMissingInstanceIDLabels
+	}
+
+	instanceIdFormat := "apiVersion-%s/namespace-%s/kind-%s/name-%s/containerName-%s"
+
+	instanceID := fmt.Sprintf(instanceIdFormat, apiVersion, workloadNamespace, kind, name, containerName)
+	return instanceID, nil
+}
+
+func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, errorCh chan<- error) {
+	defer close(errorCh)
+
+	for e := range sfEvents {
+		obj, ok := e.Object.(*spdxv1beta1.SBOMSPDXv2p3Filtered)
+		if !ok {
+			errorCh <- ErrUnsupportedObject
+			continue
+		}
+
+		// Deleting an already deleted object makes no sense
+		if e.Type == watch.Deleted {
+			continue
+		}
+
+		instanceID, err := labelsToInstanceID(obj.ObjectMeta.Labels)
+		if err != nil {
+			errorCh <- ErrMissingInstanceIDLabels
+		}
+
+		if !slices.Contains(wh.instanceIDs, instanceID) {
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+		}
+	}
+}
+
 // HandleSBOMEvents handles SBOM-related events
 //
-// Handling events is defined as dispatching scan commands that match a given
-// SBOM to the main command channel
+// Handling events is defined as deleting SBOMs that are not known to the Operator
 func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh chan<- error) {
 	defer close(errorCh)
 
