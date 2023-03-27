@@ -311,15 +311,16 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		mapContainerToImageID = val
 	}
 
-	// get pod instanceID
-	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
-	if err != nil {
-		return fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.GetName(), workload.GetID(), err)
-	}
-
 	if len(mapContainerToImageID) == 0 {
 		logger.L().Debug(fmt.Sprintf("workload %s has no running containers, skipping", actionHandler.wlid))
 		return nil
+	}
+
+	// get pod instanceID
+	// logger.L().Debug(pod.GetOwnerReferences(), pod.Spec.Containers, , pod.GetNamespace(), pod.Kind, pod.GetName())
+	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
+	if err != nil {
+		return fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.GetName(), workload.GetID(), err)
 	}
 
 	// get all images of workload
@@ -403,8 +404,8 @@ func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.Webso
 
 func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) (*corev1.Pod, error) {
 	// if the workload is a pod, we can get the pod directly by parsing the workload
-	var pod *corev1.Pod
 	if workload.GetKind() == "Pod" {
+		var pod *corev1.Pod
 		w, err := json.Marshal(workload.GetObject())
 		if err != nil {
 			return nil, err
@@ -412,6 +413,11 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		if err := json.Unmarshal(w, pod); err != nil {
 			return nil, err
 		}
+
+		// set the api version and kind to be pod - this is needed for the the resourceID
+		pod.APIVersion = "v1"
+		pod.Kind = "Pod"
+
 		return pod, nil
 	}
 
@@ -423,8 +429,15 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 	if len(pods.Items) == 0 {
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
+
 	logger.L().Debug("number pod found for workload", helpers.String("workload", workload.GetID()), helpers.Int("numPods", len(pods.Items)))
-	return &pods.Items[0], nil
+	pod := &pods.Items[0]
+
+	// set the api version and kind to be pod - this is needed for the the resourceID
+	pod.APIVersion = "v1"
+	pod.Kind = "Pod"
+
+	return pod, nil
 }
 
 // get a workload, retrieves its pod and returns a map of container name to image id
