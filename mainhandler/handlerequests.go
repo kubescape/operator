@@ -286,39 +286,35 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
 
 	logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
-	go func() { // send to goroutine so the channel will be released release the channel
-		for i := range ids {
-			cmd := sessionObj.Command.DeepCopy()
 
-			var err error
-			if pkgwlid.IsWlid(ids[i]) {
-				cmd.Wlid = ids[i]
-				err = pkgwlid.IsWlidValid(cmd.Wlid)
-			} else if pkgwlid.IsSid(ids[i]) {
-				cmd.Sid = ids[i]
-				// TODO - validate sid
-			} else {
-				err = fmt.Errorf("unknown id")
-			}
+	for i := range ids {
+		cmd := sessionObj.Command.DeepCopy()
 
-			// clean all scope request parameters
-			cmd.WildWlid = ""
-			cmd.WildSid = ""
-			cmd.Designators = make([]apitypes.PortalDesignator, 0)
-			// send specific command to the channel
-			newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
-
-			if err != nil {
-				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
-				logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
-				sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
-				continue
-			}
-
-			logger.L().Info(fmt.Sprintf("triggering id: '%s'", newSessionObj.Command.GetID()))
-			*mainHandler.sessionObj <- *newSessionObj
+		var err error
+		if pkgwlid.IsWlid(ids[i]) {
+			cmd.Wlid = ids[i]
+			err = pkgwlid.IsWlidValid(cmd.Wlid)
+		} else {
+			err = fmt.Errorf("unknown id")
 		}
-	}()
+
+		// clean all scope request parameters
+		cmd.WildWlid = ""
+		cmd.Designators = make([]apitypes.PortalDesignator, 0)
+
+		// send specific command to the channel
+		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+
+		if err != nil {
+			err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
+			logger.L().Ctx(ctx).Error(err.Error())
+			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
+			continue
+		}
+
+		logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
+		*mainHandler.sessionObj <- *newSessionObj
+	}
 }
 
 func (mainHandler *MainHandler) getIDs(namespaces []string, labels, fields map[string]string, resources []string) ([]string, []error) {

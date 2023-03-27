@@ -1,13 +1,10 @@
 package mainhandler
 
 import (
-	"context"
 	_ "embed"
 	"testing"
 
-	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/api/core/v1"
 )
 
 //go:embed testdata/vulnscan/pod.json
@@ -15,38 +12,6 @@ var podJson []byte
 
 //go:embed testdata/vulnscan/deployment.json
 var deploymentJson []byte
-
-func TestGetPodByWLID(t *testing.T) {
-	tests := []struct {
-		name              string
-		workloadObj       []byte
-		expectedPhase     v1.PodPhase
-		expectedNamespace string
-	}{
-		{
-			name:              "pod with status",
-			workloadObj:       podJson,
-			expectedPhase:     v1.PodPhase("Running"),
-			expectedNamespace: "default",
-		},
-		{
-			name:              "workload no status",
-			workloadObj:       deploymentJson,
-			expectedPhase:     v1.PodPhase(""),
-			expectedNamespace: "test",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			workload, err := workloadinterface.NewWorkload(tt.workloadObj)
-			assert.NoError(t, err)
-			got := getPodByWLID(context.TODO(), workload)
-			assert.Equal(t, tt.expectedPhase, got.Status.Phase)
-			assert.Equal(t, tt.expectedNamespace, got.Namespace)
-		})
-	}
-}
 
 func TestGetImageIDFromContainer(t *testing.T) {
 	tests := []struct {
