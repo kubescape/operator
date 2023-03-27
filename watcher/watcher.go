@@ -401,7 +401,7 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 
 		imgIDsToContainers := extractImageIDsToContainersFromPod(&podList.Items[i])
 
-		instanceID, err := instanceidhandlerv1.GenerateInstanceID(wl)
+		instanceID, err := instanceidhandlerv1.GenerateInstanceIDFromPod(&podList.Items[i])
 		if err != nil {
 			logger.L().Ctx(ctx).Error("Failed to generate instance ID for pod", helpers.String("pod", podList.Items[i].Name), helpers.String("namespace", podList.Items[i].Namespace), helpers.Error(err))
 			continue
