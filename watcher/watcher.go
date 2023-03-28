@@ -305,6 +305,63 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 	}
 }
 
+func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
+	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds("").Watch(context.TODO(), v1.ListOptions{})
+}
+
+// SBOMFilteredWatch watches and processes changes on Filtered SBOMs
+func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	inputEvents := make(chan watch.Event)
+	errorCh := make(chan error)
+	sbomEvents := make(<-chan watch.Event)
+
+	// The watcher is considered unavailable by default
+	sbomWatcherUnavailable := make(chan struct{})
+	go func() {
+		sbomWatcherUnavailable <- struct{}{}
+	}()
+
+	go wh.HandleSBOMFilteredEvents(inputEvents, errorCh)
+
+	// notifyWatcherDown notifies the appropriate channel that the watcher
+	// is down and backs off for the retry interval to not produce
+	// unnecessary events
+	notifyWatcherDown := func(watcherDownCh chan<- struct{}) {
+		go func() { watcherDownCh <- struct{}{} }()
+		time.Sleep(retryInterval)
+	}
+
+	var watcher watch.Interface
+	var err error
+	for {
+		select {
+		case sbomEvent, ok := <-sbomEvents:
+			if ok {
+				inputEvents <- sbomEvent
+			} else {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			}
+		case err, ok := <-errorCh:
+			if ok {
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMFilteredWatch: %v", err.Error()))
+			} else {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			}
+		case <-sbomWatcherUnavailable:
+			if watcher != nil {
+				watcher.Stop()
+			}
+
+			watcher, err = wh.getSBOMFilteredWatcher()
+			if err != nil {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			} else {
+				sbomEvents = watcher.ResultChan()
+			}
+		}
+	}
+}
+
 // watch for pods changes, and trigger scans accordingly
 func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
 	logger.L().Ctx(ctx).Debug("starting pod watch")
@@ -324,8 +381,15 @@ func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
 	return []string{}, fmt.Errorf("not implemented")
 }
 
+func (wh *WatchHandler) cleanUpInstanceIDs() {
+	wh.instanceIDsMutex.Lock()
+	wh.instanceIDs = []string{}
+	wh.instanceIDsMutex.Unlock()
+}
+
 func (wh *WatchHandler) cleanUpIDs() {
 	wh.iwMap.Clear()
+	wh.cleanUpInstanceIDs()
 	wh.cleanUpWlidsToContainerToImageIDMap()
 }
 

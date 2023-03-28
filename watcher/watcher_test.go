@@ -885,10 +885,16 @@ func Test_cleanUpIDs(t *testing.T) {
 		"pod2": {"container2": "alpine@sha256:2"},
 		"pod3": {"container3": "alpine@sha256:3"},
 	}
+	wh.instanceIDs = []string{
+		"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-router-main/containerName-nginx",
+		"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-router-failover/containerName-nginx",
+		"apiVersion-v1/namespace-webapp/kind-deployment/name-edge-server/containerName-webapp",
+	}
 	wh.cleanUpIDs()
 
 	assert.Equal(t, 0, len(wh.iwMap.Map()))
 	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
+	assert.Equal(t, 0, len(wh.instanceIDs))
 }
 
 //go:embed testdata/deployment-two-containers.json
