@@ -364,6 +364,9 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	if err != nil {
 		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
 	}
+	if command.GetWlid() == "" {
+		logger.L().Ctx(ctx).Debug(fmt.Sprintf("sending scan command to kubevuln: %s", string(jsonScannerC)))
+	}
 
 	creds := command.GetCreds()
 	credsList := command.GetCredentialsList()
