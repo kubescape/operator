@@ -184,6 +184,100 @@ func labelsToInstanceID(labels map[string]string) (string, error) {
 	return instanceID, nil
 }
 
+func (wh *WatchHandler) getVulnerabilityManifestWatcher() (watch.Interface, error) {
+	return wh.storageClient.SpdxV1beta1().VulnerabilityManifests("").Watch(context.TODO(), v1.ListOptions{})
+}
+
+// VulnerabilityManifestWatch watches for Vulnerability Manifests and handles them accordingly
+func (wh *WatchHandler) VulnerabilityManifestWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	inputEvents := make(chan watch.Event)
+	errorCh := make(chan error)
+	vmEvents := make(<-chan watch.Event)
+
+	// The watcher is considered unavailable by default
+	watcherUnavailable := make(chan struct{})
+	go func() {
+		watcherUnavailable <- struct{}{}
+	}()
+
+	go wh.HandleVulnerabilityManifestEvents(inputEvents, errorCh)
+
+	// notifyWatcherDown notifies the appropriate channel that the watcher
+	// is down and backs off for the retry interval to not produce
+	// unnecessary events
+	notifyWatcherDown := func(watcherDownCh chan<- struct{}) {
+		go func() { watcherDownCh <- struct{}{} }()
+		time.Sleep(retryInterval)
+	}
+
+	var watcher watch.Interface
+	var err error
+	for {
+		select {
+		case event, ok := <-vmEvents:
+			if ok {
+				inputEvents <- event
+			} else {
+				notifyWatcherDown(watcherUnavailable)
+			}
+		case err, ok := <-errorCh:
+			if ok {
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+			} else {
+				notifyWatcherDown(watcherUnavailable)
+			}
+		case <-watcherUnavailable:
+			if watcher != nil {
+				watcher.Stop()
+			}
+
+			watcher, err = wh.getVulnerabilityManifestWatcher()
+			if err != nil {
+				notifyWatcherDown(watcherUnavailable)
+			} else {
+				vmEvents = watcher.ResultChan()
+			}
+		}
+	}
+}
+
+func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.Event, errorCh chan<- error) {
+	defer close(errorCh)
+
+	for e := range vmEvents {
+		if e.Type == watch.Deleted {
+			continue
+		}
+
+		obj, ok := e.Object.(*spdxv1beta1.VulnerabilityManifest)
+		if !ok {
+			errorCh <- ErrUnsupportedObject
+			continue
+		}
+
+		manifestName := obj.ObjectMeta.Name
+		imageHash := manifestName
+		withRelevancy := obj.Spec.Metadata.WithRelevancy
+
+		var hasObject bool
+		if withRelevancy {
+			instanceIDs := wh.listInstanceIDs()
+			instanceID, err := labelsToInstanceID(obj.ObjectMeta.Annotations)
+			if err != nil {
+				errorCh <- err
+				return
+			}
+			hasObject = slices.Contains(instanceIDs, instanceID)
+		} else {
+			_, hasObject = wh.iwMap.Load(imageHash)
+		}
+
+		if !hasObject {
+			wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
+		}
+	}
+}
+
 func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, errorCh chan<- error) {
 	defer close(errorCh)
 
