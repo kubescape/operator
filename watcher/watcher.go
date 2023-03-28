@@ -223,6 +223,14 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 
 	go wh.HandleSBOMEvents(inputEvents, errorCh)
 
+	// notifyWatcherDown notifies the appropriate channel that the watcher
+	// is down and backs off for the retry interval to not produce
+	// unnecessary events
+	notifyWatcherDown := func(watcherDownCh chan<- struct{}) {
+		go func() { watcherDownCh <- struct{}{} }()
+		time.Sleep(retryInterval)
+	}
+
 	var watcher watch.Interface
 	var err error
 	for {
@@ -231,19 +239,19 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 			if ok {
 				inputEvents <- sbomEvent
 			} else {
-				sbomWatcherUnavailable <- struct{}{}
+				notifyWatcherDown(sbomWatcherUnavailable)
 			}
 		case cmd, ok := <-commands:
 			if ok {
 				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
 			} else {
-				sbomWatcherUnavailable <- struct{}{}
+				notifyWatcherDown(sbomWatcherUnavailable)
 			}
 		case err, ok := <-errorCh:
 			if ok {
 				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
 			} else {
-				sbomWatcherUnavailable <- struct{}{}
+				notifyWatcherDown(sbomWatcherUnavailable)
 			}
 		case <-sbomWatcherUnavailable:
 			if watcher != nil {
@@ -252,15 +260,10 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 
 			watcher, err = wh.getSBOMWatcher()
 			if err != nil {
-				time.Sleep(retryInterval)
-				go func() {
-					sbomWatcherUnavailable <- struct{}{}
-				}()
+				notifyWatcherDown(sbomWatcherUnavailable)
 			} else {
 				sbomEvents = watcher.ResultChan()
-				logger.L().Ctx(ctx).Debug("SBOM watcher successfully created.")
 			}
-
 		}
 	}
 }
