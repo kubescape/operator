@@ -25,14 +25,18 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
+const (
+	retryInterval = 3 * time.Second
+
+	instanceIDAnnotationKey = "instanceID"
+)
+
 var (
 	ErrUnsupportedObject = errors.New("unsupported object type")
 	ErrUnknownImageHash  = errors.New("unknown image hash")
 )
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
-
-const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
@@ -173,20 +177,10 @@ func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImag
 }
 
 func labelsToInstanceID(labels map[string]string) (string, error) {
-	apiVersion, apiVersionOK := labels["kubescape.io/workload-api-version"]
-	workloadNamespace, namespaceOk := labels["kubescape.io/workload-namespace"]
-	kind, kindOk := labels["kubescape.io/workload-kind"]
-	name, nameOk := labels["kubescape.io/workload-name"]
-	containerName, containerNameOk := labels["kubescape.io/workload-container-name"]
-
-	allLabelsOk := apiVersionOK && namespaceOk && kindOk && nameOk && containerNameOk
-	if !allLabelsOk {
-		return "", ErrMissingInstanceIDLabels
+	instanceID, ok := labels[instanceIDAnnotationKey]
+	if !ok {
+		return instanceID, ErrMissingInstanceIDAnnotation
 	}
-
-	instanceIdFormat := "apiVersion-%s/namespace-%s/kind-%s/name-%s/containerName-%s"
-
-	instanceID := fmt.Sprintf(instanceIdFormat, apiVersion, workloadNamespace, kind, name, containerName)
 	return instanceID, nil
 }
 
@@ -205,9 +199,9 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, er
 			continue
 		}
 
-		instanceID, err := labelsToInstanceID(obj.ObjectMeta.Labels)
+		instanceID, err := labelsToInstanceID(obj.ObjectMeta.Annotations)
 		if err != nil {
-			errorCh <- ErrMissingInstanceIDLabels
+			errorCh <- ErrMissingInstanceIDAnnotation
 		}
 
 		if !slices.Contains(wh.instanceIDs, instanceID) {

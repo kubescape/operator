@@ -106,12 +106,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "test-instance-id",
-							Labels: map[string]string{
-								"kubescape.io/workload-api-version":    "v1",
-								"kubescape.io/workload-namespace":      "routing",
-								"kubescape.io/workload-kind":           "deployment",
-								"kubescape.io/workload-name":           "nginx-main-router",
-								"kubescape.io/workload-container-name": "nginx",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
 							},
 						},
 					},
@@ -129,12 +125,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "test-instance-id",
-							Labels: map[string]string{
-								"kubescape.io/workload-api-version":    "v1",
-								"kubescape.io/workload-namespace":      "routing",
-								"kubescape.io/workload-kind":           "deployment",
-								"kubescape.io/workload-name":           "nginx-main-router",
-								"kubescape.io/workload-container-name": "nginx",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
 							},
 						},
 					},
@@ -152,12 +144,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "test-instance-id",
-							Labels: map[string]string{
-								"kubescape.io/workload-api-version":    "v1",
-								"kubescape.io/workload-namespace":      "routing",
-								"kubescape.io/workload-kind":           "deployment",
-								"kubescape.io/workload-name":           "nginx-main-router",
-								"kubescape.io/workload-container-name": "nginx",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
 							},
 						},
 					},
@@ -167,7 +155,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors:      []error{},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with a missing labels should produce an error",
+			name:        "Adding a new Filtered SBOM with missing annotations should produce an error",
 			instanceIDs: []string{},
 			inputEvents: []watch.Event{
 				{
@@ -180,7 +168,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				},
 			},
 			expectedObjectNames: []string{},
-			expectedErrors:      []error{ErrMissingInstanceIDLabels},
+			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
 		},
 		{
 			name:        "Adding an unsupported object should produce an error",
