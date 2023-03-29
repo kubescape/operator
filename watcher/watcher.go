@@ -649,7 +649,8 @@ func (wh *WatchHandler) getNewContainerToImageIDsFromPod(pod *core1.Pod) map[str
 
 	for imageID, containers := range imageIDsToContainers {
 		for _, container := range containers {
-			if _, imageIDinMap := wh.iwMap.Load(imageID); !imageIDinMap {
+			imageIDHashed, _ := extractImageHash(imageID)
+			if _, imageIDinMap := wh.iwMap.Load(imageIDHashed); !imageIDinMap {
 				newContainerToImageIDs[container] = imageID
 			}
 		}

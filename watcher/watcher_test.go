@@ -261,9 +261,9 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
+							Name:        "22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
 							Annotations: map[string]string{
-									// Expected Annotation empty
+								// Expected Annotation empty
 							},
 						},
 						Spec: spdxv1beta1.VulnerabilityManifestSpec{
@@ -1010,9 +1010,9 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	wh := NewWatchHandlerMock()
 
 	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
-		"alpine@sha256:1": {"wlid"},
-		"alpine@sha256:2": {"wlid"},
-		"alpine@sha256:3": {"wlid"},
+		"a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e": {"wlid"},
+		"313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70": {"wlid"},
+		"5b183f918bfb0de9a21b7cd33cea3171627f6ae1f753d370afef6c2555bd76eb": {"wlid"},
 	})
 
 	tests := []struct {
@@ -1033,14 +1033,14 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:1",
+							ImageID: "docker-pullable://alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e",
 							Name:    "container1",
 						},
 						{
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:2",
+							ImageID: "docker-pullable://alpine@sha256:313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70",
 							Name:    "container2",
 						},
 					},
@@ -1061,21 +1061,21 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:1",
+							ImageID: "docker-pullable://alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e",
 							Name:    "container1",
 						},
 						{
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:4",
+							ImageID: "docker-pullable://alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 							Name:    "container4",
 						},
 					},
 				},
 			},
 			expected: map[string]string{
-				"container4": "alpine@sha256:4",
+				"container4": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 			},
 		},
 		{
@@ -1091,22 +1091,22 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:4",
+							ImageID: "docker-pullable://alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
 							Name:    "container4",
 						},
 						{
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:5",
+							ImageID: "docker-pullable://alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 							Name:    "container5",
 						},
 					},
 				},
 			},
 			expected: map[string]string{
-				"container4": "alpine@sha256:4",
-				"container5": "alpine@sha256:5",
+				"container4": "alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
+				"container5": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 			},
 		},
 	}
