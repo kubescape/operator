@@ -354,17 +354,14 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		expectedErrors      []error
 	}{
 		{
-			name:        "Adding a new Filtered SBOM with an unknown instance ID should delete it from storage",
+			name:        "Adding a new Filtered SBOM with an unknown hashed instance ID should delete it from storage",
 			instanceIDs: []string{},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "test-instance-id",
-							Annotations: map[string]string{
-								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
-							},
+							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
 						},
 					},
 				},
@@ -374,21 +371,18 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		},
 		{
 			name:        "Adding a new Filtered SBOM with known instance ID should keep it in storage",
-			instanceIDs: []string{"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx"},
+			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "test-instance-id",
-							Annotations: map[string]string{
-								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
-							},
+							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"test-instance-id"},
+			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 			expectedErrors:      []error{},
 		},
 		{
@@ -399,32 +393,13 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Deleted,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "test-instance-id",
-							Annotations: map[string]string{
-								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
-							},
+							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"test-instance-id"},
+			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 			expectedErrors:      []error{},
-		},
-		{
-			name:        "Adding a new Filtered SBOM with missing annotations should produce an error",
-			instanceIDs: []string{},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
-						ObjectMeta: v1.ObjectMeta{
-							Name: "test-instance-id",
-						},
-					},
-				},
-			},
-			expectedObjectNames: []string{},
-			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
 		},
 		{
 			name:        "Adding an unsupported object should produce an error",
@@ -434,7 +409,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "test-instance-id",
+							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
 						},
 					},
 				},
@@ -1141,16 +1116,16 @@ func Test_cleanUpIDs(t *testing.T) {
 		"pod2": {"container2": "alpine@sha256:2"},
 		"pod3": {"container3": "alpine@sha256:3"},
 	}
-	wh.instanceIDs = []string{
-		"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-router-main/containerName-nginx",
-		"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-router-failover/containerName-nginx",
-		"apiVersion-v1/namespace-webapp/kind-deployment/name-edge-server/containerName-webapp",
+	wh.hashedInstanceIDs = []string{
+		"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+		"f26b54ef2073feae80c40423a9fac44468ec4c655476ea8a57f601daa62240c2",
+		"8d39971275da811436922ae8d8f839827e5c6567738a1390bc94cfdb58bb8762",
 	}
 	wh.cleanUpIDs()
 
 	assert.Equal(t, 0, len(wh.iwMap.Map()))
 	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
-	assert.Equal(t, 0, len(wh.instanceIDs))
+	assert.Equal(t, 0, len(wh.hashedInstanceIDs))
 }
 
 //go:embed testdata/deployment-two-containers.json
