@@ -76,6 +76,262 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	}
 }
 
+func TestHandleVulnerabilityManifestEvents(t *testing.T) {
+	tt := []struct {
+		name                string
+		imageWLIDsMap       map[string][]string
+		instanceIDs         []string
+		inputEvents         []watch.Event
+		expectedObjectNames []string
+		expectedErrors      []error
+	}{
+		{
+			name:          "Adding a new Vulnerability Manifest (no relevancy) with an unknown image ID should delete it from storage",
+			imageWLIDsMap: map[string][]string{},
+			instanceIDs:   []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: false,
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{},
+			expectedErrors:      []error{},
+		},
+		{
+			name: "Adding a new Vulnerability Manifest (no relevancy) with a known image ID keeps it in storage",
+			imageWLIDsMap: map[string][]string{
+				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid://some-wlid"},
+			},
+			instanceIDs: []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: false,
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"},
+			expectedErrors:      []error{},
+		},
+		{
+			name: "Adding Vulnerability Manifests should keep or delete them from storage accordingly",
+			imageWLIDsMap: map[string][]string{
+				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid://some-wlid"},
+			},
+			instanceIDs: []string{"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx"},
+			inputEvents: []watch.Event{
+				// Known no-relevancy VM
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: false,
+							},
+						},
+					},
+				},
+				// Known with-relevancy VM
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
+							},
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: true,
+							},
+						},
+					},
+				},
+				// Unknown no-relevancy VM
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "b9776d7ddf459c9ad5b0e1d6ac61e27befb5e99fd62446677600d7cacef544d0",
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: false,
+							},
+						},
+					},
+				},
+				// Unknown with-relevancy VM
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-webapp/kind-deployment/name-webapp-leader/containerName-webapp",
+							},
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: true,
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{
+				// Known no-relevancy VM
+				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+				// Known with-relevancy VM
+				"486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+			},
+			expectedErrors: []error{},
+		},
+		{
+			name:          "Delete events should be skipped",
+			imageWLIDsMap: map[string][]string{},
+			instanceIDs:   []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Deleted,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: false,
+							},
+						},
+					},
+				},
+			},
+			// Since the event is Deleted, nothing should change in the storage
+			expectedObjectNames: []string{
+				// Known no-relevancy VM
+				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+			},
+			expectedErrors: []error{},
+		},
+		{
+			name:          "Adding an unsupported object type should produce a matching error",
+			imageWLIDsMap: map[string][]string{},
+			instanceIDs:   []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{},
+			expectedErrors:      []error{ErrUnsupportedObject},
+		},
+		{
+			name:          "Adding Vulnerability Manifests with no instance ID should produce a matching error",
+			imageWLIDsMap: map[string][]string{},
+			instanceIDs:   []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
+							Annotations: map[string]string{
+									// Expected Annotation empty
+							},
+						},
+						Spec: spdxv1beta1.VulnerabilityManifestSpec{
+							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
+								WithRelevancy: true,
+							},
+						},
+					},
+				},
+			},
+			// Since in the beginning of the test we add all objects from the
+			// input events to the storage, and we expect to produce an error
+			// without taking actions, the object should stay in the storage
+			expectedObjectNames: []string{
+				"22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
+			},
+			expectedErrors: []error{ErrMissingInstanceIDAnnotation},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare starting startingObjects for storage
+			startingObjects := []runtime.Object{}
+			for _, e := range tc.inputEvents {
+				startingObjects = append(startingObjects, e.Object)
+			}
+
+			ctx := context.Background()
+			k8sClient := k8sfake.NewSimpleClientset()
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			storageClient := kssfake.NewSimpleClientset(startingObjects...)
+			iwMap := tc.imageWLIDsMap
+
+			errorCh := make(chan error)
+			vmEvents := make(chan watch.Event)
+
+			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.instanceIDs)
+
+			go wh.HandleVulnerabilityManifestEvents(vmEvents, errorCh)
+
+			go func() {
+				for _, e := range tc.inputEvents {
+					vmEvents <- e
+				}
+
+				close(vmEvents)
+			}()
+
+			actualErrors := []error{}
+			for err := range errorCh {
+				actualErrors = append(actualErrors, err)
+			}
+
+			actualObjects, _ := storageClient.SpdxV1beta1().VulnerabilityManifests("").List(ctx, v1.ListOptions{})
+
+			actualObjectNames := []string{}
+			for _, obj := range actualObjects.Items {
+				actualObjectNames = append(actualObjectNames, obj.ObjectMeta.Name)
+			}
+
+			assert.Equal(t, tc.expectedObjectNames, actualObjectNames)
+			assert.Equal(t, tc.expectedErrors, actualErrors)
+		})
+
+	}
+}
+
 func Test_getSBOMWatcher(t *testing.T) {
 	ctx := context.TODO()
 	k8sClient := k8sfake.NewSimpleClientset()

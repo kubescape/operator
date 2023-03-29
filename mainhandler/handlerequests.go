@@ -130,6 +130,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
 	go watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.sessionObj)
+	go watchHandler.VulnerabilityManifestWatch(ctx, mainHandler.sessionObj)
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
