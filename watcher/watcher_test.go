@@ -1075,7 +1075,7 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 				},
 			},
 			expected: map[string]string{
-				"container4": "f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
+				"container4": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 			},
 		},
 		{
@@ -1105,8 +1105,8 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 				},
 			},
 			expected: map[string]string{
-				"container4": "c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
-				"container5": "f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
+				"container4": "alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
+				"container5": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 			},
 		},
 	}
