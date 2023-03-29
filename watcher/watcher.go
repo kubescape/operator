@@ -571,7 +571,7 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 		podList.Items[i].APIVersion = "v1"
 		podList.Items[i].Kind = "Pod"
 
-		//check if at least one container is running
+		//check if at least one container is  running
 		hasOneContainerRunning := false
 		for _, containerStatus := range podList.Items[i].Status.ContainerStatuses {
 			if containerStatus.State.Running != nil {
