@@ -773,6 +773,18 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			cmd = getImageScanCommand(parentWlid, containersToImageIds)
 		}
 
+		// generate instance IDs
+		instanceID, err := instanceidhandlerv1.GenerateInstanceIDFromPod(pod)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("Failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+			continue
+		}
+
+		// save on map
+		for i := range instanceID {
+			wh.addToInstanceIDsList(instanceID[i])
+		}
+
 		utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
 	}
 }
