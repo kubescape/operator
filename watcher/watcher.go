@@ -42,7 +42,7 @@ type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
 	storageClient                     kssc.Interface
 	iwMap                             *imageHashWLIDMap
-	instanceIDs                       []string
+	hashedInstanceIDs                 []string
 	instanceIDsMutex                  *sync.RWMutex
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	wlidsToContainerToImageIDMapMutex *sync.RWMutex
@@ -115,7 +115,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
-		instanceIDs:                       instanceIDs,
+		hashedInstanceIDs:                 instanceIDs,
 	}
 
 	// list all Pods and extract their image IDs
@@ -165,7 +165,7 @@ func (wh *WatchHandler) listInstanceIDs() []string {
 	wh.instanceIDsMutex.RLock()
 	defer wh.instanceIDsMutex.RUnlock()
 
-	return wh.instanceIDs
+	return wh.hashedInstanceIDs
 }
 
 // returns wlids map
@@ -293,12 +293,9 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, er
 			continue
 		}
 
-		instanceID, err := labelsToInstanceID(obj.ObjectMeta.Annotations)
-		if err != nil {
-			errorCh <- ErrMissingInstanceIDAnnotation
-		}
+		hashedInstanceID := obj.ObjectMeta.Name
 
-		if !slices.Contains(wh.instanceIDs, instanceID) {
+		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
 			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 		}
 	}
@@ -477,7 +474,7 @@ func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
 
 func (wh *WatchHandler) cleanUpInstanceIDs() {
 	wh.instanceIDsMutex.Lock()
-	wh.instanceIDs = []string{}
+	wh.hashedInstanceIDs = []string{}
 	wh.instanceIDsMutex.Unlock()
 }
 
@@ -540,8 +537,8 @@ func (wh *WatchHandler) addToInstanceIDsList(instanceID instanceidhandler.IInsta
 	defer wh.instanceIDsMutex.Unlock()
 	h := instanceID.GetHashed()
 
-	if !slices.Contains(wh.instanceIDs, h) {
-		wh.instanceIDs = append(wh.instanceIDs, h)
+	if !slices.Contains(wh.hashedInstanceIDs, h) {
+		wh.hashedInstanceIDs = append(wh.hashedInstanceIDs, h)
 	}
 }
 
@@ -774,6 +771,18 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 				wh.addToWlidsToContainerToImageIDMap(parentWlid, container, imgID)
 			}
 			cmd = getImageScanCommand(parentWlid, containersToImageIds)
+		}
+
+		// generate instance IDs
+		instanceID, err := instanceidhandlerv1.GenerateInstanceIDFromPod(pod)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("Failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+			continue
+		}
+
+		// save on map
+		for i := range instanceID {
+			wh.addToInstanceIDsList(instanceID[i])
 		}
 
 		utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
