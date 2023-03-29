@@ -92,7 +92,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI, ksStorageClient, nil)
+	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI, ksStorageClient, nil, nil)
 
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
@@ -129,6 +129,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
 	go watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
+	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.sessionObj)
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {

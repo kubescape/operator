@@ -63,7 +63,7 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset()
 
-			wh, err := NewWatchHandler(ctx, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap)
+			wh, err := NewWatchHandler(ctx, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil)
 
 			actualMap := wh.iwMap.Map()
 			for imageID := range actualMap {
@@ -81,12 +81,159 @@ func Test_getSBOMWatcher(t *testing.T) {
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	storageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, nil)
+	wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, nil, nil)
 
 	sbomWatcher, err := wh.getSBOMWatcher()
 
 	assert.NoErrorf(t, err, "Should get no errors")
 	assert.NotNilf(t, sbomWatcher, "Returned value should not be nil")
+}
+
+func TestHandleSBOMFilteredEvents(t *testing.T) {
+	tt := []struct {
+		name                string
+		instanceIDs         []string
+		inputEvents         []watch.Event
+		expectedObjectNames []string
+		expectedErrors      []error
+	}{
+		{
+			name:        "Adding a new Filtered SBOM with an unknown instance ID should delete it from storage",
+			instanceIDs: []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "test-instance-id",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{},
+			expectedErrors:      []error{},
+		},
+		{
+			name:        "Adding a new Filtered SBOM with known instance ID should keep it in storage",
+			instanceIDs: []string{"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx"},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "test-instance-id",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{"test-instance-id"},
+			expectedErrors:      []error{},
+		},
+		{
+			name:        "Deleting a Filtered SBOM should be ignored",
+			instanceIDs: []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Deleted,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "test-instance-id",
+							Annotations: map[string]string{
+								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{"test-instance-id"},
+			expectedErrors:      []error{},
+		},
+		{
+			name:        "Adding a new Filtered SBOM with missing annotations should produce an error",
+			instanceIDs: []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "test-instance-id",
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{},
+			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
+		},
+		{
+			name:        "Adding an unsupported object should produce an error",
+			instanceIDs: []string{},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.VulnerabilityManifest{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "test-instance-id",
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{},
+			expectedErrors:      []error{ErrUnsupportedObject},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare starting startingObjects for storage
+			startingObjects := []runtime.Object{}
+			for _, e := range tc.inputEvents {
+				startingObjects = append(startingObjects, e.Object)
+			}
+
+			ctx := context.Background()
+			k8sClient := k8sfake.NewSimpleClientset()
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			storageClient := kssfake.NewSimpleClientset(startingObjects...)
+			iwMap := map[string][]string(nil)
+
+			errorCh := make(chan error)
+			sbomFilteredEvents := make(chan watch.Event)
+
+			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.instanceIDs)
+
+			go wh.HandleSBOMFilteredEvents(sbomFilteredEvents, errorCh)
+
+			go func() {
+				for _, e := range tc.inputEvents {
+					sbomFilteredEvents <- e
+				}
+
+				close(sbomFilteredEvents)
+			}()
+
+			actualErrors := []error{}
+			for err := range errorCh {
+				actualErrors = append(actualErrors, err)
+			}
+
+			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds("").List(ctx, v1.ListOptions{})
+
+			actualObjectNames := []string{}
+			for _, obj := range actualObjects.Items {
+				actualObjectNames = append(actualObjectNames, obj.ObjectMeta.Name)
+			}
+
+			assert.Equal(t, tc.expectedObjectNames, actualObjectNames)
+			assert.Equal(t, tc.expectedErrors, actualErrors)
+		})
+
+	}
 }
 
 func TestHandleSBOMEvents(t *testing.T) {
@@ -169,7 +316,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			ksStorageClient := kssfake.NewSimpleClientset(objects...)
-			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, tc.imageIDstoWlids)
+			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
 
 			errCh := make(chan error)
 
@@ -227,7 +374,7 @@ func TestSBOMWatch(t *testing.T) {
 
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	ksStorageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, imageIDsToWlids)
+	wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, imageIDsToWlids, nil)
 
 	sessionObjCh := make(chan utils.SessionObj)
 	sessionObjChPtr := &sessionObjCh
@@ -738,10 +885,16 @@ func Test_cleanUpIDs(t *testing.T) {
 		"pod2": {"container2": "alpine@sha256:2"},
 		"pod3": {"container3": "alpine@sha256:3"},
 	}
+	wh.instanceIDs = []string{
+		"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-router-main/containerName-nginx",
+		"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-router-failover/containerName-nginx",
+		"apiVersion-v1/namespace-webapp/kind-deployment/name-edge-server/containerName-webapp",
+	}
 	wh.cleanUpIDs()
 
 	assert.Equal(t, 0, len(wh.iwMap.Map()))
 	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
+	assert.Equal(t, 0, len(wh.instanceIDs))
 }
 
 //go:embed testdata/deployment-two-containers.json

@@ -25,14 +25,18 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
+const (
+	retryInterval = 3 * time.Second
+
+	instanceIDAnnotationKey = "instanceID"
+)
+
 var (
 	ErrUnsupportedObject = errors.New("unsupported object type")
 	ErrUnknownImageHash  = errors.New("unknown image hash")
 )
 
 type WlidsToContainerToImageIDMap map[string]map[string]string
-
-const retryInterval = 3 * time.Second
 
 type WatchHandler struct {
 	k8sAPI                            *k8sinterface.KubernetesApi
@@ -102,7 +106,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
@@ -111,7 +115,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
-		instanceIDs:                       make([]string, 0),
+		instanceIDs:                       instanceIDs,
 	}
 
 	// list all Pods and extract their image IDs
@@ -172,10 +176,43 @@ func (wh *WatchHandler) getWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
+func labelsToInstanceID(labels map[string]string) (string, error) {
+	instanceID, ok := labels[instanceIDAnnotationKey]
+	if !ok {
+		return instanceID, ErrMissingInstanceIDAnnotation
+	}
+	return instanceID, nil
+}
+
+func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, errorCh chan<- error) {
+	defer close(errorCh)
+
+	for e := range sfEvents {
+		obj, ok := e.Object.(*spdxv1beta1.SBOMSPDXv2p3Filtered)
+		if !ok {
+			errorCh <- ErrUnsupportedObject
+			continue
+		}
+
+		// Deleting an already deleted object makes no sense
+		if e.Type == watch.Deleted {
+			continue
+		}
+
+		instanceID, err := labelsToInstanceID(obj.ObjectMeta.Annotations)
+		if err != nil {
+			errorCh <- ErrMissingInstanceIDAnnotation
+		}
+
+		if !slices.Contains(wh.instanceIDs, instanceID) {
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+		}
+	}
+}
+
 // HandleSBOMEvents handles SBOM-related events
 //
-// Handling events is defined as dispatching scan commands that match a given
-// SBOM to the main command channel
+// Handling events is defined as deleting SBOMs that are not known to the Operator
 func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh chan<- error) {
 	defer close(errorCh)
 
@@ -268,6 +305,63 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 	}
 }
 
+func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
+	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds("").Watch(context.TODO(), v1.ListOptions{})
+}
+
+// SBOMFilteredWatch watches and processes changes on Filtered SBOMs
+func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+	inputEvents := make(chan watch.Event)
+	errorCh := make(chan error)
+	sbomEvents := make(<-chan watch.Event)
+
+	// The watcher is considered unavailable by default
+	sbomWatcherUnavailable := make(chan struct{})
+	go func() {
+		sbomWatcherUnavailable <- struct{}{}
+	}()
+
+	go wh.HandleSBOMFilteredEvents(inputEvents, errorCh)
+
+	// notifyWatcherDown notifies the appropriate channel that the watcher
+	// is down and backs off for the retry interval to not produce
+	// unnecessary events
+	notifyWatcherDown := func(watcherDownCh chan<- struct{}) {
+		go func() { watcherDownCh <- struct{}{} }()
+		time.Sleep(retryInterval)
+	}
+
+	var watcher watch.Interface
+	var err error
+	for {
+		select {
+		case sbomEvent, ok := <-sbomEvents:
+			if ok {
+				inputEvents <- sbomEvent
+			} else {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			}
+		case err, ok := <-errorCh:
+			if ok {
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMFilteredWatch: %v", err.Error()))
+			} else {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			}
+		case <-sbomWatcherUnavailable:
+			if watcher != nil {
+				watcher.Stop()
+			}
+
+			watcher, err = wh.getSBOMFilteredWatcher()
+			if err != nil {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			} else {
+				sbomEvents = watcher.ResultChan()
+			}
+		}
+	}
+}
+
 // watch for pods changes, and trigger scans accordingly
 func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
 	logger.L().Ctx(ctx).Debug("starting pod watch")
@@ -287,8 +381,15 @@ func (wh *WatchHandler) ListImageIDsFromStorage() ([]string, error) {
 	return []string{}, fmt.Errorf("not implemented")
 }
 
+func (wh *WatchHandler) cleanUpInstanceIDs() {
+	wh.instanceIDsMutex.Lock()
+	wh.instanceIDs = []string{}
+	wh.instanceIDsMutex.Unlock()
+}
+
 func (wh *WatchHandler) cleanUpIDs() {
 	wh.iwMap.Clear()
+	wh.cleanUpInstanceIDs()
 	wh.cleanUpWlidsToContainerToImageIDMap()
 }
 
