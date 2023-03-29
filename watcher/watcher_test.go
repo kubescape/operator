@@ -136,7 +136,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			imageWLIDsMap: map[string][]string{
 				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid://some-wlid"},
 			},
-			instanceIDs: []string{"apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx"},
+			instanceIDs: []string{"486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7"},
 			inputEvents: []watch.Event{
 				// Known no-relevancy VM
 				{
@@ -158,9 +158,6 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
-							Annotations: map[string]string{
-								"instanceID": "apiVersion-v1/namespace-routing/kind-deployment/name-nginx-main-router/containerName-nginx",
-							},
 						},
 						Spec: spdxv1beta1.VulnerabilityManifestSpec{
 							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
@@ -251,36 +248,6 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			},
 			expectedObjectNames: []string{},
 			expectedErrors:      []error{ErrUnsupportedObject},
-		},
-		{
-			name:          "Adding Vulnerability Manifests with no instance ID should produce a matching error",
-			imageWLIDsMap: map[string][]string{},
-			instanceIDs:   []string{},
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.VulnerabilityManifest{
-						ObjectMeta: v1.ObjectMeta{
-							Name:        "22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
-							Annotations: map[string]string{
-								// Expected Annotation empty
-							},
-						},
-						Spec: spdxv1beta1.VulnerabilityManifestSpec{
-							Metadata: spdxv1beta1.VulnerabilityManifestMeta{
-								WithRelevancy: true,
-							},
-						},
-					},
-				},
-			},
-			// Since in the beginning of the test we add all objects from the
-			// input events to the storage, and we expect to produce an error
-			// without taking actions, the object should stay in the storage
-			expectedObjectNames: []string{
-				"22c72aa82ce77c82e2ca65a711c79eaa4b51c57f85f91489ceeacc7b385943ba",
-			},
-			expectedErrors: []error{ErrMissingInstanceIDAnnotation},
 		},
 	}
 
