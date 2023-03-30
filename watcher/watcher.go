@@ -262,12 +262,8 @@ func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.
 		var hasObject bool
 		if withRelevancy {
 			instanceIDs := wh.listInstanceIDs()
-			instanceID, err := labelsToInstanceID(obj.ObjectMeta.Annotations)
-			if err != nil {
-				errorCh <- err
-				return
-			}
-			hasObject = slices.Contains(instanceIDs, instanceID)
+			hashedInstanceID := manifestName
+			hasObject = slices.Contains(instanceIDs, hashedInstanceID)
 		} else {
 			_, hasObject = wh.iwMap.Load(imageHash)
 		}
