@@ -408,7 +408,7 @@ func sendWorkloadToCVEScan(ctx context.Context, websocketScanCommand *apis.Webso
 func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) (*corev1.Pod, error) {
 	// if the workload is a pod, we can get the pod directly by parsing the workload
 	if workload.GetKind() == "Pod" {
-		var pod *corev1.Pod
+		pod := &corev1.Pod{}
 		w, err := json.Marshal(workload.GetObject())
 		if err != nil {
 			return nil, err
