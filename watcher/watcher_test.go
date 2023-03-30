@@ -915,7 +915,7 @@ func TestSBOMWatch(t *testing.T) {
 // 		wh := NewWatchHandlerMock()
 // 		t.Run(tt.name, func(t *testing.T) {
 // 			wh.buildIDs(context.TODO(), &tt.podList)
-// 			got := wh.getWlidsToContainerToImageIDMap()
+// 			got := wh.GetWlidsToContainerToImageIDMap()
 // 			assert.True(t, reflect.DeepEqual(got, tt.expectedwlidsToContainerToImageIDMap))
 // 		})
 // 	}
@@ -971,7 +971,7 @@ func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
 	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
 
-	assert.True(t, reflect.DeepEqual(wh.getWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
+	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
 		"wlid1": {
 			"container1": "alpine@sha256:1",
 		},

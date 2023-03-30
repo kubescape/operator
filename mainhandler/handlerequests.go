@@ -99,30 +99,19 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		return
 	}
 
-	newImageIDs, err := watchHandler.ListImageIDsNotInStorage(ctx)
-	if err != nil {
-		// logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
-	}
-
 	// wait for vuln scan to be ready
 	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
 	waitFunc()
 
-	// get commands for scanning new images
+	// generate list of commands to scan all workloads
+	wlids := watchHandler.GetWlidsToContainerToImageIDMap()
 	commandsList := []*apis.Command{}
-	for _, imageID := range newImageIDs {
-		wlidsForImage := watchHandler.GetWlidsForImageHash(imageID)
-		if len(wlidsForImage) == 0 {
-			logger.L().Ctx(ctx).Error(fmt.Sprintf("Image %s is not used by any workload", imageID))
-			continue
-		}
-
-		// scan each image only once
-		cmd := buildScanCommandForWorkload(ctx, wlidsForImage[0], watchHandler.GetContainerToImageIDForWlid(wlidsForImage[0]), apis.TypeScanImages)
+	for wlid := range wlids {
+		cmd := buildScanCommandForWorkload(ctx, wlid, watchHandler.GetContainerToImageIDForWlid(wlid), apis.TypeScanImages)
 		commandsList = append(commandsList, cmd)
-
 	}
+
 	// insert commands to channel
 	mainHandler.insertCommandsToChannel(ctx, commandsList)
 
