@@ -31,14 +31,9 @@ func (notification *NotificationHandler) WebsocketConnection(ctx context.Context
 	if utils.ClusterConfig.GatewayWebsocketURL == "" {
 		return nil
 	}
-	retries := 0
 	for {
 		if err := notification.setupWebsocket(ctx); err != nil {
-			retries += 1
-			time.Sleep(time.Duration(retries*2) * time.Second)
-			logger.L().Ctx(ctx).Warning("In WebsocketConnection", helpers.Error(err), helpers.Int("retry", retries))
-		} else {
-			retries = 0
+			time.Sleep(2 * time.Second)
 		}
 	}
 }
@@ -48,7 +43,6 @@ func (notification *NotificationHandler) setupWebsocket(ctx context.Context) err
 	errs := make(chan error)
 	_, err := notification.connector.DefaultDialer(nil)
 	if err != nil {
-		logger.L().Ctx(ctx).Error("In SetupWebsocket", helpers.Error(err))
 		return err
 	}
 	defer notification.connector.Close()
