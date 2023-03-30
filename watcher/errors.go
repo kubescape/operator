@@ -7,5 +7,6 @@ import (
 var (
 	errInvalidImageID = errors.New("input is not valid Image ID")
 
-	ErrMissingInstanceIDAnnotation = errors.New("Object is missing Instance ID annotation")
+	ErrMissingInstanceIDAnnotation = errors.New("object is missing Instance ID annotation")
+	ErrMissingWLIDAnnotation       = errors.New("object is missing the WLID annotation")
 )

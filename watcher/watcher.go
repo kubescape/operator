@@ -216,7 +216,7 @@ func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.
 	}
 }
 
-func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, errorCh chan<- error) {
+func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, producedCommands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(errorCh)
 
 	for e := range sfEvents {
@@ -235,7 +235,18 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, er
 
 		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
 			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			continue
 		}
+
+		wlid, ok := obj.ObjectMeta.Annotations[instanceidhandlerv1.WlidAnnotationKey]
+		if !ok {
+			errorCh <- ErrMissingWLIDAnnotation
+			continue
+		}
+
+		containerToImageIDs := wh.GetContainerToImageIDForWlid(wlid)
+		cmd := getImageScanCommand(wlid, containerToImageIDs)
+		producedCommands <- cmd
 	}
 }
 
@@ -341,6 +352,7 @@ func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
 // SBOMFilteredWatch watches and processes changes on Filtered SBOMs
 func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
 	inputEvents := make(chan watch.Event)
+	cmdCh := make(chan *apis.Command)
 	errorCh := make(chan error)
 	sbomEvents := make(<-chan watch.Event)
 
@@ -350,7 +362,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *c
 		sbomWatcherUnavailable <- struct{}{}
 	}()
 
-	go wh.HandleSBOMFilteredEvents(inputEvents, errorCh)
+	go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
 
 	// notifyWatcherDown notifies the appropriate channel that the watcher
 	// is down and backs off for the retry interval to not produce
@@ -367,6 +379,12 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *c
 		case sbomEvent, ok := <-sbomEvents:
 			if ok {
 				inputEvents <- sbomEvent
+			} else {
+				notifyWatcherDown(sbomWatcherUnavailable)
+			}
+		case cmd, ok := <-cmdCh:
+			if ok {
+				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
