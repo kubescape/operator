@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
+	instanceidv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
@@ -314,11 +315,13 @@ func Test_getSBOMWatcher(t *testing.T) {
 
 func TestHandleSBOMFilteredEvents(t *testing.T) {
 	tt := []struct {
-		name                string
-		instanceIDs         []string
-		inputEvents         []watch.Event
-		expectedObjectNames []string
-		expectedErrors      []error
+		name                           string
+		instanceIDs                    []string
+		wlidsToContainersToImageIDsMap WlidsToContainerToImageIDMap
+		inputEvents                    []watch.Event
+		expectedObjectNames            []string
+		expectedCommands               []*apis.Command
+		expectedErrors                 []error
 	}{
 		{
 			name:        "Adding a new Filtered SBOM with an unknown hashed instance ID should delete it from storage",
@@ -334,23 +337,66 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				},
 			},
 			expectedObjectNames: []string{},
+			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with known instance ID should keep it in storage",
+			name:        "Adding a new Filtered SBOM with known instance ID should produce a matching scan command",
 			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
+				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
+					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
+				},
+			},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Annotations: map[string]string{
+								instanceidv1.WlidAnnotationKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+							},
 						},
 					},
 				},
 			},
 			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-			expectedErrors:      []error{},
+			expectedCommands: []*apis.Command{
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+					Args: map[string]interface{}{
+						utils.ContainerToImageIdsArg: map[string]string{
+							"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
+						},
+					},
+				},
+			},
+			expectedErrors: []error{},
+		},
+		{
+			name:        "Adding a new Filtered SBOM with known instance ID but missing annotation should produce a matching error",
+			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
+				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
+					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
+				},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name:        "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Annotations: map[string]string{},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedCommands:    []*apis.Command{},
+			expectedErrors:      []error{ErrMissingWLIDAnnotation},
 		},
 		{
 			name:        "Deleting a Filtered SBOM should be ignored",
@@ -366,6 +412,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				},
 			},
 			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{},
 		},
 		{
@@ -382,6 +429,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				},
 			},
 			expectedObjectNames: []string{},
+			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{ErrUnsupportedObject},
 		},
 	}
@@ -400,24 +448,41 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
 			iwMap := map[string][]string(nil)
 
+			inputEvents := make(chan watch.Event)
+			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
-			sbomFilteredEvents := make(chan watch.Event)
 
 			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.instanceIDs)
+			wh.wlidsToContainerToImageIDMap = tc.wlidsToContainersToImageIDsMap
 
-			go wh.HandleSBOMFilteredEvents(sbomFilteredEvents, errorCh)
+			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
 
 			go func() {
 				for _, e := range tc.inputEvents {
-					sbomFilteredEvents <- e
+					inputEvents <- e
 				}
 
-				close(sbomFilteredEvents)
+				close(inputEvents)
 			}()
 
+			done := false
 			actualErrors := []error{}
-			for err := range errorCh {
-				actualErrors = append(actualErrors, err)
+			actualCommands := []*apis.Command{}
+			for !done {
+				select {
+				case err, ok := <-errorCh:
+					if !ok {
+						done = true
+						break
+					}
+					actualErrors = append(actualErrors, err)
+				case cmd, ok := <-cmdCh:
+					if !ok {
+						done = true
+						break
+					}
+					actualCommands = append(actualCommands, cmd)
+				}
 			}
 
 			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds("").List(ctx, v1.ListOptions{})
@@ -429,6 +494,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 
 			assert.Equal(t, tc.expectedObjectNames, actualObjectNames)
 			assert.Equal(t, tc.expectedErrors, actualErrors)
+			assert.Equal(t, tc.expectedCommands, actualCommands)
 		})
 
 	}
