@@ -84,7 +84,7 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.L().Ctx(ctx).Error(fmt.Sprintf("RECOVER in HandleWatchers, reason: %v", err))
+			logger.L().Ctx(ctx).Fatal("recover in HandleWatchers", helpers.Interface("error", err))
 		}
 	}()
 
@@ -141,7 +141,7 @@ func (mainHandler *MainHandler) HandleRequest(ctx context.Context) []error {
 	// recover
 	defer func() {
 		if err := recover(); err != nil {
-			logger.L().Ctx(ctx).Error(fmt.Sprintf("RECOVER in HandleRequest, reason: %v", err))
+			logger.L().Ctx(ctx).Fatal("recover in HandleRequest", helpers.Interface("error", err))
 		}
 	}()
 

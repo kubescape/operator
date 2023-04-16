@@ -60,12 +60,13 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.L().Ctx(r.Context()).Error(fmt.Sprintf("recover in ActionRequest: %v", err))
 			w.WriteHeader(http.StatusInternalServerError)
 			bErr, _ := json.Marshal(err)
 			w.Write(bErr)
+			logger.L().Ctx(r.Context()).Fatal("recover in ActionRequest", helpers.Interface("error", err))
 		}
 	}()
+
 	defer r.Body.Close()
 	var err error
 	returnValue := []byte("ok")
