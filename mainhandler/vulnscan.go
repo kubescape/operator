@@ -12,6 +12,8 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
@@ -288,6 +290,8 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanWorkload")
 	defer span.End()
 
+	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
+
 	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
 	if err != nil {
 		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
@@ -518,6 +522,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 			logger.L().Error("failed to get command", helpers.String("image", containers[i].image), helpers.Error(err))
 			continue
 		}
+		logger.L().Ctx(ctx).Debug("sending scan command", helpers.String("id", containers[i].id), helpers.String("image", containers[i].image), helpers.String("container", containers[i].container))
 
 		if err := sendCommandToScanner(ctx, websocketScanCommand, command); err != nil {
 			errs += err.Error()
