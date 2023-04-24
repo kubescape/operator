@@ -671,6 +671,9 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			continue
 		}
 
+		pod.APIVersion = "v1"
+		pod.Kind = "Pod"
+
 		parentWlid, err := wh.getParentIDForPod(pod)
 		if err != nil {
 			logger.L().Ctx(ctx).Error(fmt.Sprintf("error to getParentIDForPod, err :%s", err.Error()), helpers.Error(err))
