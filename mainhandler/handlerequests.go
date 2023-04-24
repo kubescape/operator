@@ -178,7 +178,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	defer span.End()
 
 	actionHandler := NewActionHandler(mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
-	logger.L().Info(fmt.Sprintf("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID()))
+	logger.L().Info(fmt.Sprintf("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID()), helpers.String("ID", sessionObj.Command.GetID()))
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(ctx, sessionObj)
@@ -300,7 +300,10 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		}
 
 		logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
-		*mainHandler.sessionObj <- *newSessionObj
+		mainHandler.HandleSingleRequest(ctx, newSessionObj)
+
+		close(newSessionObj.ErrChan)
+
 	}
 }
 
