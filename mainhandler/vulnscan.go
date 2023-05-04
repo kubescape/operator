@@ -297,6 +297,11 @@ func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj
 		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
 	}
 
+	if workload.GetKind() == "CronJob" {
+		logger.L().Ctx(ctx).Debug("workload is CronJob, skipping")
+		return nil
+	}
+
 	pod, err := actionHandler.getPodByWLID(workload)
 	if err != nil {
 		err = fmt.Errorf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err)
