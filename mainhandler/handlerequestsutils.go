@@ -43,6 +43,12 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 			if err != nil {
 				errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
 			}
+
+			// skip cronjobs
+			if kind == "CronJob" {
+				continue
+			}
+
 			wlid := pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, workloads[i].GetNamespace(), kind, name)
 			if wlid != "" {
 				idMap[wlid] = true
