@@ -36,7 +36,7 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 			)
 			logger.L().Debug("instanceID", helpers.String("str", id.GetStringFormatted()), helpers.String("id", id.GetHashed()), helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
 		} else {
-			logger.L().Debug("instance id is nil, skipping", helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
+			logger.L().Debug("instanceID is nil, skipping", helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
 		}
 	}
 	initContainers, err := workload.GetInitContainers()
