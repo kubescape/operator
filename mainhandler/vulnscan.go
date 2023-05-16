@@ -446,7 +446,6 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
 
-	var pod *corev1.Pod
 	for i := range pods.Items {
 		podMarshalled, err := json.Marshal(pods.Items[i])
 		if err != nil {
@@ -455,7 +454,7 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 
 		wl, err := workloadinterface.NewWorkload(podMarshalled)
 		if err != nil {
-			return nil, err
+			continue
 		}
 
 		kind, name, err := actionHandler.k8sAPI.CalculateWorkloadParentRecursive(wl)
@@ -464,16 +463,13 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		}
 
 		if kind == workload.GetKind() && name == workload.GetName() {
-			pod = &pods.Items[i]
-			break
+			pods.Items[i].APIVersion = "v1"
+			pods.Items[i].Kind = "Pod"
+			return &pods.Items[i], nil
 		}
 	}
 
-	// set the api version and kind to be pod - this is needed for the the resourceID
-	pod.APIVersion = "v1"
-	pod.Kind = "Pod"
-
-	return pod, nil
+	return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
 }
 
 // get a workload, retrieves its pod and returns a map of container name to image id
