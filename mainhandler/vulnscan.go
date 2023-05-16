@@ -27,6 +27,7 @@ import (
 	"github.com/kubescape/k8s-interface/cloudsupport"
 	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 )
 
 const (
@@ -433,23 +434,42 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		return pod, nil
 	}
 
+	// we need to find the pod that is owned by the workload
+	// we iterate over all the pods with the same labels as the workload until we find one pod that is owned by the workload
 	labels := workload.GetPodLabels()
 	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
 	if err != nil {
 		return nil, fmt.Errorf("failed listing pods for workload %s", workload.GetName())
 	}
+
 	if len(pods.Items) == 0 {
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
 
-	logger.L().Debug("number pod found for workload", helpers.String("workload", workload.GetID()), helpers.Int("numPods", len(pods.Items)))
-	pod := &pods.Items[0]
+	for i := range pods.Items {
+		podMarshalled, err := json.Marshal(pods.Items[i])
+		if err != nil {
+			return nil, err
+		}
 
-	// set the api version and kind to be pod - this is needed for the the resourceID
-	pod.APIVersion = "v1"
-	pod.Kind = "Pod"
+		wl, err := workloadinterface.NewWorkload(podMarshalled)
+		if err != nil {
+			continue
+		}
 
-	return pod, nil
+		kind, name, err := actionHandler.k8sAPI.CalculateWorkloadParentRecursive(wl)
+		if err != nil {
+			return nil, err
+		}
+
+		if kind == workload.GetKind() && name == workload.GetName() {
+			pods.Items[i].APIVersion = "v1"
+			pods.Items[i].Kind = "Pod"
+			return &pods.Items[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
 }
 
 // get a workload, retrieves its pod and returns a map of container name to image id
