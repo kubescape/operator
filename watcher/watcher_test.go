@@ -355,7 +355,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 						ObjectMeta: v1.ObjectMeta{
 							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
 							Annotations: map[string]string{
-								instanceidv1.WlidAnnotationKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
 							},
 						},
 					},

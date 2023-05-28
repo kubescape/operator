@@ -238,7 +238,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		wlid, ok := obj.ObjectMeta.Annotations[instanceidhandlerv1.WlidAnnotationKey]
+		wlid, ok := obj.ObjectMeta.Annotations[instanceidhandlerv1.WlidMetadataKey]
 		if !ok {
 			errorCh <- ErrMissingWLIDAnnotation
 			continue
