@@ -1,6 +1,6 @@
 module github.com/kubescape/operator
 
-go 1.19
+go 1.20
 
 require (
 	github.com/armosec/armoapi-go v0.0.176
