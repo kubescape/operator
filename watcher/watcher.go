@@ -116,8 +116,8 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
-func labelsToInstanceID(labels map[string]string) (string, error) {
-	instanceID, ok := labels[instanceidhandlerv1.InstanceIDMetadataKey]
+func annotationsToInstanceID(annotations map[string]string) (string, error) {
+	instanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
 	if !ok {
 		return instanceID, ErrMissingInstanceIDAnnotation
 	}
@@ -229,7 +229,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		hashedInstanceID, err := labelsToInstanceID(obj.ObjectMeta.Annotations)
+		hashedInstanceID, err := annotationsToInstanceID(obj.ObjectMeta.Annotations)
 		if err != nil {
 			errorCh <- ErrMissingInstanceIDAnnotation
 			continue
