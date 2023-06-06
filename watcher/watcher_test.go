@@ -331,7 +331,10 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{
+								instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							},
 						},
 					},
 				},
@@ -353,15 +356,16 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name: "default-pod-reverse-proxy-1ba5-4aaf",
 							Annotations: map[string]string{
-								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+								instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+								instanceidv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
 							},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
 			expectedCommands: []*apis.Command{
 				{
 					CommandName: apis.TypeScanImages,
@@ -376,7 +380,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors: []error{},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with known instance ID but missing annotation should produce a matching error",
+			name:        "Adding a new Filtered SBOM with known instance ID but missing WLID annotation should produce a matching error",
 			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
 				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
@@ -388,15 +392,40 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name:        "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
-							Annotations: map[string]string{},
+							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{ErrMissingWLIDAnnotation},
+		},
+		{
+			name:        "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
+			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
+				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
+					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
+				},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{
+								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
+			expectedCommands:    []*apis.Command{},
+			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
 		},
 		{
 			name:        "Deleting a Filtered SBOM should be ignored",
@@ -406,12 +435,13 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Deleted,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{},
 		},
@@ -423,7 +453,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
