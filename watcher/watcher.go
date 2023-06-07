@@ -27,8 +27,6 @@ import (
 
 const (
 	retryInterval = 3 * time.Second
-
-	instanceIDAnnotationKey = "instanceID"
 )
 
 var (
@@ -39,9 +37,12 @@ var (
 type WlidsToContainerToImageIDMap map[string]map[string]string
 
 type WatchHandler struct {
-	k8sAPI                            *k8sinterface.KubernetesApi
-	storageClient                     kssc.Interface
-	iwMap                             *imageHashWLIDMap
+	k8sAPI        *k8sinterface.KubernetesApi
+	storageClient kssc.Interface
+	iwMap         *imageHashWLIDMap
+	// TODO(vladklokun): unify the following two fields with their
+	// respective mutexes into concurrent data structures with public
+	// methods
 	hashedInstanceIDs                 []string
 	instanceIDsMutex                  *sync.RWMutex
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
@@ -118,8 +119,8 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
-func labelsToInstanceID(labels map[string]string) (string, error) {
-	instanceID, ok := labels[instanceIDAnnotationKey]
+func annotationsToInstanceID(annotations map[string]string) (string, error) {
+	instanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
 	if !ok {
 		return instanceID, ErrMissingInstanceIDAnnotation
 	}
@@ -211,7 +212,8 @@ func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.
 		}
 
 		if !hasObject {
-			wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
+			// TODO(vladklokun): deletes are disabled for a quick hach
+			// wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
 		}
 	}
 }
@@ -231,10 +233,15 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		hashedInstanceID := obj.ObjectMeta.Name
+		hashedInstanceID, err := annotationsToInstanceID(obj.ObjectMeta.Annotations)
+		if err != nil {
+			errorCh <- ErrMissingInstanceIDAnnotation
+			continue
+		}
 
 		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
-			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			// TODO(vladklokun): deletes are disabled for a quick hack
+			// wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			continue
 		}
 
@@ -272,10 +279,11 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 
 		_, imageHashOk := wh.iwMap.Load(imageHash)
 		if !imageHashOk {
-			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			if err != nil {
-				errorCh <- err
-			}
+			// TODO(vladklokun): deletes are disabled for a quick hack
+			// err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			// if err != nil {
+			// 	errorCh <- err
+			// }
 			continue
 		}
 	}

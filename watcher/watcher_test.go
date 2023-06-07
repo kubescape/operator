@@ -21,6 +21,10 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
+const (
+	deletesQuickFix = "Deletes have been disabled for a quick hack"
+)
+
 func NewWatchHandlerMock() *WatchHandler {
 	return &WatchHandler{
 		iwMap:                             NewImageHashWLIDsMap(),
@@ -79,6 +83,7 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 
 func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 	tt := []struct {
+		skipReason          string
 		name                string
 		imageWLIDsMap       map[string][]string
 		instanceIDs         []string
@@ -87,6 +92,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 		expectedErrors      []error
 	}{
 		{
+			skipReason:    deletesQuickFix,
 			name:          "Adding a new Vulnerability Manifest (no relevancy) with an unknown image ID should delete it from storage",
 			imageWLIDsMap: map[string][]string{},
 			instanceIDs:   []string{},
@@ -133,7 +139,8 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			expectedErrors:      []error{},
 		},
 		{
-			name: "Adding Vulnerability Manifests should keep or delete them from storage accordingly",
+			skipReason: deletesQuickFix,
+			name:       "Adding Vulnerability Manifests should keep or delete them from storage accordingly",
 			imageWLIDsMap: map[string][]string{
 				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid://some-wlid"},
 			},
@@ -254,6 +261,10 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.skipReason != "" {
+				t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
+			}
+
 			// Prepare starting startingObjects for storage
 			startingObjects := []runtime.Object{}
 			for _, e := range tc.inputEvents {
@@ -315,6 +326,7 @@ func Test_getSBOMWatcher(t *testing.T) {
 
 func TestHandleSBOMFilteredEvents(t *testing.T) {
 	tt := []struct {
+		skipReason                     string
 		name                           string
 		instanceIDs                    []string
 		wlidsToContainersToImageIDsMap WlidsToContainerToImageIDMap
@@ -324,6 +336,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		expectedErrors                 []error
 	}{
 		{
+			skipReason:  deletesQuickFix,
 			name:        "Adding a new Filtered SBOM with an unknown hashed instance ID should delete it from storage",
 			instanceIDs: []string{},
 			inputEvents: []watch.Event{
@@ -331,7 +344,10 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{
+								instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							},
 						},
 					},
 				},
@@ -353,15 +369,16 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name: "default-pod-reverse-proxy-1ba5-4aaf",
 							Annotations: map[string]string{
-								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+								instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+								instanceidv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
 							},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
 			expectedCommands: []*apis.Command{
 				{
 					CommandName: apis.TypeScanImages,
@@ -376,7 +393,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors: []error{},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with known instance ID but missing annotation should produce a matching error",
+			name:        "Adding a new Filtered SBOM with known instance ID but missing WLID annotation should produce a matching error",
 			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
 				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
@@ -388,15 +405,40 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name:        "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
-							Annotations: map[string]string{},
+							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{ErrMissingWLIDAnnotation},
+		},
+		{
+			name:        "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
+			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
+				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
+					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
+				},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{
+								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
+			expectedCommands:    []*apis.Command{},
+			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
 		},
 		{
 			name:        "Deleting a Filtered SBOM should be ignored",
@@ -406,12 +448,13 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Deleted,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{},
 		},
@@ -423,7 +466,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
@@ -435,6 +479,10 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		if tc.skipReason != "" {
+			t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
+		}
+
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare starting startingObjects for storage
 			startingObjects := []runtime.Object{}
@@ -502,6 +550,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 
 func TestHandleSBOMEvents(t *testing.T) {
 	tt := []struct {
+		skipReason        string
 		name              string
 		imageIDstoWlids   map[string][]string
 		inputEvents       []watch.Event
@@ -509,6 +558,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 		expectedErrors    []error
 	}{
 		{
+			skipReason:      deletesQuickFix,
 			name:            "New SBOM with unrecognized imageHash as name gets deleted",
 			imageIDstoWlids: map[string][]string{},
 			inputEvents: []watch.Event{
@@ -570,6 +620,10 @@ func TestHandleSBOMEvents(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		if tc.skipReason != "" {
+			t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
+		}
+
 		t.Run(tc.name, func(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 
