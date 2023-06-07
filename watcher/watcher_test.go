@@ -21,10 +21,6 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-const (
-	deletesQuickFix = "Deletes have been disabled for a quick hack"
-)
-
 func NewWatchHandlerMock() *WatchHandler {
 	return &WatchHandler{
 		iwMap:                             NewImageHashWLIDsMap(),
@@ -83,7 +79,6 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 
 func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 	tt := []struct {
-		skipReason          string
 		name                string
 		imageWLIDsMap       map[string][]string
 		instanceIDs         []string
@@ -92,7 +87,6 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 		expectedErrors      []error
 	}{
 		{
-			skipReason:    deletesQuickFix,
 			name:          "Adding a new Vulnerability Manifest (no relevancy) with an unknown image ID should delete it from storage",
 			imageWLIDsMap: map[string][]string{},
 			instanceIDs:   []string{},
@@ -139,8 +133,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			expectedErrors:      []error{},
 		},
 		{
-			skipReason: deletesQuickFix,
-			name:       "Adding Vulnerability Manifests should keep or delete them from storage accordingly",
+			name: "Adding Vulnerability Manifests should keep or delete them from storage accordingly",
 			imageWLIDsMap: map[string][]string{
 				"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid://some-wlid"},
 			},
@@ -261,10 +254,6 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.skipReason != "" {
-				t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
-			}
-
 			// Prepare starting startingObjects for storage
 			startingObjects := []runtime.Object{}
 			for _, e := range tc.inputEvents {
@@ -326,7 +315,6 @@ func Test_getSBOMWatcher(t *testing.T) {
 
 func TestHandleSBOMFilteredEvents(t *testing.T) {
 	tt := []struct {
-		skipReason                     string
 		name                           string
 		instanceIDs                    []string
 		wlidsToContainersToImageIDsMap WlidsToContainerToImageIDMap
@@ -336,7 +324,6 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		expectedErrors                 []error
 	}{
 		{
-			skipReason:  deletesQuickFix,
 			name:        "Adding a new Filtered SBOM with an unknown hashed instance ID should delete it from storage",
 			instanceIDs: []string{},
 			inputEvents: []watch.Event{
@@ -479,10 +466,6 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		if tc.skipReason != "" {
-			t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare starting startingObjects for storage
 			startingObjects := []runtime.Object{}
@@ -550,7 +533,6 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 
 func TestHandleSBOMEvents(t *testing.T) {
 	tt := []struct {
-		skipReason        string
 		name              string
 		imageIDstoWlids   map[string][]string
 		inputEvents       []watch.Event
@@ -558,7 +540,6 @@ func TestHandleSBOMEvents(t *testing.T) {
 		expectedErrors    []error
 	}{
 		{
-			skipReason:      deletesQuickFix,
 			name:            "New SBOM with unrecognized imageHash as name gets deleted",
 			imageIDstoWlids: map[string][]string{},
 			inputEvents: []watch.Event{
@@ -620,10 +601,6 @@ func TestHandleSBOMEvents(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		if tc.skipReason != "" {
-			t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 
