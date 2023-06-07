@@ -27,8 +27,6 @@ import (
 
 const (
 	retryInterval = 3 * time.Second
-
-	instanceIDAnnotationKey = "instanceID"
 )
 
 var (
@@ -118,8 +116,8 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
-func labelsToInstanceID(labels map[string]string) (string, error) {
-	instanceID, ok := labels[instanceIDAnnotationKey]
+func annotationsToInstanceID(annotations map[string]string) (string, error) {
+	instanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
 	if !ok {
 		return instanceID, ErrMissingInstanceIDAnnotation
 	}
@@ -231,7 +229,11 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		hashedInstanceID := obj.ObjectMeta.Name
+		hashedInstanceID, err := annotationsToInstanceID(obj.ObjectMeta.Annotations)
+		if err != nil {
+			errorCh <- ErrMissingInstanceIDAnnotation
+			continue
+		}
 
 		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
 			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
