@@ -5,7 +5,6 @@ import (
 	k8s "k8s.io/client-go/kubernetes"
 )
 
-
 // NewK8sInterfaceFake returns a new K8sInterface with a fake Kubernetes Client attached
 //
 // This function is a Dependency Injection-friendly version for the
