@@ -120,11 +120,22 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 }
 
 func annotationsToInstanceID(annotations map[string]string) (string, error) {
-	instanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
+	rawInstanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
 	if !ok {
-		return instanceID, ErrMissingInstanceIDAnnotation
+		return rawInstanceID, ErrMissingInstanceIDAnnotation
 	}
-	return instanceID, nil
+
+	// TODO(vladklokun): cover with tests
+	instanceID, err := instanceidhandlerv1.GenerateInstanceIDFromString(rawInstanceID)
+	if err != nil {
+		return "", err
+	}
+
+	slug, err := instanceID.GetSlug()
+	if err != nil {
+		return "", err
+	}
+	return slug, nil
 }
 
 func (wh *WatchHandler) getVulnerabilityManifestWatcher() (watch.Interface, error) {
@@ -224,6 +235,12 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 	for e := range sfEvents {
 		obj, ok := e.Object.(*spdxv1beta1.SBOMSPDXv2p3Filtered)
 		if !ok {
+			logger.L().Ctx(context.TODO()).Error(
+				fmt.Sprintf(
+					`Unsupported object. Got: %v`,
+					e.Object,
+				),
+			)
 			errorCh <- ErrUnsupportedObject
 			continue
 		}
@@ -233,8 +250,17 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
+		// TODO(vladklokun): refactor: generalize inserts of managed
+		// instance IDs, push for a broader refactor of the
+		// mutex-detached fields
 		hashedInstanceID, err := annotationsToInstanceID(obj.ObjectMeta.Annotations)
 		if err != nil {
+			logger.L().Ctx(context.TODO()).Error(
+				fmt.Sprintf(
+					`Missing instance ID annotation. Got: %v`,
+					obj.ObjectMeta.Annotations,
+				),
+			)
 			errorCh <- ErrMissingInstanceIDAnnotation
 			continue
 		}
@@ -242,18 +268,43 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
 			// TODO(vladklokun): deletes are disabled for a quick hack
 			// wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			logger.L().Ctx(context.TODO()).Info(
+				fmt.Sprintf(
+					`unrecognized instance ID "%s". Known: "%v", no triggering`,
+					hashedInstanceID,
+					wh.hashedInstanceIDs,
+				),
+			)
 			continue
 		}
 
 		wlid, ok := obj.ObjectMeta.Annotations[instanceidhandlerv1.WlidMetadataKey]
 		if !ok {
+			logger.L().Ctx(context.TODO()).Error(
+				fmt.Sprintf(
+					`Missing WLID annotation. Got: %v`,
+					obj.ObjectMeta.Annotations,
+				),
+			)
 			errorCh <- ErrMissingWLIDAnnotation
 			continue
 		}
 
 		containerToImageIDs := wh.GetContainerToImageIDForWlid(wlid)
 		cmd := getImageScanCommand(wlid, containerToImageIDs)
+		logger.L().Ctx(context.TODO()).Debug(
+			fmt.Sprintf(
+				`Triggering scan with command: %v`,
+				cmd,
+			),
+		)
 		producedCommands <- cmd
+		logger.L().Ctx(context.TODO()).Debug(
+			fmt.Sprintf(
+				`Scan triggered with command: %v`,
+				cmd,
+			),
+		)
 	}
 }
 
@@ -472,7 +523,7 @@ func (wh *WatchHandler) GetContainerToImageIDForWlid(wlid string) map[string]str
 func (wh *WatchHandler) addToInstanceIDsList(instanceID instanceidhandler.IInstanceID) {
 	wh.instanceIDsMutex.Lock()
 	defer wh.instanceIDsMutex.Unlock()
-	h := instanceID.GetHashed()
+	h, _ := instanceID.GetSlug()
 
 	if !slices.Contains(wh.hashedInstanceIDs, h) {
 		wh.hashedInstanceIDs = append(wh.hashedInstanceIDs, h)
@@ -483,7 +534,6 @@ func (wh *WatchHandler) addToImageIDToWlidsMap(imageID string, wlids ...string) 
 	if len(wlids) == 0 {
 		return
 	}
-	imageID, _ = extractImageHash(imageID)
 	wh.iwMap.Add(imageID, wlids...)
 }
 

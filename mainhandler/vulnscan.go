@@ -371,6 +371,16 @@ func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *api
 // send workload to the kubevuln with credentials
 func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command apis.ImageScanCommand) error {
 	jsonScannerC, err := json.Marshal(command)
+
+	// TODO(dwertent,vladklokun): get instance ID in a more elegant way
+	imageScanCommand, ok := command.(*apis.WebsocketScanCommand)
+	instanceID := "NOT_A_WEBSOCKET_SCAN_COMMAND"
+	if !ok {
+		logger.L().Ctx(ctx).Debug("Not an image scan command")
+	} else {
+		instanceID = *imageScanCommand.InstanceID
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
 	}
@@ -381,7 +391,7 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	creds := command.GetCreds()
 	credsList := command.GetCredentialsList()
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	logger.L().Info("scan request", helpers.String("url", scanUrl.String()), helpers.String("wlid", command.GetWlid()), helpers.String("instanceID", ""), helpers.String("imageTag", command.GetImageTag()), helpers.String("imageHash", command.GetImageHash()), helpers.Interface("credentials", hasCreds))
+	logger.L().Info("scan request", helpers.String("url", scanUrl.String()), helpers.String("wlid", command.GetWlid()), helpers.String("instanceID", instanceID), helpers.String("imageTag", command.GetImageTag()), helpers.String("imageHash", command.GetImageHash()), helpers.Interface("credentials", hasCreds))
 
 	resp, err := httputils.HttpPost(VulnScanHttpClient, scanUrl.String(), map[string]string{"Content-Type": "application/json"}, jsonScannerC)
 	refusedNum := 0
