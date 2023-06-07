@@ -1,10 +1,12 @@
 package watcher
 
 import (
+	"regexp"
+
 	"github.com/armosec/armoapi-go/apis"
+	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/operator/utils"
 	core1 "k8s.io/api/core/v1"
-	"regexp"
 )
 
 var (
@@ -75,4 +77,20 @@ func extractImageHash(imageID string) (string, error) {
 	}
 
 	return "", errInvalidImageID
+}
+
+func annotationsToInstanceID(annotations map[string]string) (string, error) {
+	instanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
+	if !ok {
+		return instanceID, ErrMissingInstanceIDAnnotation
+	}
+	return instanceID, nil
+}
+
+func annotationsToImageID(annotations map[string]string) (string, error) {
+	instanceID, ok := annotations[instanceidhandlerv1.ImageIDMetadataKey]
+	if !ok {
+		return instanceID, ErrMissingImageIDAnnotation
+	}
+	return instanceID, nil
 }

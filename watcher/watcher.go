@@ -119,14 +119,6 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 	return wh.wlidsToContainerToImageIDMap
 }
 
-func annotationsToInstanceID(annotations map[string]string) (string, error) {
-	instanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
-	if !ok {
-		return instanceID, ErrMissingInstanceIDAnnotation
-	}
-	return instanceID, nil
-}
-
 func (wh *WatchHandler) getVulnerabilityManifestWatcher() (watch.Interface, error) {
 	return wh.storageClient.SpdxV1beta1().VulnerabilityManifests("").Watch(context.TODO(), v1.ListOptions{})
 }
@@ -273,7 +265,11 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 			continue
 		}
 
-		imageHash := obj.ObjectMeta.Name
+		imageHash, err := annotationsToImageID(obj.ObjectMeta.Annotations)
+		if err != nil {
+			errorCh <- err
+			continue
+		}
 
 		_, imageHashOk := wh.iwMap.Load(imageHash)
 		if !imageHashOk {

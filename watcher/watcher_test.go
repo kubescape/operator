@@ -540,13 +540,62 @@ func TestHandleSBOMEvents(t *testing.T) {
 		expectedErrors    []error
 	}{
 		{
-			name:            "New SBOM with unrecognized imageHash as name gets deleted",
-			imageIDstoWlids: map[string][]string{},
+			name: "SBOMs with an unrecognized image ID in the name but a recognized image ID in the annotation should not be deleted",
+			imageIDstoWlids: map[string][]string{
+				"docker.io/kindest/local-path-provisioner:v0.0.23-kind.0@sha256:f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501": {"wlid://some-wlid"},
+			},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "docker.io-kindest-local-path-provisioner-v0.0.23-kind.0-sha256-f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501-4b9501",
+							Namespace: "kubescape",
+							Annotations: map[string]string{
+								instanceidv1.ImageIDMetadataKey: "docker.io/kindest/local-path-provisioner:v0.0.23-kind.0@sha256:f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501",
+							},
+						},
+					},
+				},
+			},
+			expectedSBOMNames: []string{"docker.io-kindest-local-path-provisioner-v0.0.23-kind.0-sha256-f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501-4b9501"},
+			expectedErrors:    []error{},
+		},
+		{
+			name: "SBOMs with an unrecognized image ID in the name and a missing image ID annotation should produce an error",
+			imageIDstoWlids: map[string][]string{
+				"docker.io/kindest/local-path-provisioner:v0.0.23-kind.0@sha256:f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501": {"wlid://some-wlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "docker.io-kindest-local-path-provisioner-v0.0.23-kind.0-sha256-f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501-4b9501",
+							Namespace: "kubescape",
+						},
+					},
+				},
+			},
+			expectedSBOMNames: []string{"docker.io-kindest-local-path-provisioner-v0.0.23-kind.0-sha256-f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501-4b9501"},
+			expectedErrors:    []error{ErrMissingImageIDAnnotation},
+		},
+		{
+			name:            "New SBOM with a mismatched image ID in the annotation gets deleted",
+			imageIDstoWlids: map[string][]string{
+				"docker.io/nginx:latest": {"wlid://some-wlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "docker.io-kindest-local-path-provisioner-v0.0.23-kind.0-sha256-f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501-4b9501",
+							Namespace: "kubescape",
+							Annotations: map[string]string{
+								instanceidv1.ImageIDMetadataKey: "docker.io/kindest/local-path-provisioner:v0.0.23-kind.0@sha256:f2d0a02831ff3a03cf51343226670d5060623b43a4cfc4808bd0875b2c4b9501",
+							},
+						},
 					},
 				},
 			},
@@ -648,7 +697,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				remainingSBOMNames = append(remainingSBOMNames, obj.ObjectMeta.Name)
 			}
 
-			assert.Equalf(t, tc.expectedSBOMNames, remainingSBOMNames, "Commands should match")
+			assert.Equalf(t, tc.expectedSBOMNames, remainingSBOMNames, "Stored objects should match")
 			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
 		})
 	}

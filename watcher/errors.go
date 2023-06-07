@@ -9,4 +9,5 @@ var (
 
 	ErrMissingInstanceIDAnnotation = errors.New("object is missing Instance ID annotation")
 	ErrMissingWLIDAnnotation       = errors.New("object is missing the WLID annotation")
+	ErrMissingImageIDAnnotation    = errors.New("object is missing the ImageID annotation")
 )
