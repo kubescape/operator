@@ -37,9 +37,12 @@ var (
 type WlidsToContainerToImageIDMap map[string]map[string]string
 
 type WatchHandler struct {
-	k8sAPI                            *k8sinterface.KubernetesApi
-	storageClient                     kssc.Interface
-	iwMap                             *imageHashWLIDMap
+	k8sAPI        *k8sinterface.KubernetesApi
+	storageClient kssc.Interface
+	iwMap         *imageHashWLIDMap
+	// TODO(vladklokun): unify the following two fields with their
+	// respective mutexes into concurrent data structures with public
+	// methods
 	hashedInstanceIDs                 []string
 	instanceIDsMutex                  *sync.RWMutex
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
