@@ -212,7 +212,8 @@ func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.
 		}
 
 		if !hasObject {
-			wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
+			// TODO(vladklokun): deletes are disabled for a quick hach
+			// wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
 		}
 	}
 }
@@ -239,7 +240,8 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		}
 
 		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
-			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			// TODO(vladklokun): deletes are disabled for a quick hack
+			// wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			continue
 		}
 
@@ -277,10 +279,11 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 
 		_, imageHashOk := wh.iwMap.Load(imageHash)
 		if !imageHashOk {
-			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			if err != nil {
-				errorCh <- err
-			}
+			// TODO(vladklokun): deletes are disabled for a quick hack
+			// err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			// if err != nil {
+			// 	errorCh <- err
+			// }
 			continue
 		}
 	}
