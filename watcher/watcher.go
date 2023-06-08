@@ -307,6 +307,14 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 	}
 }
 
+func annotationsToImageID(annotations map[string]string) (string, error) {
+	imgID, ok := annotations[instanceidhandlerv1.ImageIDMetadataKey]
+	if !ok {
+		return "", ErrMissingImageIDAnnotation
+	}
+	return imgID, nil
+}
+
 // HandleSBOMEvents handles SBOM-related events
 //
 // Handling events is defined as deleting SBOMs that are not known to the Operator
@@ -325,15 +333,25 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 			continue
 		}
 
-		imageHash := obj.ObjectMeta.Name
+		imageID, err := annotationsToImageID(obj.ObjectMeta.Annotations)
+		if err != nil {
+			errorCh <- err
+		}
 
-		_, imageHashOk := wh.iwMap.Load(imageHash)
+		_, imageHashOk := wh.iwMap.Load(imageID)
 		if !imageHashOk {
-			// TODO(vladklokun): deletes are disabled for a quick hack
-			// err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			// if err != nil {
-			// 	errorCh <- err
-			// }
+			logger.L().Ctx(context.TODO()).Debug(
+				fmt.Sprintf(
+					`Cannot find image ID "%s" among managed "%v". Deleting`,
+					imageID,
+					// TODO(vladklokun): converting to map can be expensive, implement Stringer on this
+					wh.iwMap.Map(),
+				),
+			)
+			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
 			continue
 		}
 	}
