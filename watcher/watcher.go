@@ -43,7 +43,7 @@ type WatchHandler struct {
 	// TODO(vladklokun): unify the following two fields with their
 	// respective mutexes into concurrent data structures with public
 	// methods
-	hashedInstanceIDs                 []string
+	managedInstanceIDSlugs            []string
 	instanceIDsMutex                  *sync.RWMutex
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	wlidsToContainerToImageIDMapMutex *sync.RWMutex
@@ -74,7 +74,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
-		hashedInstanceIDs:                 instanceIDs,
+		managedInstanceIDSlugs:            instanceIDs,
 	}
 
 	// list all Pods and extract their image IDs
@@ -108,7 +108,7 @@ func (wh *WatchHandler) listInstanceIDs() []string {
 	wh.instanceIDsMutex.RLock()
 	defer wh.instanceIDsMutex.RUnlock()
 
-	return wh.hashedInstanceIDs
+	return wh.managedInstanceIDSlugs
 }
 
 // returns wlids map
@@ -265,13 +265,13 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
+		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
 			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			logger.L().Ctx(context.TODO()).Info(
 				fmt.Sprintf(
 					`unrecognized instance ID "%s". Known: "%v", no triggering`,
 					hashedInstanceID,
-					wh.hashedInstanceIDs,
+					wh.managedInstanceIDSlugs,
 				),
 			)
 			continue
@@ -483,7 +483,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils
 
 func (wh *WatchHandler) cleanUpInstanceIDs() {
 	wh.instanceIDsMutex.Lock()
-	wh.hashedInstanceIDs = []string{}
+	wh.managedInstanceIDSlugs = []string{}
 	wh.instanceIDsMutex.Unlock()
 }
 
@@ -524,8 +524,8 @@ func (wh *WatchHandler) addToInstanceIDsList(instanceID instanceidhandler.IInsta
 	defer wh.instanceIDsMutex.Unlock()
 	h, _ := instanceID.GetSlug()
 
-	if !slices.Contains(wh.hashedInstanceIDs, h) {
-		wh.hashedInstanceIDs = append(wh.hashedInstanceIDs, h)
+	if !slices.Contains(wh.managedInstanceIDSlugs, h) {
+		wh.managedInstanceIDSlugs = append(wh.managedInstanceIDSlugs, h)
 	}
 }
 

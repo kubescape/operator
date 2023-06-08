@@ -1199,7 +1199,7 @@ func Test_cleanUpIDs(t *testing.T) {
 		"pod2": {"container2": "alpine@sha256:2"},
 		"pod3": {"container3": "alpine@sha256:3"},
 	}
-	wh.hashedInstanceIDs = []string{
+	wh.managedInstanceIDSlugs = []string{
 		"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
 		"f26b54ef2073feae80c40423a9fac44468ec4c655476ea8a57f601daa62240c2",
 		"8d39971275da811436922ae8d8f839827e5c6567738a1390bc94cfdb58bb8762",
@@ -1208,7 +1208,7 @@ func Test_cleanUpIDs(t *testing.T) {
 
 	assert.Equal(t, 0, len(wh.iwMap.Map()))
 	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
-	assert.Equal(t, 0, len(wh.hashedInstanceIDs))
+	assert.Equal(t, 0, len(wh.managedInstanceIDSlugs))
 }
 
 //go:embed testdata/deployment-two-containers.json
