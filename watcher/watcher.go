@@ -266,8 +266,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		}
 
 		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
-			// TODO(vladklokun): deletes are disabled for a quick hack
-			// wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			logger.L().Ctx(context.TODO()).Info(
 				fmt.Sprintf(
 					`unrecognized instance ID "%s". Known: "%v", no triggering`,

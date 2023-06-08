@@ -326,9 +326,8 @@ func Test_getSBOMWatcher(t *testing.T) {
 
 func TestHandleSBOMFilteredEvents(t *testing.T) {
 	tt := []struct {
-		skipReason                     string
 		name                           string
-		instanceIDs                    []string
+		knownInstanceIDSlugs           []string
 		wlidsToContainersToImageIDsMap WlidsToContainerToImageIDMap
 		inputEvents                    []watch.Event
 		expectedObjectNames            []string
@@ -336,17 +335,16 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		expectedErrors                 []error
 	}{
 		{
-			skipReason:  deletesQuickFix,
-			name:        "Adding a new Filtered SBOM with an unknown hashed instance ID should delete it from storage",
-			instanceIDs: []string{},
+			name:                 "Adding a new Filtered SBOM with an unknown instance ID slug should delete it from storage",
+			knownInstanceIDSlugs: []string{},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Name: "default-pod-reverse-proxy-2f07-68bd",
 							Annotations: map[string]string{
-								instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
+								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
 							},
 						},
 					},
@@ -357,10 +355,10 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors:      []error{},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with known instance ID should produce a matching scan command",
-			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			name:                 "Adding a new Filtered SBOM with known instance ID slug should produce a matching scan command",
+			knownInstanceIDSlugs: []string{"default-pod-reverse-proxy-2f07-68bd"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
-				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
+				"wlid://cluster-relevant-clutser/namespace-default/deployment-nginx": {
 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
 				},
 			},
@@ -369,20 +367,20 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Name: "default-pod-reverse-proxy-2f07-68bd",
 							Annotations: map[string]string{
-								instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",
-								instanceidv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
+								instanceidv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
 							},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-2f07-68bd"},
 			expectedCommands: []*apis.Command{
 				{
 					CommandName: apis.TypeScanImages,
-					Wlid:        "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+					Wlid:        "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
 					Args: map[string]interface{}{
 						utils.ContainerToImageIdsArg: map[string]string{
 							"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
@@ -393,10 +391,10 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors: []error{},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with known instance ID but missing WLID annotation should produce a matching error",
-			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			name:                 "Adding a new Filtered SBOM with known instance ID slug but missing WLID annotation should produce a matching error",
+			knownInstanceIDSlugs: []string{"default-pod-reverse-proxy-2f07-68bd"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
-				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
+				"wlid://cluster-relevant-clutser/namespace-default/deployment-nginx": {
 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
 				},
 			},
@@ -405,19 +403,21 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
-							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+							Name: "default-pod-reverse-proxy-2f07-68bd",
+							Annotations: map[string]string{
+								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
+							},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
+			expectedObjectNames: []string{"default-pod-reverse-proxy-2f07-68bd"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{ErrMissingWLIDAnnotation},
 		},
 		{
-			name:        "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
-			instanceIDs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+			name:                 "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
+			knownInstanceIDSlugs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
 				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
@@ -441,8 +441,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
 		},
 		{
-			name:        "Deleting a Filtered SBOM should be ignored",
-			instanceIDs: []string{},
+			name:                 "Filtered SBOM deletion events should be ignored",
+			knownInstanceIDSlugs: []string{},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Deleted,
@@ -459,8 +459,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedErrors:      []error{},
 		},
 		{
-			name:        "Adding an unsupported object should produce an error",
-			instanceIDs: []string{},
+			name:                 "Addition events for unsupported objects should produce a matching error",
+			knownInstanceIDSlugs: []string{},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
@@ -479,10 +479,6 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		if tc.skipReason != "" {
-			t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare starting startingObjects for storage
 			startingObjects := []runtime.Object{}
@@ -500,7 +496,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
-			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.instanceIDs)
+			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs)
 			wh.wlidsToContainerToImageIDMap = tc.wlidsToContainersToImageIDsMap
 
 			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
@@ -540,9 +536,9 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				actualObjectNames = append(actualObjectNames, obj.ObjectMeta.Name)
 			}
 
-			assert.Equal(t, tc.expectedObjectNames, actualObjectNames)
-			assert.Equal(t, tc.expectedErrors, actualErrors)
-			assert.Equal(t, tc.expectedCommands, actualCommands)
+			assert.Equal(t, tc.expectedObjectNames, actualObjectNames, "Objects in the storage don’t match")
+			assert.Equal(t, tc.expectedErrors, actualErrors, "Errors don’t match")
+			assert.Equal(t, tc.expectedCommands, actualCommands, "Commands don’t match")
 		})
 
 	}
