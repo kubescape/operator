@@ -23,6 +23,9 @@ import (
 
 const (
 	deletesQuickFix = "Deletes have been disabled for a quick hack"
+
+	validImageID     = "docker-pullable://alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee"
+	validImageIDSlug = "docker-pullable-alpine-sha256-c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee-70f2ee"
 )
 
 func NewWatchHandlerMock() *WatchHandler {
@@ -545,8 +548,10 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 }
 
 func TestHandleSBOMEvents(t *testing.T) {
+	validAnnotation := map[string]string{
+		instanceidv1.ImageIDMetadataKey: validImageID,
+	}
 	tt := []struct {
-		skipReason        string
 		name              string
 		imageIDstoWlids   map[string][]string
 		inputEvents       []watch.Event
@@ -554,14 +559,102 @@ func TestHandleSBOMEvents(t *testing.T) {
 		expectedErrors    []error
 	}{
 		{
-			skipReason:      deletesQuickFix,
-			name:            "New SBOM with unrecognized imageHash as name gets deleted",
-			imageIDstoWlids: map[string][]string{},
+			name: "New SBOM with recognized image hash gets kept",
+			imageIDstoWlids: map[string][]string{
+				validImageID: {"wlid://some-wlid"},
+			},
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
+						ObjectMeta: v1.ObjectMeta{
+							Name:        validImageIDSlug,
+							Namespace:   "kubescape",
+							Annotations: validAnnotation,
+						},
+					},
+				},
+			},
+			expectedSBOMNames: []string{validImageIDSlug},
+			expectedErrors:    []error{},
+		},
+		{
+			name: "New SBOM with missing image ID annotation produces an error and gets deleted",
+			imageIDstoWlids: map[string][]string{
+				validImageID: {"wlid://some-wlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name:        validImageID,
+							Namespace:   "kubescape",
+							Annotations: map[string]string{},
+						},
+					},
+				},
+			},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{ErrMissingImageIDAnnotation},
+		},
+		{
+			name: "New SBOM with recognized image ID as name but unrecognized image ID in annotation gets deleted",
+			imageIDstoWlids: map[string][]string{
+				"ab" + validImageID[2:]: {"wlid://some-wlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "ab" + validImageID[2:],
+							Namespace: "kubescape",
+							Annotations: map[string]string{
+								instanceidv1.ImageIDMetadataKey: validImageID,
+							},
+						},
+					},
+				},
+			},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{},
+		},
+		{
+			name: "New SBOM with recognized image ID as name but missing image ID annotation should produce an error",
+			imageIDstoWlids: map[string][]string{
+				validImageID: {"wlid://some-wlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      validImageID,
+							Namespace: "kubescape",
+						},
+					},
+				},
+			},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{ErrMissingImageIDAnnotation},
+		},
+		{
+			name: "New SBOM with unrecognized image ID gets deleted",
+			imageIDstoWlids: map[string][]string{
+				validImageID: {"wlid://some-wlid"},
+			},
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSPDXv2p3{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      validImageIDSlug,
+							Namespace: "kubescape",
+							Annotations: map[string]string{
+								instanceidv1.ImageIDMetadataKey: validImageID + "a",
+							},
+						},
 					},
 				},
 			},
@@ -589,7 +682,11 @@ func TestHandleSBOMEvents(t *testing.T) {
 				{
 					Type: watch.Modified,
 					Object: &spdxv1beta1.SBOMSPDXv2p3{
-						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
+						ObjectMeta: v1.ObjectMeta{
+							Name: validImageIDSlug,
+							Namespace: "kubescape",
+							Annotations: validAnnotation,
+						},
 					},
 				},
 			},
@@ -607,19 +704,12 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			// Since the fake client does not receive a delete
-			// request, it will still have the original value
-			// stored.
 			expectedSBOMNames: []string{"testName"},
 			expectedErrors:    []error{},
 		},
 	}
 
 	for _, tc := range tt {
-		if tc.skipReason != "" {
-			t.Skipf(`Skipping "%s" due to: %s`, tc.name, tc.skipReason)
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 
