@@ -620,7 +620,7 @@ func (registryScan *registryScan) getRegistryProvider() string {
 
 // parse registry information from secret, configmap and command, giving priority to command
 func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj *utils.SessionObj) error {
-	if err := registryScan.parseRegistryAuthFromSecret(ctx); err != nil {
+	if err := registryScan.setRegistryAuthFromSecret(ctx); err != nil {
 		logger.L().Info("parseRegistry: could not parse auth from secret, parsing from command", helpers.Error(err))
 	} else {
 		sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
@@ -665,27 +665,30 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 	return nil
 }
 
-func (registryScan *registryScan) parseRegistryAuthFromSecret(ctx context.Context) error {
-	secret, err := registryScan.getRegistryScanSecret()
+func (registryScan *registryScan) setRegistryAuthFromSecret(ctx context.Context) error {
+	var secretName string
+
+	if registryScan.registryInfo.SecretName != "" {
+		// in newer versions the secret is sent as part of the command
+		secretName = registryScan.registryInfo.SecretName
+	} else {
+		// in older versions the secret is stored in the cluster (backward compatibility)
+		secretName = armotypes.RegistryScanSecretName
+	}
+
+	// find secret in cluster
+	secrets, err := getRegistryScanSecrets(registryScan.k8sAPI, secretName)
+	if err != nil || len(secrets) == 0 {
+		return err
+	}
+
+	secret := secrets[0]
+
+	registriesAuth, err := parseRegistryAuthSecret(secret)
 	if err != nil {
 		return err
 	}
 
-	secretData := secret.GetData()
-	var registriesAuth []registryAuth
-	registriesAuthStr, ok := secretData[registriesAuthFieldInSecret].(string)
-	if !ok {
-		return fmt.Errorf("error parsing Secret: %s field must be a string", registriesAuthFieldInSecret)
-	}
-	data, err := base64.StdEncoding.DecodeString(registriesAuthStr)
-	if err != nil {
-		return fmt.Errorf("error parsing Secret: %s", err.Error())
-	}
-	registriesAuthStr = strings.Replace(string(data), "\n", "", -1)
-
-	if e := json.Unmarshal([]byte(registriesAuthStr), &registriesAuth); e != nil {
-		return fmt.Errorf("error parsing Secret: %s", e.Error())
-	}
 	//try to find an auth with the same registry name from the request
 	for _, auth := range registriesAuth {
 		if auth.Registry == registryScan.registryInfo.RegistryName {
@@ -715,6 +718,26 @@ func (registryScan *registryScan) parseRegistryAuthFromSecret(ctx context.Contex
 	auth := makeRegistryAuth(registryScan.registryInfo.RegistryName)
 	registryScan.setRegistryInfoFromAuth(auth, &registryScan.registryInfo)
 	return nil
+}
+
+func parseRegistryAuthSecret(secret k8sinterface.IWorkload) ([]registryAuth, error) {
+	secretData := secret.GetData()
+	var registriesAuth []registryAuth
+	registriesAuthStr, ok := secretData[registriesAuthFieldInSecret].(string)
+	if !ok {
+		return nil, fmt.Errorf("error parsing Secret: %s field must be a string", registriesAuthFieldInSecret)
+	}
+	data, err := base64.StdEncoding.DecodeString(registriesAuthStr)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing Secret: %s", err.Error())
+	}
+	registriesAuthStr = strings.Replace(string(data), "\n", "", -1)
+
+	if e := json.Unmarshal([]byte(registriesAuthStr), &registriesAuth); e != nil {
+		return nil, fmt.Errorf("error parsing Secret: %s", e.Error())
+	}
+
+	return registriesAuth, nil
 }
 
 func (registryScan *registryScan) setRegistryInfoFromAuth(auth registryAuth, registryInfo *armotypes.RegistryInfo) {
@@ -774,21 +797,26 @@ func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *arm
 	registryInfo.Exclude = registryConfig.Exclude
 }
 
-func (registryScan *registryScan) getRegistryScanSecret() (k8sinterface.IWorkload, error) {
-	// check if secret was sent as part of command (newer versions)
-	if registryScan.registryInfo.SecretName != "" {
-		secret, err := registryScan.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", registryScan.registryInfo.SecretName)
+func getRegistryScanSecrets(k8sAPI *k8sinterface.KubernetesApi, secretName string) ([]k8sinterface.IWorkload, error) {
+	if secretName != "" {
+		secret, err := k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", secretName)
 		if err == nil && secret != nil {
-			return secret, err
+			return []k8sinterface.IWorkload{secret}, err
 		}
 	}
 
-	// check if secret exists in cluster (backward compatibility)
-	secret, err := registryScan.k8sAPI.GetWorkload(armotypes.KubescapeNamespace, "Secret", armotypes.RegistryScanSecretName)
-	if err == nil && secret != nil {
-		return secret, err
+	// when secret name is not provided, we will try to find all secrets starting with kubescape-registry-scan
+	registryScanSecrets := []k8sinterface.IWorkload{}
+	all, err := k8sAPI.ListWorkloads2(armotypes.KubescapeNamespace, "Secret")
+	if err == nil {
+		for _, secret := range all {
+			if strings.HasPrefix(secret.GetName(), armotypes.RegistryScanSecretName) {
+				registryScanSecrets = append(registryScanSecrets, secret)
+			}
+		}
 	}
-	return secret, err
+
+	return registryScanSecrets, err
 }
 
 func (registryScan *registryScan) setHostnameAndProject() {
