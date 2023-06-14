@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
@@ -496,7 +497,7 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(pod *core
 	return mapContainerToImageID
 }
 
-func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *corev1.Pod, imageID string, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) (*apis.WebsocketScanCommand, error) {
+func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *corev1.Pod, imageID string, sessionObj *utils.SessionObj, command apis.NotificationPolicyType, containerRegistryAuths []registryAuth) (*apis.WebsocketScanCommand, error) {
 	websocketScanCommand := &apis.WebsocketScanCommand{
 		ImageScanParams: apis.ImageScanParams{
 			Session:  apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
@@ -535,11 +536,30 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		}
 	}
 
+	// add relevant credentials if exist in the registry scan secrets
+	for _, creds := range containerRegistryAuths {
+		if strings.Contains(websocketScanCommand.ImageTag, creds.Registry) && creds.Password != "" {
+			logger.L().Debug(fmt.Sprintf("found registry scan secret for image: %s", websocketScanCommand.ImageTag), helpers.String("ImageTag", websocketScanCommand.ImageTag))
+			websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, types.AuthConfig{ServerAddress: creds.Registry, Username: creds.Username, Password: creds.Password})
+		}
+	}
+
 	return websocketScanCommand, nil
 }
 
 func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context, containers []ContainerData, mapContainerToImageID map[string]string, pod *corev1.Pod, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) error {
 	errs := ""
+
+	// we build a list of all registry scan secrets
+	containerRegistryAuths := []registryAuth{}
+	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, ""); err == nil && len(secrets) > 0 {
+		for i := range secrets {
+			if auths, err := parseRegistryAuthSecret(secrets[i]); err == nil {
+				containerRegistryAuths = append(containerRegistryAuths, auths...)
+			}
+		}
+	}
+
 	for i := range containers {
 		imgID := ""
 		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
@@ -551,7 +571,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 
 		// some images don't have imageID prefix, we will add it for them
 		imgID = getImageIDFromContainer(containers[i], imgID)
-		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command)
+		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command, containerRegistryAuths)
 		if err != nil {
 			errs += err.Error()
 			logger.L().Error("failed to get command", helpers.String("image", containers[i].image), helpers.Error(err))
