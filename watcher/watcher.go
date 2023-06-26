@@ -322,7 +322,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 	defer close(errorCh)
 
 	for event := range sbomEvents {
-		obj, ok := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
+		obj, ok := event.Object.(*spdxv1beta1.SBOMSummary)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
 			continue
@@ -348,17 +348,27 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 					wh.iwMap.Map(),
 				),
 			)
-			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+
+			// We assume that other components store summaries and
+			// SBOMs together with the same name, so we have to
+			// clean them up together
+			err := wh.storageClient.SpdxV1beta1().SBOMSummaries(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			if err != nil {
 				errorCh <- err
 			}
+
+			err = wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
+
 			continue
 		}
 	}
 }
 
 func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
-	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+	return wh.storageClient.SpdxV1beta1().SBOMSummaries("").Watch(context.TODO(), v1.ListOptions{})
 }
 
 // watch for sbom changes, and trigger scans accordingly

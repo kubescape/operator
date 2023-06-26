@@ -552,11 +552,11 @@ func TestHandleSBOMEvents(t *testing.T) {
 		instanceidv1.ImageIDMetadataKey: validImageID,
 	}
 	tt := []struct {
-		name              string
-		imageIDstoWlids   map[string][]string
-		inputEvents       []watch.Event
-		expectedSBOMNames []string
-		expectedErrors    []error
+		name                     string
+		imageIDstoWlids          map[string][]string
+		inputEvents              []watch.Event
+		expectedSBOMSummaryNames []string
+		expectedErrors           []error
 	}{
 		{
 			name: "New SBOM with recognized image hash gets kept",
@@ -566,7 +566,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        validImageIDSlug,
 							Namespace:   "kubescape",
@@ -575,8 +575,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMNames: []string{validImageIDSlug},
-			expectedErrors:    []error{},
+			expectedSBOMSummaryNames: []string{validImageIDSlug},
+			expectedErrors:           []error{},
 		},
 		{
 			name: "New SBOM with missing image ID annotation produces an error and gets deleted",
@@ -586,7 +586,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        validImageID,
 							Namespace:   "kubescape",
@@ -595,8 +595,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMNames: []string{},
-			expectedErrors:    []error{ErrMissingImageIDAnnotation},
+			expectedSBOMSummaryNames: []string{},
+			expectedErrors:           []error{ErrMissingImageIDAnnotation},
 		},
 		{
 			name: "New SBOM with recognized image ID as name but unrecognized image ID in annotation gets deleted",
@@ -606,7 +606,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{
 							Name:      "ab" + validImageID[2:],
 							Namespace: "kubescape",
@@ -617,8 +617,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMNames: []string{},
-			expectedErrors:    []error{},
+			expectedSBOMSummaryNames: []string{},
+			expectedErrors:           []error{},
 		},
 		{
 			name: "New SBOM with recognized image ID as name but missing image ID annotation should produce an error",
@@ -628,7 +628,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{
 							Name:      validImageID,
 							Namespace: "kubescape",
@@ -636,8 +636,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMNames: []string{},
-			expectedErrors:    []error{ErrMissingImageIDAnnotation},
+			expectedSBOMSummaryNames: []string{},
+			expectedErrors:           []error{ErrMissingImageIDAnnotation},
 		},
 		{
 			name: "New SBOM with unrecognized image ID gets deleted",
@@ -647,7 +647,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{
 							Name:      validImageIDSlug,
 							Namespace: "kubescape",
@@ -658,8 +658,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMNames: []string{},
-			expectedErrors:    []error{},
+			expectedSBOMSummaryNames: []string{},
+			expectedErrors:           []error{},
 		},
 		{
 			name:            "Non-SBOM objects get ignored",
@@ -672,8 +672,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMNames: []string{},
-			expectedErrors:    []error{ErrUnsupportedObject},
+			expectedSBOMSummaryNames: []string{},
+			expectedErrors:           []error{ErrUnsupportedObject},
 		},
 		{
 			name:            "Modified SBOM with unrecognized imageHash as name gets deleted",
@@ -681,17 +681,17 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Modified,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{
-							Name: validImageIDSlug,
-							Namespace: "kubescape",
+							Name:        validImageIDSlug,
+							Namespace:   "kubescape",
 							Annotations: validAnnotation,
 						},
 					},
 				},
 			},
-			expectedSBOMNames: []string{},
-			expectedErrors:    []error{},
+			expectedSBOMSummaryNames: []string{},
+			expectedErrors:           []error{},
 		},
 		{
 			name:            "Deleted SBOM with unrecognized imageHash gets ignored",
@@ -699,13 +699,13 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Deleted,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSummary{
 						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
 					},
 				},
 			},
-			expectedSBOMNames: []string{"testName"},
-			expectedErrors:    []error{},
+			expectedSBOMSummaryNames: []string{"testName"},
+			expectedErrors:           []error{},
 		},
 	}
 
@@ -713,13 +713,27 @@ func TestHandleSBOMEvents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 
-			objects := []runtime.Object{}
+			// Arrange SBOMSummary objects in the storage from input events
+			inputObjects := []runtime.Object{}
 			for _, event := range tc.inputEvents {
-				objects = append(objects, event.Object)
+				inputObjects = append(inputObjects, event.Object)
+			}
+
+			// Arrange SBOMs that match input SBOMSummaries
+			for _, event := range tc.inputEvents {
+				// Don’t try setting up a matching SBOM for
+				// anything that is not an SBOM Summary
+				obj, ok := event.Object.(*spdxv1beta1.SBOMSummary)
+				if !ok {
+					continue
+				}
+				objMeta := obj.ObjectMeta
+				matchingSBOM := &spdxv1beta1.SBOMSPDXv2p3{ObjectMeta: objMeta}
+				inputObjects = append(inputObjects, matchingSBOM)
 			}
 
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-			ksStorageClient := kssfake.NewSimpleClientset(objects...)
+			ksStorageClient := kssfake.NewSimpleClientset(inputObjects...)
 			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
 
 			errCh := make(chan error)
@@ -750,14 +764,25 @@ func TestHandleSBOMEvents(t *testing.T) {
 				}
 			}
 
-			storedObjects, _ := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").List(context.TODO(), v1.ListOptions{})
+			storedSummaries, _ := ksStorageClient.SpdxV1beta1().SBOMSummaries("").List(context.TODO(), v1.ListOptions{})
+			remainingSBOMSummaryNames := []string{}
+			for _, obj := range storedSummaries.Items {
+				remainingSBOMSummaryNames = append(remainingSBOMSummaryNames, obj.ObjectMeta.Name)
+			}
 
+			storedSBOMs, _ := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").List(context.TODO(), v1.ListOptions{})
 			remainingSBOMNames := []string{}
-			for _, obj := range storedObjects.Items {
+			for _, obj := range storedSBOMs.Items {
 				remainingSBOMNames = append(remainingSBOMNames, obj.ObjectMeta.Name)
 			}
 
-			assert.Equalf(t, tc.expectedSBOMNames, remainingSBOMNames, "Commands should match")
+			// SBOMs and their summaries should be removed
+			// together, so their expected remaining names should
+			// match
+			expectedSBOMNames := tc.expectedSBOMSummaryNames
+
+			assert.Equalf(t, tc.expectedSBOMSummaryNames, remainingSBOMSummaryNames, "Remaining SBOM Summaries should match")
+			assert.Equalf(t, expectedSBOMNames, remainingSBOMNames, "Remaining SBOM should match")
 			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
 		})
 	}
