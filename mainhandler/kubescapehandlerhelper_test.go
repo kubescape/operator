@@ -7,6 +7,7 @@ import (
 
 	"github.com/armosec/utils-go/boolutils"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
+	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
 
@@ -74,4 +75,41 @@ func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
 	utils.ClusterConfig.KubescapeURL = "armo-kubescape:8080"
 	url := getKubescapeV1ScanStatusURL("123").String()
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")
+}
+
+func TestAppendSecurityFramework(t *testing.T) {
+	tests := []struct {
+		name            string
+		postScanRequest *utilsmetav1.PostScanRequest
+		expected        *utilsmetav1.PostScanRequest
+	}{
+		{
+			name:            "framework scan with one framework ",
+			postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"nsa"}},
+			expected:        &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"nsa", "security"}},
+		},
+		{
+			name:            "framework scan with all",
+			postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"all"}},
+			expected:        &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"all"}},
+		},
+		{
+			name:            "framework scan with security",
+			postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"security"}},
+			expected:        &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"security"}},
+		},
+		{
+			name:            "not framework scan",
+			postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindControl, TargetNames: []string{"c-0001"}},
+			expected:        &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindControl, TargetNames: []string{"c-0001"}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			appendSecurityFramework(test.postScanRequest)
+			assert.Equal(t, test.expected, test.postScanRequest)
+		})
+	}
+
 }

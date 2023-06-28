@@ -21,6 +21,11 @@ import (
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
+)
+
+const (
+	securityFrameworkName = "security"
 )
 
 func getKubescapeV1ScanURL() *url.URL {
@@ -210,5 +215,14 @@ func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanReques
 	if len(postScanRequest.TargetNames) == 0 {
 		postScanRequest.TargetNames = []string{"all"}
 		postScanRequest.TargetType = utilsapisv1.KindFramework
+	}
+}
+
+// appendSecurityFramework - append "security" framework to the request if targetType is "Framework"
+func appendSecurityFramework(postScanRequest *utilsmetav1.PostScanRequest) {
+	if postScanRequest.TargetType == utilsapisv1.KindFramework {
+		if !slices.Contains(postScanRequest.TargetNames, "all") && !slices.Contains(postScanRequest.TargetNames, securityFrameworkName) {
+			postScanRequest.TargetNames = append(postScanRequest.TargetNames, securityFrameworkName)
+		}
 	}
 }
