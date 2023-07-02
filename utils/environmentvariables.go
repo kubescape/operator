@@ -1,10 +1,10 @@
 package utils
 
 const (
-	ReleaseBuildTagEnvironmentVariable         = "RELEASE"
-	NamespaceEnvironmentVariable               = "NAMESPACE"
-	ConfigEnvironmentVariable                  = "CONFIG"
-	PortEnvironmentVariable                    = "PORT"
-	CleanUpDelayEnvironmentVariable            = "CLEANUP_DELAY"
-	AppendSecurityFrameworkEnvironmentVariable = "APPEND_SECURITY_FRAMEWORK"
+	ReleaseBuildTagEnvironmentVariable          = "RELEASE"
+	NamespaceEnvironmentVariable                = "NAMESPACE"
+	ConfigEnvironmentVariable                   = "CONFIG"
+	PortEnvironmentVariable                     = "PORT"
+	CleanUpDelayEnvironmentVariable             = "CLEANUP_DELAY"
+	TriggerSecurityFrameworkEnvironmentVariable = "TRIGGER_SECURITY_FRAMEWORK"
 )

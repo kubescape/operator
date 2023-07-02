@@ -181,9 +181,9 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 		return err
 	}
 
-	// append security framework if AppendSecurityFramework is true
-	if utils.AppendSecurityFramework {
-		appendSecurityFramework(request)
+	// trigger security framework if TriggerSecurityFramework is true
+	if utils.TriggerSecurityFramework {
+		triggerSecurityFramework(request)
 	}
 
 	body, err := json.Marshal(*request)

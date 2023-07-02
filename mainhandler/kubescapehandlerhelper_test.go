@@ -77,7 +77,7 @@ func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")
 }
 
-func TestAppendSecurityFramework(t *testing.T) {
+func TestTriggerSecurityFramework(t *testing.T) {
 	tests := []struct {
 		name            string
 		postScanRequest *utilsmetav1.PostScanRequest
@@ -107,7 +107,7 @@ func TestAppendSecurityFramework(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			appendSecurityFramework(test.postScanRequest)
+			triggerSecurityFramework(test.postScanRequest)
 			assert.Equal(t, test.expected, test.postScanRequest)
 		})
 	}

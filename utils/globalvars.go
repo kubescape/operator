@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	Namespace               string        = "default" // default namespace
-	RestAPIPort             string        = "4002"    // default port
-	CleanUpRoutineInterval  time.Duration = 10 * time.Minute
-	AppendSecurityFramework bool          = false
+	Namespace                string        = "default" // default namespace
+	RestAPIPort              string        = "4002"    // default port
+	CleanUpRoutineInterval   time.Duration = 10 * time.Minute
+	TriggerSecurityFramework bool          = false
 )
 
 var ClusterConfig = &utilsmetadata.ClusterConfig{}
@@ -43,11 +43,11 @@ func LoadEnvironmentVariables(ctx context.Context) (err error) {
 		RestAPIPort = port // override default port
 	}
 
-	if securityFramework := os.Getenv(AppendSecurityFrameworkEnvironmentVariable); securityFramework != "" {
-		AppendSecurityFramework, err = strconv.ParseBool(securityFramework)
+	if securityFramework := os.Getenv(TriggerSecurityFrameworkEnvironmentVariable); securityFramework != "" {
+		TriggerSecurityFramework, err = strconv.ParseBool(securityFramework)
 		if err != nil {
-			logger.L().Ctx(ctx).Error("could not set AppendSecurityFramework from environment variable", helpers.Error(err))
-			AppendSecurityFramework = false
+			logger.L().Ctx(ctx).Error("could not set TriggerSecurityFramework from environment variable", helpers.Error(err))
+			TriggerSecurityFramework = false
 		}
 	}
 
