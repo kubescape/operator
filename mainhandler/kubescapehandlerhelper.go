@@ -218,8 +218,8 @@ func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanReques
 	}
 }
 
-// triggerSecurityFramework - append "security" framework to the request if targetType is "Framework"
-func triggerSecurityFramework(postScanRequest *utilsmetav1.PostScanRequest) {
+// appendSecurityFramework - append "security" framework to the request if targetType is "Framework"
+func appendSecurityFramework(postScanRequest *utilsmetav1.PostScanRequest) {
 	if postScanRequest.TargetType == utilsapisv1.KindFramework {
 		if !slices.Contains(postScanRequest.TargetNames, "all") && !slices.Contains(postScanRequest.TargetNames, securityFrameworkName) {
 			postScanRequest.TargetNames = append(postScanRequest.TargetNames, securityFrameworkName)
