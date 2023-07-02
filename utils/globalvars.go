@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -12,9 +13,10 @@ import (
 )
 
 var (
-	Namespace              string        = "default" // default namespace
-	RestAPIPort            string        = "4002"    // default port
-	CleanUpRoutineInterval time.Duration = 10 * time.Minute
+	Namespace                string        = "default" // default namespace
+	RestAPIPort              string        = "4002"    // default port
+	CleanUpRoutineInterval   time.Duration = 10 * time.Minute
+	TriggerSecurityFramework bool          = false
 )
 
 var ClusterConfig = &utilsmetadata.ClusterConfig{}
@@ -39,6 +41,14 @@ func LoadEnvironmentVariables(ctx context.Context) (err error) {
 
 	if port := os.Getenv(PortEnvironmentVariable); port != "" {
 		RestAPIPort = port // override default port
+	}
+
+	if securityFramework := os.Getenv(TriggerSecurityFrameworkEnvironmentVariable); securityFramework != "" {
+		TriggerSecurityFramework, err = strconv.ParseBool(securityFramework)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("could not set TriggerSecurityFramework from environment variable", helpers.Error(err))
+			TriggerSecurityFramework = false
+		}
 	}
 
 	if cleanUpDelay := os.Getenv(CleanUpDelayEnvironmentVariable); cleanUpDelay != "" {
