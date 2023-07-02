@@ -43,7 +43,7 @@ type WatchHandler struct {
 	// TODO(vladklokun): unify the following two fields with their
 	// respective mutexes into concurrent data structures with public
 	// methods
-	hashedInstanceIDs                 []string
+	managedInstanceIDSlugs            []string
 	instanceIDsMutex                  *sync.RWMutex
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	wlidsToContainerToImageIDMapMutex *sync.RWMutex
@@ -74,7 +74,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 		wlidsToContainerToImageIDMap:      make(WlidsToContainerToImageIDMap),
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
-		hashedInstanceIDs:                 instanceIDs,
+		managedInstanceIDSlugs:            instanceIDs,
 	}
 
 	// list all Pods and extract their image IDs
@@ -108,7 +108,7 @@ func (wh *WatchHandler) listInstanceIDs() []string {
 	wh.instanceIDsMutex.RLock()
 	defer wh.instanceIDsMutex.RUnlock()
 
-	return wh.hashedInstanceIDs
+	return wh.managedInstanceIDSlugs
 }
 
 // returns wlids map
@@ -265,14 +265,13 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		if !slices.Contains(wh.hashedInstanceIDs, hashedInstanceID) {
-			// TODO(vladklokun): deletes are disabled for a quick hack
-			// wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			logger.L().Ctx(context.TODO()).Info(
 				fmt.Sprintf(
 					`unrecognized instance ID "%s". Known: "%v", no triggering`,
 					hashedInstanceID,
-					wh.hashedInstanceIDs,
+					wh.managedInstanceIDSlugs,
 				),
 			)
 			continue
@@ -308,6 +307,14 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 	}
 }
 
+func annotationsToImageID(annotations map[string]string) (string, error) {
+	imgID, ok := annotations[instanceidhandlerv1.ImageIDMetadataKey]
+	if !ok {
+		return "", ErrMissingImageIDAnnotation
+	}
+	return imgID, nil
+}
+
 // HandleSBOMEvents handles SBOM-related events
 //
 // Handling events is defined as deleting SBOMs that are not known to the Operator
@@ -315,7 +322,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 	defer close(errorCh)
 
 	for event := range sbomEvents {
-		obj, ok := event.Object.(*spdxv1beta1.SBOMSPDXv2p3)
+		obj, ok := event.Object.(*spdxv1beta1.SBOMSummary)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
 			continue
@@ -326,22 +333,42 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 			continue
 		}
 
-		imageHash := obj.ObjectMeta.Name
+		imageID, err := annotationsToImageID(obj.ObjectMeta.Annotations)
+		if err != nil {
+			errorCh <- err
+		}
 
-		_, imageHashOk := wh.iwMap.Load(imageHash)
+		_, imageHashOk := wh.iwMap.Load(imageID)
 		if !imageHashOk {
-			// TODO(vladklokun): deletes are disabled for a quick hack
-			// err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			// if err != nil {
-			// 	errorCh <- err
-			// }
+			logger.L().Ctx(context.TODO()).Debug(
+				fmt.Sprintf(
+					`Cannot find image ID "%s" among managed "%v". Deleting`,
+					imageID,
+					// TODO(vladklokun): converting to map can be expensive, implement Stringer on this
+					wh.iwMap.Map(),
+				),
+			)
+
+			// We assume that other components store summaries and
+			// SBOMs together with the same name, so we have to
+			// clean them up together
+			err := wh.storageClient.SpdxV1beta1().SBOMSummaries(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
+
+			err = wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
+
 			continue
 		}
 	}
 }
 
 func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
-	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s("").Watch(context.TODO(), v1.ListOptions{})
+	return wh.storageClient.SpdxV1beta1().SBOMSummaries("").Watch(context.TODO(), v1.ListOptions{})
 }
 
 // watch for sbom changes, and trigger scans accordingly
@@ -484,7 +511,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils
 
 func (wh *WatchHandler) cleanUpInstanceIDs() {
 	wh.instanceIDsMutex.Lock()
-	wh.hashedInstanceIDs = []string{}
+	wh.managedInstanceIDSlugs = []string{}
 	wh.instanceIDsMutex.Unlock()
 }
 
@@ -525,8 +552,8 @@ func (wh *WatchHandler) addToInstanceIDsList(instanceID instanceidhandler.IInsta
 	defer wh.instanceIDsMutex.Unlock()
 	h, _ := instanceID.GetSlug()
 
-	if !slices.Contains(wh.hashedInstanceIDs, h) {
-		wh.hashedInstanceIDs = append(wh.hashedInstanceIDs, h)
+	if !slices.Contains(wh.managedInstanceIDSlugs, h) {
+		wh.managedInstanceIDSlugs = append(wh.managedInstanceIDSlugs, h)
 	}
 }
 
