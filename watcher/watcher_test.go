@@ -1183,9 +1183,9 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	wh := NewWatchHandlerMock()
 
 	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
-		"a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e": {"wlid"},
-		"313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70": {"wlid"},
-		"5b183f918bfb0de9a21b7cd33cea3171627f6ae1f753d370afef6c2555bd76eb": {"wlid"},
+		"alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e": {"wlid"},
+		"alpine@sha256:313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70": {"wlid"},
+		"alpine@sha256:5b183f918bfb0de9a21b7cd33cea3171627f6ae1f753d370afef6c2555bd76eb": {"wlid"},
 	})
 
 	tests := []struct {
