@@ -515,7 +515,6 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 	}
 	if actionHandler.reporter != nil {
 		prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
-		logger.L().Info(fmt.Sprintf("wlid: %s, container: %s, image: %s, jobIDs: %s/%s/%s", websocketScanCommand.Wlid, websocketScanCommand.ContainerName, websocketScanCommand.ImageTag, actionHandler.reporter.GetParentAction(), websocketScanCommand.ParentJobID, websocketScanCommand.GetJobID()))
 	}
 
 	if pod != nil {

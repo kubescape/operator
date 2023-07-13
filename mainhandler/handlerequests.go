@@ -178,7 +178,6 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	defer span.End()
 
 	actionHandler := NewActionHandler(mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
-	logger.L().Info(fmt.Sprintf("NewActionHandler: %v/%v", actionHandler.reporter.GetParentAction(), actionHandler.reporter.GetJobID()), helpers.String("ID", sessionObj.Command.GetID()))
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(ctx, sessionObj)
@@ -198,10 +197,6 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	if pkgwlid.IsWlid(c.GetID()) {
 		actionHandler.wlid = c.GetID()
 	}
-
-	logCommandInfo := fmt.Sprintf("Running %s command, id: '%s'", c.CommandName, c.GetID())
-
-	logger.L().Info(logCommandInfo)
 
 	switch c.CommandName {
 	case apis.TypeScanImages:
