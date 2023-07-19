@@ -1,7 +1,9 @@
 ## Overview
 This PR fixes #
 
-**[Signed Commits]
+**[Signed Commits](https://github.com/kubescape/operator/blob/main/CONTRIBUTING.md#-Sign-off-per-commit)**
+- [ ] Yes, I signed my commits.
+
 <!-- Please provide a brief overview of the changes made in this pull request. e.g. current behavior/future behavior -->
 
 <!-- 
