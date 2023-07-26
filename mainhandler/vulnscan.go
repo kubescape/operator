@@ -459,6 +459,12 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 	}
 
 	for i := range pods.Items {
+
+		// set the api version and kind to be pod - this is needed for the the resourceID
+		// we need to do this because this is missing when listing pods
+		pods.Items[i].APIVersion = "v1"
+		pods.Items[i].Kind = "Pod"
+
 		podMarshalled, err := json.Marshal(pods.Items[i])
 		if err != nil {
 			return nil, err
@@ -475,8 +481,6 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		}
 
 		if kind == workload.GetKind() && name == workload.GetName() {
-			pods.Items[i].APIVersion = "v1"
-			pods.Items[i].Kind = "Pod"
 			return &pods.Items[i], nil
 		}
 	}
