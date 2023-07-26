@@ -11,90 +11,85 @@ If you have a small change, feel free to fire up a Pull Request.
 When planning a bigger change, please first discuss the change you wish to make via issue,
 email, or any other method with the owners of this repository before making a change. Most likely your changes or features are great, but sometimes we might already going to this direction (or the exact opposite ;-) ) and we don't want to waste your time.
 
-Please note we have a code of conduct, please follow it in all your interactions with the project.
+## Code of Conduct
+
+Please follow our [code of conduct](CODE_OF_CONDUCT.md) in all of your interactions within the project.
 
 ## Pull Request Process
 
 1. Ensure any install or build dependencies are removed before the end of the layer when doing a 
    build.
-2. Update the README.md with details of changes to the interface, this includes new environment 
+2. Fork this repository, and clone your forked version of operator to your development environment.
+3. Update the README.md with details of changes to the interface, this includes new environment 
    variables, exposed ports, useful file locations and container parameters.
-3. Open Pull Request to `dev` branch - we test the component before merging into the `master` branch
-4. We will merge the Pull Request in once you have the sign-off.
+4. Open Pull Request to `main` branch - we test the component before merging into the `main` branch
+5. We will merge the Pull Request in once you have the sign-off.
 
-## Code of Conduct
+## Developer Certificate of Origin
 
-### Our Pledge
+All commits to the project must be "signed off", which states that you agree to the terms of the [Developer Certificate of Origin](https://developercertificate.org/).  This is done by adding a "Signed-off-by:" line in the commit message, with your name and email address.
 
-In the interest of fostering an open and welcoming environment, we as
-contributors and maintainers pledge to making participation in our project and
-our community a harassment-free experience for everyone, regardless of age, body
-size, disability, ethnicity, gender identity and expression, level of experience,
-nationality, personal appearance, race, religion, or sexual identity and
-orientation.
+Commits made through the GitHub web application are automatically signed off.
 
-### Our Standards
+### Configuring Git to sign off commits
 
-Examples of behavior that contributes to creating a positive environment
-include:
+First, configure your name and email address in Git global settings:
 
-* Using welcoming and inclusive language
-* Being respectful of differing viewpoints and experiences
-* Gracefully accepting constructive criticism
-* Focusing on what is best for the community
-* Showing empathy towards other community members
+```
+$ git config --global user.name "John Doe" 
+$ git config --global user.email johndoe@example.com
+```
 
-Examples of unacceptable behavior by participants include:
+You can now sign off per-commit, or configure Git to always sign off commits per repository.
 
-* The use of sexualized language or imagery and unwelcome sexual attention or
-advances
-* Trolling, insulting/derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information, such as a physical or electronic
-  address, without explicit permission
-* Other conduct which could reasonably be considered inappropriate in a
-  professional setting
+### Sign off per-commit
 
-We will distance those who are constantly adhere to unacceptable behavior.
+Add [`-s`](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s) to your Git command line. For example:
 
-### Our Responsibilities
+```git commit -s -m "Fix issue 64738"```
 
-Project maintainers are responsible for clarifying the standards of acceptable
-behavior and are expected to take appropriate and fair corrective action in
-response to any instances of unacceptable behavior.
+This is tedious, and if you forget, you'll have to [amend your commit](#fixing-a-commit-where-the-dco-failed).
 
-Project maintainers have the right and responsibility to remove, edit, or
-reject comments, commits, code, wiki edits, issues, and other contributions
-that are not aligned to this Code of Conduct, or to ban temporarily or
-permanently any contributor for other behaviors that they deem inappropriate,
-threatening, offensive, or harmful.
+### Configure a repository to always include sign off
 
-### Scope
+There are many ways to achieve this with Git hooks, but the simplest is to do the following:
 
-This Code of Conduct applies both within project spaces and in public spaces
-when an individual is representing the project or its community. Examples of
-representing a project or community include using an official project e-mail
-address, posting via an official social media account, or acting as an appointed
-representative at an online or offline event. Representation of a project may be
-further defined and clarified by project maintainers.
+```
+cd your-repo
+curl -Ls https://gist.githubusercontent.com/dixudx/7d7edea35b4d91e1a2a8fbf41d0954fa/raw/prepare-commit-msg -o .git/hooks/prepare-commit-msg
+chmod +x .git/hooks/prepare-commit-msg
+```
 
-### Enforcement
+### Use semantic commit messages (optional)
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by contacting the project team at [INSERT EMAIL ADDRESS]. All
-complaints will be reviewed and investigated and will result in a response that
-is deemed necessary and appropriate to the circumstances. The project team is
-obligated to maintain confidentiality with regard to the reporter of an incident.
-Further details of specific enforcement policies may be posted separately.
+When contributing, you could consider using [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/), in order to improve logs readability and help us to automatically generate `CHANGELOG`s.
 
-Project maintainers who do not follow or enforce the Code of Conduct in good
-faith may face temporary or permanent repercussions as determined by other
-members of the project's leadership.
+Format: `<type>(<scope>): <subject>`
 
-### Attribution
+`<scope>` is optional
 
-This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 1.4,
-available at [http://contributor-covenant.org/version/1/4][version]
+#### Example
 
-[homepage]: http://contributor-covenant.org
-[version]: http://contributor-covenant.org/version/1/4/
+```
+feat(cmd): add kubectl plugin
+^--^ ^-^   ^----------------^
+|    |     |
+|    |     +-> subject: summary in present tense.
+|    |
+|    +-------> scope: point of interest
+|
++-------> type: chore, docs, feat, fix, refactor, style, or test.
+```
+
+More Examples:
+* `feat`: new feature for the user, not a new feature for build script
+* `fix`: bug fix for the user, not a fix to a build script
+* `docs`: changes to the documentation
+* `style`: formatting, missing semi colons, etc; no production code change
+* `refactor`: refactoring production code, eg. renaming a variable
+* `test`: adding missing tests, refactoring tests; no production code change
+* `chore`: updating grunt tasks etc; no production code change
+
+## Fixing a commit where the DCO failed
+
+Check out [this guide](https://github.com/src-d/guide/blob/master/developer-community/fix-DCO.md).
