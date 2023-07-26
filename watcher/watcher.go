@@ -577,13 +577,13 @@ func (wh *WatchHandler) addToWlidsToContainerToImageIDMap(wlid string, container
 
 func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 	for i := range podList.Items {
+		// we need to do this because this is missing when listing pods
+		podList.Items[i].APIVersion = "v1"
+		podList.Items[i].Kind = "Pod"
 
 		if podList.Items[i].Status.Phase != core1.PodRunning {
 			continue
 		}
-
-		podList.Items[i].APIVersion = "v1"
-		podList.Items[i].Kind = "Pod"
 
 		//check if at least one container is  running
 		hasOneContainerRunning := false
