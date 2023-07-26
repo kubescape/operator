@@ -23,6 +23,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/armoapi-go/identifiers"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/kubescape/k8s-interface/cloudsupport"
@@ -101,12 +102,12 @@ func convertImagesToRegistryScanCommand(registry *registryScan, sessionObj *util
 				ImageTag:    repository + ":" + tag,
 				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 				Args: map[string]interface{}{
-					apitypes.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
-					apitypes.AttributeRepository:    repositoryName,
-					apitypes.AttributeTag:           tag,
-					apitypes.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
-					apitypes.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
-					apitypes.AttributeSensor:        utils.ClusterConfig.ClusterName,
+					identifiers.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
+					identifiers.AttributeRepository:    repositoryName,
+					identifiers.AttributeTag:           tag,
+					identifiers.AttributeUseHTTP:       !*registry.registryInfo.IsHTTPS,
+					identifiers.AttributeSkipTLSVerify: registry.registryInfo.SkipTLSVerify,
+					identifiers.AttributeSensor:        utils.ClusterConfig.ClusterName,
 				},
 			}
 			// Check if auth is empty (used for public registries)
@@ -210,7 +211,7 @@ func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionO
 		return ""
 	}
 
-	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", apitypes.AttributeRegistryName,
+	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", identifiers.AttributeRegistryName,
 		registryName))
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), true, sessionObj.ErrChan)
 	return registryName

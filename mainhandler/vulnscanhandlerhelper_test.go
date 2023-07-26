@@ -3,7 +3,7 @@ package mainhandler
 import (
 	"testing"
 
-	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/armoapi-go/identifiers"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/stretchr/testify/assert"
@@ -70,12 +70,12 @@ func TestGetNamespaceFromVulnScanCommand(t *testing.T) {
 			name: "namespace from designators",
 			command: &apis.Command{
 				CommandName: apis.TypeSetVulnScanCronJob,
-				Designators: []apitypes.PortalDesignator{
+				Designators: []identifiers.PortalDesignator{
 					{
-						DesignatorType: apitypes.DesignatorAttributes,
+						DesignatorType: identifiers.DesignatorAttributes,
 						Attributes: map[string]string{
-							apitypes.AttributeCluster:   "minikube",
-							apitypes.AttributeNamespace: "test-333",
+							identifiers.AttributeCluster:   "minikube",
+							identifiers.AttributeNamespace: "test-333",
 						},
 					},
 				},

@@ -11,7 +11,7 @@ import (
 	"github.com/kubescape/operator/watcher"
 	"go.opentelemetry.io/otel"
 
-	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/armoapi-go/identifiers"
 	"github.com/armosec/utils-go/boolutils"
 	"github.com/armosec/utils-go/httputils"
 
@@ -248,7 +248,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	if len(sessionObj.Command.Designators) > 0 {
 		namespaces = make([]string, 0, 3)
 		for desiIdx := range sessionObj.Command.Designators {
-			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[apitypes.AttributeNamespace]; ok {
+			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok {
 				namespaces = append(namespaces, ns)
 			}
 		}
@@ -282,7 +282,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 
 		// clean all scope request parameters
 		cmd.WildWlid = ""
-		cmd.Designators = make([]apitypes.PortalDesignator, 0)
+		cmd.Designators = make([]identifiers.PortalDesignator, 0)
 
 		// send specific command to the channel
 		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
