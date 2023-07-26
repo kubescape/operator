@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	apitypes "github.com/armosec/armoapi-go/armotypes"
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/google/uuid"
@@ -12,6 +11,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/identifiers"
 )
 
 var ReporterHttpClient httputils.IHttpClient
@@ -19,7 +19,7 @@ var ReporterHttpClient httputils.IHttpClient
 func NewSessionObj(ctx context.Context, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
 	reporter := reporterlib.NewBaseReport(ClusterConfig.AccountID, message, ClusterConfig.EventReceiverRestURL, ReporterHttpClient)
 	target := command.GetID()
-	if target == apitypes.DesignatorsToken {
+	if target == identifiers.DesignatorsToken {
 		target = fmt.Sprintf("wlid://cluster-%s/", ClusterConfig.ClusterName)
 	}
 	if target == "" {
