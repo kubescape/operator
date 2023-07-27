@@ -25,7 +25,6 @@ jobs:
       GO111MODULE: ""
       BUILD_PLATFORM: linux/amd64,linux/arm64
       GO_VERSION: "1.20"
-      HELM_BRANCH: "dev"
       REQUIRED_TESTS: '[
                         "vulnerability_scanning", 
                         "vulnerability_scanning_trigger_scan_on_new_image", 
@@ -43,7 +42,7 @@ jobs:
                         "ks_microservice_delete_cronjob", 
                         "ks_microservice_create_2_cronjob_mitre_and_nsa",
                         "vulnerability_scanning_test_public_registry_connectivity_by_backend",
-                        "vulnerability_scanning_test_public_registry_connectivity_excluded_by_backend"
+                        "vulnerability_scanning_test_public_registry_connectivity_excluded_by_backend",
                         "relevantCVEs",
                         "relevancy_enabled_stop_sniffing",
                         "relevant_data_is_appended",
