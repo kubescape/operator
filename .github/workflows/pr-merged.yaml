@@ -42,7 +42,7 @@ jobs:
                         "ks_microservice_delete_cronjob", 
                         "ks_microservice_create_2_cronjob_mitre_and_nsa",
                         "vulnerability_scanning_test_public_registry_connectivity_by_backend",
-                        "vulnerability_scanning_test_public_registry_connectivity_excluded_by_backend"
+                        "vulnerability_scanning_test_public_registry_connectivity_excluded_by_backend",
                         "relevantCVEs",
                         "relevancy_enabled_stop_sniffing",
                         "relevant_data_is_appended",
