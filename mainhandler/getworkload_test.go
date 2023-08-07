@@ -5,6 +5,9 @@ import (
 
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/workloadinterface"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_getContainer(t *testing.T) {
@@ -56,6 +59,62 @@ func Test_getContainer(t *testing.T) {
 			if got != nil && got.GetHashed() != tt.want {
 				t.Errorf("getContainer() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func Test_listWorkloadImages(t *testing.T) {
+	instanceID := instanceidhandlerv1.InstanceID{}
+	instanceID.SetContainerName("cont")
+	type args struct {
+		workload    k8sinterface.IWorkload
+		instanceIDs []instanceidhandler.IInstanceID
+	}
+	tests := []struct {
+		name string
+		args args
+		want []ContainerData
+	}{
+		{
+			name: "test found",
+			args: args{
+				workload: workloadinterface.NewWorkloadObj(map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Pod",
+					"spec": map[string]interface{}{
+						"initContainers": []interface{}{
+							map[string]interface{}{
+								"name":  "init",
+								"image": "alpine",
+							},
+						},
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "cont",
+								"image": "nginx",
+							},
+						},
+					},
+				}),
+				instanceIDs: []instanceidhandler.IInstanceID{&instanceID},
+			},
+			want: []ContainerData{
+				{
+					container: "cont",
+					image:     "docker.io/library/nginx",
+				},
+				{
+					container: "init",
+					image:     "docker.io/library/alpine",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := listWorkloadImages(tt.args.workload, tt.args.instanceIDs)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

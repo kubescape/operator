@@ -16,7 +16,7 @@ func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
 	imageIDsToContainers := make(map[string][]string)
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {
-			imageID := utils.ExtractImageID(containerStatus.ImageID)
+			imageID := utils.ExtractAndNormalizeImageID(containerStatus.ImageID)
 			if _, ok := imageIDsToContainers[imageID]; !ok {
 				imageIDsToContainers[imageID] = []string{}
 			}
@@ -26,7 +26,7 @@ func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
 
 	for _, containerStatus := range pod.Status.InitContainerStatuses {
 		if containerStatus.State.Running != nil {
-			imageID := utils.ExtractImageID(containerStatus.ImageID)
+			imageID := utils.ExtractAndNormalizeImageID(containerStatus.ImageID)
 			if _, ok := imageIDsToContainers[imageID]; !ok {
 				imageIDsToContainers[imageID] = []string{}
 			}
@@ -43,14 +43,14 @@ func extractImageIDsFromPod(pod *core1.Pod) []string {
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {
 			imageID := containerStatus.ImageID
-			imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+			imageIDs = append(imageIDs, utils.ExtractAndNormalizeImageID(imageID))
 		}
 	}
 
 	for _, containerStatus := range pod.Status.InitContainerStatuses {
 		if containerStatus.State.Running != nil {
 			imageID := containerStatus.ImageID
-			imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+			imageIDs = append(imageIDs, utils.ExtractAndNormalizeImageID(imageID))
 		}
 	}
 

@@ -858,14 +858,14 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:1",
+// 									ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 							},
 // 						},
 // 					}}},
 // 			expectedImageIDsMap: map[string][]string{
-// 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
+// 				"alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test")},
 // 			},
 // 		},
 // 		{
@@ -883,14 +883,14 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "alpine@sha256:1",
+// 									ImageID: "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 							},
 // 						},
 // 					}}},
 // 			expectedImageIDsMap: map[string][]string{
-// 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
+// 				"alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test")},
 // 			},
 // 		},
 // 		{
@@ -908,7 +908,7 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:1",
+// 									ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 							},
@@ -925,7 +925,7 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:1",
+// 									ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container2",
 // 								},
 // 							},
@@ -934,7 +934,7 @@ func TestSBOMWatch(t *testing.T) {
 // 				},
 // 			},
 // 			expectedImageIDsMap: map[string][]string{
-// 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test"), pkgwlid.GetWLID("", "default", "pod", "test2")},
+// 				"alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test"), pkgwlid.GetWLID("", "default", "pod", "test2")},
 // 			},
 // 		},
 // 		{
@@ -952,7 +952,7 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:1",
+// 									ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 							},
@@ -969,15 +969,15 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:2",
+// 									ImageID: "docker-pullable://alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container2",
 // 								},
 // 							},
 // 						},
 // 					}}},
 // 			expectedImageIDsMap: map[string][]string{
-// 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// 				"alpine@sha256:2": {pkgwlid.GetWLID("", "default", "pod", "test2")},
+// 				"alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test")},
+// 				"alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test2")},
 // 			},
 // 		},
 // 		{
@@ -995,19 +995,19 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:1",
+// 									ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:2",
+// 									ImageID: "docker-pullable://alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container2",
 // 								},
 // 							},
 // 						},
 // 					}}},
 // 			expectedImageIDsMap: map[string][]string{
-// 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// 				"alpine@sha256:2": {pkgwlid.GetWLID("", "default", "pod", "test")},
+// 				"alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test")},
+// 				"alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {pkgwlid.GetWLID("", "default", "pod", "test")},
 // 			},
 // 		},
 // 	}
@@ -1039,7 +1039,7 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:1",
+// 									ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 							},
@@ -1048,7 +1048,7 @@ func TestSBOMWatch(t *testing.T) {
 // 			},
 // 			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
 // 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
-// 					"container1": "alpine@sha256:1",
+// 					"container1": "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 				},
 // 			},
 // 		},
@@ -1064,7 +1064,7 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "alpine@sha256:1",
+// 									ImageID: "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container1",
 // 								},
 // 							},
@@ -1073,7 +1073,7 @@ func TestSBOMWatch(t *testing.T) {
 // 			},
 // 			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
 // 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
-// 					"container1": "alpine@sha256:1",
+// 					"container1": "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 				},
 // 			},
 // 		},
@@ -1089,7 +1089,7 @@ func TestSBOMWatch(t *testing.T) {
 // 						Status: core1.PodStatus{
 // 							ContainerStatuses: []core1.ContainerStatus{
 // 								{
-// 									ImageID: "docker-pullable://alpine@sha256:3",
+// 									ImageID: "docker-pullable://alpine@sha256:33e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 									Name:    "container3",
 // 								},
 // 								{
@@ -1102,7 +1102,7 @@ func TestSBOMWatch(t *testing.T) {
 // 				}},
 // 			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
 // 				pkgwlid.GetWLID("", "namespace3", "pod", "pod3"): {
-// 					"container3": "alpine@sha256:3",
+// 					"container3": "alpine@sha256:33e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 // 					"container4": "alpine@sha256:4",
 // 				},
 // 			},
@@ -1133,14 +1133,14 @@ func Test_addToImageIDToWlidsMap(t *testing.T) {
 		{
 			name: "Adding imageName@hashType:imageHash keys with wlids produces expected maps",
 			inputOperations: []inputOperation{
-				{"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid1"},
+				{"alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid1"},
 				{"alpine@sha256:486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7", "wlid2"},
 				// add the new wlid to the same imageID
-				{"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid3"},
+				{"alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid3"},
 			},
 			expectedMap: map[string][]string{
-				"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid1", "wlid3"},
-				"alpine@sha256:486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7": {"wlid2"},
+				"alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid1", "wlid3"},
+				"alpine@sha256:486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7":                                                                {"wlid2"},
 			},
 		},
 	}
@@ -1166,15 +1166,15 @@ func Test_addToImageIDToWlidsMap(t *testing.T) {
 func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
 	wh := NewWatchHandlerMock()
 
-	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
-	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
+	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7")
+	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7")
 
 	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
 		"wlid1": {
-			"container1": "alpine@sha256:1",
+			"container1": "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 		},
 		"wlid2": {
-			"container2": "alpine@sha256:2",
+			"container2": "alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 		},
 	}))
 }
@@ -1183,9 +1183,9 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 	wh := NewWatchHandlerMock()
 
 	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
-		"alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e": {"wlid"},
-		"alpine@sha256:313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70": {"wlid"},
-		"alpine@sha256:5b183f918bfb0de9a21b7cd33cea3171627f6ae1f753d370afef6c2555bd76eb": {"wlid"},
+		"docker.io/library/alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e": {"wlid"},
+		"docker.io/library/alpine@sha256:313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70": {"wlid"},
+		"docker.io/library/alpine@sha256:5b183f918bfb0de9a21b7cd33cea3171627f6ae1f753d370afef6c2555bd76eb": {"wlid"},
 	})
 
 	tests := []struct {
@@ -1248,7 +1248,7 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 				},
 			},
 			expected: map[string]string{
-				"container4": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
+				"container4": "docker.io/library/alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 			},
 		},
 		{
@@ -1278,8 +1278,8 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 				},
 			},
 			expected: map[string]string{
-				"container4": "alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
-				"container5": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
+				"container4": "docker.io/library/alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
+				"container5": "docker.io/library/alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
 			},
 		},
 	}
@@ -1293,9 +1293,9 @@ func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
 func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 	wh := NewWatchHandlerMock()
 	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
-		"pod1": {"container1": "alpine@sha256:1"},
-		"pod2": {"container2": "alpine@sha256:2"},
-		"pod3": {"container3": "alpine@sha256:3"},
+		"pod1": {"container1": "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7"},
+		"pod2": {"container2": "alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7"},
+		"pod3": {"container3": "alpine@sha256:33e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7"},
 	}
 	wh.cleanUpWlidsToContainerToImageIDMap()
 
@@ -1305,14 +1305,14 @@ func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
 func Test_cleanUpIDs(t *testing.T) {
 	wh := NewWatchHandlerMock()
 	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
-		"alpine@sha256:1": {"pod1"},
-		"alpine@sha256:2": {"pod2"},
-		"alpine@sha256:3": {"pod3"},
+		"alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {"pod1"},
+		"alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {"pod2"},
+		"alpine@sha256:33e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7": {"pod3"},
 	})
 	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
-		"pod1": {"container1": "alpine@sha256:1"},
-		"pod2": {"container2": "alpine@sha256:2"},
-		"pod3": {"container3": "alpine@sha256:3"},
+		"pod1": {"container1": "alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7"},
+		"pod2": {"container2": "alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7"},
+		"pod3": {"container3": "alpine@sha256:33e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7"},
 	}
 	wh.managedInstanceIDSlugs = []string{
 		"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c",

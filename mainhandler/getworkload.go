@@ -5,6 +5,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/operator/utils"
 )
 
 // ContainerData specific container data
@@ -23,20 +24,20 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 		return containersData, err
 	}
 	for i := range containers {
-		c := ""
+		img := utils.ExtractAndNormalizeImageID(containers[i].Image)
 		id := getContainerID(instanceIDs, containers[i].Name)
 		if id != nil {
-			c, _ = id.GetSlug()
+			c, _ := id.GetSlug()
 			containersData = append(containersData,
 				ContainerData{
-					image:     containers[i].Image,
+					image:     img,
 					container: containers[i].Name,
 					id:        c,
 				},
 			)
-			logger.L().Debug("instanceID", helpers.String("str", id.GetStringFormatted()), helpers.String("id", id.GetHashed()), helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
+			logger.L().Debug("instanceID", helpers.String("str", id.GetStringFormatted()), helpers.String("id", id.GetHashed()), helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", img))
 		} else {
-			logger.L().Debug("instanceID is nil, skipping", helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
+			logger.L().Debug("instanceID is nil, skipping", helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", img))
 		}
 	}
 	initContainers, err := workload.GetInitContainers()
@@ -46,7 +47,7 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 	for i := range initContainers {
 		containersData = append(containersData,
 			ContainerData{
-				image:     initContainers[i].Image,
+				image:     utils.ExtractAndNormalizeImageID(initContainers[i].Image),
 				container: initContainers[i].Name,
 				// id:        getContainer(instanceIDs, containers[i].Name), // TODO: Currently not supported in the k8s-interface
 			},

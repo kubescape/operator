@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/names"
 	core1 "k8s.io/api/core/v1"
 )
 
@@ -60,8 +61,10 @@ func InitReporterHttpClient() httputils.IHttpClient {
 	return &http.Client{}
 }
 
-func ExtractImageID(imageID string) string {
-	return strings.TrimPrefix(imageID, dockerPullableURN)
+// ExtractAndNormalizeImageID extracts the image ID from the image ID string and eventually adds the default registry to it
+func ExtractAndNormalizeImageID(imageID string) string {
+	imageID, _ = names.NormalizeImageName(strings.TrimPrefix(imageID, dockerPullableURN))
+	return imageID
 }
 
 func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan SessionObj) {
@@ -74,14 +77,14 @@ func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
 	containersToImageIDs := make(map[string]string)
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {
-			imageID := ExtractImageID(containerStatus.ImageID)
+			imageID := ExtractAndNormalizeImageID(containerStatus.ImageID)
 			containersToImageIDs[containerStatus.Name] = imageID
 		}
 	}
 
 	for _, containerStatus := range pod.Status.InitContainerStatuses {
 		if containerStatus.State.Running != nil {
-			imageID := ExtractImageID(containerStatus.ImageID)
+			imageID := ExtractAndNormalizeImageID(containerStatus.ImageID)
 			containersToImageIDs[containerStatus.Name] = imageID
 		}
 	}

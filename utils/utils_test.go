@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,14 +27,14 @@ func TestExtractContainersToImageIDsFromPod(t *testing.T) {
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:1",
+							ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 							Name:    "container1",
 						},
 					},
 				},
 			},
 			expected: map[string]string{
-				"container1": "alpine@sha256:1",
+				"container1": "docker.io/library/alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 			},
 		},
 		{
@@ -51,22 +50,22 @@ func TestExtractContainersToImageIDsFromPod(t *testing.T) {
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:1",
+							ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 							Name:    "container1",
 						},
 						{
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:2",
+							ImageID: "docker-pullable://alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 							Name:    "container2",
 						},
 					},
 				},
 			},
 			expected: map[string]string{
-				"container1": "alpine@sha256:1",
-				"container2": "alpine@sha256:2",
+				"container1": "docker.io/library/alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
+				"container2": "docker.io/library/alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 			},
 		},
 		{
@@ -82,28 +81,28 @@ func TestExtractContainersToImageIDsFromPod(t *testing.T) {
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:1",
+							ImageID: "docker-pullable://alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 							Name:    "container1",
 						},
 						{
 							State: core1.ContainerState{
 								Running: &core1.ContainerStateRunning{},
 							},
-							ImageID: "docker-pullable://alpine@sha256:2",
+							ImageID: "docker-pullable://alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 							Name:    "container2",
 						},
 					},
 				},
 			},
 			expected: map[string]string{
-				"container1": "alpine@sha256:1",
-				"container2": "alpine@sha256:2",
+				"container1": "docker.io/library/alpine@sha256:13e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
+				"container2": "docker.io/library/alpine@sha256:23e957703f1266530db0aeac1fd6a3f87c1e59943f4c13eb340bb8521c6041d7",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.True(t, reflect.DeepEqual(ExtractContainersToImageIDsFromPod(tt.pod), tt.expected))
+			assert.Equal(t, tt.expected, ExtractContainersToImageIDsFromPod(tt.pod))
 		})
 	}
 }

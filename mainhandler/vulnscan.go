@@ -495,7 +495,7 @@ func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(pod *core
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {
 			imageID := containerStatus.ImageID
-			mapContainerToImageID[containerStatus.Name] = utils.ExtractImageID(imageID)
+			mapContainerToImageID[containerStatus.Name] = utils.ExtractAndNormalizeImageID(imageID)
 		}
 	}
 
@@ -511,7 +511,7 @@ func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *cor
 		},
 		Wlid:          actionHandler.wlid,
 		ContainerName: container.container,
-		ImageHash:     utils.ExtractImageID(imageID),
+		ImageHash:     utils.ExtractAndNormalizeImageID(imageID),
 	}
 
 	// Add instanceID only if container is not empty
