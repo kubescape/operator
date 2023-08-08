@@ -3,6 +3,8 @@ package utils
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseIntEnvVar(t *testing.T) {
@@ -48,15 +50,9 @@ func TestParseIntEnvVar(t *testing.T) {
 			}
 
 			val, err := parseIntEnvVar(tt.varName, tt.defaultValue)
-			if tt.expectError && err == nil {
-				t.Fatalf("Expected an error, got nil")
-			} else if !tt.expectError && err != nil {
-				t.Fatalf("Expected no error, got %v", err)
-			}
+			assert.Equalf(t, tt.expectError, err != nil, "unexpected error: %v", err)
+			assert.Equalf(t, tt.expected, val, "unexpected value: %v", val)
 
-			if val != tt.expected {
-				t.Fatalf("Expected value %d, got %d", tt.expected, val)
-			}
 		})
 	}
 }
