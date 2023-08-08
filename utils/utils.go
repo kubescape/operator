@@ -68,7 +68,9 @@ func ExtractImageID(imageID string) string {
 func AddCommandToChannel(ctx context.Context, cmd *apis.Command, workerPool *ants.PoolWithFunc) {
 	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
 	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
-	workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj})
+	if err := workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj}); err != nil {
+		logger.L().Ctx(ctx).Error("Failed to invoke job", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)), helpers.Error(err))
+	}
 }
 
 func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {

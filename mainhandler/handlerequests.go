@@ -345,7 +345,9 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)
-			mainHandler.eventWorkerPool.Invoke(l)
+			if err := mainHandler.eventWorkerPool.Invoke(l); err != nil {
+				logger.L().Ctx(ctx).Error("Failed to invoke job", helpers.String("wlid", actions[index].GetID()), helpers.String("command", fmt.Sprintf("%v", actions[index].CommandName)), helpers.String("args", fmt.Sprintf("%v", actions[index].Args)), helpers.Error(err))
+			}
 		}(i)
 	}
 }
