@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,16 +42,12 @@ func TestParseIntEnvVar(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.varValue != "" {
-				os.Setenv(tt.varName, tt.varValue)
-			} else {
-				os.Unsetenv(tt.varName)
-			}
+			t.Setenv(tt.varName, tt.varValue)
+			defer t.Setenv(tt.varName, "")
 
 			val, err := parseIntEnvVar(tt.varName, tt.defaultValue)
 			assert.Equalf(t, tt.expectError, err != nil, "unexpected error: %v", err)
 			assert.Equalf(t, tt.expected, val, "unexpected value: %v", val)
-
 		})
 	}
 }
