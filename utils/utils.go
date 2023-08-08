@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/panjf2000/ants/v2"
 	core1 "k8s.io/api/core/v1"
 )
 
@@ -64,10 +65,10 @@ func ExtractImageID(imageID string) string {
 	return strings.TrimPrefix(imageID, dockerPullableURN)
 }
 
-func AddCommandToChannel(ctx context.Context, cmd *apis.Command, channel *chan SessionObj) {
+func AddCommandToChannel(ctx context.Context, cmd *apis.Command, workerPool *ants.PoolWithFunc) {
 	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
 	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
-	*channel <- *newSessionObj
+	workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj})
 }
 
 func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {

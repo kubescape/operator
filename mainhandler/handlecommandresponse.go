@@ -68,7 +68,7 @@ func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool() {
 	}
 }
 
-func (mainHandler *MainHandler) handleCommandResponse(ctx context.Context) {
+func (mainHandler *MainHandler) HandleCommandResponse(ctx context.Context) {
 	mainHandler.createInsertCommandsResponseThreadPool()
 	for {
 		data := <-*mainHandler.commandResponseChannel.commandResponseChannel

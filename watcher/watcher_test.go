@@ -794,46 +794,46 @@ func TestSBOMWatch(t *testing.T) {
 			"Does not reproduce in a live cluster on a live Watch() object",
 	)
 
-	k8sClient := k8sfake.NewSimpleClientset()
+	// k8sClient := k8sfake.NewSimpleClientset()
 
-	expectedWlid := "some-imageID"
-	imageIDsToWlids := map[string][]string{
-		"some-imageID": {expectedWlid},
-	}
+	// expectedWlid := "some-imageID"
+	// imageIDsToWlids := map[string][]string{
+	// 	"some-imageID": {expectedWlid},
+	// }
 
-	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-	ksStorageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, imageIDsToWlids, nil)
+	// k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+	// ksStorageClient := kssfake.NewSimpleClientset()
+	// wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, imageIDsToWlids, nil)
 
-	sessionObjCh := make(chan utils.SessionObj)
-	sessionObjChPtr := &sessionObjCh
+	// sessionObjCh := make(chan utils.SessionObj)
+	// sessionObjChPtr := &sessionObjCh
 
-	ctx := context.TODO()
-	sbomClient := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("")
-	sbomWatcher, _ := sbomClient.Watch(ctx, v1.ListOptions{})
-	sbomWatcher.ResultChan()
+	// ctx := context.TODO()
+	// sbomClient := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("")
+	// sbomWatcher, _ := sbomClient.Watch(ctx, v1.ListOptions{})
+	// sbomWatcher.ResultChan()
 
-	SBOMStub := spdxv1beta1.SBOMSPDXv2p3{
-		ObjectMeta: v1.ObjectMeta{Name: "some-imageID"},
-	}
+	// SBOMStub := spdxv1beta1.SBOMSPDXv2p3{
+	// 	ObjectMeta: v1.ObjectMeta{Name: "some-imageID"},
+	// }
 
-	expectedCommands := []apis.Command{{CommandName: apis.TypeScanImages, Wlid: expectedWlid}}
+	// expectedCommands := []apis.Command{{CommandName: apis.TypeScanImages, Wlid: expectedWlid}}
 
-	doneCh := make(chan struct{})
-	go wh.SBOMWatch(context.TODO(), sessionObjChPtr)
+	// doneCh := make(chan struct{})
+	// go wh.SBOMWatch(context.TODO(), sessionObjChPtr)
 
-	go func() {
-		sbomClient.Create(ctx, &SBOMStub, v1.CreateOptions{})
-		doneCh <- struct{}{}
-	}()
+	// go func() {
+	// 	sbomClient.Create(ctx, &SBOMStub, v1.CreateOptions{})
+	// 	doneCh <- struct{}{}
+	// }()
 
-	<-doneCh
+	// <-doneCh
 
-	actualCommands := []apis.Command{}
-	sessionObj := <-*sessionObjChPtr
-	actualCommands = append(actualCommands, sessionObj.Command)
+	// actualCommands := []apis.Command{}
+	// sessionObj := <-*sessionObjChPtr
+	// actualCommands = append(actualCommands, sessionObj.Command)
 
-	assert.Equalf(t, expectedCommands, actualCommands, "Produced commands should match")
+	// assert.Equalf(t, expectedCommands, actualCommands, "Produced commands should match")
 
 }
 

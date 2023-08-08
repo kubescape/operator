@@ -19,6 +19,8 @@ import (
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	"github.com/panjf2000/ants/v2"
+
 	"golang.org/x/exp/slices"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -143,7 +145,7 @@ func (wh *WatchHandler) getVulnerabilityManifestWatcher() (watch.Interface, erro
 }
 
 // VulnerabilityManifestWatch watches for Vulnerability Manifests and handles them accordingly
-func (wh *WatchHandler) VulnerabilityManifestWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+func (wh *WatchHandler) VulnerabilityManifestWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	inputEvents := make(chan watch.Event)
 	errorCh := make(chan error)
 	vmEvents := make(<-chan watch.Event)
@@ -372,7 +374,7 @@ func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
 }
 
 // watch for sbom changes, and trigger scans accordingly
-func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	inputEvents := make(chan watch.Event)
 	commands := make(chan *apis.Command)
 	errorCh := make(chan error)
@@ -406,7 +408,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, sessionObjChan *chan util
 			}
 		case cmd, ok := <-commands:
 			if ok {
-				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
+				utils.AddCommandToChannel(ctx, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -436,7 +438,7 @@ func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
 }
 
 // SBOMFilteredWatch watches and processes changes on Filtered SBOMs
-func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	inputEvents := make(chan watch.Event)
 	cmdCh := make(chan *apis.Command)
 	errorCh := make(chan error)
@@ -470,7 +472,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *c
 			}
 		case cmd, ok := <-cmdCh:
 			if ok {
-				utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
+				utils.AddCommandToChannel(ctx, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -496,7 +498,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, sessionObjChan *c
 }
 
 // watch for pods changes, and trigger scans accordingly
-func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils.SessionObj) {
+func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	logger.L().Ctx(ctx).Debug("starting pod watch")
 	for {
 		podsWatch, err := wh.getPodWatcher()
@@ -505,7 +507,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, sessionObjChan *chan utils
 			time.Sleep(retryInterval)
 			continue
 		}
-		wh.handlePodWatcher(ctx, podsWatch, sessionObjChan)
+		wh.handlePodWatcher(ctx, podsWatch, workerPool)
 	}
 }
 
@@ -738,7 +740,7 @@ func (wh *WatchHandler) getParentWorkloadForPod(pod *core1.Pod) (workloadinterfa
 	return parentWorkload, nil
 }
 
-func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.Interface, sessionObjChan *chan utils.SessionObj) {
+func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.Interface, workerPool *ants.PoolWithFunc) {
 	var err error
 	for {
 		event, ok := <-podsWatch.ResultChan()
@@ -801,7 +803,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			wh.addToInstanceIDsList(instanceID[i])
 		}
 
-		utils.AddCommandToChannel(ctx, cmd, sessionObjChan)
+		utils.AddCommandToChannel(ctx, cmd, workerPool)
 	}
 }
 
