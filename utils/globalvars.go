@@ -16,7 +16,7 @@ var (
 	Namespace                string        = "default" // default namespace
 	RestAPIPort              string        = "4002"    // default port
 	CleanUpRoutineInterval   time.Duration = 10 * time.Minute
-	ConcurrencyWorkers       int           = 1
+	ConcurrencyWorkers       int           = 3
 	TriggerSecurityFramework bool          = false
 )
 
