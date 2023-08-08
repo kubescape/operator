@@ -60,12 +60,12 @@ func LoadEnvironmentVariables(ctx context.Context) (err error) {
 			CleanUpRoutineInterval = dur
 		}
 	}
-	ConcurrencyWorkers, _ = ParseIntEnvVar(ConcurrencyEnvironmentVariable, ConcurrencyWorkers)
+	ConcurrencyWorkers, _ = parseIntEnvVar(ConcurrencyEnvironmentVariable, ConcurrencyWorkers)
 
 	return nil
 }
 
-func ParseIntEnvVar(varName string, defaultValue int) (int, error) {
+func parseIntEnvVar(varName string, defaultValue int) (int, error) {
 	varValue, exists := os.LookupEnv(varName)
 	if !exists {
 		return defaultValue, nil
