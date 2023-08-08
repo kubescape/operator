@@ -26,11 +26,11 @@ type Job struct {
 	sessionObj SessionObj
 }
 
-func (j *Job) GetContext() context.Context {
+func (j *Job) Context() context.Context {
 	return j.ctx
 }
 
-func (j *Job) GetObj() SessionObj {
+func (j *Job) Obj() SessionObj {
 	return j.sessionObj
 }
 

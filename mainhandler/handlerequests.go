@@ -146,8 +146,8 @@ func buildScanCommandForWorkload(ctx context.Context, wlid string, mapContainerT
 // HandlePostmanRequest Parse received commands and run the command
 func (mainHandler *MainHandler) HandleRequest(j utils.Job) {
 
-	ctx := j.GetContext()
-	sessionObj := j.GetObj()
+	ctx := j.Context()
+	sessionObj := j.Obj()
 
 	// recover
 	defer func() {
