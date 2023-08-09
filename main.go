@@ -71,9 +71,9 @@ func main() {
 
 	isReadinessReady = true
 
-	go mainHandler.HandleWatchers(ctx)
 	// wait for requests to come from the websocket or from the REST API
-	mainHandler.HandleRequest(ctx)
+	go mainHandler.HandleCommandResponse(ctx)
+	mainHandler.HandleWatchers(ctx)
 
 }
 

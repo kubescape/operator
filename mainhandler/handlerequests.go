@@ -9,6 +9,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
+	"github.com/panjf2000/ants/v2"
 	"go.opentelemetry.io/otel"
 
 	"github.com/armosec/armoapi-go/identifiers"
@@ -28,17 +29,17 @@ import (
 )
 
 type MainHandler struct {
-	sessionObj             *chan utils.SessionObj // TODO: wrap chan with struct for mutex support
+	eventWorkerPool        *ants.PoolWithFunc
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 }
 
 type ActionHandler struct {
-	k8sAPI                 *k8sinterface.KubernetesApi
-	reporter               reporterlib.IReporter
-	wlid                   string
 	command                apis.Command
+	reporter               reporterlib.IReporter
+	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
+	wlid                   string
 }
 
 type waitFunc func()
@@ -64,11 +65,17 @@ func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.Kube
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
-	return &MainHandler{
-		sessionObj:             sessionObj,
+	mainHandler := &MainHandler{
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 	}
+	pool, _ := ants.NewPoolWithFunc(utils.ConcurrencyWorkers, func(i interface{}) {
+		j := i.(utils.Job)
+
+		mainHandler.HandleRequest(j)
+	})
+	mainHandler.eventWorkerPool = pool
+	return mainHandler
 }
 
 // CreateWebSocketHandler Create ws-handler obj
@@ -116,15 +123,15 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	mainHandler.insertCommandsToChannel(ctx, commandsList)
 
 	// start watching
-	go watchHandler.PodWatch(ctx, mainHandler.sessionObj)
-	go watchHandler.SBOMWatch(ctx, mainHandler.sessionObj)
-	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.sessionObj)
-	go watchHandler.VulnerabilityManifestWatch(ctx, mainHandler.sessionObj)
+	go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
+	go watchHandler.SBOMWatch(ctx, mainHandler.eventWorkerPool)
+	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
+	go watchHandler.VulnerabilityManifestWatch(ctx, mainHandler.eventWorkerPool)
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
 	for _, cmd := range commandsList {
-		utils.AddCommandToChannel(ctx, cmd, mainHandler.sessionObj)
+		utils.AddCommandToChannel(ctx, cmd, mainHandler.eventWorkerPool)
 	}
 }
 
@@ -137,7 +144,11 @@ func buildScanCommandForWorkload(ctx context.Context, wlid string, mapContainerT
 }
 
 // HandlePostmanRequest Parse received commands and run the command
-func (mainHandler *MainHandler) HandleRequest(ctx context.Context) []error {
+func (mainHandler *MainHandler) HandleRequest(j utils.Job) {
+
+	ctx := j.Context()
+	sessionObj := j.Obj()
+
 	// recover
 	defer func() {
 		if err := recover(); err != nil {
@@ -145,32 +156,28 @@ func (mainHandler *MainHandler) HandleRequest(ctx context.Context) []error {
 		}
 	}()
 
-	go mainHandler.handleCommandResponse(ctx)
-	for {
-		sessionObj := <-*mainHandler.sessionObj
-		ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
+	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 
-		// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
-		sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
+	// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
+	sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
 
-		isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
-		switch sessionObj.Command.CommandName {
-		case apis.TypeRunKubescape, apis.TypeRunKubescapeJob, apis.TypeSetKubescapeCronJob, apis.TypeDeleteKubescapeCronJob, apis.TypeUpdateKubescapeCronJob:
-			isToItemizeScopeCommand = false
+	isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
+	switch sessionObj.Command.CommandName {
+	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob, apis.TypeSetKubescapeCronJob, apis.TypeDeleteKubescapeCronJob, apis.TypeUpdateKubescapeCronJob:
+		isToItemizeScopeCommand = false
 
-		case apis.TypeSetVulnScanCronJob, apis.TypeDeleteVulnScanCronJob, apis.TypeUpdateVulnScanCronJob:
-			isToItemizeScopeCommand = false
-		}
-
-		if isToItemizeScopeCommand {
-			mainHandler.HandleScopedRequest(ctx, &sessionObj) // this might be a heavy action, do not send to a goroutine
-		} else {
-			// handle requests
-			mainHandler.HandleSingleRequest(ctx, &sessionObj)
-		}
-		span.End()
-		close(sessionObj.ErrChan)
+	case apis.TypeSetVulnScanCronJob, apis.TypeDeleteVulnScanCronJob, apis.TypeUpdateVulnScanCronJob:
+		isToItemizeScopeCommand = false
 	}
+
+	if isToItemizeScopeCommand {
+		mainHandler.HandleScopedRequest(ctx, &sessionObj) // this might be a heavy action, do not send to a goroutine
+	} else {
+		// handle requests
+		mainHandler.HandleSingleRequest(ctx, &sessionObj)
+	}
+	span.End()
+	close(sessionObj.ErrChan)
 }
 
 func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) {
@@ -335,7 +342,12 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc()
 			sessionObj := utils.NewSessionObj(ctx, &actions[index], "Websocket", "", uuid.NewString(), 1)
-			*mainHandler.sessionObj <- *sessionObj
+			l := utils.Job{}
+			l.SetContext(ctx)
+			l.SetObj(*sessionObj)
+			if err := mainHandler.eventWorkerPool.Invoke(l); err != nil {
+				logger.L().Ctx(ctx).Error("Failed to invoke job", helpers.String("wlid", actions[index].GetID()), helpers.String("command", fmt.Sprintf("%v", actions[index].CommandName)), helpers.String("args", fmt.Sprintf("%v", actions[index].Args)), helpers.Error(err))
+			}
 		}(i)
 	}
 }

@@ -16,6 +16,7 @@ var (
 	Namespace                string        = "default" // default namespace
 	RestAPIPort              string        = "4002"    // default port
 	CleanUpRoutineInterval   time.Duration = 10 * time.Minute
+	ConcurrencyWorkers       int           = 3
 	TriggerSecurityFramework bool          = false
 )
 
@@ -59,6 +60,21 @@ func LoadEnvironmentVariables(ctx context.Context) (err error) {
 			CleanUpRoutineInterval = dur
 		}
 	}
+	ConcurrencyWorkers, _ = parseIntEnvVar(ConcurrencyEnvironmentVariable, ConcurrencyWorkers)
 
 	return nil
+}
+
+func parseIntEnvVar(varName string, defaultValue int) (int, error) {
+	varValue, exists := os.LookupEnv(varName)
+	if !exists || varValue == "" {
+		return defaultValue, nil
+	}
+
+	intValue, err := strconv.Atoi(varValue)
+	if err != nil {
+		return defaultValue, fmt.Errorf("failed to parse %s env var as int: %w", varName, err)
+	}
+
+	return intValue, nil
 }

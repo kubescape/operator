@@ -21,6 +21,7 @@ require (
 	github.com/kubescape/opa-utils v0.0.257
 	github.com/kubescape/storage v0.0.8
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/panjf2000/ants/v2 v2.8.1
 	github.com/stretchr/testify v1.8.3
 	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux v0.37.0
 	go.opentelemetry.io/otel v1.16.0
