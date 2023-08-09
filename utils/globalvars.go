@@ -67,7 +67,7 @@ func LoadEnvironmentVariables(ctx context.Context) (err error) {
 
 func parseIntEnvVar(varName string, defaultValue int) (int, error) {
 	varValue, exists := os.LookupEnv(varName)
-	if !exists {
+	if !exists || varValue == "" {
 		return defaultValue, nil
 	}
 
