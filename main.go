@@ -75,6 +75,8 @@ func main() {
 	go mainHandler.HandleCommandResponse(ctx)
 	mainHandler.HandleWatchers(ctx)
 
+	// wait for the context to be done
+	<-ctx.Done()
 }
 
 func displayBuildTag() {
