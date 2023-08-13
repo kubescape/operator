@@ -61,7 +61,7 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+func NewMainHandler(k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -346,10 +346,14 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)
 			if err := mainHandler.eventWorkerPool.Invoke(l); err != nil {
-				logger.L().Ctx(ctx).Error("Failed to invoke job", helpers.String("wlid", actions[index].GetID()), helpers.String("command", fmt.Sprintf("%v", actions[index].CommandName)), helpers.String("args", fmt.Sprintf("%v", actions[index].Args)), helpers.Error(err))
+				logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("wlid", actions[index].GetID()), helpers.String("command", fmt.Sprintf("%v", actions[index].CommandName)), helpers.String("args", fmt.Sprintf("%v", actions[index].Args)), helpers.Error(err))
 			}
 		}(i)
 	}
+}
+
+func (mainHandler *MainHandler) EventWorkerPool() *ants.PoolWithFunc {
+	return mainHandler.eventWorkerPool
 }
 
 func GetStartupActions() []apis.Command {

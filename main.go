@@ -46,27 +46,26 @@ func main() {
 	}
 
 	initHttpHandlers()
-
-	sessionObj := make(chan utils.SessionObj, 50)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
+	// setup main handler
+	mainHandler := mainhandler.NewMainHandler(k8sApi)
+
 	go func() { // open websocket connection to notification server
-		notificationHandler := notificationhandler.NewNotificationHandler(&sessionObj)
+		notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool())
 		if err := notificationHandler.WebsocketConnection(ctx); err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 		}
 	}()
 
 	go func() { // open a REST API connection listener
-		restAPIHandler := restapihandler.NewHTTPHandler(&sessionObj)
+		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool())
 		if err := restAPIHandler.SetupHTTPListener(); err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 		}
 	}()
 
-	// setup main handler
-	mainHandler := mainhandler.NewMainHandler(&sessionObj, k8sApi)
 	go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions())
 
 	isReadinessReady = true
