@@ -70,9 +70,12 @@ func NewMainHandler(k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 	}
 	pool, _ := ants.NewPoolWithFunc(utils.ConcurrencyWorkers, func(i interface{}) {
-		j := i.(utils.Job)
-
-		mainHandler.HandleRequest(j)
+		j, ok := i.(utils.Job)
+		if !ok {
+			logger.L().Error("failed to cast job", helpers.Interface("job", i))
+			return
+		}
+		mainHandler.handleRequest(j)
 	})
 	mainHandler.eventWorkerPool = pool
 	return mainHandler
@@ -144,7 +147,7 @@ func buildScanCommandForWorkload(ctx context.Context, wlid string, mapContainerT
 }
 
 // HandlePostmanRequest Parse received commands and run the command
-func (mainHandler *MainHandler) HandleRequest(j utils.Job) {
+func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 
 	ctx := j.Context()
 	sessionObj := j.Obj()
