@@ -52,7 +52,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 			continue
 		}
 
-		*resthandler.sessionObj <- *sessionObj
+		resthandler.pool.Invoke(sessionObj)
 	}
 	return nil
 }

@@ -46,7 +46,7 @@ func (notification *NotificationHandler) handleNotification(ctx context.Context,
 		}
 		for _, cmd := range cmds.Commands {
 			sessionObj := utils.NewSessionObj(ctx, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
-			*notification.sessionObj <- *sessionObj
+			notification.pool.Invoke(sessionObj)
 		}
 	}
 

@@ -61,7 +61,7 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(sessionObj *chan utils.SessionObj, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+func NewMainHandler(k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -350,6 +350,10 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 			}
 		}(i)
 	}
+}
+
+func (mainHandler *MainHandler) EventWorkerPool() *ants.PoolWithFunc {
+	return mainHandler.eventWorkerPool
 }
 
 func GetStartupActions() []apis.Command {

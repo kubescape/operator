@@ -8,22 +8,23 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
+	"github.com/panjf2000/ants/v2"
 
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
 	"github.com/gorilla/websocket"
 )
 
 type NotificationHandler struct {
-	connector  IWebsocketActions
-	sessionObj *chan utils.SessionObj
+	connector IWebsocketActions
+	pool      *ants.PoolWithFunc
 }
 
-func NewNotificationHandler(sessionObj *chan utils.SessionObj) *NotificationHandler {
+func NewNotificationHandler(pool *ants.PoolWithFunc) *NotificationHandler {
 	urlStr := initNotificationServerURL()
 
 	return &NotificationHandler{
-		connector:  NewWebsocketActions(urlStr),
-		sessionObj: sessionObj,
+		connector: NewWebsocketActions(urlStr),
+		pool:      pool,
 	}
 }
 

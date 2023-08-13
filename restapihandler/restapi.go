@@ -8,20 +8,21 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/docs"
 	"github.com/kubescape/operator/utils"
+	"github.com/panjf2000/ants/v2"
 
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 type HTTPHandler struct {
-	keyPair    *tls.Certificate
-	sessionObj *chan utils.SessionObj
+	keyPair *tls.Certificate
+	pool    *ants.PoolWithFunc
 }
 
-func NewHTTPHandler(sessionObj *chan utils.SessionObj) *HTTPHandler {
+func NewHTTPHandler(pool *ants.PoolWithFunc) *HTTPHandler {
 	return &HTTPHandler{
-		keyPair:    nil,
-		sessionObj: sessionObj,
+		keyPair: nil,
+		pool:    pool,
 	}
 }
 
