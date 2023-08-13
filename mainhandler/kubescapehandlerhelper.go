@@ -35,7 +35,7 @@ func getKubescapeV1ScanURL() *url.URL {
 	ksURL.Path = utils.KubescapeRequestPathV1
 
 	q := ksURL.Query()
-	q.Set("keep", "true")
+	q.Set("keep", "false")
 	ksURL.RawQuery = q.Encode()
 
 	return &ksURL
