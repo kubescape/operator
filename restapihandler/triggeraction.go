@@ -51,8 +51,10 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
 			continue
 		}
-
-		if err := resthandler.pool.Invoke(sessionObj); err != nil {
+		l := utils.Job{}
+		l.SetContext(ctx)
+		l.SetObj(*sessionObj)
+		if err := resthandler.pool.Invoke(l); err != nil {
 			logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("ID", c.GetID()), helpers.Error(err))
 		}
 	}

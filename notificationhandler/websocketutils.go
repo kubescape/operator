@@ -46,7 +46,10 @@ func (notification *NotificationHandler) handleNotification(ctx context.Context,
 		}
 		for _, cmd := range cmds.Commands {
 			sessionObj := utils.NewSessionObj(ctx, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
-			if err := notification.pool.Invoke(sessionObj); err != nil {
+			l := utils.Job{}
+			l.SetContext(ctx)
+			l.SetObj(*sessionObj)
+			if err := notification.pool.Invoke(l); err != nil {
 				logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("ID", cmd.GetID()), helpers.String("command", fmt.Sprintf("%v", cmd)), helpers.Error(err))
 			}
 		}
