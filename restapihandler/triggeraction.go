@@ -67,7 +67,7 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 			w.WriteHeader(http.StatusInternalServerError)
 			bErr, _ := json.Marshal(err)
 			w.Write(bErr)
-			logger.L().Ctx(r.Context()).Fatal("recover in ActionRequest", helpers.Interface("error", err))
+			logger.L().Ctx(context.Background()).Fatal("recover in ActionRequest", helpers.Interface("error", err))
 		}
 	}()
 
@@ -80,7 +80,7 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 	if err == nil {
 		switch r.Method {
 		case http.MethodPost:
-			err = resthandler.HandleActionRequest(r.Context(), readBuffer)
+			err = resthandler.HandleActionRequest(context.Background(), readBuffer)
 		default:
 			httpStatus = http.StatusMethodNotAllowed
 			err = fmt.Errorf("method '%s' not allowed", r.Method)
