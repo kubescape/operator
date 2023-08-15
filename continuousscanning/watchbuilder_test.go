@@ -112,6 +112,8 @@ func makeWlid(clusterName, namespace, kind, name string) string {
 }
 
 func createUnstructuredPod(t *testing.T, ctx context.Context, dClient dynamic.Interface, gvr schema.GroupVersionResource, namespace string, pod *corev1.Pod, createOpts metav1.CreateOptions) error {
+	t.Helper()
+
 	dynPods := dClient.Resource(gvr).Namespace(namespace)
 	podRaw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
 	if err != nil {
@@ -126,6 +128,31 @@ func createUnstructuredPod(t *testing.T, ctx context.Context, dClient dynamic.In
 		return err
 	}
 	return nil
+}
+
+type spyHandler struct {
+	mx     *sync.RWMutex
+	called bool
+	wg     *sync.WaitGroup
+}
+
+func (h *spyHandler) Handle(ctx context.Context, e watch.Event) error {
+	if !h.Called() {
+		h.mx.Lock()
+		h.called = true
+		h.mx.Unlock()
+
+		h.wg.Done()
+	}
+
+	return nil
+}
+
+func (h *spyHandler) Called() bool {
+	h.mx.RLock()
+	res := h.called
+	h.mx.RUnlock()
+	return res
 }
 
 func TestAddEventHandler(t *testing.T) {
@@ -145,27 +172,11 @@ func TestAddEventHandler(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-			css := NewContinuousScanningService(dynClient)
-
 			resourcesCreatedWg := &sync.WaitGroup{}
-
+			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 			// We use the spy handler later to verify if it's been called
-			called := &struct {
-				mx     *sync.Mutex
-				called bool
-				wg     *sync.WaitGroup
-			}{called: false, wg: resourcesCreatedWg, mx: &sync.Mutex{}}
-			spyHandler := func(ctx context.Context, e watch.Event) {
-				if !called.called {
-					called.mx.Lock()
-					called.called = true
-					called.mx.Unlock()
-
-					called.wg.Done()
-				}
-			}
-			css.AddEventHandler(spyHandler)
+			spyH := &spyHandler{called: false, wg: resourcesCreatedWg, mx: &sync.RWMutex{}}
+			css := NewContinuousScanningService(dynClient, spyH)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
@@ -184,7 +195,7 @@ func TestAddEventHandler(t *testing.T) {
 			resourcesCreatedWg.Wait()
 			css.Stop()
 
-			assert.Equal(t, true, called.called)
+			assert.Equal(t, true, spyH.Called())
 		})
 	}
 }
@@ -223,7 +234,6 @@ func TestContinuousScanningService(t *testing.T) {
 			ctx := context.Background()
 			// client := fake.NewSimpleClientset()
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-			css := NewContinuousScanningService(dynClient)
 			resourcesCreatedWg := &sync.WaitGroup{}
 			podsGvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "Pods"}
 			gotCommands := newSyncSlice[armoapi.Command]()
@@ -239,29 +249,8 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-
-			handleEvent := func(ctx context.Context, e watch.Event) {
-				// TriggerScan(ctx, e, wp)
-
-				obj := e.Object.(*unstructured.Unstructured)
-				objRaw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-				if err != nil {
-					t.Fatalf("handling err: %v", err)
-				}
-
-				unstructuredObj := &unstructured.Unstructured{Object: objRaw}
-				clusterName := clusterNameStub
-				objKind := unstructuredObj.GetKind()
-				objName := unstructuredObj.GetName()
-				objNamespace := unstructuredObj.GetNamespace()
-				wlid := armowlid.GetK8sWLID(clusterName, objNamespace, objKind, objName)
-
-				command := armoapi.Command{Wlid: wlid}
-				utils.AddCommandToChannel(ctx, &command, wp)
-			}
-			css.AddEventHandler(handleEvent)
-
-			// Once events handlers have been added, launch
+			ph := NewTriggeringHandler(wp, clusterNameStub)
+			css := NewContinuousScanningService(dynClient, ph)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
