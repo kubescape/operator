@@ -17,9 +17,9 @@ func NewDynamicWatch(ctx context.Context, client dynamic.Interface, gvr schema.G
 	var w watch.Interface
 	var err error
 	if k8sinterface.IsNamespaceScope(&gvr) {
-		w, err = client.Resource(gvr).Watch(ctx, opts)
-	} else {
 		w, err = client.Resource(gvr).Namespace("").Watch(ctx, opts)
+	} else {
+		w, err = client.Resource(gvr).Watch(ctx, opts)
 	}
 	return w, err
 }
