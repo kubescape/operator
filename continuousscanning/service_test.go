@@ -16,6 +16,8 @@ import (
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
+	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +51,8 @@ func (s *syncSlice[T]) Commands() []T {
 func makePod(namespace, name string) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "Pod",
+			Kind:       "Pod",
+			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -151,6 +154,19 @@ func TestAddEventHandler(t *testing.T) {
 	}
 }
 
+func makePodScanObject(p *corev1.Pod) *objectsenvelopes.ScanObject {
+	gvk := p.GroupVersionKind()
+	so := &objectsenvelopes.ScanObject{
+		ApiVersion: gvk.GroupVersion().String(),
+		Kind:       gvk.Kind,
+		Metadata: objectsenvelopes.ScanObjectMetadata{
+			Name:      p.GetName(),
+			Namespace: p.GetNamespace(),
+		},
+	}
+	return so
+}
+
 func TestContinuousScanningService(t *testing.T) {
 	clusterNameStub := "clusterCHANGEME"
 	namespaceStub := "default"
@@ -168,13 +184,31 @@ func TestContinuousScanningService(t *testing.T) {
 			},
 			want: []armoapi.Command{
 				{
+					CommandName: armoapi.TypeRunKubescape,
 					Wlid: makeWlid(clusterNameStub, namespaceStub, "Pod", "first"),
+					Args: map[string]interface{}{
+						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
+							ScanObject: makePodScanObject(makePod("default", "first")),
+						},
+					},
 				},
 				{
+					CommandName: armoapi.TypeRunKubescape,
 					Wlid: makeWlid(clusterNameStub, namespaceStub, "Pod", "second"),
+					Args: map[string]interface{}{
+						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
+							ScanObject: makePodScanObject(makePod("default", "second")),
+						},
+					},
 				},
 				{
+					CommandName: armoapi.TypeRunKubescape,
 					Wlid: makeWlid(clusterNameStub, namespaceStub, "Pod", "third"),
+					Args: map[string]interface{}{
+						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
+							ScanObject: makePodScanObject(makePod("default", "third")),
+						},
+					},
 				},
 			},
 		},
@@ -219,7 +253,7 @@ func TestContinuousScanningService(t *testing.T) {
 			resourcesCreatedWg.Wait()
 			css.Stop()
 
-			assert.ElementsMatch(t, tc.want, gotCommands.Commands())
+			assert.Equal(t, tc.want, gotCommands.Commands())
 		})
 	}
 }

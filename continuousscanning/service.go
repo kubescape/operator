@@ -2,6 +2,7 @@ package continuousscanning
 
 import (
 	"context"
+	"errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -13,6 +14,8 @@ import (
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
+	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 )
@@ -116,6 +119,33 @@ type poolInvokerHandler struct {
 	clusterName string
 }
 
+func makeScanArgs(so *objectsenvelopes.ScanObject) map[string]interface{} {
+	psr := opautilsmetav1.PostScanRequest{
+		ScanObject: so,
+	}
+	return map[string]interface{}{
+		utils.KubescapeScanV1: psr,
+	}
+
+}
+
+func makeScanCommand(clusterName string, uo *unstructured.Unstructured) *armoapi.Command {
+	objKind := uo.GetKind()
+	objName := uo.GetName()
+	objNamespace := uo.GetNamespace()
+	wlid := armowlid.GetK8sWLID(clusterName, objNamespace, objKind, objName)
+
+	scanObject, _ := unstructuredToScanObject(uo)
+
+	args := makeScanArgs(scanObject)
+
+	return &armoapi.Command{
+		CommandName: armoapi.TypeRunKubescape,
+		Wlid:        wlid,
+		Args:        args,
+	}
+}
+
 func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterName string, e watch.Event) error {
 	obj := e.Object.(*unstructured.Unstructured)
 	objRaw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
@@ -123,16 +153,19 @@ func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterName string,
 		return err
 	}
 
-	unstructuredObj := &unstructured.Unstructured{Object: objRaw}
-	objKind := unstructuredObj.GetKind()
-	objName := unstructuredObj.GetName()
-	objNamespace := unstructuredObj.GetNamespace()
-	wlid := armowlid.GetK8sWLID(clusterName, objNamespace, objKind, objName)
-
-	command := armoapi.Command{Wlid: wlid}
-	utils.AddCommandToChannel(ctx, &command, wp)
+	uObject := &unstructured.Unstructured{Object: objRaw}
+	command := makeScanCommand(clusterName, uObject)
+	utils.AddCommandToChannel(ctx, command, wp)
 
 	return nil
+}
+
+func unstructuredToScanObject(uo *unstructured.Unstructured) (*objectsenvelopes.ScanObject, error) {
+	var res *objectsenvelopes.ScanObject
+	if res = objectsenvelopes.NewScanObject(uo.UnstructuredContent()); res == nil {
+		return res, errors.New("passed object cannot be converted to ScanObject")
+	}
+	return res, nil
 }
 
 func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
