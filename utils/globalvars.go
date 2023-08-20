@@ -18,6 +18,7 @@ var (
 	CleanUpRoutineInterval   time.Duration = 10 * time.Minute
 	ConcurrencyWorkers       int           = 3
 	TriggerSecurityFramework bool          = false
+	MatchingRulesFilename    string        = "/etc/config/matchingRules.json"
 )
 
 var ClusterConfig = &utilsmetadata.ClusterConfig{}

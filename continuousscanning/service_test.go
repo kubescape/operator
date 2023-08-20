@@ -109,6 +109,16 @@ func (h *spyHandler) Called() bool {
 	return res
 }
 
+var podMatchRules *MatchingRules = &MatchingRules{
+	APIResources: []APIResourceMatch{
+		{
+			Groups:    []string{""},
+			Versions:  []string{"v1"},
+			Resources: []string{"Pods"},
+		},
+	},
+}
+
 func TestAddEventHandler(t *testing.T) {
 	namespaceStub := "default"
 	tt := []struct {
@@ -128,9 +138,11 @@ func TestAddEventHandler(t *testing.T) {
 			ctx := context.Background()
 			resourcesCreatedWg := &sync.WaitGroup{}
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+			f := &stubFetcher{data: podMatchRules}
+			tl := NewTargetLoader(f)
 			// We use the spy handler later to verify if it's been called
 			spyH := &spyHandler{called: false, wg: resourcesCreatedWg, mx: &sync.RWMutex{}}
-			css := NewContinuousScanningService(dynClient, spyH)
+			css := NewContinuousScanningService(dynClient, tl, spyH)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
@@ -185,7 +197,7 @@ func TestContinuousScanningService(t *testing.T) {
 			want: []armoapi.Command{
 				{
 					CommandName: armoapi.TypeRunKubescape,
-					Wlid: makeWlid(clusterNameStub, namespaceStub, "Pod", "first"),
+					Wlid:        makeWlid(clusterNameStub, namespaceStub, "Pod", "first"),
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject: makePodScanObject(makePod("default", "first")),
@@ -194,7 +206,7 @@ func TestContinuousScanningService(t *testing.T) {
 				},
 				{
 					CommandName: armoapi.TypeRunKubescape,
-					Wlid: makeWlid(clusterNameStub, namespaceStub, "Pod", "second"),
+					Wlid:        makeWlid(clusterNameStub, namespaceStub, "Pod", "second"),
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject: makePodScanObject(makePod("default", "second")),
@@ -203,7 +215,7 @@ func TestContinuousScanningService(t *testing.T) {
 				},
 				{
 					CommandName: armoapi.TypeRunKubescape,
-					Wlid: makeWlid(clusterNameStub, namespaceStub, "Pod", "third"),
+					Wlid:        makeWlid(clusterNameStub, namespaceStub, "Pod", "third"),
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject: makePodScanObject(makePod("default", "third")),
@@ -234,8 +246,10 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-			ph := NewTriggeringHandler(wp, clusterNameStub)
-			css := NewContinuousScanningService(dynClient, ph)
+			triggeringHandler := NewTriggeringHandler(wp, clusterNameStub)
+			stubFetcher := &stubFetcher{podMatchRules}
+			loader := NewTargetLoader(stubFetcher)
+			css := NewContinuousScanningService(dynClient, loader, triggeringHandler)
 			css.Launch(ctx)
 
 			// Create Pods to be listened

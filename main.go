@@ -74,7 +74,14 @@ func main() {
 	go mainHandler.HandleCommandResponse(ctx)
 	mainHandler.HandleWatchers(ctx)
 
-	// wait for the context to be done
+	go func(mh *mainhandler.MainHandler) {
+		err := mh.SetupContinuousScanning(ctx)
+		logger.L().Ctx(ctx).Info("set up cont scanning service")
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
+		}
+	}(mainHandler)
+
 	<-ctx.Done()
 }
 

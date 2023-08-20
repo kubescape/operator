@@ -2,34 +2,29 @@ package continuousscanning
 
 import (
 	"context"
+	"io"
 	"testing"
+	"errors"
 
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestTargetFetcher(t *testing.T) {
-	tt := []struct {
-		name         string
-		inputObjects []runtime.Object
-		wantData     MatchingRules
-		wantErr      bool
-	}{
-		{
-			name: "existing valid configmap should return appropriate values",
-			inputObjects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kubescape-config",
-						Namespace: "kubescape",
-					},
-					BinaryData: map[string][]byte{
-						"matches.json": []byte(
-							`{
+type stubReader struct {
+	data []byte
+	e error
+}
+
+func (r stubReader) Read(p []byte) (int, error) {
+	if r.e != nil {
+		return 0, r.e
+	}
+	n := copy(p, r.data)
+	return n, io.EOF
+}
+
+func TestFileFetcher(t *testing.T) {
+	validData := `{
 	"match": [
 		{
 			"apiGroups": [],
@@ -43,13 +38,18 @@ func TestTargetFetcher(t *testing.T) {
 		}
 	],
 	"namespaces": ["kube-system", "default"]
-}
-`,
-						),
-					},
-				},
-			},
-			wantData: MatchingRules{
+}`
+	tt := []struct {
+		name            string
+		inputData       []byte
+		inputDataReader io.Reader
+		wantRules       *MatchingRules
+		wantError       bool
+	}{
+		{
+			name:            "valid data parses correctly",
+			inputDataReader: &stubReader{data: []byte(validData), e: nil},
+			wantRules: &MatchingRules{
 				APIResources: []APIResourceMatch{
 					{
 						Groups:    []string{},
@@ -66,99 +66,53 @@ func TestTargetFetcher(t *testing.T) {
 			},
 		},
 		{
-			name: "misnamed configmap key should return an error",
-			inputObjects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kubescape-config",
-						Namespace: "kubescape",
-					},
-					BinaryData: map[string][]byte{
-						"not-matches.json": []byte(
-							`{
-	"match": [
-		{
-			"apiGroups": [],
-			"apiVersions": ["v1"],
-			"resources": ["Deployment"]
+			name:      "malformed JSON as input returns error",
+			inputDataReader: &stubReader{data: []byte{}, e: nil},
+			wantRules: nil,
+			wantError: true,
 		},
 		{
-			"apiGroups": ["rbac.authorization.k8s.io"],
-			"apiVersions": ["v1"],
-			"resources": ["ClusterRoleBinding"]
-		}
-	],
-	"namespaces": ["kube-system", "default"]
-}
-`,
-						),
-					},
-				},
-			},
-			wantData: MatchingRules{},
-			wantErr:  true,
-		},
-		{
-			name: "malformed configmap should return an error",
-			inputObjects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kubescape-config",
-						Namespace: "kubescape",
-					},
-					BinaryData: map[string][]byte{
-						"matches.json": []byte(
-							`{`,
-						),
-					},
-				},
-			},
-			wantData: MatchingRules{},
-			wantErr:  true,
-		},
-		{
-			name:         "missing configmap should return empty values and matching error",
-			inputObjects: []runtime.Object{},
-			wantData:     MatchingRules{},
-			wantErr:      true,
+			name:      "reader error returns error",
+			inputDataReader: &stubReader{data: []byte(validData), e: errors.New("some error")},
+			wantRules: nil,
+			wantError: true,
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			k8sClient := k8sfake.NewSimpleClientset(tc.inputObjects...)
-			l := NewConfigMapTargetFetcher(k8sClient)
+			var f MatchingRuleFetcher
+			f = NewFileFetcher(tc.inputDataReader)
 
-			gotData, gotErr := l.Fetch(ctx)
+			gotRules, gotError := f.Fetch(ctx)
 
-			assert.Equal(t, tc.wantData, gotData)
-			if tc.wantErr {
-				assert.Error(t, gotErr)
+			assert.Equal(t, tc.wantRules, gotRules)
+			if tc.wantError {
+				assert.Error(t, gotError)
 			}
 		})
 	}
-
 }
 
 type stubFetcher struct {
-	data MatchingRules
+	data *MatchingRules
 }
 
-func (f *stubFetcher) Fetch(ctx context.Context) (MatchingRules, error) {
+func (f *stubFetcher) Fetch(ctx context.Context) (*MatchingRules, error) {
 	return f.data, nil
 }
 
 func TestTargetLoader(t *testing.T) {
 	tt := []struct {
 		name               string
-		inputMatchingRules MatchingRules
+		inputMatchingRules *MatchingRules
 		wantGVRs           []schema.GroupVersionResource
 		wantErr            bool
 	}{
 		{
 			name: "single valid GVRs should return appropriate values",
-			inputMatchingRules: MatchingRules{
+			inputMatchingRules: &MatchingRules{
 				APIResources: []APIResourceMatch{
 					{
 						Groups:    []string{""},
@@ -174,7 +128,7 @@ func TestTargetLoader(t *testing.T) {
 		},
 		{
 			name: "single valid GVRs should return appropriate values",
-			inputMatchingRules: MatchingRules{
+			inputMatchingRules: &MatchingRules{
 				APIResources: []APIResourceMatch{
 					{
 						Groups:    []string{""},
@@ -196,7 +150,7 @@ func TestTargetLoader(t *testing.T) {
 		},
 		{
 			name: "multiple valid GVRs should return appropriate values",
-			inputMatchingRules: MatchingRules{
+			inputMatchingRules: &MatchingRules{
 				APIResources: []APIResourceMatch{
 					{
 						Groups:    []string{""},
@@ -223,8 +177,10 @@ func TestTargetLoader(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			fetcher := &stubFetcher{tc.inputMatchingRules}
-			l := NewTargetLoader(fetcher)
+			var fetcher MatchingRuleFetcher
+			fetcher = &stubFetcher{tc.inputMatchingRules}
+			var l TargetLoader
+			l = NewTargetLoader(fetcher)
 
 			gotData := l.LoadGVRs(ctx)
 

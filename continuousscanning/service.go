@@ -7,13 +7,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	watch "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	k8sclient "k8s.io/client-go/kubernetes"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/utils"
@@ -25,6 +26,7 @@ type EventHandler interface {
 }
 
 type ContinuousScanningService struct {
+	tl                TargetLoader
 	shutdownRequested chan struct{}
 	workDone          chan struct{}
 	k8s               k8sclient.Interface
@@ -39,15 +41,11 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	listOpts := metav1.ListOptions{}
 	resourceEventsCh := make(chan watch.Event, 100)
 
-	gvrs := []schema.GroupVersionResource{
-		{
-			Group:    "",
-			Version:  "v1",
-			Resource: "Pods",
-		},
-	}
+	gvrs := s.tl.LoadGVRs(ctx)
+	logger.L().Ctx(ctx).Info("fetched gvrs", helpers.Interface("gvrs", gvrs))
 	wp, _ := NewWatchPool(ctx, s.k8sdynamic, gvrs, listOpts)
 	wp.Run(ctx, resourceEventsCh)
+	logger.L().Ctx(ctx).Info("ran watch pool")
 
 	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out chan<- watch.Event) {
 		defer close(out)
@@ -55,6 +53,10 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 		for {
 			select {
 			case e := <-resourceEventsCh:
+				logger.L().Ctx(ctx).Info(
+					"got event from channel",
+					helpers.Interface("event", e),
+				)
 				out <- e
 			case <-shutdownCh:
 				return
@@ -100,12 +102,13 @@ func (s *ContinuousScanningService) Stop() {
 	<-s.workDone
 }
 
-func NewContinuousScanningService(client dynamic.Interface, h ...EventHandler) *ContinuousScanningService {
+func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h ...EventHandler) *ContinuousScanningService {
 	doneCh := make(chan struct{})
 	eventQueue := make(chan watch.Event, 100)
 	workDone := make(chan struct{})
 
 	return &ContinuousScanningService{
+		tl:                tl,
 		k8sdynamic:        client,
 		shutdownRequested: doneCh,
 		eventHandlers:     h,
@@ -147,6 +150,11 @@ func makeScanCommand(clusterName string, uo *unstructured.Unstructured) *armoapi
 }
 
 func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterName string, e watch.Event) error {
+	logger.L().Ctx(ctx).Info(
+		"triggering scan",
+		helpers.String("clusterName", clusterName),
+		helpers.Interface("event", e),
+	)
 	obj := e.Object.(*unstructured.Unstructured)
 	objRaw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {

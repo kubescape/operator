@@ -3,10 +3,9 @@ package continuousscanning
 import (
 	"context"
 	"encoding/json"
+	"io"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -30,50 +29,22 @@ type MatchingRules struct {
 	Namespaces   []string           `json:"namespaces"`
 }
 
-// configMapFetcher fetches Matching Rules from a ConfigMap
-type configMapFetcher struct {
-	client          kubernetes.Interface
-	configMapName   string
-	matchesFilename string
-}
-
-func NewConfigMapTargetFetcher(k8sclient kubernetes.Interface) *configMapFetcher {
-	return &configMapFetcher{
-		client:          k8sclient,
-		configMapName:   defaultConfigMapName,
-		matchesFilename: defaultTargetsKeyName,
-	}
-}
-
-func (l *configMapFetcher) Fetch(ctx context.Context) (MatchingRules, error) {
-	cm, err := l.client.CoreV1().ConfigMaps("kubescape").Get(ctx, l.configMapName, v1.GetOptions{})
-	if err != nil {
-		return MatchingRules{}, err
-	}
-
-	data := cm.BinaryData[l.matchesFilename]
-
-	var matches MatchingRules
-	err = json.Unmarshal(data, &matches)
-	if err != nil {
-		return matches, err
-	}
-
-	return matches, nil
-}
-
-// Fetcher fetches Matching Rules from some somewhere
-type Fetcher interface {
-	Fetch(ctx context.Context) (MatchingRules, error)
+// MatchingRuleFetcher fetches Matching Rules from somewhere
+type MatchingRuleFetcher interface {
+	Fetch(ctx context.Context) (*MatchingRules, error)
 }
 
 // targetLoader loads target matching rules
 type targetLoader struct {
-	fetcher Fetcher
+	fetcher MatchingRuleFetcher
+}
+
+type TargetLoader interface {
+	LoadGVRs(ctx context.Context) []schema.GroupVersionResource
 }
 
 // NewTargetLoader returns a new Target Loader
-func NewTargetLoader(f Fetcher) *targetLoader {
+func NewTargetLoader(f MatchingRuleFetcher) *targetLoader {
 	return &targetLoader{fetcher: f}
 }
 
@@ -84,8 +55,8 @@ func matchRuleToGVR(apiMatch APIResourceMatch) []schema.GroupVersionResource {
 		for _, version := range apiMatch.Versions {
 			for _, resource := range apiMatch.Resources {
 				gvr := schema.GroupVersionResource{
-					Group: group,
-					Version: version,
+					Group:    group,
+					Version:  version,
 					Resource: resource,
 				}
 				gvrs = append(gvrs, gvr)
@@ -108,4 +79,29 @@ func (l *targetLoader) LoadGVRs(ctx context.Context) []schema.GroupVersionResour
 	}
 
 	return gvrs
+}
+
+type fileFetcher struct{
+	r io.Reader
+}
+
+func (f *fileFetcher) Fetch(ctx context.Context) (*MatchingRules, error) {
+	return parseMatchingRules(f.r)
+}
+
+// NewFileFetcher returns a new file-based rule matches fetcher
+func NewFileFetcher(r io.Reader) *fileFetcher {
+	return &fileFetcher{r: r}
+}
+
+// parseMatchingRules takes the data from the reader and parsess it into resource matching rules
+func parseMatchingRules(r io.Reader) (*MatchingRules, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches *MatchingRules
+	err = json.Unmarshal(data, &matches)
+	return matches, err
 }

@@ -3,10 +3,12 @@ package mainhandler
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
 	"github.com/panjf2000/ants/v2"
@@ -91,6 +93,26 @@ func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.Sess
 	}
 }
 
+// SetupContinuousScanning sets up the continuous cluster scanning function
+func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
+	clusterName := utils.ClusterConfig.ClusterName
+	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, clusterName)
+	dynClient := mainHandler.k8sAPI.DynamicClient
+
+	rulesFilename := utils.MatchingRulesFilename
+	rulesReader, err := os.Open(rulesFilename)
+	if err != nil {
+		return err
+	}
+
+	fetcher := cs.NewFileFetcher(rulesReader)
+	loader := cs.NewTargetLoader(fetcher)
+	svc := cs.NewContinuousScanningService(dynClient, loader, triggeringHandler)
+	svc.Launch(ctx)
+
+	return nil
+}
+
 func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -130,6 +152,10 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	go watchHandler.SBOMWatch(ctx, mainHandler.eventWorkerPool)
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
 	go watchHandler.VulnerabilityManifestWatch(ctx, mainHandler.eventWorkerPool)
+}
+
+func (h *MainHandler) StartContinuousScanning(ctx context.Context) error {
+	return nil
 }
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
