@@ -74,13 +74,15 @@ func main() {
 	go mainHandler.HandleCommandResponse(ctx)
 	mainHandler.HandleWatchers(ctx)
 
-	go func(mh *mainhandler.MainHandler) {
-		err := mh.SetupContinuousScanning(ctx)
-		logger.L().Ctx(ctx).Info("set up cont scanning service")
-		if err != nil {
-			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
-		}
-	}(mainHandler)
+	if enabled, ok := os.LookupEnv("KUBESCAPE_FEAT_CONTINUOUS_SCAN"); ok && enabled == "true"{
+		go func(mh *mainhandler.MainHandler) {
+			err := mh.SetupContinuousScanning(ctx)
+			logger.L().Ctx(ctx).Info("set up cont scanning service")
+			if err != nil {
+				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
+			}
+		}(mainHandler)
+	}
 
 	<-ctx.Done()
 }
