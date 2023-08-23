@@ -1,0 +1,14 @@
+{
+	"match": [
+		{
+			"apiGroups": [],
+			"apiVersions": ["v1"],
+			"resources": ["deployment"]
+		},
+		{
+			"apiGroups": ["rbac.authorization.k8s.io"],
+			"apiVersions": ["v1"],
+			"resources": ["ClusterRoleBinding"]
+		}
+	]
+}
