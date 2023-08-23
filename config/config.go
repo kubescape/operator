@@ -14,6 +14,42 @@ import (
 	"github.com/spf13/viper"
 )
 
+type Component struct {
+	Enabled bool `json:"enabled"`
+}
+
+type Components struct {
+	Gateway            Component `mapstructure:"gateway"`
+	HostScanner        Component `mapstructure:"hostScanner"`
+	Kollector          Component `mapstructure:"kollector"`
+	Kubescape          Component `mapstructure:"kubescape"`
+	KubescapeScheduler Component `mapstructure:"kubescapeScheduler"`
+	Kubevuln           Component `mapstructure:"kubevuln"`
+	KubevulnScheduler  Component `mapstructure:"kubevulnScheduler"`
+	NodeAgent          Component `mapstructure:"nodeAgent"`
+	Operator           Component `mapstructure:"operator"`
+	OtelCollector      Component `mapstructure:"otelCollector"`
+	Persistence        Component `mapstructure:"persistence"`
+	Storage            Component `mapstructure:"storage"`
+}
+
+func LoadComponents(path string) (Components, error) {
+	viper.AddConfigPath(path)
+	viper.SetConfigName("components")
+	viper.SetConfigType("json")
+
+	viper.AutomaticEnv()
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		return Components{}, err
+	}
+
+	var c Components
+	err = viper.Unmarshal(&c)
+	return c, err
+}
+
 type Config struct {
 	Namespace                string        `mapstructure:"namespace"`
 	RestAPIPort              string        `mapstructure:"port"`

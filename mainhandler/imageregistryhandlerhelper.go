@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -96,6 +97,10 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(ctx context.Contex
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateRegistryScanCronJob")
 	defer span.End()
 
+	if !actionHandler.components.KubevulnScheduler.Enabled {
+		return errors.New("KubevulnScheduler is not enabled")
+	}
+
 	jobParams := actionHandler.command.GetCronJobParams()
 	if jobParams == nil {
 		logger.L().Info("In updateRegistryScanCronJob failed with error: jobParams is nil")
@@ -150,6 +155,10 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setRegistryScanCronJob")
 	defer span.End()
 
+	if !actionHandler.components.KubevulnScheduler.Enabled {
+		return errors.New("KubevulnScheduler is not enabled")
+	}
+
 	// If command has credentials on it, create secret with it.
 	// Create configmap with command to trigger operator. Command includes secret name (if there were credentials).
 	// Create cronjob which will send request to operator to trigger scan using the configmap (and secret) data.
@@ -201,6 +210,10 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteRegistryScanCronJo")
 	defer span.End()
+
+	if !actionHandler.components.KubevulnScheduler.Enabled {
+		return errors.New("KubevulnScheduler is not enabled")
+	}
 
 	// Delete cronjob, configmap and secret (if exists)
 	jobParams := actionHandler.command.GetCronJobParams()

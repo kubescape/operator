@@ -37,6 +37,11 @@ func main() {
 		logger.L().Ctx(ctx).Fatal("load clusterData error", helpers.Error(err))
 	}
 
+	components, err := config.LoadComponents("/etc/config")
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal("load components error", helpers.Error(err))
+	}
+
 	services, err := config.GetServiceURLs("/etc/config/services.json")
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
@@ -51,7 +56,7 @@ func main() {
 	}
 
 	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
-	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present {
+	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present && components.OtelCollector.Enabled {
 		ctx = logger.InitOtel("operator",
 			os.Getenv("RELEASE"),
 			clusterConfig.AccountID,
@@ -65,14 +70,16 @@ func main() {
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
 	// setup main handler
-	mainHandler := mainhandler.NewMainHandler(clusterConfig, cfg, k8sApi, eventReceiverRestURL)
+	mainHandler := mainhandler.NewMainHandler(clusterConfig, cfg, components, k8sApi, eventReceiverRestURL)
 
-	go func() { // open websocket connection to notification server
-		notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool(), clusterConfig, eventReceiverRestURL)
-		if err := notificationHandler.WebsocketConnection(ctx); err != nil {
-			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
-		}
-	}()
+	if components.Gateway.Enabled {
+		go func() { // open websocket connection to notification server
+			notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool(), clusterConfig, eventReceiverRestURL)
+			if err := notificationHandler.WebsocketConnection(ctx); err != nil {
+				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
+			}
+		}()
+	}
 
 	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), clusterConfig, eventReceiverRestURL)
@@ -87,9 +94,11 @@ func main() {
 
 	// wait for requests to come from the websocket or from the REST API
 	go mainHandler.HandleCommandResponse(ctx)
-	mainHandler.HandleWatchers(ctx)
+	if components.Kubevuln.Enabled {
+		mainHandler.HandleWatchers(ctx)
+	}
 
-	if enabled, ok := os.LookupEnv("KUBESCAPE_FEAT_CONTINUOUS_SCAN"); ok && enabled == "true" {
+	if components.Kubescape.Enabled {
 		go func(mh *mainhandler.MainHandler) {
 			err := mh.SetupContinuousScanning(ctx)
 			logger.L().Ctx(ctx).Info("set up cont scanning service")
