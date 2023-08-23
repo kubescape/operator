@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -16,6 +17,7 @@ import (
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
@@ -50,6 +52,8 @@ type WatchHandler struct {
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	wlidsToContainerToImageIDMapMutex *sync.RWMutex
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
+	clusterConfig                     utilsmetadata.ClusterConfig
+	cfg                               config.Config
 }
 
 // remove unused imageIDs and instanceIDs from storage. Update internal maps
@@ -67,7 +71,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
@@ -77,6 +81,8 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
 		managedInstanceIDSlugs:            instanceIDs,
+		clusterConfig:                     clusterConfig,
+		cfg:                               cfg,
 	}
 
 	// list all Pods and extract their image IDs
@@ -98,7 +104,7 @@ func NewWatchHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, st
 func (wh *WatchHandler) startCleanUpAndTriggerScanRoutine(ctx context.Context) {
 	go func() {
 		for {
-			time.Sleep(utils.CleanUpRoutineInterval)
+			time.Sleep(wh.cfg.CleanUpRoutineInterval)
 			wh.cleanUp(ctx)
 			// must be called after cleanUp, since we can have two instanceIDs with same wlid
 			// wh.triggerRelevancyScan(ctx)
@@ -408,7 +414,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			}
 		case cmd, ok := <-commands:
 			if ok {
-				utils.AddCommandToChannel(ctx, cmd, workerPool)
+				utils.AddCommandToChannel(ctx, wh.clusterConfig, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -472,7 +478,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.
 			}
 		case cmd, ok := <-cmdCh:
 			if ok {
-				utils.AddCommandToChannel(ctx, cmd, workerPool)
+				utils.AddCommandToChannel(ctx, wh.clusterConfig, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -606,7 +612,7 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 			continue
 		}
 
-		parentWlid := pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, wl.GetNamespace(), wl.GetKind(), wl.GetName())
+		parentWlid := pkgwlid.GetWLID(wh.clusterConfig.ClusterName, wl.GetNamespace(), wl.GetKind(), wl.GetName())
 
 		imgIDsToContainers := extractImageIDsToContainersFromPod(&podList.Items[i])
 
@@ -710,7 +716,7 @@ func (wh *WatchHandler) getParentIDForPod(pod *core1.Pod) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return pkgwlid.GetWLID(utils.ClusterConfig.ClusterName, wl.GetNamespace(), kind, name), nil
+	return pkgwlid.GetWLID(wh.clusterConfig.ClusterName, wl.GetNamespace(), kind, name), nil
 
 }
 
@@ -803,7 +809,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			wh.addToInstanceIDsList(instanceID[i])
 		}
 
-		utils.AddCommandToChannel(ctx, cmd, workerPool)
+		utils.AddCommandToChannel(ctx, wh.clusterConfig, cmd, workerPool)
 	}
 }
 

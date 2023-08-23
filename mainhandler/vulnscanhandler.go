@@ -8,7 +8,6 @@ import (
 
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/go-logger"
-	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,11 +23,11 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 
 	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "kubevuln-schedule", rand.NewSource(time.Now().UnixNano()).Int63()))
 
-	if err := createConfigMapForTriggerRequest(actionHandler.k8sAPI, name, req); err != nil {
+	if err := createConfigMapForTriggerRequest(actionHandler.k8sAPI, actionHandler.cfg.Namespace, name, req); err != nil {
 		return err
 	}
 
-	jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, VulnScanCronjobTemplateName, utils.Namespace)
+	jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, VulnScanCronjobTemplateName, actionHandler.cfg.Namespace)
 	if err != nil {
 		return err
 	}
@@ -45,7 +44,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKeyDeprecated] = namespace // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKey] = namespace
 
-	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 
@@ -64,7 +63,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 		return fmt.Errorf("updateVulnScanCronJob: jobName not found")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Get(context.Background(), scanJobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -76,7 +75,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -92,7 +91,7 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob(ctx context.Context) e
 		return fmt.Errorf("deleteVulnScanCronJob: CronTabSchedule not found")
 	}
 
-	return actionHandler.deleteCronjob(scanJobParams.JobName, utils.Namespace)
+	return actionHandler.deleteCronjob(scanJobParams.JobName, actionHandler.cfg.Namespace)
 
 }
 

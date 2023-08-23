@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"testing"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/utils-go/boolutils"
@@ -66,14 +67,18 @@ func TestFixK8sNameLimit(t *testing.T) {
 }
 
 func TestGetKubescapeV1ScanURL(t *testing.T) {
-	utils.ClusterConfig.KubescapeURL = "kubescape"
-	u := getKubescapeV1ScanURL()
+	clusterConfig := utilsmetadata.ClusterConfig{
+		KubescapeURL: "kubescape",
+	}
+	u := getKubescapeV1ScanURL(clusterConfig)
 	assert.Equal(t, "http://kubescape/v1/scan?keep=false", u.String())
 }
 
 func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
-	utils.ClusterConfig.KubescapeURL = "armo-kubescape:8080"
-	url := getKubescapeV1ScanStatusURL("123").String()
+	clusterConfig := utilsmetadata.ClusterConfig{
+		KubescapeURL: "armo-kubescape:8080",
+	}
+	url := getKubescapeV1ScanStatusURL(clusterConfig, "123").String()
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")
 }
 

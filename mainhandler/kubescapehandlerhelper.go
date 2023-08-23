@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -28,10 +29,10 @@ const (
 	securityFrameworkName = "security"
 )
 
-func getKubescapeV1ScanURL() *url.URL {
+func getKubescapeV1ScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = utils.ClusterConfig.KubescapeURL
+	ksURL.Host = clusterConfig.KubescapeURL
 	ksURL.Path = utils.KubescapeRequestPathV1
 
 	q := ksURL.Query()
@@ -41,10 +42,10 @@ func getKubescapeV1ScanURL() *url.URL {
 	return &ksURL
 }
 
-func getKubescapeV1ScanStatusURL(scanID string) *url.URL {
+func getKubescapeV1ScanStatusURL(clusterConfig utilsmetadata.ClusterConfig, scanID string) *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = utils.ClusterConfig.KubescapeURL
+	ksURL.Host = clusterConfig.KubescapeURL
 	ksURL.Path = utils.KubescapeRequestStatusV1
 
 	q := ksURL.Query()
@@ -146,7 +147,7 @@ func setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, targe
 
 }
 
-func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name string, req *utilsmetav1.PostScanRequest) error {
+func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string, req *utilsmetav1.PostScanRequest) error {
 	// create config map
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
@@ -164,7 +165,7 @@ func createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name stri
 	}
 
 	configMap.Data["request-body.json"] = string(command)
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil

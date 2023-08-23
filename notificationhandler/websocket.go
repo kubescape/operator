@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 
 	"github.com/armosec/cluster-notifier-api-go/notificationserver"
@@ -15,21 +15,23 @@ import (
 )
 
 type NotificationHandler struct {
-	connector IWebsocketActions
-	pool      *ants.PoolWithFunc
+	connector     IWebsocketActions
+	pool          *ants.PoolWithFunc
+	clusterConfig utilsmetadata.ClusterConfig
 }
 
-func NewNotificationHandler(pool *ants.PoolWithFunc) *NotificationHandler {
-	urlStr := initNotificationServerURL()
+func NewNotificationHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig) *NotificationHandler {
+	urlStr := initNotificationServerURL(clusterConfig)
 
 	return &NotificationHandler{
-		connector: NewWebsocketActions(urlStr),
-		pool:      pool,
+		connector:     NewWebsocketActions(urlStr),
+		pool:          pool,
+		clusterConfig: clusterConfig,
 	}
 }
 
 func (notification *NotificationHandler) WebsocketConnection(ctx context.Context) error {
-	if utils.ClusterConfig.GatewayWebsocketURL == "" {
+	if notification.clusterConfig.GatewayWebsocketURL == "" {
 		return nil
 	}
 	for {
@@ -91,7 +93,7 @@ func (notification *NotificationHandler) websocketReceiveNotification(ctx contex
 				}
 			}
 
-			err := notification.handleNotification(ctx, notif)
+			err := notification.handleNotification(ctx, notification.clusterConfig, notif)
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to handle notification", helpers.String("messageBytes", string(messageBytes)), helpers.Error(err))
 			}
