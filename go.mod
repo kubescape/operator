@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/armosec/armoapi-go v0.0.211
 	github.com/armosec/cluster-notifier-api-go v0.0.5
-	github.com/armosec/logger-go v0.0.14
+	github.com/armosec/logger-go v0.0.18
 	github.com/armosec/registryx v0.0.15
 	github.com/armosec/utils-go v0.0.20
 	github.com/armosec/utils-k8s-go v0.0.16
