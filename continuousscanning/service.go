@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
-	k8sclient "k8s.io/client-go/kubernetes"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
@@ -29,7 +28,6 @@ type ContinuousScanningService struct {
 	tl                TargetLoader
 	shutdownRequested chan struct{}
 	workDone          chan struct{}
-	k8s               k8sclient.Interface
 	k8sdynamic        dynamic.Interface
 	eventHandlers     []EventHandler
 	eventQueue        chan watch.Event
