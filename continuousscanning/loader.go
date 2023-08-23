@@ -8,11 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-const (
-	defaultConfigMapName  = "kubescape-config"
-	defaultTargetsKeyName = "matches.json"
-)
-
 // APIResourceMatch is a definition of a matching rule for API Resources
 //
 // It defines a rule on how to generate GVRs from it. The rule definition
