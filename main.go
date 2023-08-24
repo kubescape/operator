@@ -88,7 +88,10 @@ func main() {
 		}
 	}()
 
-	go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions(clusterConfig))
+	if components.Components.Gateway.Enabled {
+		// trigger a full scan on startup
+		go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions(clusterConfig))
+	}
 
 	isReadinessReady = true
 
