@@ -18,6 +18,18 @@ type Component struct {
 	Enabled bool `json:"enabled"`
 }
 
+type Capabilities struct {
+	ConfigurationScan    string `json:"configurationScan"`
+	ContinuousScan       string `json:"continuousScan"`
+	NetworkGenerator     string `json:"networkGenerator"`
+	NodeScan             string `json:"nodeScan"`
+	Otel                 string `json:"otel"`
+	Relevancy            string `json:"relevancy"`
+	RuntimeObservability string `json:"runtimeObservability"`
+	Seccomp              string `json:"seccomp"`
+	VulnerabilityScan    string `json:"vulnerabilityScan"`
+}
+
 type Components struct {
 	Gateway            Component `mapstructure:"gateway"`
 	HostScanner        Component `mapstructure:"hostScanner"`
@@ -33,19 +45,35 @@ type Components struct {
 	Storage            Component `mapstructure:"storage"`
 }
 
-func LoadComponents(path string) (Components, error) {
+type Server struct {
+	Account string `json:"account"`
+	URL     string `json:"url"`
+}
+
+type Configurations struct {
+	Persistence string `json:"persistence"`
+	Server      Server `json:"server"`
+}
+
+type CapabilitiesConfig struct {
+	Capabilities   Capabilities   `mapstructure:"capabilities"`
+	Components     Components     `mapstructure:"components"`
+	Configurations Configurations `mapstructure:"configurations"`
+}
+
+func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
 	viper.AddConfigPath(path)
-	viper.SetConfigName("components")
+	viper.SetConfigName("capabilities")
 	viper.SetConfigType("json")
 
 	viper.AutomaticEnv()
 
 	err := viper.ReadInConfig()
 	if err != nil {
-		return Components{}, err
+		return CapabilitiesConfig{}, err
 	}
 
-	var c Components
+	var c CapabilitiesConfig
 	err = viper.Unmarshal(&c)
 	return c, err
 }

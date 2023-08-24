@@ -37,7 +37,7 @@ func main() {
 		logger.L().Ctx(ctx).Fatal("load clusterData error", helpers.Error(err))
 	}
 
-	components, err := config.LoadComponents("/etc/config")
+	components, err := config.LoadCapabilitiesConfig("/etc/config")
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load components error", helpers.Error(err))
 	}
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
-	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present && components.OtelCollector.Enabled {
+	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present && components.Components.OtelCollector.Enabled {
 		ctx = logger.InitOtel("operator",
 			os.Getenv("RELEASE"),
 			clusterConfig.AccountID,
@@ -70,9 +70,9 @@ func main() {
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
 	// setup main handler
-	mainHandler := mainhandler.NewMainHandler(clusterConfig, cfg, components, k8sApi, eventReceiverRestURL)
+	mainHandler := mainhandler.NewMainHandler(clusterConfig, cfg, components.Components, k8sApi, eventReceiverRestURL)
 
-	if components.Gateway.Enabled {
+	if components.Components.Gateway.Enabled {
 		go func() { // open websocket connection to notification server
 			notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool(), clusterConfig, eventReceiverRestURL)
 			if err := notificationHandler.WebsocketConnection(ctx); err != nil {
@@ -94,11 +94,11 @@ func main() {
 
 	// wait for requests to come from the websocket or from the REST API
 	go mainHandler.HandleCommandResponse(ctx)
-	if components.Kubevuln.Enabled {
+	if components.Components.Kubevuln.Enabled {
 		mainHandler.HandleWatchers(ctx)
 	}
 
-	if components.Kubescape.Enabled {
+	if components.Capabilities.ContinuousScan == "enable" {
 		go func(mh *mainhandler.MainHandler) {
 			err := mh.SetupContinuousScanning(ctx)
 			logger.L().Ctx(ctx).Info("set up cont scanning service")
