@@ -7,9 +7,9 @@ import (
 	"math/rand"
 	"time"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -40,11 +40,11 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.cfg.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -59,7 +59,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -91,11 +91,11 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%s-%d", "ks-scheduled-scan", req.TargetNames[i], rand.NewSource(time.Now().UnixNano()).Int63()))
 
 		// create config map
-		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, name, req); err != nil {
+		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, actionHandler.cfg.Namespace, name, req); err != nil {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, utils.Namespace)
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, actionHandler.cfg.Namespace)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
-		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(utils.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 	}
@@ -111,7 +111,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	return nil
 }
 
-func HandleKubescapeResponse(ctx context.Context, payload interface{}) (bool, *time.Duration) {
+func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, payload interface{}) (bool, *time.Duration) {
 	data := payload.(*kubescapeResponseData)
 	logger.L().Info(fmt.Sprintf("handle kubescape response for scan id %s", data.scanID))
 
@@ -122,7 +122,7 @@ func HandleKubescapeResponse(ctx context.Context, payload interface{}) (bool, *t
 		logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send error report", helpers.Error(err))
 	}
 
-	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(data.scanID).String(), nil)
+	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(clusterConfig, data.scanID).String(), nil)
 	if err != nil {
 		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
 		data.reporter.SendDetails(info, true, errChan)
@@ -182,7 +182,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	}
 
 	// append security framework if TriggerSecurityFramework is true
-	if utils.TriggerSecurityFramework {
+	if actionHandler.cfg.TriggerSecurityFramework {
 		appendSecurityFramework(request)
 	}
 
@@ -190,7 +190,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL().String(), nil, body)
+	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL(actionHandler.clusterConfig).String(), nil, body)
 	if err != nil {
 		return err
 	}

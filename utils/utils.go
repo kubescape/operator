@@ -8,6 +8,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -39,23 +40,9 @@ func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
 		Body:       http.NoBody}, nil
 }
 
-func InitKubescapeHttpClient() httputils.IHttpClient {
-	// If the KubescapeURL not configured, then the HttpClient defined as a mock
-	if ClusterConfig.KubescapeURL == "" {
-		return &ClientMock{}
-	}
-	return &http.Client{}
-}
-func InitVulnScanHttpClient() httputils.IHttpClient {
-	// If the VulnScan URL not configured, then the HttpClient defined as a mock
-	if ClusterConfig.KubevulnURL == "" {
-		return &ClientMock{}
-	}
-	return &http.Client{}
-}
-func InitReporterHttpClient() httputils.IHttpClient {
-	// If the EventReceiverREST not configured, then the HttpClient defined as a mock
-	if ClusterConfig.EventReceiverRestURL == "" {
+func InitHttpClient(url string) httputils.IHttpClient {
+	// If the url is not configured, then the HttpClient defined as a mock
+	if url == "" {
 		return &ClientMock{}
 	}
 	return &http.Client{}
@@ -65,9 +52,9 @@ func ExtractImageID(imageID string) string {
 	return strings.TrimPrefix(imageID, dockerPullableURN)
 }
 
-func AddCommandToChannel(ctx context.Context, cmd *apis.Command, workerPool *ants.PoolWithFunc) {
+func AddCommandToChannel(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, cmd *apis.Command, workerPool *ants.PoolWithFunc) {
 	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
-	newSessionObj := NewSessionObj(ctx, cmd, "Websocket", "", uuid.NewString(), 1)
+	newSessionObj := NewSessionObj(ctx, clusterConfig, cmd, "Websocket", "", uuid.NewString(), 1)
 	if err := workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj}); err != nil {
 		logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)), helpers.Error(err))
 	}

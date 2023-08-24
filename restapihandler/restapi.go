@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/docs"
-	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 
 	"github.com/gorilla/mux"
@@ -15,25 +15,27 @@ import (
 )
 
 type HTTPHandler struct {
-	keyPair *tls.Certificate
-	pool    *ants.PoolWithFunc
+	keyPair       *tls.Certificate
+	pool          *ants.PoolWithFunc
+	clusterConfig utilsmetadata.ClusterConfig
 }
 
-func NewHTTPHandler(pool *ants.PoolWithFunc) *HTTPHandler {
+func NewHTTPHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig) *HTTPHandler {
 	return &HTTPHandler{
-		keyPair: nil,
-		pool:    pool,
+		keyPair:       nil,
+		pool:          pool,
+		clusterConfig: clusterConfig,
 	}
 }
 
 // SetupHTTPListener set up listening http servers
-func (resthandler *HTTPHandler) SetupHTTPListener() error {
+func (resthandler *HTTPHandler) SetupHTTPListener(port string) error {
 	err := resthandler.loadTLSKey()
 	if err != nil {
 		return err
 	}
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%v", utils.RestAPIPort),
+		Addr: fmt.Sprintf(":%v", port),
 	}
 	if resthandler.keyPair != nil {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
@@ -47,7 +49,7 @@ func (resthandler *HTTPHandler) SetupHTTPListener() error {
 
 	server.Handler = rtr
 
-	logger.L().Info("Waiting for REST API to receive notifications, port: " + utils.RestAPIPort)
+	logger.L().Info("Waiting for REST API to receive notifications, port: " + port)
 
 	// listen
 	if resthandler.keyPair != nil {

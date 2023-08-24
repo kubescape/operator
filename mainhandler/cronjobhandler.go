@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubescape/operator/utils"
-
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -73,7 +71,7 @@ func getJobParams(command *armoapi.Command) *armoapi.CronJobParams {
 	return nil
 }
 
-func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name string, req *armoapi.Commands) error {
+func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string, req *armoapi.Commands) error {
 	// create config map
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
@@ -91,7 +89,7 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, name s
 	}
 
 	configMap.Data[requestBodyFile] = string(reqByte)
-	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(utils.Namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
+	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
@@ -75,6 +76,7 @@ type registryScan struct {
 	registry       registry
 	registryInfo   armotypes.RegistryInfo
 	mapImageToTags map[string][]string
+	clusterConfig  utilsmetadata.ClusterConfig
 }
 
 type RepositoriesAndTagsParams struct {
@@ -102,7 +104,7 @@ func errorWithDocumentationRef(errorMessage string) error {
 	return fmt.Errorf("%s. Please refer to the documentation %s", errorMessage, registryScanDocumentation)
 }
 
-func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
+func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinterface.KubernetesApi) registryScan {
 	depth := new(int)
 	isHTTPS := new(bool)
 	skipTlsVerify := new(bool)
@@ -117,7 +119,8 @@ func NewRegistryScan(k8sAPI *k8sinterface.KubernetesApi) registryScan {
 			IsHTTPS:       isHTTPS,
 			SkipTLSVerify: skipTlsVerify,
 		},
-		k8sAPI: k8sAPI,
+		k8sAPI:        k8sAPI,
+		clusterConfig: clusterConfig,
 	}
 }
 
@@ -836,11 +839,11 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 	}
 
 	var scheme, eventReceiverRestURL string
-	if strings.HasPrefix(utils.ClusterConfig.EventReceiverRestURL, "https://") {
-		eventReceiverRestURL = strings.Replace(utils.ClusterConfig.EventReceiverRestURL, "https://", "", 1)
+	if strings.HasPrefix(registryScan.clusterConfig.EventReceiverRestURL, "https://") {
+		eventReceiverRestURL = strings.Replace(registryScan.clusterConfig.EventReceiverRestURL, "https://", "", 1)
 		scheme = "https"
 	} else {
-		eventReceiverRestURL = strings.Replace(utils.ClusterConfig.EventReceiverRestURL, "http://", "", 1)
+		eventReceiverRestURL = strings.Replace(registryScan.clusterConfig.EventReceiverRestURL, "http://", "", 1)
 		scheme = "http"
 	}
 

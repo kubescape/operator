@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	instanceidv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
@@ -67,11 +69,14 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.TODO()
+			clusterConfig := utilsmetadata.ClusterConfig{}
+			cfg, err := config.LoadConfig("../configuration")
+			assert.NoError(t, err)
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset()
 
-			wh, err := NewWatchHandler(ctx, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil)
+			wh, err := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil)
 
 			actualMap := wh.iwMap.Map()
 			for imageID := range actualMap {
@@ -275,6 +280,9 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			}
 
 			ctx := context.Background()
+			clusterConfig := utilsmetadata.ClusterConfig{}
+			cfg, err := config.LoadConfig("../configuration")
+			assert.NoError(t, err)
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
@@ -283,7 +291,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			errorCh := make(chan error)
 			vmEvents := make(chan watch.Event)
 
-			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.instanceIDs)
+			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.instanceIDs)
 
 			go wh.HandleVulnerabilityManifestEvents(vmEvents, errorCh)
 
@@ -316,10 +324,13 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 
 func Test_getSBOMWatcher(t *testing.T) {
 	ctx := context.TODO()
+	clusterConfig := utilsmetadata.ClusterConfig{}
+	cfg, err := config.LoadConfig("../configuration")
+	assert.NoError(t, err)
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	storageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, nil, nil)
+	wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, nil, nil)
 
 	sbomWatcher, err := wh.getSBOMWatcher()
 
@@ -490,6 +501,9 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			}
 
 			ctx := context.Background()
+			clusterConfig := utilsmetadata.ClusterConfig{}
+			cfg, err := config.LoadConfig("../configuration")
+			assert.NoError(t, err)
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
@@ -499,7 +513,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
-			wh, _ := NewWatchHandler(ctx, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs)
+			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs)
 			wh.wlidsToContainerToImageIDMap = tc.wlidsToContainersToImageIDsMap
 
 			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
@@ -732,9 +746,12 @@ func TestHandleSBOMEvents(t *testing.T) {
 				inputObjects = append(inputObjects, matchingSBOM)
 			}
 
+			clusterConfig := utilsmetadata.ClusterConfig{}
+			cfg, err := config.LoadConfig("../configuration")
+			assert.NoError(t, err)
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			ksStorageClient := kssfake.NewSimpleClientset(inputObjects...)
-			wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
+			wh, _ := NewWatchHandler(context.TODO(), clusterConfig, cfg, k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
 
 			errCh := make(chan error)
 

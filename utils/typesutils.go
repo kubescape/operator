@@ -6,6 +6,7 @@ import (
 
 	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/armosec/utils-go/httputils"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -16,11 +17,11 @@ import (
 
 var ReporterHttpClient httputils.IHttpClient
 
-func NewSessionObj(ctx context.Context, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := reporterlib.NewBaseReport(ClusterConfig.AccountID, message, ClusterConfig.EventReceiverRestURL, ReporterHttpClient)
+func NewSessionObj(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
+	reporter := reporterlib.NewBaseReport(clusterConfig.AccountID, message, clusterConfig.EventReceiverRestURL, ReporterHttpClient)
 	target := command.GetID()
 	if target == identifiers.DesignatorsToken {
-		target = fmt.Sprintf("wlid://cluster-%s/", ClusterConfig.ClusterName)
+		target = fmt.Sprintf("wlid://cluster-%s/", clusterConfig.ClusterName)
 	}
 	if target == "" {
 		target = fmt.Sprintf("%v", command.Args)

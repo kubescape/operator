@@ -6,8 +6,10 @@ import (
 	"os"
 	"regexp"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
@@ -34,6 +36,8 @@ type MainHandler struct {
 	eventWorkerPool        *ants.PoolWithFunc
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
+	clusterConfig          utilsmetadata.ClusterConfig
+	cfg                    config.Config
 }
 
 type ActionHandler struct {
@@ -42,9 +46,11 @@ type ActionHandler struct {
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
+	clusterConfig          utilsmetadata.ClusterConfig
+	cfg                    config.Config
 }
 
-type waitFunc func()
+type waitFunc func(clusterConfig utilsmetadata.ClusterConfig)
 
 var k8sNamesRegex *regexp.Regexp
 var actionNeedToBeWaitOnStartUp = map[apis.NotificationPolicyType]waitFunc{}
@@ -63,15 +69,17 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	mainHandler := &MainHandler{
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
+		clusterConfig:          clusterConfig,
+		cfg:                    cfg,
 	}
-	pool, _ := ants.NewPoolWithFunc(utils.ConcurrencyWorkers, func(i interface{}) {
+	pool, _ := ants.NewPoolWithFunc(cfg.ConcurrencyWorkers, func(i interface{}) {
 		j, ok := i.(utils.Job)
 		if !ok {
 			logger.L().Error("failed to cast job", helpers.Interface("job", i))
@@ -84,22 +92,23 @@ func NewMainHandler(k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
+func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: commandResponseChannel,
+		clusterConfig:          clusterConfig,
+		cfg:                    cfg,
 	}
 }
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
 func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
-	clusterName := utils.ClusterConfig.ClusterName
-	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, clusterName)
+	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig)
 	dynClient := mainHandler.k8sAPI.DynamicClient
 
-	rulesFilename := utils.MatchingRulesFilename
+	rulesFilename := mainHandler.cfg.MatchingRulesFilename
 	rulesReader, err := os.Open(rulesFilename)
 	if err != nil {
 		return err
@@ -124,7 +133,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.k8sAPI, ksStorageClient, nil, nil)
+	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, ksStorageClient, nil, nil)
 
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
@@ -134,7 +143,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	// wait for vuln scan to be ready
 	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
-	waitFunc()
+	waitFunc(mainHandler.clusterConfig)
 
 	// generate list of commands to scan all workloads
 	wlids := watchHandler.GetWlidsToContainerToImageIDMap()
@@ -160,7 +169,7 @@ func (h *MainHandler) StartContinuousScanning(ctx context.Context) error {
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
 	for _, cmd := range commandsList {
-		utils.AddCommandToChannel(ctx, cmd, mainHandler.eventWorkerPool)
+		utils.AddCommandToChannel(ctx, mainHandler.clusterConfig, cmd, mainHandler.eventWorkerPool)
 	}
 }
 
@@ -213,7 +222,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	actionHandler := NewActionHandler(mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
+	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(ctx, sessionObj)
@@ -321,7 +330,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		cmd.Designators = make([]identifiers.PortalDesignator, 0)
 
 		// send specific command to the channel
-		newSessionObj := utils.NewSessionObj(ctx, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+		newSessionObj := utils.NewSessionObj(ctx, mainHandler.clusterConfig, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 		if err != nil {
 			err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
@@ -369,8 +378,8 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 	for i := range actions {
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
-			waitFunc()
-			sessionObj := utils.NewSessionObj(ctx, &actions[index], "Websocket", "", uuid.NewString(), 1)
+			waitFunc(mainHandler.clusterConfig)
+			sessionObj := utils.NewSessionObj(ctx, mainHandler.clusterConfig, &actions[index], "Websocket", "", uuid.NewString(), 1)
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)
@@ -385,11 +394,11 @@ func (mainHandler *MainHandler) EventWorkerPool() *ants.PoolWithFunc {
 	return mainHandler.eventWorkerPool
 }
 
-func GetStartupActions() []apis.Command {
+func GetStartupActions(clusterConfig utilsmetadata.ClusterConfig) []apis.Command {
 	return []apis.Command{
 		{
 			CommandName: apis.TypeRunKubescape,
-			WildWlid:    pkgwlid.GetK8sWLID(utils.ClusterConfig.ClusterName, "", "", ""),
+			WildWlid:    pkgwlid.GetK8sWLID(clusterConfig.ClusterName, "", "", ""),
 			Args: map[string]interface{}{
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
 					HostScanner: boolutils.BoolPointer(false),

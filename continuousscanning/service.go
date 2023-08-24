@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -116,8 +117,8 @@ func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h .
 }
 
 type poolInvokerHandler struct {
-	wp          *ants.PoolWithFunc
-	clusterName string
+	wp            *ants.PoolWithFunc
+	clusterConfig utilsmetadata.ClusterConfig
 }
 
 func makeScanArgs(so *objectsenvelopes.ScanObject) map[string]interface{} {
@@ -147,10 +148,10 @@ func makeScanCommand(clusterName string, uo *unstructured.Unstructured) *armoapi
 	}
 }
 
-func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterName string, e watch.Event) error {
+func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, e watch.Event) error {
 	logger.L().Ctx(ctx).Info(
 		"triggering scan",
-		helpers.String("clusterName", clusterName),
+		helpers.String("clusterName", clusterConfig.ClusterName),
 		helpers.Interface("event", e),
 	)
 	obj := e.Object.(*unstructured.Unstructured)
@@ -160,8 +161,8 @@ func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterName string,
 	}
 
 	uObject := &unstructured.Unstructured{Object: objRaw}
-	command := makeScanCommand(clusterName, uObject)
-	utils.AddCommandToChannel(ctx, command, wp)
+	command := makeScanCommand(clusterConfig.ClusterName, uObject)
+	utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
 
 	return nil
 }
@@ -175,9 +176,9 @@ func unstructuredToScanObject(uo *unstructured.Unstructured) (*objectsenvelopes.
 }
 
 func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
-	return triggerScan(ctx, h.wp, h.clusterName, e)
+	return triggerScan(ctx, h.wp, h.clusterConfig, e)
 }
 
-func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterName string) EventHandler {
-	return &poolInvokerHandler{wp: wp, clusterName: clusterName}
+func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig) EventHandler {
+	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig}
 }

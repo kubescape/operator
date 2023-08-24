@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -246,7 +247,7 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-			triggeringHandler := NewTriggeringHandler(wp, clusterNameStub)
+			triggeringHandler := NewTriggeringHandler(wp, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub})
 			stubFetcher := &stubFetcher{podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
 			css := NewContinuousScanningService(dynClient, loader, triggeringHandler)
