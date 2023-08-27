@@ -6,6 +6,10 @@ import (
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	"github.com/kubescape/backend/pkg/servicediscovery"
+	v1 "github.com/kubescape/backend/pkg/servicediscovery/v1"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/spf13/viper"
 )
 
@@ -61,4 +65,23 @@ func LoadClusterConfig() (utilsmetadata.ClusterConfig, error) {
 	}
 
 	return *clusterConfig, err
+}
+
+func UpdateClusterConfigURLs(clusterConfig *utilsmetadata.ClusterConfig, filePath string) error {
+	pathAndFileName, present := os.LookupEnv("SERVICES")
+	if !present {
+		pathAndFileName = filePath
+	}
+	logger.L().Debug("discovery service URLs from file", helpers.String("path", pathAndFileName))
+
+	services, err := servicediscovery.GetServices(
+		v1.NewServiceDiscoveryFileV1(pathAndFileName),
+	)
+	if err != nil {
+		return err
+	}
+
+	clusterConfig.EventReceiverRestURL = services.GetReportReceiverHttpUrl()
+	logger.L().Info("setting URLs", helpers.String("EventReceiverRestURL", clusterConfig.EventReceiverRestURL))
+	return nil
 }

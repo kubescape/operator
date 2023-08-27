@@ -25,7 +25,7 @@ import (
 
 // 	repos, err := registryScan.enumerateRepos()
 // 	assert.NoError(t, err)
-// 	reporter := reporterlib.NewBaseReport("bla", "bla", "http://localhost:7200", http.DefaultClient)
+// 	reporter := systemreports.NewBaseReport("bla", "bla", "http://localhost:7200", http.DefaultClient)
 // 	reposToTags := make(chan map[string][]string, len(repos))
 // 	mapUniqueRepos := make(map[string]bool, len(repos))
 // 	for _, repo := range repos {

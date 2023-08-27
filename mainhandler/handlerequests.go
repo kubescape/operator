@@ -26,8 +26,9 @@ import (
 	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 
-	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
+	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 )
@@ -42,7 +43,7 @@ type MainHandler struct {
 
 type ActionHandler struct {
 	command                apis.Command
-	reporter               reporterlib.IReporter
+	reporter               beClientV1.IReportSender
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
@@ -232,7 +233,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 		return
 	}
 
-	actionHandler.reporter.SendStatus(reporterlib.JobDone, true, sessionObj.ErrChan)
+	actionHandler.reporter.SendStatus(systemreports.JobDone, true, sessionObj.ErrChan)
 	logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 
 }
@@ -310,7 +311,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		sessionObj.Reporter.SendError(errs[i], true, true, sessionObj.ErrChan)
 	}
 
-	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
 
 	logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
 

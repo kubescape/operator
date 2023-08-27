@@ -10,6 +10,7 @@ import (
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/docker/docker/api/types"
+	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
@@ -25,7 +26,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/armoapi-go/identifiers"
-	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
+
 	"github.com/armosec/utils-go/httputils"
 	"github.com/kubescape/k8s-interface/cloudsupport"
 	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
@@ -224,7 +225,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "DENIED") || strings.Contains(strings.ToLower(err.Error()), "authentication") || strings.Contains(strings.ToLower(err.Error()), "empty token") {
 			// registry info is good, but authentication failed
 			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-			sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+			sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
 			sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
 			return fmt.Errorf("failed to retrieve repositories: authentication error: %v", err)
 		} else {
@@ -234,9 +235,9 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
 	sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
-	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
 
 	if len(repos) == 0 {
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryRetrieveReposStatus, err))
@@ -244,7 +245,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveReposStatus))
-	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
 
 	// check that we can pull tags. One is enough
 	if len(repos) > 0 {
@@ -256,7 +257,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
-	sessionObj.Reporter.SendStatus(reporterlib.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
 
 	var repositories []apitypes.Repository
 	for _, repo := range repos {

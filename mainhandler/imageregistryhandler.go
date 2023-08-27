@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -23,10 +22,10 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/docker/docker/api/types"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -306,7 +305,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	return nil
 }
 
-func (registryScan *registryScan) getImagesForScanning(ctx context.Context, reporter datastructures.IReporter) error {
+func (registryScan *registryScan) getImagesForScanning(ctx context.Context, reporter beClientV1.IReportSender) error {
 	logger.L().Info("getImagesForScanning: enumerating repoes...")
 	errChan := make(chan error)
 	repos, err := registryScan.enumerateRepos(ctx)
@@ -344,7 +343,7 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 	return nil
 }
 
-func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, reporter datastructures.IReporter, c chan map[string][]string) error {
+func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, sender beClientV1.IReportSender, c chan map[string][]string) error {
 	logger.L().Info(fmt.Sprintf("Fetching repository %s tags", repo))
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
@@ -374,10 +373,10 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 				if tagsForDigestLen > *tagsDepth {
 					tags = append(tags, tagsForDigest[:*tagsDepth]...)
 					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:*tagsDepth], ","))
-					if reporter != nil {
+					if sender != nil {
 						errChan := make(chan error)
 						err := errorWithDocumentationRef(errMsg)
-						reporter.SendWarning(err.Error(), true, true, errChan)
+						sender.SendWarning(err.Error(), true, true, errChan)
 						if err := <-errChan; err != nil {
 							logger.L().Ctx(ctx).Error("GetLatestTags failed to send error report",
 								helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
@@ -838,28 +837,13 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
 	}
 
-	var scheme, eventReceiverRestURL string
-	if strings.HasPrefix(registryScan.clusterConfig.EventReceiverRestURL, "https://") {
-		eventReceiverRestURL = strings.Replace(registryScan.clusterConfig.EventReceiverRestURL, "https://", "", 1)
-		scheme = "https"
-	} else {
-		eventReceiverRestURL = strings.Replace(registryScan.clusterConfig.EventReceiverRestURL, "http://", "", 1)
-		scheme = "http"
+	url, err := beClientV1.GetRegistryRepositoriesUrl(registryScan.clusterConfig.EventReceiverRestURL, params.CustomerGUID, params.RegistryName, params.JobID)
+	if err != nil {
+		return err
 	}
 
 	bodyReader := bytes.NewReader(reqBody)
-	urlQuery := url.URL{
-		Scheme: scheme,
-		Host:   eventReceiverRestURL,
-		Path:   "k8s/registryRepositories",
-	}
-	query := url.Values{
-		"jobID":        []string{params.JobID},
-		"customerGUID": []string{params.CustomerGUID},
-		"registryName": []string{params.RegistryName},
-	}
-	urlQuery.RawQuery = query.Encode()
-	req, err := http.NewRequest("POST", urlQuery.String(), bodyReader)
+	req, err := http.NewRequest(http.MethodPost, url.String(), bodyReader)
 	if err != nil {
 		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to create request, reason: %v", err)
 	}

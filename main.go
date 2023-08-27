@@ -37,6 +37,10 @@ func main() {
 		logger.L().Ctx(ctx).Fatal("load clusterData error", helpers.Error(err))
 	}
 
+	if err = config.UpdateClusterConfigURLs(&clusterConfig, "/etc/config/services.json"); err != nil {
+		logger.L().Ctx(ctx).Fatal("failed updating urls", helpers.Error(err))
+	}
+
 	cfg, err := config.LoadConfig("/etc/config")
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load config error", helpers.Error(err))
