@@ -90,8 +90,8 @@ github.com/armosec/registryx v0.0.15 h1:+iCO+TuhOL4cwv9JHpTMmmr4oI2wcVZS8k/S1TlJ
 github.com/armosec/registryx v0.0.15/go.mod h1:tWzKL9LcYySAfcujIPgYSvKG+HiJqqiMxF5juUaBKxU=
 github.com/armosec/utils-go v0.0.20 h1:bvr+TMumEYdMsGFGSsaQysST7K02nNROFvuajNuKPlw=
 github.com/armosec/utils-go v0.0.20/go.mod h1:ZEFiSv8KpTFNT19jHis1IengiF/BGDvg7tHmXo+cwxs=
-github.com/armosec/utils-k8s-go v0.0.17 h1:HUntJGR0/PHt7bp8S0zLhVcJ6sDz061Hc9mAM9ha1lA=
-github.com/armosec/utils-k8s-go v0.0.17/go.mod h1:FJRG/MRz7jT4ExSEYHIFsilVsAF11M+GJRhLl4PFZ4s=
+github.com/armosec/utils-k8s-go v0.0.18 h1:SBmj+j/5JrROVQVLjlHsoMcPZKK/AKWEK1SMMf3hd1U=
+github.com/armosec/utils-k8s-go v0.0.18/go.mod h1:FJRG/MRz7jT4ExSEYHIFsilVsAF11M+GJRhLl4PFZ4s=
 github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=

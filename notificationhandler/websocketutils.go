@@ -37,7 +37,7 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 	return cmds, err
 }
 
-func (notification *NotificationHandler) handleNotification(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, notif *notificationserver.Notification) error {
+func (notification *NotificationHandler) handleNotification(ctx context.Context, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"] // TODO: move target "dest" so it will be a constant
 	switch dst {
 	case "trigger", "kubescape": // the "kubescape" is for backward compatibility
@@ -46,7 +46,7 @@ func (notification *NotificationHandler) handleNotification(ctx context.Context,
 			return err
 		}
 		for _, cmd := range cmds.Commands {
-			sessionObj := utils.NewSessionObj(ctx, clusterConfig, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
+			sessionObj := utils.NewSessionObj(ctx, eventReceiverRestURL, clusterConfig, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)

@@ -39,6 +39,7 @@ type MainHandler struct {
 	commandResponseChannel *commandResponseChannelData
 	clusterConfig          utilsmetadata.ClusterConfig
 	cfg                    config.Config
+	eventReceiverRestURL   string
 }
 
 type ActionHandler struct {
@@ -49,6 +50,7 @@ type ActionHandler struct {
 	wlid                   string
 	clusterConfig          utilsmetadata.ClusterConfig
 	cfg                    config.Config
+	eventReceiverRestURL   string
 }
 
 type waitFunc func(clusterConfig utilsmetadata.ClusterConfig)
@@ -70,7 +72,7 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, eventReceiverRestURL string) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -79,6 +81,7 @@ func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 		clusterConfig:          clusterConfig,
 		cfg:                    cfg,
+		eventReceiverRestURL:   eventReceiverRestURL,
 	}
 	pool, _ := ants.NewPoolWithFunc(cfg.ConcurrencyWorkers, func(i interface{}) {
 		j, ok := i.(utils.Job)
@@ -93,7 +96,7 @@ func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
+func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, eventReceiverRestURL string) *ActionHandler {
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
@@ -101,12 +104,13 @@ func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Conf
 		commandResponseChannel: commandResponseChannel,
 		clusterConfig:          clusterConfig,
 		cfg:                    cfg,
+		eventReceiverRestURL:   eventReceiverRestURL,
 	}
 }
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
 func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
-	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig)
+	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig, mainHandler.eventReceiverRestURL)
 	dynClient := mainHandler.k8sAPI.DynamicClient
 
 	rulesFilename := mainHandler.cfg.MatchingRulesFilename
@@ -134,7 +138,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, ksStorageClient, nil, nil)
+	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, ksStorageClient, nil, nil, mainHandler.eventReceiverRestURL)
 
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
@@ -170,7 +174,7 @@ func (h *MainHandler) StartContinuousScanning(ctx context.Context) error {
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
 	for _, cmd := range commandsList {
-		utils.AddCommandToChannel(ctx, mainHandler.clusterConfig, cmd, mainHandler.eventWorkerPool)
+		utils.AddCommandToChannel(ctx, mainHandler.eventReceiverRestURL, mainHandler.clusterConfig, cmd, mainHandler.eventWorkerPool)
 	}
 }
 
@@ -223,7 +227,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
+	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.eventReceiverRestURL)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(ctx, sessionObj)
@@ -331,7 +335,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		cmd.Designators = make([]identifiers.PortalDesignator, 0)
 
 		// send specific command to the channel
-		newSessionObj := utils.NewSessionObj(ctx, mainHandler.clusterConfig, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+		newSessionObj := utils.NewSessionObj(ctx, mainHandler.eventReceiverRestURL, mainHandler.clusterConfig, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 		if err != nil {
 			err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
@@ -380,7 +384,7 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc(mainHandler.clusterConfig)
-			sessionObj := utils.NewSessionObj(ctx, mainHandler.clusterConfig, &actions[index], "Websocket", "", uuid.NewString(), 1)
+			sessionObj := utils.NewSessionObj(ctx, mainHandler.eventReceiverRestURL, mainHandler.clusterConfig, &actions[index], "Websocket", "", uuid.NewString(), 1)
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)

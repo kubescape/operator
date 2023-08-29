@@ -56,7 +56,7 @@ func NewMockKubernetesAPI() *k8sinterface.KubernetesApi {
 
 func TestFilterRepositories(t *testing.T) {
 	k8sAPI := NewMockKubernetesAPI()
-	registryScan := NewRegistryScan(utilsmetadata.ClusterConfig{}, k8sAPI)
+	registryScan := NewRegistryScan(utilsmetadata.ClusterConfig{}, k8sAPI, "")
 
 	registryScan.registry = registry{
 		hostname:  "quay.io",

@@ -37,9 +37,13 @@ func main() {
 		logger.L().Ctx(ctx).Fatal("load clusterData error", helpers.Error(err))
 	}
 
-	if err = config.UpdateClusterConfigURLs(&clusterConfig, "/etc/config/services.json"); err != nil {
-		logger.L().Ctx(ctx).Fatal("failed updating urls", helpers.Error(err))
+	services, err := config.GetServiceURLs("/etc/config/services.json")
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
 	}
+
+	eventReceiverRestURL := services.GetReportReceiverHttpUrl()
+	logger.L().Debug("setting eventReceiverRestURL", helpers.String("url", eventReceiverRestURL))
 
 	cfg, err := config.LoadConfig("/etc/config")
 	if err != nil {
@@ -56,22 +60,22 @@ func main() {
 		defer logger.ShutdownOtel(ctx)
 	}
 
-	initHttpHandlers(clusterConfig)
+	initHttpHandlers(clusterConfig, eventReceiverRestURL)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
 	// setup main handler
-	mainHandler := mainhandler.NewMainHandler(clusterConfig, cfg, k8sApi)
+	mainHandler := mainhandler.NewMainHandler(clusterConfig, cfg, k8sApi, eventReceiverRestURL)
 
 	go func() { // open websocket connection to notification server
-		notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool(), clusterConfig)
+		notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool(), clusterConfig, eventReceiverRestURL)
 		if err := notificationHandler.WebsocketConnection(ctx); err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 		}
 	}()
 
 	go func() { // open a REST API connection listener
-		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), clusterConfig)
+		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), clusterConfig, eventReceiverRestURL)
 		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIPort); err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 		}
@@ -102,8 +106,8 @@ func displayBuildTag() {
 	logger.L().Info(fmt.Sprintf("Image version: %s", os.Getenv("RELEASE")))
 }
 
-func initHttpHandlers(clusterConfig utilsmetadata.ClusterConfig) {
+func initHttpHandlers(clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) {
 	mainhandler.KubescapeHttpClient = utils.InitHttpClient(clusterConfig.KubescapeURL)
 	mainhandler.VulnScanHttpClient = utils.InitHttpClient(clusterConfig.KubevulnURL)
-	utils.ReporterHttpClient = utils.InitHttpClient(clusterConfig.EventReceiverRestURL)
+	utils.ReporterHttpClient = utils.InitHttpClient(eventReceiverRestURL)
 }

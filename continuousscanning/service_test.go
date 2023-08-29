@@ -247,7 +247,7 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-			triggeringHandler := NewTriggeringHandler(wp, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub})
+			triggeringHandler := NewTriggeringHandler(wp, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, "")
 			stubFetcher := &stubFetcher{podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
 			css := NewContinuousScanningService(dynClient, loader, triggeringHandler)

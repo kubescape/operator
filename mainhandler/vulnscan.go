@@ -149,7 +149,7 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 }
 
 func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessionObj *utils.SessionObj) (*registryScan, error) {
-	registryScan := NewRegistryScan(actionHandler.clusterConfig, actionHandler.k8sAPI)
+	registryScan := NewRegistryScan(actionHandler.clusterConfig, actionHandler.k8sAPI, actionHandler.eventReceiverRestURL)
 	if regName := actionHandler.parseRegistryName(sessionObj); regName != "" {
 		registryScan.setRegistryName(regName)
 	}

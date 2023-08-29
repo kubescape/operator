@@ -18,7 +18,7 @@ import (
 
 var ReporterHttpClient httputils.IHttpClient
 
-func NewSessionObj(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
+func NewSessionObj(ctx context.Context, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
 	reporter := systemreports.NewBaseReport(clusterConfig.AccountID, message)
 	target := command.GetID()
 	if target == identifiers.DesignatorsToken {
@@ -41,7 +41,7 @@ func NewSessionObj(ctx context.Context, clusterConfig utilsmetadata.ClusterConfi
 
 	sessionObj := SessionObj{
 		Command:  *command,
-		Reporter: beClientV1.NewBaseReportSender(clusterConfig.EventReceiverRestURL, ReporterHttpClient, reporter),
+		Reporter: beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, reporter),
 		ErrChan:  make(chan error),
 	}
 	go sessionObj.WatchErrors(ctx)

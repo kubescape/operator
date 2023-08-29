@@ -76,7 +76,7 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset()
 
-			wh, err := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil)
+			wh, err := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil, "")
 
 			actualMap := wh.iwMap.Map()
 			for imageID := range actualMap {
@@ -291,7 +291,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			errorCh := make(chan error)
 			vmEvents := make(chan watch.Event)
 
-			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.instanceIDs)
+			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.instanceIDs, "")
 
 			go wh.HandleVulnerabilityManifestEvents(vmEvents, errorCh)
 
@@ -330,7 +330,7 @@ func Test_getSBOMWatcher(t *testing.T) {
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	storageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, nil, nil)
+	wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, nil, nil, "")
 
 	sbomWatcher, err := wh.getSBOMWatcher()
 
@@ -513,7 +513,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
-			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs)
+			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs, "")
 			wh.wlidsToContainerToImageIDMap = tc.wlidsToContainersToImageIDsMap
 
 			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
@@ -751,7 +751,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			assert.NoError(t, err)
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			ksStorageClient := kssfake.NewSimpleClientset(inputObjects...)
-			wh, _ := NewWatchHandler(context.TODO(), clusterConfig, cfg, k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
+			wh, _ := NewWatchHandler(context.TODO(), clusterConfig, cfg, k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil, "")
 
 			errCh := make(chan error)
 

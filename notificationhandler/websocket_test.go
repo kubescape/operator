@@ -21,7 +21,7 @@ func TestNewTriggerHandlerNotificationHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewNotificationHandler(tt.args.pool, utilsmetadata.ClusterConfig{}); !reflect.DeepEqual(got, tt.want) {
+			if got := NewNotificationHandler(tt.args.pool, utilsmetadata.ClusterConfig{}, ""); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewTriggerHandlerNotificationHandler() = %v, want %v", got, tt.want)
 			}
 		})

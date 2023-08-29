@@ -7,7 +7,7 @@ require (
 	github.com/armosec/cluster-notifier-api-go v0.0.5
 	github.com/armosec/registryx v0.0.15
 	github.com/armosec/utils-go v0.0.20
-	github.com/armosec/utils-k8s-go v0.0.17
+	github.com/armosec/utils-k8s-go v0.0.18
 	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/docker/docker v24.0.5+incompatible
 	github.com/go-openapi/runtime v0.26.0

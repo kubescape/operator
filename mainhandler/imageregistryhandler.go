@@ -71,11 +71,12 @@ type registry struct {
 }
 
 type registryScan struct {
-	k8sAPI         *k8sinterface.KubernetesApi
-	registry       registry
-	registryInfo   armotypes.RegistryInfo
-	mapImageToTags map[string][]string
-	clusterConfig  utilsmetadata.ClusterConfig
+	k8sAPI               *k8sinterface.KubernetesApi
+	registry             registry
+	registryInfo         armotypes.RegistryInfo
+	mapImageToTags       map[string][]string
+	clusterConfig        utilsmetadata.ClusterConfig
+	eventReceiverRestURL string
 }
 
 type RepositoriesAndTagsParams struct {
@@ -103,7 +104,7 @@ func errorWithDocumentationRef(errorMessage string) error {
 	return fmt.Errorf("%s. Please refer to the documentation %s", errorMessage, registryScanDocumentation)
 }
 
-func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinterface.KubernetesApi) registryScan {
+func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinterface.KubernetesApi, eventReceiverRestURL string) registryScan {
 	depth := new(int)
 	isHTTPS := new(bool)
 	skipTlsVerify := new(bool)
@@ -118,8 +119,9 @@ func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinter
 			IsHTTPS:       isHTTPS,
 			SkipTLSVerify: skipTlsVerify,
 		},
-		k8sAPI:        k8sAPI,
-		clusterConfig: clusterConfig,
+		k8sAPI:               k8sAPI,
+		clusterConfig:        clusterConfig,
+		eventReceiverRestURL: eventReceiverRestURL,
 	}
 }
 
@@ -837,7 +839,7 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
 	}
 
-	url, err := beClientV1.GetRegistryRepositoriesUrl(registryScan.clusterConfig.EventReceiverRestURL, params.CustomerGUID, params.RegistryName, params.JobID)
+	url, err := beClientV1.GetRegistryRepositoriesUrl(registryScan.eventReceiverRestURL, params.CustomerGUID, params.RegistryName, params.JobID)
 	if err != nil {
 		return err
 	}
