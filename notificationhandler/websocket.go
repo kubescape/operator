@@ -15,18 +15,20 @@ import (
 )
 
 type NotificationHandler struct {
-	connector     IWebsocketActions
-	pool          *ants.PoolWithFunc
-	clusterConfig utilsmetadata.ClusterConfig
+	connector            IWebsocketActions
+	pool                 *ants.PoolWithFunc
+	clusterConfig        utilsmetadata.ClusterConfig
+	eventReceiverRestURL string
 }
 
-func NewNotificationHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig) *NotificationHandler {
+func NewNotificationHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) *NotificationHandler {
 	urlStr := initNotificationServerURL(clusterConfig)
 
 	return &NotificationHandler{
-		connector:     NewWebsocketActions(urlStr),
-		pool:          pool,
-		clusterConfig: clusterConfig,
+		connector:            NewWebsocketActions(urlStr),
+		pool:                 pool,
+		clusterConfig:        clusterConfig,
+		eventReceiverRestURL: eventReceiverRestURL,
 	}
 }
 
@@ -93,7 +95,7 @@ func (notification *NotificationHandler) websocketReceiveNotification(ctx contex
 				}
 			}
 
-			err := notification.handleNotification(ctx, notification.clusterConfig, notif)
+			err := notification.handleNotification(ctx, notification.eventReceiverRestURL, notification.clusterConfig, notif)
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to handle notification", helpers.String("messageBytes", string(messageBytes)), helpers.Error(err))
 			}

@@ -15,16 +15,18 @@ import (
 )
 
 type HTTPHandler struct {
-	keyPair       *tls.Certificate
-	pool          *ants.PoolWithFunc
-	clusterConfig utilsmetadata.ClusterConfig
+	keyPair              *tls.Certificate
+	pool                 *ants.PoolWithFunc
+	clusterConfig        utilsmetadata.ClusterConfig
+	eventReceiverRestURL string
 }
 
-func NewHTTPHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig) *HTTPHandler {
+func NewHTTPHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) *HTTPHandler {
 	return &HTTPHandler{
-		keyPair:       nil,
-		pool:          pool,
-		clusterConfig: clusterConfig,
+		keyPair:              nil,
+		pool:                 pool,
+		clusterConfig:        clusterConfig,
+		eventReceiverRestURL: eventReceiverRestURL,
 	}
 }
 

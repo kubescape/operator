@@ -8,13 +8,13 @@ import (
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	v1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"go.opentelemetry.io/otel"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
-	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
 	"github.com/armosec/utils-go/httputils"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 
@@ -27,7 +27,7 @@ const (
 )
 
 type kubescapeResponseData struct {
-	reporter reporterlib.IReporter
+	reporter v1.IReportSender
 	scanID   string
 }
 

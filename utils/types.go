@@ -4,14 +4,14 @@ import (
 	"context"
 
 	"github.com/armosec/armoapi-go/apis"
-	reporterlib "github.com/armosec/logger-go/system-reports/datastructures"
+	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
 )
 
 // Commands list of commands received from websocket
 type SessionObj struct {
-	Command  apis.Command          `json:"command"`
-	Reporter reporterlib.IReporter `json:"reporter"`
-	ErrChan  chan error            `json:"-"`
+	Command  apis.Command             `json:"command"`
+	Reporter beClientV1.IReportSender `json:"reporter"`
+	ErrChan  chan error               `json:"-"`
 }
 
 // CredStruct holds the various credentials needed to do login into CA BE

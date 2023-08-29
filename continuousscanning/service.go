@@ -117,8 +117,9 @@ func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h .
 }
 
 type poolInvokerHandler struct {
-	wp            *ants.PoolWithFunc
-	clusterConfig utilsmetadata.ClusterConfig
+	wp                   *ants.PoolWithFunc
+	clusterConfig        utilsmetadata.ClusterConfig
+	eventReceiverRestURL string
 }
 
 func makeScanArgs(so *objectsenvelopes.ScanObject) map[string]interface{} {
@@ -148,7 +149,7 @@ func makeScanCommand(clusterName string, uo *unstructured.Unstructured) *armoapi
 	}
 }
 
-func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, e watch.Event) error {
+func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, e watch.Event) error {
 	logger.L().Ctx(ctx).Info(
 		"triggering scan",
 		helpers.String("clusterName", clusterConfig.ClusterName),
@@ -162,7 +163,7 @@ func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterConfig utils
 
 	uObject := &unstructured.Unstructured{Object: objRaw}
 	command := makeScanCommand(clusterConfig.ClusterName, uObject)
-	utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
+	utils.AddCommandToChannel(ctx, eventReceiverRestURL, clusterConfig, command, wp)
 
 	return nil
 }
@@ -176,9 +177,9 @@ func unstructuredToScanObject(uo *unstructured.Unstructured) (*objectsenvelopes.
 }
 
 func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
-	return triggerScan(ctx, h.wp, h.clusterConfig, e)
+	return triggerScan(ctx, h.wp, h.eventReceiverRestURL, h.clusterConfig, e)
 }
 
-func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig) EventHandler {
-	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig}
+func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) EventHandler {
+	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig, eventReceiverRestURL: eventReceiverRestURL}
 }

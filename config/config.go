@@ -6,6 +6,11 @@ import (
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	"github.com/kubescape/backend/pkg/servicediscovery"
+	"github.com/kubescape/backend/pkg/servicediscovery/schema"
+	v1 "github.com/kubescape/backend/pkg/servicediscovery/v1"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/spf13/viper"
 )
 
@@ -61,4 +66,16 @@ func LoadClusterConfig() (utilsmetadata.ClusterConfig, error) {
 	}
 
 	return *clusterConfig, err
+}
+
+func GetServiceURLs(filePath string) (schema.IBackendServices, error) {
+	pathAndFileName, present := os.LookupEnv("SERVICES")
+	if !present {
+		pathAndFileName = filePath
+	}
+	logger.L().Debug("discovery service URLs from file", helpers.String("path", pathAndFileName))
+
+	return servicediscovery.GetServices(
+		v1.NewServiceDiscoveryFileV1(pathAndFileName),
+	)
 }

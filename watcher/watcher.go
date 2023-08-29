@@ -54,6 +54,7 @@ type WatchHandler struct {
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
 	clusterConfig                     utilsmetadata.ClusterConfig
 	cfg                               config.Config
+	eventReceiverRestURL              string
 }
 
 // remove unused imageIDs and instanceIDs from storage. Update internal maps
@@ -71,7 +72,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string, eventReceiverRestURL string) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
@@ -83,6 +84,7 @@ func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterCon
 		managedInstanceIDSlugs:            instanceIDs,
 		clusterConfig:                     clusterConfig,
 		cfg:                               cfg,
+		eventReceiverRestURL:              eventReceiverRestURL,
 	}
 
 	// list all Pods and extract their image IDs
@@ -414,7 +416,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			}
 		case cmd, ok := <-commands:
 			if ok {
-				utils.AddCommandToChannel(ctx, wh.clusterConfig, cmd, workerPool)
+				utils.AddCommandToChannel(ctx, wh.eventReceiverRestURL, wh.clusterConfig, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -478,7 +480,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.
 			}
 		case cmd, ok := <-cmdCh:
 			if ok {
-				utils.AddCommandToChannel(ctx, wh.clusterConfig, cmd, workerPool)
+				utils.AddCommandToChannel(ctx, wh.eventReceiverRestURL, wh.clusterConfig, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -809,7 +811,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			wh.addToInstanceIDsList(instanceID[i])
 		}
 
-		utils.AddCommandToChannel(ctx, wh.clusterConfig, cmd, workerPool)
+		utils.AddCommandToChannel(ctx, wh.eventReceiverRestURL, wh.clusterConfig, cmd, workerPool)
 	}
 }
 
