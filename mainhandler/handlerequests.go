@@ -39,6 +39,7 @@ type MainHandler struct {
 	commandResponseChannel *commandResponseChannelData
 	clusterConfig          utilsmetadata.ClusterConfig
 	cfg                    config.Config
+	components             config.Components
 	eventReceiverRestURL   string
 }
 
@@ -50,6 +51,7 @@ type ActionHandler struct {
 	wlid                   string
 	clusterConfig          utilsmetadata.ClusterConfig
 	cfg                    config.Config
+	components             config.Components
 	eventReceiverRestURL   string
 }
 
@@ -72,7 +74,7 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, eventReceiverRestURL string) *MainHandler {
+func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, components config.Components, k8sAPI *k8sinterface.KubernetesApi, eventReceiverRestURL string) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -81,6 +83,7 @@ func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 		clusterConfig:          clusterConfig,
 		cfg:                    cfg,
+		components:             components,
 		eventReceiverRestURL:   eventReceiverRestURL,
 	}
 	pool, _ := ants.NewPoolWithFunc(cfg.ConcurrencyWorkers, func(i interface{}) {
@@ -96,7 +99,7 @@ func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, eventReceiverRestURL string) *ActionHandler {
+func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, components config.Components, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, eventReceiverRestURL string) *ActionHandler {
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
@@ -104,6 +107,7 @@ func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Conf
 		commandResponseChannel: commandResponseChannel,
 		clusterConfig:          clusterConfig,
 		cfg:                    cfg,
+		components:             components,
 		eventReceiverRestURL:   eventReceiverRestURL,
 	}
 }
@@ -227,7 +231,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.eventReceiverRestURL)
+	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.components, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.eventReceiverRestURL)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", true, sessionObj.ErrChan)
 	err := actionHandler.runCommand(ctx, sessionObj)

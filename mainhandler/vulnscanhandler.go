@@ -2,6 +2,7 @@ package mainhandler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -18,6 +19,10 @@ const VulnScanCronjobTemplateName = "kubevuln-cronjob-template"
 func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setVulnScanCronJob")
 	defer span.End()
+
+	if !actionHandler.components.KubevulnScheduler.Enabled {
+		return errors.New("KubevulnScheduler is not enabled")
+	}
 
 	req := getVulnScanRequest(&actionHandler.command)
 
@@ -55,6 +60,10 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateVulnScanCronJob")
 	defer span.End()
 
+	if !actionHandler.components.KubevulnScheduler.Enabled {
+		return errors.New("KubevulnScheduler is not enabled")
+	}
+
 	scanJobParams := getJobParams(&actionHandler.command)
 	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
 		return fmt.Errorf("updateVulnScanCronJob: CronTabSchedule not found")
@@ -85,6 +94,10 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 func (actionHandler *ActionHandler) deleteVulnScanCronJob(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteVulnScanCronJob")
 	defer span.End()
+
+	if !actionHandler.components.KubevulnScheduler.Enabled {
+		return errors.New("KubevulnScheduler is not enabled")
+	}
 
 	scanJobParams := getJobParams(&actionHandler.command)
 	if scanJobParams == nil || scanJobParams.JobName == "" {

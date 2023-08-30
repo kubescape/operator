@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -35,6 +36,10 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteKubescapeCronJob")
 	defer span.End()
 
+	if !actionHandler.components.KubescapeScheduler.Enabled {
+		return errors.New("KubescapeScheduler is not enabled")
+	}
+
 	kubescapeJobParams := getKubescapeJobParams(&actionHandler.command)
 	if kubescapeJobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
@@ -53,6 +58,10 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateKubescapeCronJob")
 	defer span.End()
+
+	if !actionHandler.components.KubescapeScheduler.Enabled {
+		return errors.New("KubescapeScheduler is not enabled")
+	}
 
 	jobParams := getKubescapeJobParams(&actionHandler.command)
 	if jobParams == nil {
@@ -81,6 +90,10 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setKubescapeCronJob")
 	defer span.End()
+
+	if !actionHandler.components.KubescapeScheduler.Enabled {
+		return errors.New("KubescapeScheduler is not enabled")
+	}
 
 	req, err := getKubescapeRequest(actionHandler.command.Args)
 	if err != nil {
@@ -175,6 +188,10 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.kubescapeScan")
 	defer span.End()
+
+	if !actionHandler.components.Kubescape.Enabled {
+		return errors.New("Kubescape is not enabled")
+	}
 
 	request, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 	if err != nil {

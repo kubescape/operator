@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -131,6 +132,10 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistries")
 	defer span.End()
 
+	if !actionHandler.components.Kubevuln.Enabled {
+		return errors.New("Kubevuln is not enabled")
+	}
+
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("in parseRegistryCommand", helpers.Error(err))
@@ -170,6 +175,10 @@ func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessio
 func (actionHandler *ActionHandler) testRegistryConnectivity(ctx context.Context, sessionObj *utils.SessionObj) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.testRegistryConnectivity")
 	defer span.End()
+
+	if !actionHandler.components.Kubevuln.Enabled {
+		return errors.New("Kubevuln is not enabled")
+	}
 
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
 	if err != nil {
@@ -294,6 +303,10 @@ func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *
 func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj *utils.SessionObj) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanWorkload")
 	defer span.End()
+
+	if !actionHandler.components.Kubevuln.Enabled {
+		return errors.New("Kubevuln is not enabled")
+	}
 
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
 

@@ -1,0 +1,55 @@
+{
+  "capabilities": {
+    "configurationScan": "enable",
+    "continuousScan": "disable",
+    "networkGenerator": "disable",
+    "nodeScan": "enable",
+    "otel": "enable",
+    "relevancy": "enable",
+    "runtimeObservability": "disable",
+    "seccomp": "disable",
+    "vulnerabilityScan": "enable"
+  },
+  "components": {
+    "gateway": {
+      "enabled": true
+    },
+    "hostScanner": {
+      "enabled": true
+    },
+    "kollector": {
+      "enabled": true
+    },
+    "kubescape": {
+      "enabled": true
+    },
+    "kubescapeScheduler": {
+      "enabled": true
+    },
+    "kubevuln": {
+      "enabled": true
+    },
+    "kubevulnScheduler": {
+      "enabled": true
+    },
+    "nodeAgent": {
+      "enabled": true
+    },
+    "operator": {
+      "enabled": true
+    },
+    "otelCollector": {
+      "enabled": true
+    },
+    "storage": {
+      "enabled": true
+    }
+  },
+  "configurations": {
+    "persistence": "enable",
+    "server": {
+      "account": null,
+      "url": "foo.com"
+    }
+  }
+}
