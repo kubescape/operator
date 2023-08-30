@@ -283,7 +283,7 @@ For example:
     "gatewayRestURL": "",
     "kubevulnURL": "",
     "kubescapeURL": "",
-    "eventReceiverRestURL": ",
+    "eventReceiverRestURL": "",
     "eventReceiverWebsocketURL": "",
     "rootGatewayURL": "",
     "accountID": "*********************",
@@ -291,4 +291,3 @@ For example:
 }
 ```
 </details>
-
