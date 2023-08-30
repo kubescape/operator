@@ -49,7 +49,7 @@
     "persistence": "enable",
     "server": {
       "account": null,
-      "url": "ens.euprod1.cyberarmorsoft.com"
+      "url": "foo.com"
     }
   }
 }

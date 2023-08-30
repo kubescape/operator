@@ -50,7 +50,7 @@ func TestLoadCapabilities(t *testing.T) {
 				Configurations: Configurations{
 					Persistence: "enable",
 					Server: Server{
-						URL: "ens.euprod1.cyberarmorsoft.com",
+						URL: "foo.com",
 					},
 				},
 			},

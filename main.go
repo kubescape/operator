@@ -41,6 +41,7 @@ func main() {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load components error", helpers.Error(err))
 	}
+	logger.L().Debug("loaded config for components", helpers.Interface("components", components))
 
 	services, err := config.GetServiceURLs("/etc/config/services.json")
 	if err != nil {
