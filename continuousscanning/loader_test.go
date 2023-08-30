@@ -2,9 +2,9 @@ package continuousscanning
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
-	"errors"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -12,7 +12,7 @@ import (
 
 type stubReader struct {
 	data []byte
-	e error
+	e    error
 }
 
 func (r stubReader) Read(p []byte) (int, error) {
@@ -66,16 +66,16 @@ func TestFileFetcher(t *testing.T) {
 			},
 		},
 		{
-			name:      "malformed JSON as input returns error",
+			name:            "malformed JSON as input returns error",
 			inputDataReader: &stubReader{data: []byte{}, e: nil},
-			wantRules: nil,
-			wantError: true,
+			wantRules:       nil,
+			wantError:       true,
 		},
 		{
-			name:      "reader error returns error",
+			name:            "reader error returns error",
 			inputDataReader: &stubReader{data: []byte(validData), e: errors.New("some error")},
-			wantRules: nil,
-			wantError: true,
+			wantRules:       nil,
+			wantError:       true,
 		},
 	}
 

@@ -76,7 +76,7 @@ func (l *targetLoader) LoadGVRs(ctx context.Context) []schema.GroupVersionResour
 	return gvrs
 }
 
-type fileFetcher struct{
+type fileFetcher struct {
 	r io.Reader
 }
 
