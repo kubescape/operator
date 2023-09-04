@@ -30,9 +30,6 @@ If you running the Operator as part of the Kubescape cluster components, you nee
 	       "gatewayRestURL": "127.0.0.1:8002",
 	       "kubevulnURL": "127.0.0.1:8081",
 	       "kubescapeURL": "127.0.0.1:8080",
-	       "eventReceiverRestURL": "https://report.armo.cloud",
-	       "eventReceiverWebsocketURL": "wss://report.armo.cloud",
-	       "rootGatewayURL": "wss://ens.euprod1.cyberarmorsoft.com/v1/waitfornotification",
 	       "accountID": "*********************",
 	       "clusterName": "******", } 
 	```
@@ -283,9 +280,6 @@ For example:
     "gatewayRestURL": "",
     "kubevulnURL": "",
     "kubescapeURL": "",
-    "eventReceiverRestURL": "",
-    "eventReceiverWebsocketURL": "",
-    "rootGatewayURL": "",
     "accountID": "*********************",
     "clusterName": "******"
 }

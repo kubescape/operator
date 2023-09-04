@@ -48,7 +48,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())
 			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
-			sessionObj.Reporter.SendError(err, true, true, sessionObj.ErrChan)
+			sessionObj.Reporter.SendError(err, resthandler.eventReceiverRestURL != "", true, sessionObj.ErrChan)
 			continue
 		}
 		l := utils.Job{}

@@ -43,13 +43,16 @@ func main() {
 	}
 	logger.L().Debug("loaded config for components", helpers.Interface("components", components))
 
-	services, err := config.GetServiceURLs("/etc/config/services.json")
-	if err != nil {
-		logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
-	}
+	var eventReceiverRestURL string
+	if components.Components.ServiceDiscovery.Enabled {
+		services, err := config.GetServiceURLs("/etc/config/services.json")
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
+		}
 
-	eventReceiverRestURL := services.GetReportReceiverHttpUrl()
-	logger.L().Debug("setting eventReceiverRestURL", helpers.String("url", eventReceiverRestURL))
+		eventReceiverRestURL := services.GetReportReceiverHttpUrl()
+		logger.L().Debug("setting eventReceiverRestURL", helpers.String("url", eventReceiverRestURL))
+	}
 
 	cfg, err := config.LoadConfig("/etc/config")
 	if err != nil {
