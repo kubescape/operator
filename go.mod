@@ -19,7 +19,7 @@ require (
 	github.com/kubescape/go-logger v0.0.14-0.20230730134225-e59751254525
 	github.com/kubescape/k8s-interface v0.0.135-0.20230730135750-e6e709507847
 	github.com/kubescape/opa-utils v0.0.266
-	github.com/kubescape/storage v0.0.8
+	github.com/kubescape/storage v0.0.18
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/panjf2000/ants/v2 v2.8.1
 	github.com/spf13/viper v1.16.0
