@@ -50,7 +50,7 @@ func main() {
 			logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
 		}
 
-		eventReceiverRestURL := services.GetReportReceiverHttpUrl()
+		eventReceiverRestURL = services.GetReportReceiverHttpUrl()
 		logger.L().Debug("setting eventReceiverRestURL", helpers.String("url", eventReceiverRestURL))
 	}
 
