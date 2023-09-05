@@ -221,7 +221,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 		info = fmt.Sprintf("Kubescape scanID '%s' returned an error: %s", response.ID, response.Response)
 	}
 	errChan := make(chan error)
-	actionHandler.reporter.SendDetails(info, actionHandler.eventReceiverRestURL != "", errChan)
+	actionHandler.reporter.SendDetails(info, actionHandler.sendReport, errChan)
 	if err := <-errChan; err != nil {
 		logger.L().Ctx(ctx).Error("kubescapeScan::Done failed to send status report", helpers.Error(err))
 	}
@@ -232,7 +232,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 		scanID:   response.ID,
 	}
 
-	if actionHandler.eventReceiverRestURL != "" {
+	if actionHandler.sendReport {
 		nextHandledTime := WaitTimeForKubescapeScanResponse * time.Second
 		commandResponseData := createNewCommandResponseData(KubescapeResponse, HandleKubescapeResponse, data, &nextHandledTime)
 		insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
