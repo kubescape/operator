@@ -380,7 +380,7 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 					if sender != nil {
 						errChan := make(chan error)
 						err := errorWithDocumentationRef(errMsg)
-						sender.SendWarning(err.Error(), true, true, errChan)
+						sender.SendWarning(err.Error(), registryScan.sendReport, true, errChan)
 						if err := <-errChan; err != nil {
 							logger.L().Ctx(ctx).Error("GetLatestTags failed to send error report",
 								helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))

@@ -7,7 +7,7 @@ import (
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 )
 
-type HandleCommandResponseCallBack func(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, payload interface{}) (bool, *time.Duration)
+type HandleCommandResponseCallBack func(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, sendReport bool, payload interface{}) (bool, *time.Duration)
 
 const (
 	MaxLimitationInsertToCommandResponseChannelGoRoutine = 10
@@ -74,7 +74,7 @@ func (mainHandler *MainHandler) HandleCommandResponse(ctx context.Context) {
 	mainHandler.createInsertCommandsResponseThreadPool()
 	for {
 		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
-		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, mainHandler.clusterConfig, data.payload)
+		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, mainHandler.clusterConfig, mainHandler.sendReport, data.payload)
 		if data.isCommandResponseNeedToBeRehandled {
 			insertNewCommandResponseData(mainHandler.commandResponseChannel, data)
 		}
