@@ -42,6 +42,7 @@ type Components struct {
 	Operator           Component `mapstructure:"operator"`
 	OtelCollector      Component `mapstructure:"otelCollector"`
 	Persistence        Component `mapstructure:"persistence"`
+	ServiceDiscovery   Component `mapstructure:"serviceDiscovery"`
 	Storage            Component `mapstructure:"storage"`
 }
 

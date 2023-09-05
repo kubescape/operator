@@ -19,6 +19,7 @@ type HTTPHandler struct {
 	pool                 *ants.PoolWithFunc
 	clusterConfig        utilsmetadata.ClusterConfig
 	eventReceiverRestURL string
+	sendReport           bool
 }
 
 func NewHTTPHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) *HTTPHandler {
@@ -27,6 +28,7 @@ func NewHTTPHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.Cluster
 		pool:                 pool,
 		clusterConfig:        clusterConfig,
 		eventReceiverRestURL: eventReceiverRestURL,
+		sendReport:           eventReceiverRestURL != "",
 	}
 }
 

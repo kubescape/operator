@@ -9,7 +9,7 @@ Run the executable. You can run the executable as a [stand-alone](https://github
 ### Prerequisites
  * A running Kubernetes cluster
 ### Preparations
-If you running the Operator as part of the Kubescape cluster components, you need to prepare the environment, as follows:.  
+If you will be running the Operator as part of the Kubescape cluster components, you need to prepare the environment, as follows:.  
 
  1. [install Kubescape cluster components](https://github.com/armosec/armo-helm#installing-armo-cluster-components-in-a-kubernetes-cluster-using-helm)
  2. Port-forward the other in-cluster components ports, this way the Operator will communicate with them.
@@ -21,27 +21,112 @@ If you running the Operator as part of the Kubescape cluster components, you nee
 	kubectl port-forward -n kubescape service/gateway 8001:8001 &
 	```
 
- 3. Add a configuration file.  
-	<details><summary>example/clusterData.json</summary>
+3. Add configuration files.
 
-	   ```json5 
-		{
-	       "gatewayWebsocketURL": "127.0.0.1:8001",
-	       "gatewayRestURL": "127.0.0.1:8002",
-	       "kubevulnURL": "127.0.0.1:8081",
-	       "kubescapeURL": "127.0.0.1:8080",
-	       "eventReceiverRestURL": "https://report.armo.cloud",
-	       "eventReceiverWebsocketURL": "wss://report.armo.cloud",
-	       "rootGatewayURL": "wss://ens.euprod1.cyberarmorsoft.com/v1/waitfornotification",
-	       "accountID": "*********************",
-	       "clusterName": "******", } 
-	```
-	</details>
-   
- 4. Set the file path to the `CONFIG` environment variable 
-     ```
-     export CONFIG=path/to/clusterData.json
-     ```
+<details><summary>/etc/config/capabilities.json</summary>
+
+```json5
+{
+  "capabilities": {
+    "configurationScan": "enable",
+    "continuousScan": "disable",
+    "networkGenerator": "disable",
+    "nodeScan": "enable",
+    "otel": "enable",
+    "relevancy": "enable",
+    "runtimeObservability": "disable",
+    "seccomp": "disable",
+    "vulnerabilityScan": "enable"
+  },
+  "components": {
+    "gateway": {
+      "enabled": true
+    },
+    "hostScanner": {
+      "enabled": true
+    },
+    "kollector": {
+      "enabled": true
+    },
+    "kubescape": {
+      "enabled": true
+    },
+    "kubescapeScheduler": {
+      "enabled": true
+    },
+    "kubevuln": {
+      "enabled": true
+    },
+    "kubevulnScheduler": {
+      "enabled": true
+    },
+    "nodeAgent": {
+      "enabled": true
+    },
+    "operator": {
+      "enabled": true
+    },
+    "otelCollector": {
+      "enabled": true
+    },
+    "storage": {
+      "enabled": true
+    }
+  },
+  "configurations": {
+    "persistence": "enable",
+    "server": {
+      "account": null,
+      "url": "foo.com"
+    }
+  }
+}
+```
+</details>
+
+<details><summary>/etc/config/clusterData.json</summary>
+
+```json5
+{
+   "gatewayWebsocketURL": "127.0.0.1:8001",
+   "gatewayRestURL": "127.0.0.1:8002",
+   "kubevulnURL": "127.0.0.1:8081",
+   "kubescapeURL": "127.0.0.1:8080",
+   "accountID": "*********************",
+   "clusterName": "******"
+}
+```
+</details>
+
+<details><summary>/etc/config/config.json</summary>
+
+```json5
+{
+  "cleanupdelay": 600000000000,
+  "matchingrulesfilename": "/etc/config/matchingRules.json",
+  "namespace": "kubescape",
+  "port": "4002",
+  "triggersecurityframework": false,
+  "workerconcurrency": 3
+}
+```
+</details>
+
+<details><summary>/etc/config/services.json</summary>
+
+```json5
+{
+  "version": "v1",
+  "response": {
+    "event-receiver-http": "https://report.armo.cloud",
+    "event-receiver-ws": "wss://report.armo.cloud",
+    "gateway": "wss://ens.euprod1.cyberarmorsoft.com",
+    "api-server": "https://api.armosec.io",
+    "metrics": "otelcol.armosec.io:443"
+  }
+}
+```
+</details>
      
 ## API Documentation
 
@@ -273,7 +358,7 @@ and also need to open the ports of the other in-cluster components, [as mentione
 ## Running Operator as stand-alone
 
 The Operator also supports running as a stand-alone.
-For this you need to define in the config file, for the relevant values that will be empty
+For this you need to define in the config file, for the relevant values that will be empty.
 For example:
 <details><summary>.vscode/clusterData.json</summary>
 
@@ -283,11 +368,10 @@ For example:
     "gatewayRestURL": "",
     "kubevulnURL": "",
     "kubescapeURL": "",
-    "eventReceiverRestURL": "",
-    "eventReceiverWebsocketURL": "",
-    "rootGatewayURL": "",
     "accountID": "*********************",
     "clusterName": "******"
 }
 ```
 </details>
+
+Also do not specify a service config file for the backend addresses.

@@ -77,6 +77,7 @@ type registryScan struct {
 	mapImageToTags       map[string][]string
 	clusterConfig        utilsmetadata.ClusterConfig
 	eventReceiverRestURL string
+	sendReport           bool
 }
 
 type RepositoriesAndTagsParams struct {
@@ -122,6 +123,7 @@ func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinter
 		k8sAPI:               k8sAPI,
 		clusterConfig:        clusterConfig,
 		eventReceiverRestURL: eventReceiverRestURL,
+		sendReport:           eventReceiverRestURL != "",
 	}
 }
 
@@ -334,7 +336,7 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 		errMsg := fmt.Sprintf("more than %d images provided. scanning only first %d images", imagesToScanLimit, imagesToScanLimit)
 		if reporter != nil {
 			err := errorWithDocumentationRef(errMsg)
-			reporter.SendWarning(err.Error(), true, true, errChan)
+			reporter.SendWarning(err.Error(), registryScan.sendReport, true, errChan)
 			if err := <-errChan; err != nil {
 				logger.L().Ctx(ctx).Error("setImageToTagsMap failed to send error report",
 					helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
@@ -627,7 +629,7 @@ func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj 
 	if err := registryScan.setRegistryAuthFromSecret(ctx); err != nil {
 		logger.L().Info("parseRegistry: could not parse auth from secret, parsing from command", helpers.Error(err))
 	} else {
-		sessionObj.Reporter.SendDetails("secret loaded", true, sessionObj.ErrChan)
+		sessionObj.Reporter.SendDetails("secret loaded", registryScan.sendReport, sessionObj.ErrChan)
 	}
 
 	configMapMode, err := registryScan.getRegistryConfig(&registryScan.registryInfo)

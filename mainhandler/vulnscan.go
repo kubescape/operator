@@ -224,7 +224,7 @@ func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionO
 
 	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", identifiers.AttributeRegistryName,
 		registryName))
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), actionHandler.sendReport, sessionObj.ErrChan)
 	return registryName
 }
 
@@ -234,7 +234,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "DENIED") || strings.Contains(strings.ToLower(err.Error()), "authentication") || strings.Contains(strings.ToLower(err.Error()), "empty token") {
 			// registry info is good, but authentication failed
 			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-			sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
+			sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
 			sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
 			return fmt.Errorf("failed to retrieve repositories: authentication error: %v", err)
 		} else {
@@ -244,9 +244,9 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
 	sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
 
 	if len(repos) == 0 {
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryRetrieveReposStatus, err))
@@ -254,7 +254,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveReposStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
 
 	// check that we can pull tags. One is enough
 	if len(repos) > 0 {
@@ -266,7 +266,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
 
 	var repositories []apitypes.Repository
 	for _, repo := range repos {
@@ -295,7 +295,7 @@ func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *
 		return fmt.Errorf("GetImagesForScanning failed with err %v", err)
 	}
 	registryScanCMDList := convertImagesToRegistryScanCommand(actionHandler.clusterConfig.ClusterName, registry, sessionObj)
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), actionHandler.sendReport, sessionObj.ErrChan)
 
 	return sendAllImagesToRegistryScan(ctx, actionHandler.clusterConfig, registryScanCMDList)
 }
