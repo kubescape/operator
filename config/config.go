@@ -47,8 +47,9 @@ type Components struct {
 }
 
 type Server struct {
-	Account string `json:"account"`
-	URL     string `json:"url"`
+	Account      string `json:"account"`
+	DiscoveryURL string `json:"discoveryUrl"`
+	OtelURL      string `json:"otelUrl"`
 }
 
 type Configurations struct {

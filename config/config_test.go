@@ -24,15 +24,11 @@ func TestLoadCapabilities(t *testing.T) {
 			},
 			want: CapabilitiesConfig{
 				Capabilities: Capabilities{
-					ConfigurationScan:    "enable",
-					ContinuousScan:       "disable",
-					NetworkGenerator:     "disable",
-					NodeScan:             "enable",
-					Otel:                 "enable",
-					Relevancy:            "enable",
-					RuntimeObservability: "disable",
-					Seccomp:              "disable",
-					VulnerabilityScan:    "enable",
+					ConfigurationScan: "enable",
+					ContinuousScan:    "disable",
+					NodeScan:          "enable",
+					Relevancy:         "enable",
+					VulnerabilityScan: "enable",
 				},
 				Components: Components{
 					Gateway:            Component{Enabled: true},
@@ -45,12 +41,13 @@ func TestLoadCapabilities(t *testing.T) {
 					NodeAgent:          Component{Enabled: true},
 					Operator:           Component{Enabled: true},
 					OtelCollector:      Component{Enabled: true},
+					ServiceDiscovery:   Component{Enabled: true},
 					Storage:            Component{Enabled: true},
 				},
 				Configurations: Configurations{
 					Persistence: "enable",
 					Server: Server{
-						URL: "foo.com",
+						DiscoveryURL: "foo.com",
 					},
 				},
 			},
