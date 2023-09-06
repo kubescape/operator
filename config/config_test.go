@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -98,6 +99,79 @@ func TestLoadConfig(t *testing.T) {
 				return
 			}
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	type args struct {
+		clusterConfig armometadata.ClusterConfig
+		components    CapabilitiesConfig
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "no clusterName: error",
+			args: args{
+				clusterConfig: armometadata.ClusterConfig{},
+				components:    CapabilitiesConfig{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "no discovery, no account: error",
+			args: args{
+				clusterConfig: armometadata.ClusterConfig{
+					ClusterName: "foo",
+				},
+				components: CapabilitiesConfig{},
+			},
+		},
+		{
+			name: "discovery, no account: error",
+			args: args{
+				clusterConfig: armometadata.ClusterConfig{
+					ClusterName: "foo",
+				},
+				components: CapabilitiesConfig{
+					Components: Components{ServiceDiscovery: Component{Enabled: true}},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "no discovery, account: no error",
+			args: args{
+				clusterConfig: armometadata.ClusterConfig{
+					AccountID:   "123",
+					ClusterName: "foo",
+				},
+				components: CapabilitiesConfig{},
+			},
+		},
+		{
+			name: "discovery, account: no error",
+			args: args{
+				clusterConfig: armometadata.ClusterConfig{
+					AccountID:   "123",
+					ClusterName: "foo",
+				},
+				components: CapabilitiesConfig{
+					Components: Components{ServiceDiscovery: Component{Enabled: true}},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateConfig(tt.args.clusterConfig, tt.args.components)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 		})
 	}
 }

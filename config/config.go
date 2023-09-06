@@ -124,13 +124,6 @@ func LoadClusterConfig() (utilsmetadata.ClusterConfig, error) {
 		return utilsmetadata.ClusterConfig{}, err
 	}
 
-	if clusterConfig.ClusterName == "" {
-		return utilsmetadata.ClusterConfig{}, fmt.Errorf("missing cluster name in config")
-	}
-	if clusterConfig.AccountID == "" {
-		return utilsmetadata.ClusterConfig{}, fmt.Errorf("missing customer guid in config")
-	}
-
 	return *clusterConfig, err
 }
 
@@ -144,4 +137,14 @@ func GetServiceURLs(filePath string) (schema.IBackendServices, error) {
 	return servicediscovery.GetServices(
 		v1.NewServiceDiscoveryFileV1(pathAndFileName),
 	)
+}
+
+func ValidateConfig(clusterConfig utilsmetadata.ClusterConfig, components CapabilitiesConfig) error {
+	if clusterConfig.AccountID == "" && components.Components.ServiceDiscovery.Enabled {
+		return fmt.Errorf("missing customer guid in config")
+	}
+	if clusterConfig.ClusterName == "" {
+		return fmt.Errorf("missing cluster name in config")
+	}
+	return nil
 }
