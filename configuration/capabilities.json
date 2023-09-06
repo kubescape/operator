@@ -2,12 +2,8 @@
   "capabilities": {
     "configurationScan": "enable",
     "continuousScan": "disable",
-    "networkGenerator": "disable",
     "nodeScan": "enable",
-    "otel": "enable",
     "relevancy": "enable",
-    "runtimeObservability": "disable",
-    "seccomp": "disable",
     "vulnerabilityScan": "enable"
   },
   "components": {
@@ -41,6 +37,9 @@
     "otelCollector": {
       "enabled": true
     },
+    "serviceDiscovery": {
+      "enabled": true
+    },
     "storage": {
       "enabled": true
     }
@@ -49,7 +48,8 @@
     "persistence": "enable",
     "server": {
       "account": null,
-      "url": "foo.com"
+      "discoveryUrl": "foo.com",
+      "otelUrl": null
     }
   }
 }

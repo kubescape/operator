@@ -93,7 +93,7 @@ func main() {
 	}()
 
 	if components.Components.Gateway.Enabled {
-		// trigger a full scan on startup
+		logger.L().Debug("triggering a full kubescapeScan on startup")
 		go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions(clusterConfig))
 	}
 

@@ -124,13 +124,13 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	return nil
 }
 
-func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, payload interface{}) (bool, *time.Duration) {
+func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, sendReport bool, payload interface{}) (bool, *time.Duration) {
 	data := payload.(*kubescapeResponseData)
 	logger.L().Info(fmt.Sprintf("handle kubescape response for scan id %s", data.scanID))
 
 	info := fmt.Sprintf("getting kubescape scanID %s job status", data.scanID)
 	errChan := make(chan error)
-	data.reporter.SendDetails(info, true, errChan)
+	data.reporter.SendDetails(info, sendReport, errChan)
 	if err := <-errChan; err != nil {
 		logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send error report", helpers.Error(err))
 	}
@@ -138,11 +138,11 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(clusterConfig, data.scanID).String(), nil)
 	if err != nil {
 		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendDetails(info, true, errChan)
+		data.reporter.SendDetails(info, sendReport, errChan)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send status report", helpers.Error(err))
 		}
-		data.reporter.SendError(err, true, true, errChan)
+		data.reporter.SendError(err, sendReport, true, errChan)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::error in HTTP GET + failed to send error report", helpers.Error(err))
 		}
@@ -153,11 +153,11 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 	response, err := readKubescapeV1ScanResponse(resp)
 	if err != nil {
 		info := fmt.Sprintf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendDetails(info, true, errChan)
+		data.reporter.SendDetails(info, sendReport, errChan)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send status report", helpers.Error(err))
 		}
-		data.reporter.SendError(err, true, true, errChan)
+		data.reporter.SendError(err, sendReport, true, errChan)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send error report", helpers.Error(err))
 		}
@@ -169,7 +169,7 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 		nextTimeRehandled := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
 		info = fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String())
 		logger.L().Info(info)
-		data.reporter.SendDetails(info, true, errChan)
+		data.reporter.SendDetails(info, sendReport, errChan)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::BusyScanResponseType failed to send status report", helpers.Error(err))
 		}
@@ -178,7 +178,7 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 
 	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID)
 	logger.L().Info(info)
-	data.reporter.SendDetails(info, true, errChan)
+	data.reporter.SendDetails(info, sendReport, errChan)
 	if err := <-errChan; err != nil {
 		logger.L().Ctx(ctx).Error("HandleKubescapeResponse::Done failed to send status report", helpers.Error(err))
 	}
