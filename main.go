@@ -43,6 +43,8 @@ func main() {
 	}
 	logger.L().Debug("loaded config for components", helpers.Interface("components", components))
 
+	config.ValidateConfig(clusterConfig, components)
+
 	var eventReceiverRestURL string
 	if components.Components.ServiceDiscovery.Enabled {
 		services, err := config.GetServiceURLs("/etc/config/services.json")
