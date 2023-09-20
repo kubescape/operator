@@ -11,7 +11,6 @@ import (
 type SessionObj struct {
 	Command  apis.Command             `json:"command"`
 	Reporter beClientV1.IReportSender `json:"reporter"`
-	ErrChan  chan error               `json:"-"`
 }
 
 // CredStruct holds the various credentials needed to do login into CA BE
