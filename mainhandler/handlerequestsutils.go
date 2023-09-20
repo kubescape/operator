@@ -85,7 +85,7 @@ func waitForVulnScanReady(clusterConfig utilsmetadata.ClusterConfig) {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
-			logger.L().Info("vuln scan is ready")
+			logger.L().Info("image vulnerability scanning is available")
 			break
 		}
 

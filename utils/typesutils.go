@@ -12,8 +12,6 @@ import (
 	"github.com/google/uuid"
 	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
-	"github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
 )
 
 var ReporterHttpClient httputils.IHttpClient
@@ -42,20 +40,10 @@ func NewSessionObj(ctx context.Context, eventReceiverRestURL string, clusterConf
 	sessionObj := SessionObj{
 		Command:  *command,
 		Reporter: beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, reporter),
-		ErrChan:  make(chan error),
 	}
-	go sessionObj.WatchErrors(ctx)
 
-	sessionObj.Reporter.SendAsRoutine(true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendAsRoutine(true)
 	return &sessionObj
-}
-
-func (sessionObj *SessionObj) WatchErrors(ctx context.Context) {
-	for err := range sessionObj.ErrChan {
-		if err != nil {
-			logger.L().Ctx(ctx).Error("failed to send job report", helpers.Error(err))
-		}
-	}
 }
 
 func NewJobTracking(reporter systemreports.IReporter) *apis.JobTracking {
