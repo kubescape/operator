@@ -3,6 +3,7 @@ package continuousscanning
 import (
 	"context"
 	"errors"
+	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +32,7 @@ type ContinuousScanningService struct {
 	workDone          chan struct{}
 	k8sdynamic        dynamic.Interface
 	eventHandlers     []EventHandler
-	eventQueue        chan watch.Event
+	eventQueue        *cooldownQueue
 }
 
 func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.Command {
@@ -46,8 +47,8 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	wp.Run(ctx, resourceEventsCh)
 	logger.L().Ctx(ctx).Info("ran watch pool")
 
-	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out chan<- watch.Event) {
-		defer close(out)
+	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *cooldownQueue) {
+		defer out.Stop()
 
 		for {
 			select {
@@ -56,7 +57,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
-				out <- e
+				out.Enqueue(e)
 			case <-shutdownCh:
 				return
 			}
@@ -68,7 +69,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 }
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
-	for e := range s.eventQueue {
+	for e := range s.eventQueue.ResultChan {
 		for idx := range s.eventHandlers {
 			handler := s.eventHandlers[idx]
 			handler.Handle(ctx, e)
@@ -101,9 +102,9 @@ func (s *ContinuousScanningService) Stop() {
 	<-s.workDone
 }
 
-func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h ...EventHandler) *ContinuousScanningService {
+func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, queueSize int, sameEventCooldown time.Duration, h ...EventHandler) *ContinuousScanningService {
 	doneCh := make(chan struct{})
-	eventQueue := make(chan watch.Event, 100)
+	eventQueue := NewCooldownQueue(queueSize, sameEventCooldown)
 	workDone := make(chan struct{})
 
 	return &ContinuousScanningService{

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
@@ -117,7 +118,7 @@ func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Conf
 }
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
-func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
+func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, queueSize int, eventCooldown time.Duration) error {
 	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig, mainHandler.eventReceiverRestURL)
 	dynClient := mainHandler.k8sAPI.DynamicClient
 
@@ -129,7 +130,7 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) err
 
 	fetcher := cs.NewFileFetcher(rulesReader)
 	loader := cs.NewTargetLoader(fetcher)
-	svc := cs.NewContinuousScanningService(dynClient, loader, triggeringHandler)
+	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler)
 	svc.Launch(ctx)
 
 	return nil

@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	uuid "github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -49,7 +51,10 @@ func (s *syncSlice[T]) Commands() []T {
 	return result
 }
 
-func makePod(namespace, name string) *corev1.Pod {
+func makePod(namespace, name, uid string) *corev1.Pod {
+	if uid == "" {
+		uid = uuid.NewString()
+	}
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -58,6 +63,7 @@ func makePod(namespace, name string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			UID:       types.UID(uid),
 		},
 	}
 }
@@ -129,7 +135,7 @@ func TestAddEventHandler(t *testing.T) {
 		{
 			name: "an added event handler should be called on new events",
 			input: []*corev1.Pod{
-				makePod("default", "first"),
+				makePod("default", "first", ""),
 			},
 		},
 	}
@@ -143,7 +149,7 @@ func TestAddEventHandler(t *testing.T) {
 			tl := NewTargetLoader(f)
 			// We use the spy handler later to verify if it's been called
 			spyH := &spyHandler{called: false, wg: resourcesCreatedWg, mx: &sync.RWMutex{}}
-			css := NewContinuousScanningService(dynClient, tl, spyH)
+			css := NewContinuousScanningService(dynClient, tl, DefaultQueueSize, DefaultTTL, spyH)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
@@ -191,9 +197,9 @@ func TestContinuousScanningService(t *testing.T) {
 		{
 			name: "recognized event should produce a scan command",
 			input: []*corev1.Pod{
-				makePod("default", "first"),
-				makePod("default", "second"),
-				makePod("default", "third"),
+				makePod("default", "first", ""),
+				makePod("default", "second", ""),
+				makePod("default", "third", ""),
 			},
 			want: []armoapi.Command{
 				{
@@ -201,7 +207,7 @@ func TestContinuousScanningService(t *testing.T) {
 					Wlid:        makeWlid(clusterNameStub, namespaceStub, "Pod", "first"),
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
-							ScanObject: makePodScanObject(makePod("default", "first")),
+							ScanObject: makePodScanObject(makePod("default", "first", "")),
 						},
 					},
 				},
@@ -210,7 +216,7 @@ func TestContinuousScanningService(t *testing.T) {
 					Wlid:        makeWlid(clusterNameStub, namespaceStub, "Pod", "second"),
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
-							ScanObject: makePodScanObject(makePod("default", "second")),
+							ScanObject: makePodScanObject(makePod("default", "second", "")),
 						},
 					},
 				},
@@ -219,7 +225,7 @@ func TestContinuousScanningService(t *testing.T) {
 					Wlid:        makeWlid(clusterNameStub, namespaceStub, "Pod", "third"),
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
-							ScanObject: makePodScanObject(makePod("default", "third")),
+							ScanObject: makePodScanObject(makePod("default", "third", "")),
 						},
 					},
 				},
@@ -250,7 +256,7 @@ func TestContinuousScanningService(t *testing.T) {
 			triggeringHandler := NewTriggeringHandler(wp, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, "")
 			stubFetcher := &stubFetcher{podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
-			css := NewContinuousScanningService(dynClient, loader, triggeringHandler)
+			css := NewContinuousScanningService(dynClient, loader, DefaultQueueSize, DefaultTTL, triggeringHandler)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
@@ -268,7 +274,7 @@ func TestContinuousScanningService(t *testing.T) {
 			resourcesCreatedWg.Wait()
 			css.Stop()
 
-			assert.Equal(t, tc.want, gotCommands.Commands())
+			assert.ElementsMatch(t, tc.want, gotCommands.Commands())
 		})
 	}
 }

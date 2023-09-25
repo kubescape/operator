@@ -109,7 +109,7 @@ func main() {
 
 	if components.Capabilities.ContinuousScan == "enable" {
 		go func(mh *mainhandler.MainHandler) {
-			err := mh.SetupContinuousScanning(ctx)
+			err := mh.SetupContinuousScanning(ctx, 512, cfg.EventDeduplicationInterval)
 			logger.L().Ctx(ctx).Info("set up cont scanning service")
 			if err != nil {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))

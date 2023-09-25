@@ -87,6 +87,8 @@ type Config struct {
 	ConcurrencyWorkers       int           `mapstructure:"workerConcurrency"`
 	TriggerSecurityFramework bool          `mapstructure:"triggerSecurityFramework"`
 	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
+	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
+	EventDeduplicationInterval time.Duration `mapstructure:"eventDeduplicationInterval"`
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -100,6 +102,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("workerConcurrency", 3)
 	viper.SetDefault("triggerSecurityFramework", false)
 	viper.SetDefault("matchingRulesFilename", "/etc/config/matchingRules.json")
+	viper.SetDefault("eventDeduplicationInterval", 2 * time.Minute)
 
 	viper.AutomaticEnv()
 
