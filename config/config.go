@@ -11,6 +11,8 @@ import (
 	v1 "github.com/kubescape/backend/pkg/servicediscovery/v1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/kubevuln/config"
+	secretConfig "github.com/kubescape/kubevuln/config"
 	"github.com/spf13/viper"
 )
 
@@ -62,6 +64,10 @@ type CapabilitiesConfig struct {
 	Components     Components     `mapstructure:"components"`
 	Configurations Configurations `mapstructure:"configurations"`
 }
+
+var (
+	SD config.SecretData
+)
 
 func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
 	viper.AddConfigPath(path)
@@ -147,4 +153,13 @@ func ValidateConfig(clusterConfig utilsmetadata.ClusterConfig, components Capabi
 		return fmt.Errorf("missing cluster name in config")
 	}
 	return nil
+}
+
+func LoadSecret(path string) (*secretConfig.SecretData, error) {
+	sd, err := secretConfig.LoadSecret(path)
+	if err != nil {
+		return nil, err
+	}
+	SD = *sd
+	return sd, err
 }

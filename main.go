@@ -45,6 +45,11 @@ func main() {
 
 	config.ValidateConfig(clusterConfig, components)
 
+	_, err = config.LoadSecret("/etc/access-token-secret")
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal("load secrets failed", helpers.Error(err))
+	}
+
 	var eventReceiverRestURL string
 	if components.Components.ServiceDiscovery.Enabled {
 		services, err := config.GetServiceURLs("/etc/config/services.json")
