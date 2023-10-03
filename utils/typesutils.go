@@ -12,15 +12,17 @@ import (
 	"github.com/google/uuid"
 	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
-	"github.com/kubescape/operator/config"
 )
 
-var ReporterHttpClient httputils.IHttpClient
+var (
+	ReporterHttpClient httputils.IHttpClient
+	RequestToken       string
+)
 
-func setPostResultHeaders() map[string]string {
+func getRequestHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type":  "application/json",
-		"Authorization": "Bearer " + config.SD.Token,
+		"Authorization": "Bearer " + RequestToken,
 	}
 }
 
@@ -47,7 +49,7 @@ func NewSessionObj(ctx context.Context, eventReceiverRestURL string, clusterConf
 
 	sessionObj := SessionObj{
 		Command:  *command,
-		Reporter: beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, setPostResultHeaders(), reporter),
+		Reporter: beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, getRequestHeaders(), reporter),
 	}
 
 	sessionObj.Reporter.SendAsRoutine(true)

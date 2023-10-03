@@ -15,10 +15,9 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
-	github.com/kubescape/backend v0.0.7
+	github.com/kubescape/backend v0.0.8-0.20231003075242-690fc75a1964
 	github.com/kubescape/go-logger v0.0.21
 	github.com/kubescape/k8s-interface v0.0.135-0.20230730135750-e6e709507847
-	github.com/kubescape/kubevuln v0.2.111-0.20230930222654-26a5470dd1c6
 	github.com/kubescape/opa-utils v0.0.268
 	github.com/kubescape/storage v0.0.18
 	github.com/mitchellh/mapstructure v1.5.0
@@ -80,6 +79,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.10.1 // indirect
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/fatih/color v1.15.0 // indirect

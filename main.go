@@ -18,6 +18,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
+	beUtils "github.com/kubescape/backend/pkg/utils"
 	logger "github.com/kubescape/go-logger"
 )
 
@@ -45,7 +46,7 @@ func main() {
 
 	config.ValidateConfig(clusterConfig, components)
 
-	_, err = config.LoadSecret("/etc/access-token-secret")
+	secretData, err := beUtils.LoadTokenFromSecret("/etc/access-token-secret")
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load secrets failed", helpers.Error(err))
 	}
@@ -76,7 +77,7 @@ func main() {
 		defer logger.ShutdownOtel(ctx)
 	}
 
-	initHttpHandlers(clusterConfig, eventReceiverRestURL)
+	initHttpHandlers(clusterConfig, eventReceiverRestURL, secretData.Token)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
@@ -129,8 +130,9 @@ func displayBuildTag() {
 	logger.L().Info(fmt.Sprintf("Image version: %s", os.Getenv("RELEASE")))
 }
 
-func initHttpHandlers(clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) {
+func initHttpHandlers(clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL, requestToken string) {
 	mainhandler.KubescapeHttpClient = utils.InitHttpClient(clusterConfig.KubescapeURL)
 	mainhandler.VulnScanHttpClient = utils.InitHttpClient(clusterConfig.KubevulnURL)
 	utils.ReporterHttpClient = utils.InitHttpClient(eventReceiverRestURL)
+	utils.RequestToken = requestToken
 }
