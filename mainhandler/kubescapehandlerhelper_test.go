@@ -1,18 +1,17 @@
 package mainhandler
 
 import (
+	"fmt"
 	"testing"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
-	"github.com/kubescape/operator/utils"
-
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/boolutils"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
-
-	"github.com/armosec/armoapi-go/apis"
 )
 
 func TestGetKubescapeV1ScanRequest(t *testing.T) {
@@ -35,6 +34,24 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
 		assert.Equal(t, "json", req.Format)
+	}
+	{
+		actionHandler := ActionHandler{
+			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		assert.NoError(t, err)
+		assert.Equal(t, "all", req.TargetNames[0])
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
+	}
+	{
+		actionHandler := ActionHandler{
+			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		assert.NoError(t, err)
+		assert.Equal(t, "all", req.TargetNames[0])
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
 }
 
@@ -117,4 +134,50 @@ func TestAppendSecurityFramework(t *testing.T) {
 		})
 	}
 
+}
+
+func Test_appendSecurityFramework(t *testing.T) {
+	type args struct {
+		postScanRequest *utilsmetav1.PostScanRequest
+	}
+	tests := []struct {
+		args     args
+		name     string
+		expected []string
+	}{
+		{
+			name: "framework scan with one framework ",
+			args: args{
+				postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"nsa"}},
+			},
+			expected: []string{"nsa", "security"},
+		},
+		{
+			name: "framework scan with all",
+			args: args{
+				postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"all"}},
+			},
+			expected: []string{"all", "security"},
+		},
+		{
+			name: "framework scan with security",
+			args: args{
+				postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"security"}},
+			},
+			expected: []string{"security"},
+		},
+		{
+			name: "not framework scan",
+			args: args{
+				postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindControl, TargetNames: []string{"c-0001"}},
+			},
+			expected: []string{"c-0001"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appendSecurityFramework(tt.args.postScanRequest)
+			assert.Equal(t, fmt.Sprint(tt.args.postScanRequest.TargetNames), fmt.Sprint(tt.expected))
+		})
+	}
 }
