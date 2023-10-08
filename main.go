@@ -11,6 +11,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/crdhandler"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/restapihandler"
@@ -116,6 +117,10 @@ func main() {
 			}
 		}(mainHandler)
 	}
+
+	crdHandler := crdhandler.NewCrdHandler(k8sApi)
+
+	go crdHandler.HandleCrds()
 
 	<-ctx.Done()
 }
