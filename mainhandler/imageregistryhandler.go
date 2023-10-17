@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"github.com/mitchellh/mapstructure"
 
@@ -71,13 +71,12 @@ type registry struct {
 }
 
 type registryScan struct {
-	k8sAPI               *k8sinterface.KubernetesApi
-	registry             registry
-	registryInfo         armotypes.RegistryInfo
-	mapImageToTags       map[string][]string
-	clusterConfig        utilsmetadata.ClusterConfig
-	eventReceiverRestURL string
-	sendReport           bool
+	k8sAPI         *k8sinterface.KubernetesApi
+	registry       registry
+	registryInfo   armotypes.RegistryInfo
+	mapImageToTags map[string][]string
+	config         config.IConfig
+	sendReport     bool
 }
 
 type RepositoriesAndTagsParams struct {
@@ -105,7 +104,7 @@ func errorWithDocumentationRef(errorMessage string) error {
 	return fmt.Errorf("%s. Please refer to the documentation %s", errorMessage, registryScanDocumentation)
 }
 
-func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinterface.KubernetesApi, eventReceiverRestURL string) registryScan {
+func NewRegistryScan(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) registryScan {
 	depth := new(int)
 	isHTTPS := new(bool)
 	skipTlsVerify := new(bool)
@@ -120,10 +119,9 @@ func NewRegistryScan(clusterConfig utilsmetadata.ClusterConfig, k8sAPI *k8sinter
 			IsHTTPS:       isHTTPS,
 			SkipTLSVerify: skipTlsVerify,
 		},
-		k8sAPI:               k8sAPI,
-		clusterConfig:        clusterConfig,
-		eventReceiverRestURL: eventReceiverRestURL,
-		sendReport:           eventReceiverRestURL != "",
+		k8sAPI:     k8sAPI,
+		config:     config,
+		sendReport: config.EventReceiverURL() != "",
 	}
 }
 
@@ -841,7 +839,7 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
 	}
 
-	url, err := beClientV1.GetRegistryRepositoriesUrl(registryScan.eventReceiverRestURL, params.CustomerGUID, params.RegistryName, params.JobID)
+	url, err := beClientV1.GetRegistryRepositoriesUrl(registryScan.config.EventReceiverURL(), params.CustomerGUID, params.RegistryName, params.JobID)
 	if err != nil {
 		return err
 	}

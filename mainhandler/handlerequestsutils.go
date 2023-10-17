@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -37,7 +37,7 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 	for i := range workloads {
 		switch workloads[i].GetKind() {
 		case "Namespace":
-			idMap[pkgwlid.GetWLID(mainHandler.clusterConfig.ClusterName, workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
+			idMap[pkgwlid.GetWLID(mainHandler.config.ClusterName(), workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
 		default:
 			// find wlid
 			kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(workloads[i])
@@ -50,7 +50,7 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 				continue
 			}
 
-			wlid := pkgwlid.GetWLID(mainHandler.clusterConfig.ClusterName, workloads[i].GetNamespace(), kind, name)
+			wlid := pkgwlid.GetWLID(mainHandler.config.ClusterName(), workloads[i].GetNamespace(), kind, name)
 			if wlid != "" {
 				idMap[wlid] = true
 			}
@@ -59,7 +59,7 @@ func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorklo
 	return utils.MapToString(idMap), errs
 }
 
-func notWaitAtAll(_ utilsmetadata.ClusterConfig) {
+func notWaitAtAll(_ config.IConfig) {
 }
 
 func isActionNeedToWait(action apis.Command) waitFunc {
@@ -69,8 +69,8 @@ func isActionNeedToWait(action apis.Command) waitFunc {
 	return notWaitAtAll
 }
 
-func waitForVulnScanReady(clusterConfig utilsmetadata.ClusterConfig) {
-	fullURL := getVulnScanURL(clusterConfig)
+func waitForVulnScanReady(config config.IConfig) {
+	fullURL := getVulnScanURL(config)
 	// replace path
 	fullURL.Path = fmt.Sprintf("v1/%s", probes.ReadinessPath)
 
@@ -92,8 +92,8 @@ func waitForVulnScanReady(clusterConfig utilsmetadata.ClusterConfig) {
 	}
 }
 
-func waitForKubescapeReady(clusterConfig utilsmetadata.ClusterConfig) {
-	fullURL := getKubescapeV1ScanURL(clusterConfig)
+func waitForKubescapeReady(config config.IConfig) {
+	fullURL := getKubescapeV1ScanURL(config)
 	fullURL.Path = "readyz"
 	timer := time.NewTimer(time.Duration(1) * time.Minute)
 

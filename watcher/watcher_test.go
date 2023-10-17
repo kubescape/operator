@@ -10,6 +10,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	beUtils "github.com/kubescape/backend/pkg/utils"
 	instanceidv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
@@ -72,11 +73,13 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset()
 
-			wh, err := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil, "")
+			wh, err := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil)
 
 			actualMap := wh.iwMap.Map()
 			for imageID := range actualMap {
@@ -283,6 +286,8 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
@@ -291,7 +296,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			errorCh := make(chan error)
 			vmEvents := make(chan watch.Event)
 
-			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.instanceIDs, "")
+			wh, _ := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, iwMap, tc.instanceIDs)
 
 			go wh.HandleVulnerabilityManifestEvents(vmEvents, errorCh)
 
@@ -327,10 +332,11 @@ func Test_getSBOMWatcher(t *testing.T) {
 	clusterConfig := utilsmetadata.ClusterConfig{}
 	cfg, err := config.LoadConfig("../configuration")
 	assert.NoError(t, err)
+	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	storageClient := kssfake.NewSimpleClientset()
-	wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, nil, nil, "")
+	wh, _ := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, nil, nil)
 
 	sbomWatcher, err := wh.getSBOMWatcher()
 
@@ -504,6 +510,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
@@ -513,7 +521,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
-			wh, _ := NewWatchHandler(ctx, clusterConfig, cfg, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs, "")
+			wh, _ := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs)
 			wh.wlidsToContainerToImageIDMap = tc.wlidsToContainersToImageIDsMap
 
 			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
@@ -748,10 +756,11 @@ func TestHandleSBOMEvents(t *testing.T) {
 
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
 			assert.NoError(t, err)
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			ksStorageClient := kssfake.NewSimpleClientset(inputObjects...)
-			wh, _ := NewWatchHandler(context.TODO(), clusterConfig, cfg, k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil, "")
+			wh, _ := NewWatchHandler(context.TODO(), operatorConfig, k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
 
 			errCh := make(chan error)
 

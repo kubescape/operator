@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -29,10 +29,10 @@ const (
 	securityFrameworkName = "security"
 )
 
-func getKubescapeV1ScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
+func getKubescapeV1ScanURL(config config.IConfig) *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = clusterConfig.KubescapeURL
+	ksURL.Host = config.KubescapeURL()
 	ksURL.Path = utils.KubescapeRequestPathV1
 
 	q := ksURL.Query()
@@ -42,10 +42,10 @@ func getKubescapeV1ScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
 	return &ksURL
 }
 
-func getKubescapeV1ScanStatusURL(clusterConfig utilsmetadata.ClusterConfig, scanID string) *url.URL {
+func getKubescapeV1ScanStatusURL(config config.IConfig, scanID string) *url.URL {
 	ksURL := url.URL{}
 	ksURL.Scheme = "http"
-	ksURL.Host = clusterConfig.KubescapeURL
+	ksURL.Host = config.KubescapeURL()
 	ksURL.Path = utils.KubescapeRequestStatusV1
 
 	q := ksURL.Query()

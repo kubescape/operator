@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/armosec/utils-k8s-go/armometadata"
+	"github.com/kubescape/backend/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -107,6 +108,7 @@ func TestValidateConfig(t *testing.T) {
 	type args struct {
 		clusterConfig armometadata.ClusterConfig
 		components    CapabilitiesConfig
+		tokenData     utils.TokenSecretData
 	}
 	tests := []struct {
 		name    string
@@ -146,8 +148,11 @@ func TestValidateConfig(t *testing.T) {
 			name: "no discovery, account: no error",
 			args: args{
 				clusterConfig: armometadata.ClusterConfig{
-					AccountID:   "123",
 					ClusterName: "foo",
+				},
+				tokenData: utils.TokenSecretData{
+					AccountId: "123",
+					Token:     "abc",
 				},
 				components: CapabilitiesConfig{},
 			},
@@ -156,8 +161,11 @@ func TestValidateConfig(t *testing.T) {
 			name: "discovery, account: no error",
 			args: args{
 				clusterConfig: armometadata.ClusterConfig{
-					AccountID:   "123",
 					ClusterName: "foo",
+				},
+				tokenData: utils.TokenSecretData{
+					AccountId: "123",
+					Token:     "abc",
 				},
 				components: CapabilitiesConfig{
 					Components: Components{ServiceDiscovery: Component{Enabled: true}},
@@ -167,7 +175,8 @@ func TestValidateConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateConfig(tt.args.clusterConfig, tt.args.components)
+			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.tokenData, "", Config{})
+			err := ValidateConfig(operatorConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -8,29 +8,29 @@ import (
 	"github.com/armosec/armoapi-go/identifiers"
 
 	"github.com/armosec/utils-go/httputils"
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/google/uuid"
 	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
+	beServerV1 "github.com/kubescape/backend/pkg/server/v1"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
+	"github.com/kubescape/operator/config"
 )
 
 var (
 	ReporterHttpClient httputils.IHttpClient
-	RequestToken       string
 )
 
-func getRequestHeaders() map[string]string {
+func getRequestHeaders(token string) map[string]string {
 	return map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer " + RequestToken,
+		"Content-Type":                "application/json",
+		beServerV1.RequestTokenHeader: token,
 	}
 }
 
-func NewSessionObj(ctx context.Context, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := systemreports.NewBaseReport(clusterConfig.AccountID, message)
+func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
+	reporter := systemreports.NewBaseReport(config.AccountID(), message)
 	target := command.GetID()
 	if target == identifiers.DesignatorsToken {
-		target = fmt.Sprintf("wlid://cluster-%s/", clusterConfig.ClusterName)
+		target = fmt.Sprintf("wlid://cluster-%s/", config.ClusterName())
 	}
 	if target == "" {
 		target = fmt.Sprintf("%v", command.Args)
@@ -49,7 +49,7 @@ func NewSessionObj(ctx context.Context, eventReceiverRestURL string, clusterConf
 
 	sessionObj := SessionObj{
 		Command:  *command,
-		Reporter: beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, getRequestHeaders(), reporter),
+		Reporter: beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, getRequestHeaders(config.Token()), reporter),
 	}
 
 	sessionObj.Reporter.SendAsRoutine(true)

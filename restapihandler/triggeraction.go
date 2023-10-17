@@ -44,7 +44,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 	displayReceivedCommand(receivedCommands)
 
 	for _, c := range commands.Commands {
-		sessionObj := utils.NewSessionObj(ctx, resthandler.eventReceiverRestURL, resthandler.clusterConfig, &c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
+		sessionObj := utils.NewSessionObj(ctx, resthandler.config, &c, "Websocket", c.JobTracking.ParentID, c.JobTracking.JobID, c.JobTracking.LastActionNumber+1)
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())
 			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))

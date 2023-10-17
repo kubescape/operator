@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -52,9 +51,7 @@ type WatchHandler struct {
 	wlidsToContainerToImageIDMap      WlidsToContainerToImageIDMap // <wlid> : <containerName> : imageID
 	wlidsToContainerToImageIDMapMutex *sync.RWMutex
 	currentPodListResourceVersion     string // current PodList version, used by watcher (https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes)
-	clusterConfig                     utilsmetadata.ClusterConfig
-	cfg                               config.Config
-	eventReceiverRestURL              string
+	cfg                               config.IConfig
 }
 
 // remove unused imageIDs and instanceIDs from storage. Update internal maps
@@ -72,7 +69,7 @@ func (wh *WatchHandler) cleanUp(ctx context.Context) {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string, eventReceiverRestURL string) (*WatchHandler, error) {
+func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
 
 	wh := &WatchHandler{
 		storageClient:                     storageClient,
@@ -82,9 +79,7 @@ func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterCon
 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
 		instanceIDsMutex:                  &sync.RWMutex{},
 		managedInstanceIDSlugs:            instanceIDs,
-		clusterConfig:                     clusterConfig,
 		cfg:                               cfg,
-		eventReceiverRestURL:              eventReceiverRestURL,
 	}
 
 	// list all Pods and extract their image IDs
@@ -106,7 +101,7 @@ func NewWatchHandler(ctx context.Context, clusterConfig utilsmetadata.ClusterCon
 func (wh *WatchHandler) startCleanUpAndTriggerScanRoutine(ctx context.Context) {
 	go func() {
 		for {
-			time.Sleep(wh.cfg.CleanUpRoutineInterval)
+			time.Sleep(wh.cfg.CleanUpRoutineInterval())
 			wh.cleanUp(ctx)
 			// must be called after cleanUp, since we can have two instanceIDs with same wlid
 			// wh.triggerRelevancyScan(ctx)
@@ -416,7 +411,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			}
 		case cmd, ok := <-commands:
 			if ok {
-				utils.AddCommandToChannel(ctx, wh.eventReceiverRestURL, wh.clusterConfig, cmd, workerPool)
+				utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -480,7 +475,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.
 			}
 		case cmd, ok := <-cmdCh:
 			if ok {
-				utils.AddCommandToChannel(ctx, wh.eventReceiverRestURL, wh.clusterConfig, cmd, workerPool)
+				utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -614,7 +609,7 @@ func (wh *WatchHandler) buildIDs(ctx context.Context, podList *core1.PodList) {
 			continue
 		}
 
-		parentWlid := pkgwlid.GetWLID(wh.clusterConfig.ClusterName, wl.GetNamespace(), wl.GetKind(), wl.GetName())
+		parentWlid := pkgwlid.GetWLID(wh.cfg.ClusterName(), wl.GetNamespace(), wl.GetKind(), wl.GetName())
 
 		imgIDsToContainers := extractImageIDsToContainersFromPod(&podList.Items[i])
 
@@ -718,7 +713,7 @@ func (wh *WatchHandler) getParentIDForPod(pod *core1.Pod) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return pkgwlid.GetWLID(wh.clusterConfig.ClusterName, wl.GetNamespace(), kind, name), nil
+	return pkgwlid.GetWLID(wh.cfg.ClusterName(), wl.GetNamespace(), kind, name), nil
 
 }
 
@@ -811,7 +806,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, podsWatch watch.In
 			wh.addToInstanceIDsList(instanceID[i])
 		}
 
-		utils.AddCommandToChannel(ctx, wh.eventReceiverRestURL, wh.clusterConfig, cmd, workerPool)
+		utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
 	}
 }
 

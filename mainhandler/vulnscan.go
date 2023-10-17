@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/docker/docker/api/types"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -51,27 +51,27 @@ const (
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
 )
 
-func getVulnScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
+func getVulnScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
 		Scheme: "http",
-		Host:   clusterConfig.KubevulnURL,
+		Host:   config.KubevulnURL(),
 		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.ContainerScanCommandPath),
 	}
 }
 
-func getRegistryScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
+func getRegistryScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
 		Scheme: "http",
-		Host:   clusterConfig.KubevulnURL,
+		Host:   config.KubevulnURL(),
 		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.RegistryScanCommandPath),
 	}
 }
 
-func sendAllImagesToRegistryScan(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, registryScanCMDList []*apis.RegistryScanCommand) error {
+func sendAllImagesToRegistryScan(ctx context.Context, config config.IConfig, registryScanCMDList []*apis.RegistryScanCommand) error {
 	var err error
 	errs := make([]error, 0)
 	for _, registryScanCMD := range registryScanCMDList {
-		err = sendWorkloadToRegistryScan(ctx, clusterConfig, registryScanCMD)
+		err = sendWorkloadToRegistryScan(ctx, config, registryScanCMD)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("sendWorkloadToRegistryScan failed", helpers.Error(err))
 			errs = append(errs, err)
@@ -132,7 +132,7 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistries")
 	defer span.End()
 
-	if !actionHandler.components.Kubevuln.Enabled {
+	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("Kubevuln is not enabled")
 	}
 
@@ -154,7 +154,7 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 }
 
 func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessionObj *utils.SessionObj) (*registryScan, error) {
-	registryScan := NewRegistryScan(actionHandler.clusterConfig, actionHandler.k8sAPI, actionHandler.eventReceiverRestURL)
+	registryScan := NewRegistryScan(actionHandler.config, actionHandler.k8sAPI)
 	if regName := actionHandler.parseRegistryName(sessionObj); regName != "" {
 		registryScan.setRegistryName(regName)
 	}
@@ -176,7 +176,7 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(ctx context.Context
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.testRegistryConnectivity")
 	defer span.End()
 
-	if !actionHandler.components.Kubevuln.Enabled {
+	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("Kubevuln is not enabled")
 	}
 
@@ -294,17 +294,17 @@ func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *
 	if err != nil {
 		return fmt.Errorf("GetImagesForScanning failed with err %v", err)
 	}
-	registryScanCMDList := convertImagesToRegistryScanCommand(actionHandler.clusterConfig.ClusterName, registry, sessionObj)
+	registryScanCMDList := convertImagesToRegistryScanCommand(actionHandler.config.ClusterName(), registry, sessionObj)
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), actionHandler.sendReport)
 
-	return sendAllImagesToRegistryScan(ctx, actionHandler.clusterConfig, registryScanCMDList)
+	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
 }
 
 func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj *utils.SessionObj) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanWorkload")
 	defer span.End()
 
-	if !actionHandler.components.Kubevuln.Enabled {
+	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("Kubevuln is not enabled")
 	}
 
@@ -434,12 +434,12 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 
 }
 
-func sendWorkloadToRegistryScan(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, registryScanCommand *apis.RegistryScanCommand) error {
-	return sendWorkloadWithCredentials(ctx, getRegistryScanURL(clusterConfig), registryScanCommand)
+func sendWorkloadToRegistryScan(ctx context.Context, config config.IConfig, registryScanCommand *apis.RegistryScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getRegistryScanURL(config), registryScanCommand)
 }
 
-func sendWorkloadToCVEScan(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, websocketScanCommand *apis.WebsocketScanCommand) error {
-	return sendWorkloadWithCredentials(ctx, getVulnScanURL(clusterConfig), websocketScanCommand)
+func sendWorkloadToCVEScan(ctx context.Context, config config.IConfig, websocketScanCommand *apis.WebsocketScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getVulnScanURL(config), websocketScanCommand)
 }
 
 func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) (*corev1.Pod, error) {
@@ -598,7 +598,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 		}
 		logger.L().Ctx(ctx).Debug("sending scan command", helpers.String("id", containers[i].id), helpers.String("image", containers[i].image), helpers.String("container", containers[i].container))
 
-		if err := sendCommandToScanner(ctx, actionHandler.clusterConfig, websocketScanCommand, command); err != nil {
+		if err := sendCommandToScanner(ctx, actionHandler.config, websocketScanCommand, command); err != nil {
 			errs += err.Error()
 			logger.L().Error("scanning failed", helpers.String("image", websocketScanCommand.ImageTag), helpers.Error(err))
 		}
@@ -611,11 +611,11 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 	return nil
 }
 
-func sendCommandToScanner(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
+func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
 	var err error
 	switch command {
 	case apis.TypeScanImages:
-		err = sendWorkloadToCVEScan(ctx, clusterConfig, webSocketScanCommand)
+		err = sendWorkloadToCVEScan(ctx, config, webSocketScanCommand)
 	default:
 		err = fmt.Errorf("unknown command: %s", command)
 	}
