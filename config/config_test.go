@@ -151,8 +151,8 @@ func TestValidateConfig(t *testing.T) {
 					ClusterName: "foo",
 				},
 				tokenData: utils.TokenSecretData{
-					AccountId: "123",
-					Token:     "abc",
+					Account: "123",
+					Token:   "abc",
 				},
 				components: CapabilitiesConfig{},
 			},
@@ -164,8 +164,8 @@ func TestValidateConfig(t *testing.T) {
 					ClusterName: "foo",
 				},
 				tokenData: utils.TokenSecretData{
-					AccountId: "123",
-					Token:     "abc",
+					Account: "123",
+					Token:   "abc",
 				},
 				components: CapabilitiesConfig{
 					Components: Components{ServiceDiscovery: Component{Enabled: true}},

@@ -43,9 +43,9 @@ func main() {
 	}
 	logger.L().Debug("loaded config for components", helpers.Interface("components", components))
 
-	secretData := &beUtils.TokenSecretData{AccountId: "", Token: ""}
+	secretData := &beUtils.TokenSecretData{Account: "", Token: ""}
 	if components.Components.ServiceDiscovery.Enabled {
-		secretData, err = beUtils.LoadTokenFromSecret("/etc/access-token-secret")
+		secretData, err = beUtils.LoadTokenFromFile("/etc/access-token-secret")
 		if err != nil {
 			logger.L().Ctx(ctx).Fatal("load secrets failed", helpers.Error(err))
 		}

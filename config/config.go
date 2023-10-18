@@ -123,7 +123,7 @@ func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadat
 		components:           components,
 		serviceConfig:        serviceConfig,
 		clusterConfig:        clusterConfig,
-		accountId:            tokenSecret.AccountId,
+		accountId:            tokenSecret.Account,
 		token:                tokenSecret.Token,
 		eventReceiverRestURL: eventReceiverRestURL,
 	}
