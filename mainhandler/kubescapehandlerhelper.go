@@ -67,10 +67,18 @@ func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostSc
 		return nil, err
 	}
 
-	// validate
 	postScanRequest := &utilsmetav1.PostScanRequest{}
 	if err := json.Unmarshal(scanV1Bytes, postScanRequest); err != nil {
 		return nil, fmt.Errorf("failed to convert request to v1/scan object, reason: %s", err.Error())
+	}
+	if len(postScanRequest.TargetNames) == 0 || postScanRequest.TargetType == "" {
+		setDefaultsKubescapeScanRequest(postScanRequest)
+	}
+
+	for i := range postScanRequest.TargetNames {
+		if postScanRequest.TargetNames[i] == "" {
+			postScanRequest.TargetNames[i] = "all"
+		}
 	}
 
 	return postScanRequest, nil
@@ -222,7 +230,7 @@ func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanReques
 // appendSecurityFramework - append "security" framework to the request if targetType is "Framework"
 func appendSecurityFramework(postScanRequest *utilsmetav1.PostScanRequest) {
 	if postScanRequest.TargetType == utilsapisv1.KindFramework {
-		if !slices.Contains(postScanRequest.TargetNames, "all") && !slices.Contains(postScanRequest.TargetNames, securityFrameworkName) {
+		if !slices.Contains(postScanRequest.TargetNames, securityFrameworkName) {
 			postScanRequest.TargetNames = append(postScanRequest.TargetNames, securityFrameworkName)
 		}
 	}

@@ -473,6 +473,9 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
 
+	relPods := []corev1.Pod{}
+
+	// list the pods that are related to the workload
 	for i := range pods.Items {
 
 		// set the api version and kind to be pod - this is needed for the the resourceID
@@ -496,11 +499,26 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		}
 
 		if kind == workload.GetKind() && name == workload.GetName() {
-			return &pods.Items[i], nil
+			relPods = append(relPods, pods.Items[i])
 		}
 	}
 
-	return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
+	if len(relPods) == 0 {
+		return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
+	}
+
+	// find the latest pod
+	latestPod := relPods[0]
+	latestTime := latestPod.CreationTimestamp.Time
+
+	for i := range relPods {
+		if relPods[i].CreationTimestamp.Time.After(latestTime) {
+			latestPod = relPods[i]
+			latestTime = relPods[i].CreationTimestamp.Time
+		}
+	}
+	return &latestPod, nil
+
 }
 
 // get a workload, retrieves its pod and returns a map of container name to image id
