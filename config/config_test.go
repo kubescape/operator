@@ -108,7 +108,7 @@ func TestValidateConfig(t *testing.T) {
 	type args struct {
 		clusterConfig armometadata.ClusterConfig
 		components    CapabilitiesConfig
-		tokenData     utils.TokenSecretData
+		credentials   *utils.Credentials
 	}
 	tests := []struct {
 		name    string
@@ -150,9 +150,9 @@ func TestValidateConfig(t *testing.T) {
 				clusterConfig: armometadata.ClusterConfig{
 					ClusterName: "foo",
 				},
-				tokenData: utils.TokenSecretData{
-					Account: "123",
-					Token:   "abc",
+				credentials: &utils.Credentials{
+					Account:   "123",
+					AccessKey: "abc",
 				},
 				components: CapabilitiesConfig{},
 			},
@@ -163,9 +163,9 @@ func TestValidateConfig(t *testing.T) {
 				clusterConfig: armometadata.ClusterConfig{
 					ClusterName: "foo",
 				},
-				tokenData: utils.TokenSecretData{
-					Account: "123",
-					Token:   "abc",
+				credentials: &utils.Credentials{
+					Account:   "123",
+					AccessKey: "abc",
 				},
 				components: CapabilitiesConfig{
 					Components: Components{ServiceDiscovery: Component{Enabled: true}},
@@ -175,7 +175,7 @@ func TestValidateConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.tokenData, "", Config{})
+			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.credentials, "", Config{})
 			err := ValidateConfig(operatorConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)

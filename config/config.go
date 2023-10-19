@@ -94,7 +94,7 @@ type Config struct {
 type IConfig interface {
 	Namespace() string
 	AccountID() string
-	Token() string
+	AccessKey() string
 	ClusterName() string
 	EventReceiverURL() string
 	GatewayWebsocketURL() string
@@ -114,17 +114,17 @@ type OperatorConfig struct {
 	components           CapabilitiesConfig
 	clusterConfig        utilsmetadata.ClusterConfig
 	accountId            string
-	token                string
+	accessKey            string
 	eventReceiverRestURL string
 }
 
-func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, tokenSecret utils.TokenSecretData, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
+func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
 	return &OperatorConfig{
 		components:           components,
 		serviceConfig:        serviceConfig,
 		clusterConfig:        clusterConfig,
-		accountId:            tokenSecret.Account,
-		token:                tokenSecret.Token,
+		accountId:            creds.Account,
+		accessKey:            creds.AccessKey,
 		eventReceiverRestURL: eventReceiverRestURL,
 	}
 }
@@ -170,8 +170,8 @@ func (c *OperatorConfig) AccountID() string {
 	return c.accountId
 }
 
-func (c *OperatorConfig) Token() string {
-	return c.token
+func (c *OperatorConfig) AccessKey() string {
+	return c.accessKey
 }
 
 func (c *OperatorConfig) ClusterName() string {
@@ -233,8 +233,8 @@ func GetServiceURLs(filePath string) (schema.IBackendServices, error) {
 }
 
 func ValidateConfig(config IConfig) error {
-	if (config.AccountID() == "" || config.Token() == "") && config.Components().ServiceDiscovery.Enabled {
-		return fmt.Errorf("missing account id / token")
+	if config.AccountID() == "" && config.Components().ServiceDiscovery.Enabled {
+		return fmt.Errorf("missing account id")
 	}
 
 	if config.ClusterName() == "" {

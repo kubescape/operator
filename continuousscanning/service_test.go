@@ -248,7 +248,7 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, beUtils.TokenSecretData{}, "", config.Config{})
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, &beUtils.Credentials{}, "", config.Config{})
 			triggeringHandler := NewTriggeringHandler(wp, operatorConfig)
 			stubFetcher := &stubFetcher{podMatchRules}
 			loader := NewTargetLoader(stubFetcher)

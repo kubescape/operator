@@ -88,7 +88,7 @@ func TestFixK8sNameLimit(t *testing.T) {
 func TestGetKubescapeV1ScanURL(t *testing.T) {
 	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "kubescape",
-	}, beUtils.TokenSecretData{}, "", config.Config{})
+	}, &beUtils.Credentials{}, "", config.Config{})
 	u := getKubescapeV1ScanURL(cfg)
 	assert.Equal(t, "http://kubescape/v1/scan?keep=false", u.String())
 }
@@ -96,7 +96,7 @@ func TestGetKubescapeV1ScanURL(t *testing.T) {
 func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
 	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "armo-kubescape:8080",
-	}, beUtils.TokenSecretData{}, "", config.Config{})
+	}, &beUtils.Credentials{}, "", config.Config{})
 
 	url := getKubescapeV1ScanStatusURL(cfg, "123").String()
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")

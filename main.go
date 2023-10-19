@@ -43,12 +43,14 @@ func main() {
 	}
 	logger.L().Debug("loaded config for components", helpers.Interface("components", components))
 
-	secretData := &beUtils.TokenSecretData{Account: "", Token: ""}
-	if components.Components.ServiceDiscovery.Enabled {
-		secretData, err = beUtils.LoadTokenFromFile("/etc/access-token-secret")
-		if err != nil {
-			logger.L().Ctx(ctx).Fatal("load secrets failed", helpers.Error(err))
-		}
+	var credentials *beUtils.Credentials
+	if credentials, err = beUtils.LoadCredentialsFromFile("/etc/credentials"); err != nil {
+		logger.L().Ctx(ctx).Error("failed to load credentials", helpers.Error(err))
+		credentials = &beUtils.Credentials{}
+	} else {
+		logger.L().Info("credentials loaded",
+			helpers.Int("accessKeyLength", len(credentials.AccessKey)),
+			helpers.Int("accountLength", len(credentials.Account)))
 	}
 
 	var eventReceiverRestURL string
@@ -68,9 +70,9 @@ func main() {
 	}
 
 	// wrapper for all configs
-	operatorConfig := config.NewOperatorConfig(components, clusterConfig, *secretData, eventReceiverRestURL, cfg)
+	operatorConfig := config.NewOperatorConfig(components, clusterConfig, credentials, eventReceiverRestURL, cfg)
 	if err := config.ValidateConfig(operatorConfig); err != nil {
-		logger.L().Ctx(ctx).Fatal("validate config error", helpers.Error(err))
+		logger.L().Ctx(ctx).Error("validate config error", helpers.Error(err))
 	}
 
 	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317

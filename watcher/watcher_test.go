@@ -73,7 +73,7 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
@@ -286,7 +286,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
@@ -332,7 +332,7 @@ func Test_getSBOMWatcher(t *testing.T) {
 	clusterConfig := utilsmetadata.ClusterConfig{}
 	cfg, err := config.LoadConfig("../configuration")
 	assert.NoError(t, err)
-	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 	k8sClient := k8sfake.NewSimpleClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 	storageClient := kssfake.NewSimpleClientset()
@@ -510,7 +510,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
@@ -756,7 +756,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, beUtils.TokenSecretData{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 			assert.NoError(t, err)
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			ksStorageClient := kssfake.NewSimpleClientset(inputObjects...)

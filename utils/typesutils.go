@@ -19,10 +19,10 @@ var (
 	ReporterHttpClient httputils.IHttpClient
 )
 
-func getRequestHeaders(token string) map[string]string {
+func getRequestHeaders(accessKey string) map[string]string {
 	return map[string]string{
-		"Content-Type":                "application/json",
-		beServerV1.RequestTokenHeader: token,
+		"Content-Type":             "application/json",
+		beServerV1.AccessKeyHeader: accessKey,
 	}
 }
 
@@ -49,7 +49,7 @@ func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Com
 
 	sessionObj := SessionObj{
 		Command:  *command,
-		Reporter: beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, getRequestHeaders(config.Token()), reporter),
+		Reporter: beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, getRequestHeaders(config.AccessKey()), reporter),
 	}
 
 	sessionObj.Reporter.SendAsRoutine(true)
