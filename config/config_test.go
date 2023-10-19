@@ -120,6 +120,7 @@ func TestValidateConfig(t *testing.T) {
 			args: args{
 				clusterConfig: armometadata.ClusterConfig{},
 				components:    CapabilitiesConfig{},
+				credentials:   &utils.Credentials{},
 			},
 			wantErr: true,
 		},
@@ -129,7 +130,8 @@ func TestValidateConfig(t *testing.T) {
 				clusterConfig: armometadata.ClusterConfig{
 					ClusterName: "foo",
 				},
-				components: CapabilitiesConfig{},
+				components:  CapabilitiesConfig{},
+				credentials: &utils.Credentials{},
 			},
 		},
 		{
@@ -141,6 +143,7 @@ func TestValidateConfig(t *testing.T) {
 				components: CapabilitiesConfig{
 					Components: Components{ServiceDiscovery: Component{Enabled: true}},
 				},
+				credentials: &utils.Credentials{},
 			},
 			wantErr: true,
 		},
