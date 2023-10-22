@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,6 +16,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	"github.com/kubescape/opa-utils/objectsenvelopes"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 )
@@ -117,9 +117,8 @@ func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h .
 }
 
 type poolInvokerHandler struct {
-	wp                   *ants.PoolWithFunc
-	clusterConfig        utilsmetadata.ClusterConfig
-	eventReceiverRestURL string
+	wp     *ants.PoolWithFunc
+	config config.IConfig
 }
 
 func makeScanArgs(so *objectsenvelopes.ScanObject) map[string]interface{} {
@@ -149,10 +148,10 @@ func makeScanCommand(clusterName string, uo *unstructured.Unstructured) *armoapi
 	}
 }
 
-func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, e watch.Event) error {
+func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, config config.IConfig, e watch.Event) error {
 	logger.L().Ctx(ctx).Info(
 		"triggering scan",
-		helpers.String("clusterName", clusterConfig.ClusterName),
+		helpers.String("clusterName", config.ClusterName()),
 		helpers.Interface("event", e),
 	)
 	obj := e.Object.(*unstructured.Unstructured)
@@ -162,8 +161,8 @@ func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, eventReceiverRestUR
 	}
 
 	uObject := &unstructured.Unstructured{Object: objRaw}
-	command := makeScanCommand(clusterConfig.ClusterName, uObject)
-	utils.AddCommandToChannel(ctx, eventReceiverRestURL, clusterConfig, command, wp)
+	command := makeScanCommand(config.ClusterName(), uObject)
+	utils.AddCommandToChannel(ctx, config, command, wp)
 
 	return nil
 }
@@ -177,9 +176,9 @@ func unstructuredToScanObject(uo *unstructured.Unstructured) (*objectsenvelopes.
 }
 
 func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
-	return triggerScan(ctx, h.wp, h.eventReceiverRestURL, h.clusterConfig, e)
+	return triggerScan(ctx, h.wp, h.config, e)
 }
 
-func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) EventHandler {
-	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig, eventReceiverRestURL: eventReceiverRestURL}
+func NewTriggeringHandler(wp *ants.PoolWithFunc, config config.IConfig) EventHandler {
+	return &poolInvokerHandler{wp: wp, config: config}
 }

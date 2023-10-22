@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/operator/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -56,7 +56,7 @@ func NewMockKubernetesAPI() *k8sinterface.KubernetesApi {
 
 func TestFilterRepositories(t *testing.T) {
 	k8sAPI := NewMockKubernetesAPI()
-	registryScan := NewRegistryScan(utilsmetadata.ClusterConfig{}, k8sAPI, "")
+	registryScan := NewRegistryScan(&config.OperatorConfig{}, k8sAPI)
 
 	registryScan.registry = registry{
 		hostname:  "quay.io",

@@ -5,7 +5,16 @@ import (
 	"sync"
 	"testing"
 
+	armoapi "github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	armowlid "github.com/armosec/utils-k8s-go/wlid"
+	beUtils "github.com/kubescape/backend/pkg/utils"
+	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/opa-utils/objectsenvelopes"
+	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
+	"github.com/panjf2000/ants/v2"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,14 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-
-	armoapi "github.com/armosec/armoapi-go/apis"
-	armowlid "github.com/armosec/utils-k8s-go/wlid"
-	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
-	"github.com/kubescape/opa-utils/objectsenvelopes"
-	"github.com/kubescape/operator/utils"
-	"github.com/panjf2000/ants/v2"
-	"github.com/stretchr/testify/assert"
 )
 
 type syncSlice[T any] struct {
@@ -247,7 +248,8 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-			triggeringHandler := NewTriggeringHandler(wp, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, "")
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, &beUtils.Credentials{}, "", config.Config{})
+			triggeringHandler := NewTriggeringHandler(wp, operatorConfig)
 			stubFetcher := &stubFetcher{podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
 			css := NewContinuousScanningService(dynClient, loader, triggeringHandler)

@@ -3,9 +3,12 @@ package mainhandler
 import (
 	"testing"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	beUtils "github.com/kubescape/backend/pkg/utils"
+	"github.com/kubescape/operator/config"
+
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/boolutils"
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	"github.com/kubescape/operator/utils"
@@ -83,18 +86,19 @@ func TestFixK8sNameLimit(t *testing.T) {
 }
 
 func TestGetKubescapeV1ScanURL(t *testing.T) {
-	clusterConfig := utilsmetadata.ClusterConfig{
+	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "kubescape",
-	}
-	u := getKubescapeV1ScanURL(clusterConfig)
+	}, &beUtils.Credentials{}, "", config.Config{})
+	u := getKubescapeV1ScanURL(cfg)
 	assert.Equal(t, "http://kubescape/v1/scan?keep=false", u.String())
 }
 
 func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
-	clusterConfig := utilsmetadata.ClusterConfig{
+	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "armo-kubescape:8080",
-	}
-	url := getKubescapeV1ScanStatusURL(clusterConfig, "123").String()
+	}, &beUtils.Credentials{}, "", config.Config{})
+
+	url := getKubescapeV1ScanStatusURL(cfg, "123").String()
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")
 }
 

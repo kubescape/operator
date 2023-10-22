@@ -97,7 +97,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(ctx context.Contex
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateRegistryScanCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubevulnScheduler.Enabled {
+	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
@@ -155,7 +155,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setRegistryScanCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubevulnScheduler.Enabled {
+	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
@@ -211,7 +211,7 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Contex
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteRegistryScanCronJo")
 	defer span.End()
 
-	if !actionHandler.components.KubevulnScheduler.Enabled {
+	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
