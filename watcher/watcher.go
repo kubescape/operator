@@ -282,6 +282,18 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
+		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
+			wh.storageClient.SpdxV1beta1().OpenVulnerabilityExchangeContainers(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			logger.L().Ctx(context.TODO()).Info(
+				fmt.Sprintf(
+					`unrecognized instance ID "%s". Known: "%v", no triggering`,
+					hashedInstanceID,
+					wh.managedInstanceIDSlugs,
+				),
+			)
+			continue
+		}
+
 		wlid, ok := obj.ObjectMeta.Annotations[instanceidhandlerv1.WlidMetadataKey]
 		if !ok {
 			logger.L().Ctx(context.TODO()).Error(
