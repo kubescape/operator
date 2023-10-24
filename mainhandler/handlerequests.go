@@ -238,15 +238,15 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 
 	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.components, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.eventReceiverRestURL)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
-	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport, sessionObj.ErrChan)
+	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport)
 	err := actionHandler.runCommand(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
-		actionHandler.reporter.SendError(err, mainHandler.sendReport, true, sessionObj.ErrChan)
+		actionHandler.reporter.SendError(err, mainHandler.sendReport, true)
 		return
 	}
 
-	actionHandler.reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport, sessionObj.ErrChan)
+	actionHandler.reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
 	logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 
 }
@@ -317,14 +317,14 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	}
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	logger.L().Info(info)
-	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 	ids, errs := mainHandler.getIDs(namespaces, labels, fields, []string{"pods"})
 	for i := range errs {
 		logger.L().Ctx(ctx).Warning(errs[i].Error())
-		sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true, sessionObj.ErrChan)
+		sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true)
 	}
 
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
 
 	logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
 
@@ -349,7 +349,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		if err != nil {
 			err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
 			logger.L().Ctx(ctx).Error(err.Error())
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true, sessionObj.ErrChan)
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 			continue
 		}
 

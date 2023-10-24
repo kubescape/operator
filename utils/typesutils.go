@@ -19,34 +19,42 @@ import (
 var ReporterHttpClient httputils.IHttpClient
 
 func NewSessionObj(ctx context.Context, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := systemreports.NewBaseReport(clusterConfig.AccountID, message)
-	target := command.GetID()
-	if target == identifiers.DesignatorsToken {
-		target = fmt.Sprintf("wlid://cluster-%s/", clusterConfig.ClusterName)
-	}
-	if target == "" {
-		target = fmt.Sprintf("%v", command.Args)
-	}
-	reporter.SetTarget(target)
+	var reporter beClientV1.IReportSender
+	if eventReceiverRestURL == "" {
+		reporter = newDummyReportSender()
+	} else {
+		report := systemreports.NewBaseReport(clusterConfig.AccountID, message)
+		target := command.GetID()
+		if target == identifiers.DesignatorsToken {
+			target = fmt.Sprintf("wlid://cluster-%s/", clusterConfig.ClusterName)
+		}
+		if target == "" {
+			target = fmt.Sprintf("%v", command.Args)
+		}
+		report.SetTarget(target)
 
-	if jobID == "" {
-		jobID = uuid.NewString()
-	}
-	reporter.SetJobID(jobID)
-	reporter.SetParentAction(parentID)
-	reporter.SetActionIDN(actionNumber)
-	if command.CommandName != "" {
-		reporter.SetActionName(string(command.CommandName))
+		if jobID == "" {
+			jobID = uuid.NewString()
+		}
+		report.SetJobID(jobID)
+		report.SetParentAction(parentID)
+		report.SetActionIDN(actionNumber)
+		if command.CommandName != "" {
+			report.SetActionName(string(command.CommandName))
+		}
+
+		noHeaders := map[string]string{}
+		reporter = beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, noHeaders, report)
 	}
 
 	sessionObj := SessionObj{
 		Command:  *command,
-		Reporter: beClientV1.NewBaseReportSender(eventReceiverRestURL, ReporterHttpClient, reporter),
+		Reporter: reporter,
 		ErrChan:  make(chan error),
 	}
 	go sessionObj.WatchErrors(ctx)
 
-	sessionObj.Reporter.SendAsRoutine(true, sessionObj.ErrChan)
+	sessionObj.Reporter.SendAsRoutine(true)
 	return &sessionObj
 }
 
