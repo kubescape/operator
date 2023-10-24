@@ -27,29 +27,37 @@ func getRequestHeaders(accessKey string) map[string]string {
 }
 
 func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	reporter := systemreports.NewBaseReport(config.AccountID(), message)
-	target := command.GetID()
-	if target == identifiers.DesignatorsToken {
-		target = fmt.Sprintf("wlid://cluster-%s/", config.ClusterName())
-	}
-	if target == "" {
-		target = fmt.Sprintf("%v", command.Args)
-	}
-	reporter.SetTarget(target)
+	var reporter beClientV1.IReportSender
+	if config.EventReceiverURL() == "" {
+		reporter = newDummyReportSender()
+	} else {
+		report := systemreports.NewBaseReport(config.AccountID(), message)
+		target := command.GetID()
+		if target == identifiers.DesignatorsToken {
+			target = fmt.Sprintf("wlid://cluster-%s/", config.ClusterName())
+		}
+		if target == "" {
+			target = fmt.Sprintf("%v", command.Args)
+		}
+		report.SetTarget(target)
 
-	if jobID == "" {
-		jobID = uuid.NewString()
-	}
-	reporter.SetJobID(jobID)
-	reporter.SetParentAction(parentID)
-	reporter.SetActionIDN(actionNumber)
-	if command.CommandName != "" {
-		reporter.SetActionName(string(command.CommandName))
+		if jobID == "" {
+			jobID = uuid.NewString()
+		}
+		report.SetJobID(jobID)
+		report.SetParentAction(parentID)
+		report.SetActionIDN(actionNumber)
+		if command.CommandName != "" {
+			report.SetActionName(string(command.CommandName))
+		}
+
+		noHeaders := getRequestHeaders(config.AccessKey())
+		reporter = beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, noHeaders, report)
 	}
 
 	sessionObj := SessionObj{
 		Command:  *command,
-		Reporter: beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, getRequestHeaders(config.AccessKey()), reporter),
+		Reporter: reporter,
 	}
 
 	sessionObj.Reporter.SendAsRoutine(true)
