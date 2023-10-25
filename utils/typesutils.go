@@ -29,7 +29,7 @@ func getRequestHeaders(accessKey string) map[string]string {
 func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
 	var reporter beClientV1.IReportSender
 	if config.EventReceiverURL() == "" {
-		reporter = beServerV1.NewDummyReportSender()
+		reporter = systemreports.NewNoReportSender()
 	} else {
 		report := systemreports.NewBaseReport(config.AccountID(), message)
 		target := command.GetID()
