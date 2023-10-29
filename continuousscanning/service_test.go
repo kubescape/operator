@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/utils/pointer"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
@@ -208,6 +209,7 @@ func TestContinuousScanningService(t *testing.T) {
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject: makePodScanObject(makePod("default", "first", "")),
+							IsDeletedScanObject: pointer.Bool(false),
 						},
 					},
 				},
@@ -217,6 +219,7 @@ func TestContinuousScanningService(t *testing.T) {
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject: makePodScanObject(makePod("default", "second", "")),
+							IsDeletedScanObject: pointer.Bool(false),
 						},
 					},
 				},
@@ -226,6 +229,7 @@ func TestContinuousScanningService(t *testing.T) {
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject: makePodScanObject(makePod("default", "third", "")),
+							IsDeletedScanObject: pointer.Bool(false),
 						},
 					},
 				},
