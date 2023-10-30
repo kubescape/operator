@@ -35,7 +35,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	logger.L().Ctx(ctx).Info("ran watch pool")
 
 	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *cooldownQueue) {
-		defer out.Stop()
+		defer out.Stop(ctx)
 
 		for {
 			select {
@@ -44,7 +44,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
-				out.Enqueue(e)
+				out.Enqueue(ctx, e)
 			case <-shutdownCh:
 				return
 			}

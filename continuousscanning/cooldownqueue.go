@@ -1,6 +1,7 @@
 package continuousscanning
 
 import (
+	"context"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
@@ -18,7 +19,7 @@ const (
 	DefaultTTL = 5 * time.Second
 )
 
-// cooldownQueuey is a queue that lets clients put events into it with a cooldown
+// cooldownQueue is a queue that lets clients put events into it with a cooldown
 //
 // When a client puts an event into a queue, it forwards the event to its
 // output channel and starts a cooldown for this event. If a client attempts to
@@ -57,24 +58,24 @@ func makeEventKey(e watch.Event) string {
 }
 
 // Enqueue enqueues an event in the Cooldown Queue
-func (q *cooldownQueue) Enqueue(e watch.Event) {
+func (q *cooldownQueue) Enqueue(ctx context.Context, e watch.Event) {
 	eventKey := makeEventKey(e)
-	logger.L().Debug("Enqueing event with key: ", helpers.String("eventKey", eventKey))
+	logger.L().Debug("Adding event to queue", helpers.String("eventKey", eventKey))
 
 	_, exists := q.seenEvents.Get(eventKey)
 	if exists {
-		logger.L().Debug("event exists, dismissing", helpers.Interface("eventKey", eventKey))
+		logger.L().Debug("key exists, dropping event", helpers.Interface("eventKey", eventKey))
 		return
 	}
 
 	go func() {
-		logger.L().Debug("pushing event: ", helpers.Interface("eventKey", eventKey))
+		logger.L().Debug("pushing event", helpers.Interface("eventKey", eventKey))
 		q.innerChan <- e
-		logger.L().Debug("pushed event: ", helpers.Interface("event", eventKey))
+		logger.L().Debug("pushed event", helpers.Interface("event", eventKey))
 	}()
 	q.seenEvents.Add(eventKey, true)
 }
 
-func (q *cooldownQueue) Stop() {
+func (q *cooldownQueue) Stop(ctx context.Context) {
 	close(q.innerChan)
 }
