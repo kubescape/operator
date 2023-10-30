@@ -52,22 +52,25 @@ func makeEventKey(e watch.Event) string {
 		return ""
 	}
 
-	eventKey := string(object.GetUID())
-	logger.L().Info("got event key: ", helpers.String("event key", eventKey))
+	eventKey := string(e.Type) + "-" + string(object.GetUID())
 	return eventKey
 }
 
 // Enqueue enqueues an event in the Cooldown Queue
 func (q *cooldownQueue) Enqueue(e watch.Event) {
 	eventKey := makeEventKey(e)
+	logger.L().Debug("Enqueing event with key: ", helpers.String("eventKey", eventKey))
 
 	_, exists := q.seenEvents.Get(eventKey)
 	if exists {
+		logger.L().Debug("event exists, dismissing", helpers.Interface("eventKey", eventKey))
 		return
 	}
 
 	go func() {
+		logger.L().Debug("pushing event: ", helpers.Interface("eventKey", eventKey))
 		q.innerChan <- e
+		logger.L().Debug("pushed event: ", helpers.Interface("event", eventKey))
 	}()
 	q.seenEvents.Add(eventKey, true)
 }

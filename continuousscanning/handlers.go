@@ -13,10 +13,14 @@ import (
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/names"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/utils"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type EventHandler interface {
@@ -74,7 +78,7 @@ func eventToUnstructured(e watch.Event) (*unstructured.Unstructured, error) {
 }
 
 func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, command *armoapi.Command) error {
-	utils.AddCommandToChannel(ctx, eventReceiverRestURL, clusterConfig, command, wp)
+	go utils.AddCommandToChannel(ctx, eventReceiverRestURL, clusterConfig, command, wp)
 	return nil
 }
 
@@ -112,4 +116,98 @@ func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
 
 func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) EventHandler {
 	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig, eventReceiverRestURL: eventReceiverRestURL}
+}
+
+func NewDeletedCleanerHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string, storageClient kssc.Interface) EventHandler {
+	return &deletedCleanerHandler{
+		wp: wp,
+		clusterConfig: clusterConfig,
+		eventReceiverRestURL: eventReceiverRestURL,
+		storageClient: storageClient,
+	}
+}
+
+// deletedCleanerHandler cleans up deleted resources in the Storage
+type deletedCleanerHandler struct {
+	wp                   *ants.PoolWithFunc
+	clusterConfig        utilsmetadata.ClusterConfig
+	eventReceiverRestURL string
+	storageClient        kssc.Interface
+}
+
+func (h *deletedCleanerHandler) getObjectNamespace(uObject *unstructured.Unstructured, fallback string) string {
+	ns := uObject.GetNamespace()
+	if ns != "" {
+		return ns
+	}
+	return fallback
+}
+
+func (h *deletedCleanerHandler) getObjectName(uObject *unstructured.Unstructured) (string, error) {
+	kind := uObject.GetKind()
+	wl := workloadinterface.NewWorkloadObj(uObject.Object)
+
+	var slug string
+	if kind == "RoleBinding" {
+		slug, _ = names.ResourceToSlug(wl)
+	}
+
+	slug, err := names.ResourceToSlug(wl)
+	if err != nil {
+		return "", err
+	}
+
+	return slug, nil
+}
+
+func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
+	nsFallback := ""
+	ns := h.getObjectNamespace(uObject, nsFallback)
+	name, err := h.getObjectName(uObject)
+	if err != nil {
+		return err
+	}
+
+	err = storageClient.SpdxV1beta1().WorkloadConfigurationScans(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		logger.L().Ctx(ctx).Error("cant delete workload configuration", helpers.Error(err))
+		return err
+	}
+
+	err = storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		logger.L().Ctx(ctx).Error("cant delete workload configuration summary", helpers.Error(err))
+		return err
+	}
+	return err
+}
+
+func (h *deletedCleanerHandler) deleteCRDs(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
+	kind := uObject.GetKind()
+	var err error
+
+	switch kind {
+	default:
+		err = h.deleteScanArtifacts(ctx, uObject, storageClient)
+	}
+
+	return err
+}
+
+func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error {
+	// Handle only DELETED events
+	if e.Type != watch.Deleted {
+		return nil
+	}
+	isDelete := true
+
+	uObject, err := eventToUnstructured(e)
+	if err != nil {
+		return err
+	}
+
+	h.deleteCRDs(ctx, uObject, h.storageClient)
+
+	err = triggerScanFor(ctx, uObject, isDelete, h.wp, h.eventReceiverRestURL, h.clusterConfig)
+	return err
 }

@@ -91,12 +91,27 @@ func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config
 		sendReport:             eventReceiverRestURL != "",
 	}
 	pool, _ := ants.NewPoolWithFunc(cfg.ConcurrencyWorkers, func(i interface{}) {
+		logger.L().Debug("ants pool received job", helpers.Interface("job", i))
 		j, ok := i.(utils.Job)
 		if !ok {
 			logger.L().Error("failed to cast job", helpers.Interface("job", i))
 			return
 		}
+		logger.L().Debug(
+			"handling request",
+			helpers.String("jobID", j.Obj().Command.JobTracking.JobID),
+			helpers.String("parentID", j.Obj().Command.JobTracking.ParentID),
+			helpers.String("commandName", string(j.Obj().Command.CommandName)),
+			helpers.String("wlid", j.Obj().Command.Wlid),
+		)
 		mainHandler.handleRequest(j)
+		logger.L().Debug(
+			"request handled",
+			helpers.String("jobID", j.Obj().Command.JobTracking.JobID),
+			helpers.String("parentID", j.Obj().Command.JobTracking.ParentID),
+			helpers.String("commandName", string(j.Obj().Command.CommandName)),
+			helpers.String("wlid", j.Obj().Command.Wlid),
+		)
 	})
 	mainHandler.eventWorkerPool = pool
 	return mainHandler
@@ -119,8 +134,13 @@ func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Conf
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
 func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, queueSize int, eventCooldown time.Duration) error {
+	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
+	}
+
 	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig, mainHandler.eventReceiverRestURL)
-	dynClient := mainHandler.k8sAPI.DynamicClient
+	deletingHandler := cs.NewDeletedCleanerHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig, mainHandler.eventReceiverRestURL, ksStorageClient)
 
 	rulesFilename := mainHandler.cfg.MatchingRulesFilename
 	rulesReader, err := os.Open(rulesFilename)
@@ -129,8 +149,16 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, que
 	}
 
 	fetcher := cs.NewFileFetcher(rulesReader)
+	if fetcher == nil {
+		panic("fetcher is nil")
+	}
 	loader := cs.NewTargetLoader(fetcher)
-	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler)
+	if loader == nil {
+		panic("loader is nil")
+	}
+
+	dynClient := mainHandler.k8sAPI.DynamicClient
+	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler, deletingHandler)
 	svc.Launch(ctx)
 
 	return nil
@@ -210,6 +238,7 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 
 	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 
+	logger.L().Ctx(ctx).Info("handleRequest: setting action name")
 	// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
 	sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
 

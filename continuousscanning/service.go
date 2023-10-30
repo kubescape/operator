@@ -40,7 +40,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 		for {
 			select {
 			case e := <-resourceEventsCh:
-				logger.L().Ctx(ctx).Info(
+				logger.L().Ctx(ctx).Debug(
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
@@ -57,6 +57,10 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
 	for e := range s.eventQueue.ResultChan {
+		logger.L().Ctx(ctx).Debug(
+			"got an event to process",
+			helpers.Interface("event", e),
+		)
 		for idx := range s.eventHandlers {
 			handler := s.eventHandlers[idx]
 			handler.Handle(ctx, e)
