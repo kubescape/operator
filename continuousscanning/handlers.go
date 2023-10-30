@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -17,6 +16,7 @@ import (
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	"github.com/kubescape/opa-utils/objectsenvelopes"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
@@ -29,8 +29,7 @@ type EventHandler interface {
 
 type poolInvokerHandler struct {
 	wp                   *ants.PoolWithFunc
-	clusterConfig        utilsmetadata.ClusterConfig
-	eventReceiverRestURL string
+	clusterConfig        config.IConfig
 }
 
 func makeScanArgs(so *objectsenvelopes.ScanObject, isDeletedSO bool) map[string]interface{} {
@@ -77,8 +76,8 @@ func eventToUnstructured(e watch.Event) (*unstructured.Unstructured, error) {
 	return &unstructured.Unstructured{Object: objRaw}, nil
 }
 
-func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, command *armoapi.Command) error {
-	go utils.AddCommandToChannel(ctx, eventReceiverRestURL, clusterConfig, command, wp)
+func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterConfig config.IConfig, command *armoapi.Command) error {
+	go utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
 	return nil
 }
 
@@ -90,13 +89,13 @@ func unstructuredToScanObject(uObject *unstructured.Unstructured) (*objectsenvel
 	return res, nil
 }
 
-func triggerScanFor(ctx context.Context, uObject *unstructured.Unstructured, isDelete bool, wp *ants.PoolWithFunc, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig) error {
+func triggerScanFor(ctx context.Context, uObject *unstructured.Unstructured, isDelete bool, wp *ants.PoolWithFunc, clusterConfig config.IConfig) error {
 	logger.L().Ctx(ctx).Info(
 		"triggering scan",
-		helpers.String("clusterName", clusterConfig.ClusterName),
+		helpers.String("clusterName", clusterConfig.ClusterName()),
 	)
-	sc := makeScanCommand(clusterConfig.ClusterName, uObject, isDelete)
-	return triggerScan(ctx, wp, eventReceiverRestURL, clusterConfig, sc)
+	sc := makeScanCommand(clusterConfig.ClusterName(), uObject, isDelete)
+	return triggerScan(ctx, wp, clusterConfig, sc)
 }
 
 func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
@@ -111,27 +110,25 @@ func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
 		return err
 	}
 
-	return triggerScanFor(ctx, uObject, isDelete, h.wp, h.eventReceiverRestURL, h.clusterConfig)
+	return triggerScanFor(ctx, uObject, isDelete, h.wp, h.clusterConfig)
 }
 
-func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) EventHandler {
-	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig, eventReceiverRestURL: eventReceiverRestURL}
+func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig config.IConfig) EventHandler {
+	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig}
 }
 
-func NewDeletedCleanerHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string, storageClient kssc.Interface) EventHandler {
+func NewDeletedCleanerHandler(wp *ants.PoolWithFunc, clusterConfig config.IConfig, storageClient kssc.Interface) EventHandler {
 	return &deletedCleanerHandler{
-		wp: wp,
-		clusterConfig: clusterConfig,
-		eventReceiverRestURL: eventReceiverRestURL,
-		storageClient: storageClient,
+		wp:                   wp,
+		clusterConfig:        clusterConfig,
+		storageClient:        storageClient,
 	}
 }
 
 // deletedCleanerHandler cleans up deleted resources in the Storage
 type deletedCleanerHandler struct {
 	wp                   *ants.PoolWithFunc
-	clusterConfig        utilsmetadata.ClusterConfig
-	eventReceiverRestURL string
+	clusterConfig        config.IConfig
 	storageClient        kssc.Interface
 }
 
@@ -208,6 +205,6 @@ func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error
 
 	h.deleteCRDs(ctx, uObject, h.storageClient)
 
-	err = triggerScanFor(ctx, uObject, isDelete, h.wp, h.eventReceiverRestURL, h.clusterConfig)
+	err = triggerScanFor(ctx, uObject, isDelete, h.wp, h.clusterConfig)
 	return err
 }

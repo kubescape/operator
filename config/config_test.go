@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/armosec/utils-k8s-go/armometadata"
+	"github.com/kubescape/backend/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -108,6 +109,7 @@ func TestValidateConfig(t *testing.T) {
 	type args struct {
 		clusterConfig armometadata.ClusterConfig
 		components    CapabilitiesConfig
+		credentials   *utils.Credentials
 	}
 	tests := []struct {
 		name    string
@@ -119,6 +121,7 @@ func TestValidateConfig(t *testing.T) {
 			args: args{
 				clusterConfig: armometadata.ClusterConfig{},
 				components:    CapabilitiesConfig{},
+				credentials:   &utils.Credentials{},
 			},
 			wantErr: true,
 		},
@@ -128,7 +131,8 @@ func TestValidateConfig(t *testing.T) {
 				clusterConfig: armometadata.ClusterConfig{
 					ClusterName: "foo",
 				},
-				components: CapabilitiesConfig{},
+				components:  CapabilitiesConfig{},
+				credentials: &utils.Credentials{},
 			},
 		},
 		{
@@ -140,6 +144,7 @@ func TestValidateConfig(t *testing.T) {
 				components: CapabilitiesConfig{
 					Components: Components{ServiceDiscovery: Component{Enabled: true}},
 				},
+				credentials: &utils.Credentials{},
 			},
 			wantErr: true,
 		},
@@ -147,8 +152,11 @@ func TestValidateConfig(t *testing.T) {
 			name: "no discovery, account: no error",
 			args: args{
 				clusterConfig: armometadata.ClusterConfig{
-					AccountID:   "123",
 					ClusterName: "foo",
+				},
+				credentials: &utils.Credentials{
+					Account:   "123",
+					AccessKey: "abc",
 				},
 				components: CapabilitiesConfig{},
 			},
@@ -157,8 +165,11 @@ func TestValidateConfig(t *testing.T) {
 			name: "discovery, account: no error",
 			args: args{
 				clusterConfig: armometadata.ClusterConfig{
-					AccountID:   "123",
 					ClusterName: "foo",
+				},
+				credentials: &utils.Credentials{
+					Account:   "123",
+					AccessKey: "abc",
 				},
 				components: CapabilitiesConfig{
 					Components: Components{ServiceDiscovery: Component{Enabled: true}},
@@ -168,7 +179,8 @@ func TestValidateConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateConfig(tt.args.clusterConfig, tt.args.components)
+			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.credentials, "", Config{})
+			err := ValidateConfig(operatorConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
