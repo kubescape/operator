@@ -53,11 +53,31 @@ func ExtractImageID(imageID string) string {
 }
 
 func AddCommandToChannel(ctx context.Context, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, cmd *apis.Command, workerPool *ants.PoolWithFunc) {
-	logger.L().Ctx(ctx).Info("Triggering scan for", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)))
+	logger.L().Ctx(ctx).Info(
+		"issuing scan command",
+		helpers.String("wlid", cmd.Wlid),
+		helpers.String("command", string(cmd.CommandName)),
+		helpers.Interface("args", cmd.Args),
+	)
 	newSessionObj := NewSessionObj(ctx, eventReceiverRestURL, clusterConfig, cmd, "Websocket", "", uuid.NewString(), 1)
+
+	logger.L().Ctx(ctx).Debug("invoking worker pool job", helpers.Interface("session", newSessionObj))
 	if err := workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj}); err != nil {
-		logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("wlid", cmd.Wlid), helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)), helpers.String("args", fmt.Sprintf("%v", cmd.Args)), helpers.Error(err))
+		logger.L().Ctx(ctx).Error(
+			"failed to invoke job",
+			helpers.String("wlid", cmd.Wlid),
+			helpers.String("command", string(cmd.CommandName)),
+			helpers.Interface("args", cmd.Args),
+			helpers.Error(err),
+		)
 	}
+
+	logger.L().Ctx(ctx).Debug(
+		"job invoked",
+		helpers.String("wlid", cmd.Wlid),
+		helpers.String("command", fmt.Sprintf("%v", cmd.CommandName)),
+		helpers.String("args", fmt.Sprintf("%v", cmd.Args)),
+	)
 }
 
 func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
