@@ -238,7 +238,6 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 
 	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 
-	logger.L().Ctx(ctx).Info("handleRequest: setting action name")
 	// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
 	sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
 
