@@ -849,6 +849,10 @@ func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAnd
 	if err != nil {
 		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to create request, reason: %v", err)
 	}
+	for k, v := range utils.GetRequestHeaders(registryScan.config.AccessKey()) {
+		req.Header.Set(k, v)
+	}
+
 	_, err = http.DefaultClient.Do(req)
 
 	if err != nil {
