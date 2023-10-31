@@ -19,7 +19,7 @@ var (
 	ReporterHttpClient httputils.IHttpClient
 )
 
-func getRequestHeaders(accessKey string) map[string]string {
+func GetRequestHeaders(accessKey string) map[string]string {
 	return map[string]string{
 		"Content-Type":             "application/json",
 		beServerV1.AccessKeyHeader: accessKey,
@@ -51,7 +51,7 @@ func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Com
 			report.SetActionName(string(command.CommandName))
 		}
 
-		noHeaders := getRequestHeaders(config.AccessKey())
+		noHeaders := GetRequestHeaders(config.AccessKey())
 		reporter = beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, noHeaders, report)
 	}
 
