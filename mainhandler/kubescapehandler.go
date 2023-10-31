@@ -100,6 +100,11 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		return err
 	}
 
+	// append security framework if TriggerSecurityFramework is true
+	if actionHandler.config.TriggerSecurityFramework() {
+		appendSecurityFramework(req)
+	}
+
 	for i := range req.TargetNames {
 		name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%s-%d", "ks-scheduled-scan", req.TargetNames[i], rand.NewSource(time.Now().UnixNano()).Int63()))
 
