@@ -77,7 +77,7 @@ func eventToUnstructured(e watch.Event) (*unstructured.Unstructured, error) {
 }
 
 func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterConfig config.IConfig, command *armoapi.Command) error {
-	go utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
+	utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
 	return nil
 }
 
