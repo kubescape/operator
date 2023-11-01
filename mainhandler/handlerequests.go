@@ -136,13 +136,7 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, que
 	}
 
 	fetcher := cs.NewFileFetcher(rulesReader)
-	if fetcher == nil {
-		panic("fetcher is nil")
-	}
 	loader := cs.NewTargetLoader(fetcher)
-	if loader == nil {
-		panic("loader is nil")
-	}
 
 	dynClient := mainHandler.k8sAPI.DynamicClient
 	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler, deletingHandler)
