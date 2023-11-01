@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
+	"k8s.io/utils/ptr"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
@@ -41,6 +42,7 @@ func makeScanArgs(so *objectsenvelopes.ScanObject, isDeletedSO bool) map[string]
 	psr := opautilsmetav1.PostScanRequest{
 		ScanObject:          so,
 		IsDeletedScanObject: &isDeletedSO,
+		HostScanner:         ptr.To(false),
 	}
 
 	return map[string]interface{}{
