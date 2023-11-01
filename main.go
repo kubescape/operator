@@ -10,6 +10,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
+	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/restapihandler"
@@ -123,7 +124,7 @@ func main() {
 
 	if operatorConfig.ContinuousScanEnabled() {
 		go func(mh *mainhandler.MainHandler) {
-			err := mh.SetupContinuousScanning(ctx, 512, cfg.EventDeduplicationInterval)
+			err := mh.SetupContinuousScanning(ctx, cs.DefaultQueueSize, cfg.EventDeduplicationInterval)
 			logger.L().Ctx(ctx).Info("set up cont scanning service")
 			if err != nil {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
