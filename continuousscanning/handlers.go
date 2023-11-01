@@ -12,6 +12,7 @@ import (
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/names"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
@@ -21,15 +22,19 @@ import (
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	sets "github.com/deckarep/golang-set/v2"
 )
+
+var orphanableWorkloadTypes sets.Set[string] = sets.NewSet[string]("Pod", "ReplicaSet", "Job")
 
 type EventHandler interface {
 	Handle(ctx context.Context, e watch.Event) error
 }
 
 type poolInvokerHandler struct {
-	wp                   *ants.PoolWithFunc
-	clusterConfig        config.IConfig
+	wp            *ants.PoolWithFunc
+	clusterConfig config.IConfig
 }
 
 func makeScanArgs(so *objectsenvelopes.ScanObject, isDeletedSO bool) map[string]interface{} {
@@ -98,6 +103,16 @@ func triggerScanFor(ctx context.Context, uObject *unstructured.Unstructured, isD
 	return triggerScan(ctx, wp, clusterConfig, sc)
 }
 
+func isOrphanWorkloadType(uObject *unstructured.Unstructured) bool {
+	kind := uObject.GetKind()
+	return orphanableWorkloadTypes.Contains(kind)
+}
+
+func isOrphanWorkload(uObject *unstructured.Unstructured) bool {
+	wlObject := workloadinterface.NewWorkloadObj(uObject.Object)
+	return isOrphanWorkloadType(uObject) && k8sinterface.WorkloadHasParent(wlObject)
+}
+
 func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
 	// Process only ADDED and MODIFIED events
 	if e.Type != watch.Added && e.Type != watch.Modified {
@@ -110,6 +125,11 @@ func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
 		return err
 	}
 
+	// Don't trigger scans for orphan workloads
+	if isOrphanWorkload(uObject) {
+		return nil
+	}
+
 	return triggerScanFor(ctx, uObject, isDelete, h.wp, h.clusterConfig)
 }
 
@@ -119,17 +139,17 @@ func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig config.IConfig) E
 
 func NewDeletedCleanerHandler(wp *ants.PoolWithFunc, clusterConfig config.IConfig, storageClient kssc.Interface) EventHandler {
 	return &deletedCleanerHandler{
-		wp:                   wp,
-		clusterConfig:        clusterConfig,
-		storageClient:        storageClient,
+		wp:            wp,
+		clusterConfig: clusterConfig,
+		storageClient: storageClient,
 	}
 }
 
 // deletedCleanerHandler cleans up deleted resources in the Storage
 type deletedCleanerHandler struct {
-	wp                   *ants.PoolWithFunc
-	clusterConfig        config.IConfig
-	storageClient        kssc.Interface
+	wp            *ants.PoolWithFunc
+	clusterConfig config.IConfig
+	storageClient kssc.Interface
 }
 
 func (h *deletedCleanerHandler) getObjectNamespace(uObject *unstructured.Unstructured, fallback string) string {
@@ -201,6 +221,11 @@ func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error
 	uObject, err := eventToUnstructured(e)
 	if err != nil {
 		return err
+	}
+
+	// Don't trigger scans for orphan workloads
+	if isOrphanWorkload(uObject) {
+		return nil
 	}
 
 	h.deleteCRDs(ctx, uObject, h.storageClient)
