@@ -3,7 +3,7 @@ module github.com/kubescape/operator
 go 1.20
 
 require (
-	github.com/armosec/armoapi-go v0.0.254
+	github.com/armosec/armoapi-go v0.0.256
 	github.com/armosec/cluster-notifier-api-go v0.0.5
 	github.com/armosec/registryx v0.0.15
 	github.com/armosec/utils-go v0.0.40
@@ -15,11 +15,12 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
+	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/kubescape/backend v0.0.13
 	github.com/kubescape/go-logger v0.0.21
-	github.com/kubescape/k8s-interface v0.0.145
-	github.com/kubescape/opa-utils v0.0.268
-	github.com/kubescape/storage v0.0.18
+	github.com/kubescape/k8s-interface v0.0.148
+	github.com/kubescape/opa-utils v0.0.270
+	github.com/kubescape/storage v0.0.29
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/panjf2000/ants/v2 v2.8.1
 	github.com/spf13/viper v1.16.0
@@ -106,7 +107,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
