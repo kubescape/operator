@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 type syncSlice[T any] struct {
@@ -210,7 +210,8 @@ func TestContinuousScanningService(t *testing.T) {
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject:          makePodScanObject(makePod("default", "first", "")),
-							IsDeletedScanObject: pointer.Bool(false),
+							HostScanner:         ptr.To(false),
+							IsDeletedScanObject: ptr.To(false),
 						},
 					},
 				},
@@ -220,7 +221,8 @@ func TestContinuousScanningService(t *testing.T) {
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject:          makePodScanObject(makePod("default", "second", "")),
-							IsDeletedScanObject: pointer.Bool(false),
+							HostScanner:         ptr.To(false),
+							IsDeletedScanObject: ptr.To(false),
 						},
 					},
 				},
@@ -230,7 +232,8 @@ func TestContinuousScanningService(t *testing.T) {
 					Args: map[string]interface{}{
 						utils.KubescapeScanV1: opautilsmetav1.PostScanRequest{
 							ScanObject:          makePodScanObject(makePod("default", "third", "")),
-							IsDeletedScanObject: pointer.Bool(false),
+							HostScanner:         ptr.To(false),
+							IsDeletedScanObject: ptr.To(false),
 						},
 					},
 				},
