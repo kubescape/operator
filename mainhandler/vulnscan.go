@@ -589,7 +589,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 
 	// we build a list of all registry scan secrets
 	containerRegistryAuths := []registryAuth{}
-	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, ""); err == nil && len(secrets) > 0 {
+	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, actionHandler.config.Namespace(), ""); err == nil && len(secrets) > 0 {
 		for i := range secrets {
 			if auths, err := parseRegistryAuthSecret(secrets[i]); err == nil {
 				containerRegistryAuths = append(containerRegistryAuths, auths...)
