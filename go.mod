@@ -7,8 +7,8 @@ require (
 	github.com/armosec/cluster-notifier-api-go v0.0.5
 	github.com/armosec/registryx v0.0.15
 	github.com/armosec/utils-go v0.0.40
-	github.com/armosec/utils-k8s-go v0.0.18
-	github.com/deckarep/golang-set/v2 v2.3.0
+	github.com/armosec/utils-k8s-go v0.0.23
+	github.com/deckarep/golang-set/v2 v2.5.0
 	github.com/docker/docker v24.0.7+incompatible
 	github.com/go-openapi/runtime v0.26.0
 	github.com/google/go-containerregistry v0.16.1
@@ -17,10 +17,10 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/kubescape/backend v0.0.17
-	github.com/kubescape/k8s-interface v0.0.155
 	github.com/kubescape/go-logger v0.0.22
-	github.com/kubescape/opa-utils v0.0.270
-	github.com/kubescape/storage v0.0.40-0.20231115211116-209bb0a90c91
+	github.com/kubescape/k8s-interface v0.0.155
+	github.com/kubescape/opa-utils v0.0.273
+	github.com/kubescape/storage v0.0.47
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/panjf2000/ants/v2 v2.8.1
 	github.com/spf13/viper v1.16.0
@@ -60,8 +60,8 @@ require (
 	github.com/anchore/fangs v0.0.0-20230818131516-2186b10924fe // indirect
 	github.com/anchore/go-logger v0.0.0-20230725134548-c21dafa1ec5a // indirect
 	github.com/anchore/packageurl-go v0.1.1-0.20230104203445-02e0a6721501 // indirect
-	github.com/anchore/stereoscope v0.0.0-20231027135531-5909e353ee88 // indirect
-	github.com/anchore/syft v0.96.0 // indirect
+	github.com/anchore/stereoscope v0.0.0-20231117203853-3610f4ef3e83 // indirect
+	github.com/anchore/syft v0.97.1 // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/armosec/gojay v1.2.15 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -177,6 +177,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nwaples/rardecode v1.1.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/olvrng/ujson v1.1.0 // indirect
 	github.com/open-policy-agent/opa v0.55.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc4 // indirect
@@ -236,14 +237,14 @@ require (
 	go.opentelemetry.io/proto/otlp v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
-	golang.org/x/crypto v0.14.0 // indirect
+	golang.org/x/crypto v0.15.0 // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/net v0.18.0 // indirect
 	golang.org/x/oauth2 v0.12.0 // indirect
 	golang.org/x/sync v0.4.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
-	golang.org/x/term v0.13.0 // indirect
-	golang.org/x/text v0.13.0 // indirect
+	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/term v0.14.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.14.0 // indirect
 	google.golang.org/api v0.126.0 // indirect
