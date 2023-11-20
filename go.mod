@@ -2,8 +2,6 @@ module github.com/kubescape/operator
 
 go 1.21.3
 
-toolchain go1.21.4
-
 require (
 	github.com/armosec/armoapi-go v0.0.256
 	github.com/armosec/cluster-notifier-api-go v0.0.5
@@ -32,9 +30,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.19.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
-	k8s.io/api v0.27.4
-	k8s.io/apimachinery v0.27.4
-	k8s.io/client-go v0.27.4
+	k8s.io/api v0.28.4
+	k8s.io/apimachinery v0.28.4
+	k8s.io/client-go v0.28.4
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 	sigs.k8s.io/yaml v1.3.0
 )
@@ -137,7 +135,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
@@ -267,5 +264,3 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
-
-replace k8s.io/client-go => k8s.io/client-go v0.26.2
