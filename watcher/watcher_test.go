@@ -258,7 +258,7 @@ func TestHandleVulnerabilityManifestEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
 						},
@@ -360,7 +360,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+					Object: &spdxv1beta1.SBOMSyftFiltered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
@@ -385,7 +385,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+					Object: &spdxv1beta1.SBOMSyftFiltered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
@@ -421,7 +421,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+					Object: &spdxv1beta1.SBOMSyftFiltered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
@@ -446,7 +446,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+					Object: &spdxv1beta1.SBOMSyftFiltered{
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
@@ -466,7 +466,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Deleted,
-					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
+					Object: &spdxv1beta1.SBOMSyftFiltered{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
@@ -554,7 +554,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				}
 			}
 
-			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds("").List(ctx, v1.ListOptions{})
+			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSyftFiltereds("").List(ctx, v1.ListOptions{})
 
 			actualObjectNames := []string{}
 			for _, obj := range actualObjects.Items {
@@ -588,7 +588,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        validImageIDSlug,
 							Namespace:   "kubescape",
@@ -608,7 +608,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        validImageID,
 							Namespace:   "kubescape",
@@ -628,7 +628,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name:      "ab" + validImageID[2:],
 							Namespace: "kubescape",
@@ -650,7 +650,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name:      validImageID,
 							Namespace: "kubescape",
@@ -669,7 +669,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name:      validImageIDSlug,
 							Namespace: "kubescape",
@@ -703,7 +703,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Modified,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        validImageIDSlug,
 							Namespace:   "kubescape",
@@ -721,7 +721,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Deleted,
-					Object: &spdxv1beta1.SBOMSummary{
+					Object: &spdxv1beta1.SBOMSyft{
 						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
 					},
 				},
@@ -737,20 +737,17 @@ func TestHandleSBOMEvents(t *testing.T) {
 
 			// Arrange SBOMSummary objects in the storage from input events
 			inputObjects := []runtime.Object{}
-			for _, event := range tc.inputEvents {
-				inputObjects = append(inputObjects, event.Object)
-			}
 
 			// Arrange SBOMs that match input SBOMSummaries
 			for _, event := range tc.inputEvents {
 				// Don’t try setting up a matching SBOM for
 				// anything that is not an SBOM Summary
-				obj, ok := event.Object.(*spdxv1beta1.SBOMSummary)
+				obj, ok := event.Object.(*spdxv1beta1.SBOMSyft)
 				if !ok {
 					continue
 				}
 				objMeta := obj.ObjectMeta
-				matchingSBOM := &spdxv1beta1.SBOMSPDXv2p3{ObjectMeta: objMeta}
+				matchingSBOM := &spdxv1beta1.SBOMSyft{ObjectMeta: objMeta}
 				inputObjects = append(inputObjects, matchingSBOM)
 			}
 
@@ -790,25 +787,13 @@ func TestHandleSBOMEvents(t *testing.T) {
 				}
 			}
 
-			storedSummaries, _ := ksStorageClient.SpdxV1beta1().SBOMSummaries("").List(context.TODO(), v1.ListOptions{})
+			storedSummaries, _ := ksStorageClient.SpdxV1beta1().SBOMSyfts("").List(context.TODO(), v1.ListOptions{})
 			remainingSBOMSummaryNames := []string{}
 			for _, obj := range storedSummaries.Items {
 				remainingSBOMSummaryNames = append(remainingSBOMSummaryNames, obj.ObjectMeta.Name)
 			}
 
-			storedSBOMs, _ := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("").List(context.TODO(), v1.ListOptions{})
-			remainingSBOMNames := []string{}
-			for _, obj := range storedSBOMs.Items {
-				remainingSBOMNames = append(remainingSBOMNames, obj.ObjectMeta.Name)
-			}
-
-			// SBOMs and their summaries should be removed
-			// together, so their expected remaining names should
-			// match
-			expectedSBOMNames := tc.expectedSBOMSummaryNames
-
 			assert.Equalf(t, tc.expectedSBOMSummaryNames, remainingSBOMSummaryNames, "Remaining SBOM Summaries should match")
-			assert.Equalf(t, expectedSBOMNames, remainingSBOMNames, "Remaining SBOM should match")
 			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
 		})
 	}
