@@ -16,7 +16,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/golang-lru/v2 v2.0.6
-	github.com/kubescape/backend v0.0.13
+	github.com/kubescape/backend v0.0.15
 	github.com/kubescape/go-logger v0.0.22
 	github.com/kubescape/k8s-interface v0.0.148
 	github.com/kubescape/opa-utils v0.0.270

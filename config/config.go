@@ -8,7 +8,7 @@ import (
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/backend/pkg/servicediscovery"
 	"github.com/kubescape/backend/pkg/servicediscovery/schema"
-	v1 "github.com/kubescape/backend/pkg/servicediscovery/v1"
+	v2 "github.com/kubescape/backend/pkg/servicediscovery/v2"
 	"github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -195,7 +195,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("workerConcurrency", 3)
 	viper.SetDefault("triggerSecurityFramework", false)
 	viper.SetDefault("matchingRulesFilename", "/etc/config/matchingRules.json")
-	viper.SetDefault("eventDeduplicationInterval", 2 * time.Minute)
+	viper.SetDefault("eventDeduplicationInterval", 2*time.Minute)
 
 	viper.AutomaticEnv()
 
@@ -231,7 +231,7 @@ func GetServiceURLs(filePath string) (schema.IBackendServices, error) {
 	logger.L().Debug("discovery service URLs from file", helpers.String("path", pathAndFileName))
 
 	return servicediscovery.GetServices(
-		v1.NewServiceDiscoveryFileV1(pathAndFileName),
+		v2.NewServiceDiscoveryFileV2(pathAndFileName),
 	)
 }
 
