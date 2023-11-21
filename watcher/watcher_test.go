@@ -574,11 +574,11 @@ func TestHandleSBOMEvents(t *testing.T) {
 		instanceidv1.ImageIDMetadataKey: validImageID,
 	}
 	tt := []struct {
-		name                     string
-		imageIDstoWlids          map[string][]string
-		inputEvents              []watch.Event
-		expectedSBOMSummaryNames []string
-		expectedErrors           []error
+		name              string
+		imageIDstoWlids   map[string][]string
+		inputEvents       []watch.Event
+		expectedSBOMNames []string
+		expectedErrors    []error
 	}{
 		{
 			name: "New SBOM with recognized image hash gets kept",
@@ -597,8 +597,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{validImageIDSlug},
-			expectedErrors:           []error{},
+			expectedSBOMNames: []string{validImageIDSlug},
+			expectedErrors:    []error{},
 		},
 		{
 			name: "New SBOM with missing image ID annotation produces an error and gets deleted",
@@ -617,8 +617,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{},
-			expectedErrors:           []error{ErrMissingImageIDAnnotation},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{ErrMissingImageIDAnnotation},
 		},
 		{
 			name: "New SBOM with recognized image ID as name but unrecognized image ID in annotation gets deleted",
@@ -639,8 +639,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{},
-			expectedErrors:           []error{},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{},
 		},
 		{
 			name: "New SBOM with recognized image ID as name but missing image ID annotation should produce an error",
@@ -658,8 +658,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{},
-			expectedErrors:           []error{ErrMissingImageIDAnnotation},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{ErrMissingImageIDAnnotation},
 		},
 		{
 			name: "New SBOM with unrecognized image ID gets deleted",
@@ -680,8 +680,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{},
-			expectedErrors:           []error{},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{},
 		},
 		{
 			name:            "Non-SBOM objects get ignored",
@@ -694,8 +694,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{},
-			expectedErrors:           []error{ErrUnsupportedObject},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{ErrUnsupportedObject},
 		},
 		{
 			name:            "Modified SBOM with unrecognized imageHash as name gets deleted",
@@ -712,8 +712,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{},
-			expectedErrors:           []error{},
+			expectedSBOMNames: []string{},
+			expectedErrors:    []error{},
 		},
 		{
 			name:            "Deleted SBOM with unrecognized imageHash gets ignored",
@@ -726,8 +726,8 @@ func TestHandleSBOMEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedSBOMSummaryNames: []string{"testName"},
-			expectedErrors:           []error{},
+			expectedSBOMNames: []string{"testName"},
+			expectedErrors:    []error{},
 		},
 	}
 
@@ -735,13 +735,10 @@ func TestHandleSBOMEvents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 
-			// Arrange SBOMSummary objects in the storage from input events
+			// Arrange SBOMSummary objects in the storage fro input events
 			inputObjects := []runtime.Object{}
 
-			// Arrange SBOMs that match input SBOMSummaries
 			for _, event := range tc.inputEvents {
-				// Don’t try setting up a matching SBOM for
-				// anything that is not an SBOM Summary
 				obj, ok := event.Object.(*spdxv1beta1.SBOMSyft)
 				if !ok {
 					continue
@@ -793,7 +790,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				remainingSBOMSummaryNames = append(remainingSBOMSummaryNames, obj.ObjectMeta.Name)
 			}
 
-			assert.Equalf(t, tc.expectedSBOMSummaryNames, remainingSBOMSummaryNames, "Remaining SBOM Summaries should match")
+			assert.Equalf(t, tc.expectedSBOMNames, remainingSBOMSummaryNames, "Remaining SBOM Summaries should match")
 			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
 		})
 	}
