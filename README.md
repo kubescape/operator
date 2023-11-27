@@ -1,5 +1,6 @@
 
 # Operator 
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/kubescape/operator/badge)](https://securityscorecards.dev/viewer/?uri=github.com/kubescape/operator)
 
 The Operator component is at the heart of Kubescape as it is the triggering engine for the different actions in the cluster; It responds to REST API requests and messages received over websocket connections, and triggers the relevant action in the cluster. Such actions could be triggering a [configuration scan](https://www.armosec.io/blog/ci-cd-security/?utm_source=github&utm_medium=repository), an image vulnerability scan, defining a recurring scan (by creating CronJobs), etc.
 
