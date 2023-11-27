@@ -163,7 +163,7 @@ func TestAddEventHandler(t *testing.T) {
 				// to sync with a WaitGroup
 				resourcesCreatedWg.Add(1)
 				pod := podToCreate
-				createUnstructuredPod(t, ctx, dynClient, podsGvr, namespaceStub, pod, createOpts)
+				createUnstructuredPod(t, ctx, dynClient, podsGvr, namespaceStub, pod, createOpts) //nolint: errcheck
 			}
 
 			// wait for all Creates to complete
@@ -271,7 +271,7 @@ func TestContinuousScanningService(t *testing.T) {
 			// Create Pods to be listened
 			createOpts := metav1.CreateOptions{}
 			for _, podToCreate := range tc.input {
-				createUnstructuredPod(t, ctx, dynClient, podsGvr, namespaceStub, podToCreate, createOpts)
+				createUnstructuredPod(t, ctx, dynClient, podsGvr, namespaceStub, podToCreate, createOpts) //nolint: errcheck
 
 				// Since the fake K8s client does not wait for
 				// creates to write to the event channel, try

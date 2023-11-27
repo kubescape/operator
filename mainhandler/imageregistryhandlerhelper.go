@@ -218,7 +218,7 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Contex
 	// Delete cronjob, configmap and secret (if exists)
 	jobParams := actionHandler.command.GetCronJobParams()
 	if jobParams == nil {
-		logger.L().Info("updateRegistryScanCronJob: failed to get jobParams")
+		logger.L().Error("updateRegistryScanCronJob: failed to get jobParams")
 		return fmt.Errorf("failed to get jobParams")
 	}
 
@@ -227,7 +227,7 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Contex
 	if err != nil {
 		err = actionHandler.k8sAPI.KubernetesClient.BatchV1beta1().CronJobs(actionHandler.config.Namespace()).Delete(context.Background(), name, metav1.DeleteOptions{})
 		if err != nil {
-			logger.L().Info("deleteRegistryScanCronJob: deleteCronJob failed", helpers.Error(err))
+			logger.L().Error("deleteRegistryScanCronJob: deleteCronJob failed", helpers.Error(err))
 			return err
 		}
 	}
@@ -238,7 +238,7 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Contex
 	if err != nil {
 		// if secret not found, it means was configured without credentials
 		if !strings.Contains(err.Error(), "not found") {
-			logger.L().Info("deleteRegistryScanCronJob: deleteSecret failed", helpers.Error(err))
+			logger.L().Error("deleteRegistryScanCronJob: deleteSecret failed", helpers.Error(err))
 		}
 	}
 	logger.L().Info(fmt.Sprintf("deleteRegistryScanCronJob: secret: %v deleted successfully", name))
@@ -246,7 +246,7 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Contex
 	// delete configmap
 	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.config.Namespace()).Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.L().Info("deleteRegistryScanCronJob: deleteConfigMap failed", helpers.Error(err))
+		logger.L().Error("deleteRegistryScanCronJob: deleteConfigMap failed", helpers.Error(err))
 	}
 	logger.L().Info(fmt.Sprintf("deleteRegistryScanCronJob: configmap: %v deleted successfully", name))
 

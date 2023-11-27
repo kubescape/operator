@@ -228,8 +228,10 @@ func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.
 		}
 
 		if !hasObject {
-			// TODO(vladklokun): deletes are disabled for a quick hack
-			// wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
+			err := wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
 		}
 	}
 }
@@ -271,7 +273,6 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		}
 
 		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
-			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			logger.L().Ctx(context.TODO()).Info(
 				fmt.Sprintf(
 					`unrecognized instance ID "%s". Known: "%v", no triggering`,
@@ -279,6 +280,10 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 					wh.managedInstanceIDSlugs,
 				),
 			)
+			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			if err != nil {
+				errorCh <- err
+			}
 			continue
 		}
 
@@ -417,7 +422,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			}
 		case err, ok := <-errorCh:
 			if ok {
-				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+				logger.L().Ctx(ctx).Error("error in SBOMWatch", helpers.Error(err))
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
