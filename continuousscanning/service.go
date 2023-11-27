@@ -63,7 +63,14 @@ func (s *ContinuousScanningService) work(ctx context.Context) {
 		)
 		for idx := range s.eventHandlers {
 			handler := s.eventHandlers[idx]
-			handler.Handle(ctx, e)
+			err := handler.Handle(ctx, e)
+			if err != nil {
+				logger.L().Ctx(ctx).Error(
+					"failed to handle event",
+					helpers.Interface("event", e),
+					helpers.Error(err),
+				)
+			}
 		}
 	}
 

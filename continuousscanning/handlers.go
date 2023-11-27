@@ -230,7 +230,10 @@ func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error
 		return nil
 	}
 
-	h.deleteCRDs(ctx, uObject, h.storageClient)
+	err = h.deleteCRDs(ctx, uObject, h.storageClient)
+	if err != nil {
+		logger.L().Ctx(ctx).Error("failed to delete CRDs", helpers.Error(err))
+	}
 
 	err = triggerScanFor(ctx, uObject, isDelete, h.wp, h.clusterConfig)
 	return err
