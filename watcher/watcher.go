@@ -228,10 +228,11 @@ func (wh *WatchHandler) HandleVulnerabilityManifestEvents(vmEvents <-chan watch.
 		}
 
 		if !hasObject {
-			err := wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
-			if err != nil {
-				errorCh <- err
-			}
+			// TODO(vladklokun): deletes are disabled for a quick hack
+			// err := wh.storageClient.SpdxV1beta1().VulnerabilityManifests(obj.ObjectMeta.Namespace).Delete(context.TODO(), manifestName, v1.DeleteOptions{})
+			// if err != nil {
+			// errorCh <- err
+			// }
 		}
 	}
 }
