@@ -127,8 +127,31 @@ If you will be running the Operator as part of the Kubescape cluster components,
   }
 }
 ```
+</details>  
+If continuous scanning is enabled, add the following configuration file (change to the relevant values):
+<details><summary>/etc/config/matchingRules.json</summary>
+
+```json5
+{
+    "match": [
+        {
+            "apiGroups": [
+                "apps"
+            ],
+            "apiVersions": [
+                "v1"
+            ],
+            "resources": [
+                "deployments"
+            ]
+        }
+    ],
+    "namespaces": [
+        "default"
+    ]
+}
+```
 </details>
-     
 ## API Documentation
 
 The Operator provides an HTTP API.
