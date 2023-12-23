@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/docker/docker/api/types"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -51,27 +51,27 @@ const (
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
 )
 
-func getVulnScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
+func getVulnScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
 		Scheme: "http",
-		Host:   clusterConfig.KubevulnURL,
+		Host:   config.KubevulnURL(),
 		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.ContainerScanCommandPath),
 	}
 }
 
-func getRegistryScanURL(clusterConfig utilsmetadata.ClusterConfig) *url.URL {
+func getRegistryScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
 		Scheme: "http",
-		Host:   clusterConfig.KubevulnURL,
+		Host:   config.KubevulnURL(),
 		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.RegistryScanCommandPath),
 	}
 }
 
-func sendAllImagesToRegistryScan(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, registryScanCMDList []*apis.RegistryScanCommand) error {
+func sendAllImagesToRegistryScan(ctx context.Context, config config.IConfig, registryScanCMDList []*apis.RegistryScanCommand) error {
 	var err error
 	errs := make([]error, 0)
 	for _, registryScanCMD := range registryScanCMDList {
-		err = sendWorkloadToRegistryScan(ctx, clusterConfig, registryScanCMD)
+		err = sendWorkloadToRegistryScan(ctx, config, registryScanCMD)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("sendWorkloadToRegistryScan failed", helpers.Error(err))
 			errs = append(errs, err)
@@ -132,7 +132,7 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistries")
 	defer span.End()
 
-	if !actionHandler.components.Kubevuln.Enabled {
+	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("Kubevuln is not enabled")
 	}
 
@@ -154,7 +154,7 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 }
 
 func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessionObj *utils.SessionObj) (*registryScan, error) {
-	registryScan := NewRegistryScan(actionHandler.clusterConfig, actionHandler.k8sAPI, actionHandler.eventReceiverRestURL)
+	registryScan := NewRegistryScan(actionHandler.config, actionHandler.k8sAPI)
 	if regName := actionHandler.parseRegistryName(sessionObj); regName != "" {
 		registryScan.setRegistryName(regName)
 	}
@@ -176,7 +176,7 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(ctx context.Context
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.testRegistryConnectivity")
 	defer span.End()
 
-	if !actionHandler.components.Kubevuln.Enabled {
+	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("Kubevuln is not enabled")
 	}
 
@@ -224,7 +224,7 @@ func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionO
 
 	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", identifiers.AttributeRegistryName,
 		registryName))
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), actionHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), actionHandler.sendReport)
 	return registryName
 }
 
@@ -234,7 +234,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "DENIED") || strings.Contains(strings.ToLower(err.Error()), "authentication") || strings.Contains(strings.ToLower(err.Error()), "empty token") {
 			// registry info is good, but authentication failed
 			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-			sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
+			sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 			sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
 			return fmt.Errorf("failed to retrieve repositories: authentication error: %v", err)
 		} else {
@@ -244,9 +244,9 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 	sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 
 	if len(repos) == 0 {
 		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryRetrieveReposStatus, err))
@@ -254,7 +254,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveReposStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 
 	// check that we can pull tags. One is enough
 	if len(repos) > 0 {
@@ -266,7 +266,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	}
 
 	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 
 	var repositories []apitypes.Repository
 	for _, repo := range repos {
@@ -294,17 +294,17 @@ func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *
 	if err != nil {
 		return fmt.Errorf("GetImagesForScanning failed with err %v", err)
 	}
-	registryScanCMDList := convertImagesToRegistryScanCommand(actionHandler.clusterConfig.ClusterName, registry, sessionObj)
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), actionHandler.sendReport, sessionObj.ErrChan)
+	registryScanCMDList := convertImagesToRegistryScanCommand(actionHandler.config.ClusterName(), registry, sessionObj)
+	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), actionHandler.sendReport)
 
-	return sendAllImagesToRegistryScan(ctx, actionHandler.clusterConfig, registryScanCMDList)
+	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
 }
 
 func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj *utils.SessionObj) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanWorkload")
 	defer span.End()
 
-	if !actionHandler.components.Kubevuln.Enabled {
+	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("Kubevuln is not enabled")
 	}
 
@@ -434,12 +434,12 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 
 }
 
-func sendWorkloadToRegistryScan(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, registryScanCommand *apis.RegistryScanCommand) error {
-	return sendWorkloadWithCredentials(ctx, getRegistryScanURL(clusterConfig), registryScanCommand)
+func sendWorkloadToRegistryScan(ctx context.Context, config config.IConfig, registryScanCommand *apis.RegistryScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getRegistryScanURL(config), registryScanCommand)
 }
 
-func sendWorkloadToCVEScan(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, websocketScanCommand *apis.WebsocketScanCommand) error {
-	return sendWorkloadWithCredentials(ctx, getVulnScanURL(clusterConfig), websocketScanCommand)
+func sendWorkloadToCVEScan(ctx context.Context, config config.IConfig, websocketScanCommand *apis.WebsocketScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getVulnScanURL(config), websocketScanCommand)
 }
 
 func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) (*corev1.Pod, error) {
@@ -473,6 +473,9 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
 	}
 
+	relPods := []corev1.Pod{}
+
+	// list the pods that are related to the workload
 	for i := range pods.Items {
 
 		// set the api version and kind to be pod - this is needed for the the resourceID
@@ -496,11 +499,26 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 		}
 
 		if kind == workload.GetKind() && name == workload.GetName() {
-			return &pods.Items[i], nil
+			relPods = append(relPods, pods.Items[i])
 		}
 	}
 
-	return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
+	if len(relPods) == 0 {
+		return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
+	}
+
+	// find the latest pod
+	latestPod := relPods[0]
+	latestTime := latestPod.CreationTimestamp.Time
+
+	for i := range relPods {
+		if relPods[i].CreationTimestamp.Time.After(latestTime) {
+			latestPod = relPods[i]
+			latestTime = relPods[i].CreationTimestamp.Time
+		}
+	}
+	return &latestPod, nil
+
 }
 
 // get a workload, retrieves its pod and returns a map of container name to image id
@@ -571,7 +589,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 
 	// we build a list of all registry scan secrets
 	containerRegistryAuths := []registryAuth{}
-	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, ""); err == nil && len(secrets) > 0 {
+	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, actionHandler.config.Namespace(), ""); err == nil && len(secrets) > 0 {
 		for i := range secrets {
 			if auths, err := parseRegistryAuthSecret(secrets[i]); err == nil {
 				containerRegistryAuths = append(containerRegistryAuths, auths...)
@@ -598,7 +616,7 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 		}
 		logger.L().Ctx(ctx).Debug("sending scan command", helpers.String("id", containers[i].id), helpers.String("image", containers[i].image), helpers.String("container", containers[i].container))
 
-		if err := sendCommandToScanner(ctx, actionHandler.clusterConfig, websocketScanCommand, command); err != nil {
+		if err := sendCommandToScanner(ctx, actionHandler.config, websocketScanCommand, command); err != nil {
 			errs += err.Error()
 			logger.L().Error("scanning failed", helpers.String("image", websocketScanCommand.ImageTag), helpers.Error(err))
 		}
@@ -611,11 +629,11 @@ func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context
 	return nil
 }
 
-func sendCommandToScanner(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
+func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
 	var err error
 	switch command {
 	case apis.TypeScanImages:
-		err = sendWorkloadToCVEScan(ctx, clusterConfig, webSocketScanCommand)
+		err = sendWorkloadToCVEScan(ctx, config, webSocketScanCommand)
 	default:
 		err = fmt.Errorf("unknown command: %s", command)
 	}

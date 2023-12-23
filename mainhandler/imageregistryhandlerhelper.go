@@ -20,7 +20,7 @@ import (
 )
 
 func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, secretName string, authConfig *types.AuthConfig) error {
-	secretObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	secretObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Get(context.Background(), secretName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, s
 		return err
 	}
 	secretObj.Data[registriesAuthFieldInSecret] = authMarshal
-	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Update(context.Background(), secretObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Update(context.Background(), secretObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, s
 }
 
 func (actionHandler *ActionHandler) updateConfigMap(sessionObj *utils.SessionObj, configMapName string, registryScan *registryScan) error {
-	configMapObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Get(context.Background(), configMapName, metav1.GetOptions{})
+	configMapObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.config.Namespace()).Get(context.Background(), configMapName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (actionHandler *ActionHandler) updateConfigMap(sessionObj *utils.SessionObj
 	}
 	configMapObj.Data[requestBodyFile] = string(command)
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Update(context.Background(), configMapObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.config.Namespace()).Update(context.Background(), configMapObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (actionHandler *ActionHandler) updateConfigMap(sessionObj *utils.SessionObj
 }
 
 func (actionHandler *ActionHandler) updateCronJob(sessionObj *utils.SessionObj, cronJobName string) error {
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Get(context.Background(), cronJobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Get(context.Background(), cronJobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (actionHandler *ActionHandler) updateCronJob(sessionObj *utils.SessionObj, 
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(ctx context.Contex
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateRegistryScanCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubevulnScheduler.Enabled {
+	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
@@ -155,7 +155,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setRegistryScanCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubevulnScheduler.Enabled {
+	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
@@ -211,42 +211,42 @@ func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Contex
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteRegistryScanCronJo")
 	defer span.End()
 
-	if !actionHandler.components.KubevulnScheduler.Enabled {
+	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
 	// Delete cronjob, configmap and secret (if exists)
 	jobParams := actionHandler.command.GetCronJobParams()
 	if jobParams == nil {
-		logger.L().Info("updateRegistryScanCronJob: failed to get jobParams")
+		logger.L().Error("updateRegistryScanCronJob: failed to get jobParams")
 		return fmt.Errorf("failed to get jobParams")
 	}
 
 	name := jobParams.JobName
-	err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
-		err = actionHandler.k8sAPI.KubernetesClient.BatchV1beta1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+		err = actionHandler.k8sAPI.KubernetesClient.BatchV1beta1().CronJobs(actionHandler.config.Namespace()).Delete(context.Background(), name, metav1.DeleteOptions{})
 		if err != nil {
-			logger.L().Info("deleteRegistryScanCronJob: deleteCronJob failed", helpers.Error(err))
+			logger.L().Error("deleteRegistryScanCronJob: deleteCronJob failed", helpers.Error(err))
 			return err
 		}
 	}
 	logger.L().Info(fmt.Sprintf("deleteRegistryScanCronJob: cronjob: %v deleted successfully", name))
 
 	// delete secret
-	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
 		// if secret not found, it means was configured without credentials
 		if !strings.Contains(err.Error(), "not found") {
-			logger.L().Info("deleteRegistryScanCronJob: deleteSecret failed", helpers.Error(err))
+			logger.L().Error("deleteRegistryScanCronJob: deleteSecret failed", helpers.Error(err))
 		}
 	}
 	logger.L().Info(fmt.Sprintf("deleteRegistryScanCronJob: secret: %v deleted successfully", name))
 
 	// delete configmap
-	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	err = actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.config.Namespace()).Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.L().Info("deleteRegistryScanCronJob: deleteConfigMap failed", helpers.Error(err))
+		logger.L().Error("deleteRegistryScanCronJob: deleteConfigMap failed", helpers.Error(err))
 	}
 	logger.L().Info(fmt.Sprintf("deleteRegistryScanCronJob: configmap: %v deleted successfully", name))
 

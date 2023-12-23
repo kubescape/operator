@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
@@ -37,10 +37,7 @@ type MainHandler struct {
 	eventWorkerPool        *ants.PoolWithFunc
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
-	clusterConfig          utilsmetadata.ClusterConfig
-	cfg                    config.Config
-	components             config.Components
-	eventReceiverRestURL   string
+	config                 config.IConfig
 	sendReport             bool
 }
 
@@ -50,14 +47,11 @@ type ActionHandler struct {
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
-	clusterConfig          utilsmetadata.ClusterConfig
-	cfg                    config.Config
-	components             config.Components
-	eventReceiverRestURL   string
+	config                 config.IConfig
 	sendReport             bool
 }
 
-type waitFunc func(clusterConfig utilsmetadata.ClusterConfig)
+type waitFunc func(clusterConfig config.IConfig)
 
 var k8sNamesRegex *regexp.Regexp
 var actionNeedToBeWaitOnStartUp = map[apis.NotificationPolicyType]waitFunc{}
@@ -76,52 +70,66 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, components config.Components, k8sAPI *k8sinterface.KubernetesApi, eventReceiverRestURL string) *MainHandler {
+func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	mainHandler := &MainHandler{
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
-		clusterConfig:          clusterConfig,
-		cfg:                    cfg,
-		components:             components,
-		eventReceiverRestURL:   eventReceiverRestURL,
-		sendReport:             eventReceiverRestURL != "",
+		config:                 config,
+		sendReport:             config.EventReceiverURL() != "",
 	}
-	pool, _ := ants.NewPoolWithFunc(cfg.ConcurrencyWorkers, func(i interface{}) {
+	pool, _ := ants.NewPoolWithFunc(config.ConcurrencyWorkers(), func(i interface{}) {
+		logger.L().Debug("ants pool received job", helpers.Interface("job", i))
 		j, ok := i.(utils.Job)
 		if !ok {
 			logger.L().Error("failed to cast job", helpers.Interface("job", i))
 			return
 		}
+		logger.L().Debug(
+			"handling request",
+			helpers.String("jobID", j.Obj().Command.JobTracking.JobID),
+			helpers.String("parentID", j.Obj().Command.JobTracking.ParentID),
+			helpers.String("commandName", string(j.Obj().Command.CommandName)),
+			helpers.String("wlid", j.Obj().Command.Wlid),
+		)
 		mainHandler.handleRequest(j)
+		logger.L().Debug(
+			"request handled",
+			helpers.String("jobID", j.Obj().Command.JobTracking.JobID),
+			helpers.String("parentID", j.Obj().Command.JobTracking.ParentID),
+			helpers.String("commandName", string(j.Obj().Command.CommandName)),
+			helpers.String("wlid", j.Obj().Command.Wlid),
+		)
 	})
 	mainHandler.eventWorkerPool = pool
 	return mainHandler
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(clusterConfig utilsmetadata.ClusterConfig, cfg config.Config, components config.Components, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, eventReceiverRestURL string) *ActionHandler {
+func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: commandResponseChannel,
-		clusterConfig:          clusterConfig,
-		cfg:                    cfg,
-		components:             components,
-		eventReceiverRestURL:   eventReceiverRestURL,
-		sendReport:             eventReceiverRestURL != "",
+		config:                 config,
+		sendReport:             config.EventReceiverURL() != "",
 	}
 }
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
-func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
-	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.clusterConfig, mainHandler.eventReceiverRestURL)
-	dynClient := mainHandler.k8sAPI.DynamicClient
+func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, queueSize int, eventCooldown time.Duration) error {
+	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
+	}
 
-	rulesFilename := mainHandler.cfg.MatchingRulesFilename
+	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.config)
+	deletingHandler := cs.NewDeletedCleanerHandler(mainHandler.eventWorkerPool, mainHandler.config, ksStorageClient)
+
+	rulesFilename := mainHandler.config.MatchingRulesFilename()
 	rulesReader, err := os.Open(rulesFilename)
 	if err != nil {
 		return err
@@ -129,7 +137,9 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) err
 
 	fetcher := cs.NewFileFetcher(rulesReader)
 	loader := cs.NewTargetLoader(fetcher)
-	svc := cs.NewContinuousScanningService(dynClient, loader, triggeringHandler)
+
+	dynClient := mainHandler.k8sAPI.DynamicClient
+	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler, deletingHandler)
 	svc.Launch(ctx)
 
 	return nil
@@ -146,7 +156,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.clusterConfig, mainHandler.cfg, mainHandler.k8sAPI, ksStorageClient, nil, nil, mainHandler.eventReceiverRestURL)
+	watchHandler, err := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, nil, nil)
 
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
@@ -156,7 +166,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	// wait for vuln scan to be ready
 	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
-	waitFunc(mainHandler.clusterConfig)
+	waitFunc(mainHandler.config)
 
 	// generate list of commands to scan all workloads
 	wlids := watchHandler.GetWlidsToContainerToImageIDMap()
@@ -182,7 +192,7 @@ func (h *MainHandler) StartContinuousScanning(ctx context.Context) error {
 
 func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
 	for _, cmd := range commandsList {
-		utils.AddCommandToChannel(ctx, mainHandler.eventReceiverRestURL, mainHandler.clusterConfig, cmd, mainHandler.eventWorkerPool)
+		utils.AddCommandToChannel(ctx, mainHandler.config, cmd, mainHandler.eventWorkerPool)
 	}
 }
 
@@ -228,24 +238,23 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 		mainHandler.HandleSingleRequest(ctx, &sessionObj)
 	}
 	span.End()
-	close(sessionObj.ErrChan)
 }
 
 func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) {
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	actionHandler := NewActionHandler(mainHandler.clusterConfig, mainHandler.cfg, mainHandler.components, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.eventReceiverRestURL)
+	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
-	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport, sessionObj.ErrChan)
+	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport)
 	err := actionHandler.runCommand(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
-		actionHandler.reporter.SendError(err, mainHandler.sendReport, true, sessionObj.ErrChan)
+		actionHandler.reporter.SendError(err, mainHandler.sendReport, true)
 		return
 	}
 
-	actionHandler.reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport, sessionObj.ErrChan)
+	actionHandler.reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
 	logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 
 }
@@ -316,14 +325,14 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	}
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	logger.L().Info(info)
-	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 	ids, errs := mainHandler.getIDs(namespaces, labels, fields, []string{"pods"})
 	for i := range errs {
 		logger.L().Ctx(ctx).Warning(errs[i].Error())
-		sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true, sessionObj.ErrChan)
+		sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true)
 	}
 
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport, sessionObj.ErrChan)
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
 
 	logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
 
@@ -343,19 +352,17 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		cmd.Designators = make([]identifiers.PortalDesignator, 0)
 
 		// send specific command to the channel
-		newSessionObj := utils.NewSessionObj(ctx, mainHandler.eventReceiverRestURL, mainHandler.clusterConfig, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+		newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
 		if err != nil {
 			err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
 			logger.L().Ctx(ctx).Error(err.Error())
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true, sessionObj.ErrChan)
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 			continue
 		}
 
 		logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
 		mainHandler.HandleSingleRequest(ctx, newSessionObj)
-
-		close(newSessionObj.ErrChan)
 
 	}
 }
@@ -391,8 +398,8 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 	for i := range actions {
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
-			waitFunc(mainHandler.clusterConfig)
-			sessionObj := utils.NewSessionObj(ctx, mainHandler.eventReceiverRestURL, mainHandler.clusterConfig, &actions[index], "Websocket", "", uuid.NewString(), 1)
+			waitFunc(mainHandler.config)
+			sessionObj := utils.NewSessionObj(ctx, mainHandler.config, &actions[index], "Websocket", "", uuid.NewString(), 1)
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)
@@ -407,11 +414,11 @@ func (mainHandler *MainHandler) EventWorkerPool() *ants.PoolWithFunc {
 	return mainHandler.eventWorkerPool
 }
 
-func GetStartupActions(clusterConfig utilsmetadata.ClusterConfig) []apis.Command {
+func GetStartupActions(config config.IConfig) []apis.Command {
 	return []apis.Command{
 		{
 			CommandName: apis.TypeRunKubescape,
-			WildWlid:    pkgwlid.GetK8sWLID(clusterConfig.ClusterName, "", "", ""),
+			WildWlid:    pkgwlid.GetK8sWLID(config.ClusterName(), "", "", ""),
 			Args: map[string]interface{}{
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
 					HostScanner: boolutils.BoolPointer(false),

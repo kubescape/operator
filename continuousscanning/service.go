@@ -2,28 +2,16 @@ package continuousscanning
 
 import (
 	"context"
-	"errors"
+	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
-	armowlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	opautilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
-	"github.com/kubescape/opa-utils/objectsenvelopes"
-	"github.com/kubescape/operator/utils"
-	"github.com/panjf2000/ants/v2"
 )
-
-type EventHandler interface {
-	Handle(ctx context.Context, e watch.Event) error
-}
 
 type ContinuousScanningService struct {
 	tl                TargetLoader
@@ -31,7 +19,7 @@ type ContinuousScanningService struct {
 	workDone          chan struct{}
 	k8sdynamic        dynamic.Interface
 	eventHandlers     []EventHandler
-	eventQueue        chan watch.Event
+	eventQueue        *cooldownQueue
 }
 
 func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.Command {
@@ -46,17 +34,17 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	wp.Run(ctx, resourceEventsCh)
 	logger.L().Ctx(ctx).Info("ran watch pool")
 
-	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out chan<- watch.Event) {
-		defer close(out)
+	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *cooldownQueue) {
+		defer out.Stop(ctx)
 
 		for {
 			select {
 			case e := <-resourceEventsCh:
-				logger.L().Ctx(ctx).Info(
+				logger.L().Ctx(ctx).Debug(
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
-				out <- e
+				out.Enqueue(ctx, e)
 			case <-shutdownCh:
 				return
 			}
@@ -68,10 +56,21 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 }
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
-	for e := range s.eventQueue {
+	for e := range s.eventQueue.ResultChan {
+		logger.L().Ctx(ctx).Debug(
+			"got an event to process",
+			helpers.Interface("event", e),
+		)
 		for idx := range s.eventHandlers {
 			handler := s.eventHandlers[idx]
-			handler.Handle(ctx, e)
+			err := handler.Handle(ctx, e)
+			if err != nil {
+				logger.L().Ctx(ctx).Error(
+					"failed to handle event",
+					helpers.Interface("event", e),
+					helpers.Error(err),
+				)
+			}
 		}
 	}
 
@@ -101,9 +100,9 @@ func (s *ContinuousScanningService) Stop() {
 	<-s.workDone
 }
 
-func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h ...EventHandler) *ContinuousScanningService {
+func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, queueSize int, sameEventCooldown time.Duration, h ...EventHandler) *ContinuousScanningService {
 	doneCh := make(chan struct{})
-	eventQueue := make(chan watch.Event, 100)
+	eventQueue := NewCooldownQueue(queueSize, sameEventCooldown)
 	workDone := make(chan struct{})
 
 	return &ContinuousScanningService{
@@ -114,72 +113,4 @@ func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h .
 		eventQueue:        eventQueue,
 		workDone:          workDone,
 	}
-}
-
-type poolInvokerHandler struct {
-	wp                   *ants.PoolWithFunc
-	clusterConfig        utilsmetadata.ClusterConfig
-	eventReceiverRestURL string
-}
-
-func makeScanArgs(so *objectsenvelopes.ScanObject) map[string]interface{} {
-	psr := opautilsmetav1.PostScanRequest{
-		ScanObject: so,
-	}
-	return map[string]interface{}{
-		utils.KubescapeScanV1: psr,
-	}
-
-}
-
-func makeScanCommand(clusterName string, uo *unstructured.Unstructured) *armoapi.Command {
-	objKind := uo.GetKind()
-	objName := uo.GetName()
-	objNamespace := uo.GetNamespace()
-	wlid := armowlid.GetK8sWLID(clusterName, objNamespace, objKind, objName)
-
-	scanObject, _ := unstructuredToScanObject(uo)
-
-	args := makeScanArgs(scanObject)
-
-	return &armoapi.Command{
-		CommandName: armoapi.TypeRunKubescape,
-		Wlid:        wlid,
-		Args:        args,
-	}
-}
-
-func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, e watch.Event) error {
-	logger.L().Ctx(ctx).Info(
-		"triggering scan",
-		helpers.String("clusterName", clusterConfig.ClusterName),
-		helpers.Interface("event", e),
-	)
-	obj := e.Object.(*unstructured.Unstructured)
-	objRaw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	if err != nil {
-		return err
-	}
-
-	uObject := &unstructured.Unstructured{Object: objRaw}
-	command := makeScanCommand(clusterConfig.ClusterName, uObject)
-	utils.AddCommandToChannel(ctx, eventReceiverRestURL, clusterConfig, command, wp)
-
-	return nil
-}
-
-func unstructuredToScanObject(uo *unstructured.Unstructured) (*objectsenvelopes.ScanObject, error) {
-	var res *objectsenvelopes.ScanObject
-	if res = objectsenvelopes.NewScanObject(uo.UnstructuredContent()); res == nil {
-		return res, errors.New("passed object cannot be converted to ScanObject")
-	}
-	return res, nil
-}
-
-func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
-	return triggerScan(ctx, h.wp, h.eventReceiverRestURL, h.clusterConfig, e)
-}
-
-func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) EventHandler {
-	return &poolInvokerHandler{wp: wp, clusterConfig: clusterConfig, eventReceiverRestURL: eventReceiverRestURL}
 }

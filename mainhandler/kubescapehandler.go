@@ -8,10 +8,10 @@ import (
 	"math/rand"
 	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	v1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/config"
 	"go.opentelemetry.io/otel"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -36,7 +36,7 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteKubescapeCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubescapeScheduler.Enabled {
+	if !actionHandler.config.Components().KubescapeScheduler.Enabled {
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
@@ -45,11 +45,11 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.cfg.Namespace).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
+	if err := actionHandler.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(actionHandler.config.Namespace()).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -59,7 +59,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateKubescapeCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubescapeScheduler.Enabled {
+	if !actionHandler.config.Components().KubescapeScheduler.Enabled {
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
@@ -68,7 +68,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
 
-	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
+	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
 
-	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
+	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setKubescapeCronJob")
 	defer span.End()
 
-	if !actionHandler.components.KubescapeScheduler.Enabled {
+	if !actionHandler.config.Components().KubescapeScheduler.Enabled {
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
@@ -104,11 +104,11 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%s-%d", "ks-scheduled-scan", req.TargetNames[i], rand.NewSource(time.Now().UnixNano()).Int63()))
 
 		// create config map
-		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, actionHandler.cfg.Namespace, name, req); err != nil {
+		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, actionHandler.config.Namespace(), name, req); err != nil {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, actionHandler.cfg.Namespace)
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, actionHandler.config.Namespace())
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
-		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.cfg.Namespace).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 	}
@@ -124,25 +124,25 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	return nil
 }
 
-func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.ClusterConfig, sendReport bool, payload interface{}) (bool, *time.Duration) {
+func HandleKubescapeResponse(ctx context.Context, config config.IConfig, sendReport bool, payload interface{}) (bool, *time.Duration) {
 	data := payload.(*kubescapeResponseData)
 	logger.L().Info(fmt.Sprintf("handle kubescape response for scan id %s", data.scanID))
 
 	info := fmt.Sprintf("getting kubescape scanID %s job status", data.scanID)
 	errChan := make(chan error)
-	data.reporter.SendDetails(info, sendReport, errChan)
+	data.reporter.SendDetails(info, sendReport)
 	if err := <-errChan; err != nil {
 		logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send error report", helpers.Error(err))
 	}
 
-	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(clusterConfig, data.scanID).String(), nil)
+	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(config, data.scanID).String(), nil)
 	if err != nil {
 		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendDetails(info, sendReport, errChan)
+		data.reporter.SendDetails(info, sendReport)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send status report", helpers.Error(err))
 		}
-		data.reporter.SendError(err, sendReport, true, errChan)
+		data.reporter.SendError(err, sendReport, true)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::error in HTTP GET + failed to send error report", helpers.Error(err))
 		}
@@ -153,11 +153,11 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 	response, err := readKubescapeV1ScanResponse(resp)
 	if err != nil {
 		info := fmt.Sprintf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendDetails(info, sendReport, errChan)
+		data.reporter.SendDetails(info, sendReport)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send status report", helpers.Error(err))
 		}
-		data.reporter.SendError(err, sendReport, true, errChan)
+		data.reporter.SendError(err, sendReport, true)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send error report", helpers.Error(err))
 		}
@@ -169,7 +169,7 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 		nextTimeRehandled := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
 		info = fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String())
 		logger.L().Info(info)
-		data.reporter.SendDetails(info, sendReport, errChan)
+		data.reporter.SendDetails(info, sendReport)
 		if err := <-errChan; err != nil {
 			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::BusyScanResponseType failed to send status report", helpers.Error(err))
 		}
@@ -178,7 +178,7 @@ func HandleKubescapeResponse(ctx context.Context, clusterConfig utilsmetadata.Cl
 
 	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID)
 	logger.L().Info(info)
-	data.reporter.SendDetails(info, sendReport, errChan)
+	data.reporter.SendDetails(info, sendReport)
 	if err := <-errChan; err != nil {
 		logger.L().Ctx(ctx).Error("HandleKubescapeResponse::Done failed to send status report", helpers.Error(err))
 	}
@@ -189,7 +189,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.kubescapeScan")
 	defer span.End()
 
-	if !actionHandler.components.Kubescape.Enabled {
+	if !actionHandler.config.Components().Kubescape.Enabled {
 		return errors.New("Kubescape is not enabled")
 	}
 
@@ -199,7 +199,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	}
 
 	// append security framework if TriggerSecurityFramework is true
-	if actionHandler.cfg.TriggerSecurityFramework {
+	if actionHandler.config.TriggerSecurityFramework() {
 		appendSecurityFramework(request)
 	}
 
@@ -207,7 +207,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL(actionHandler.clusterConfig).String(), nil, body)
+	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL(actionHandler.config).String(), nil, body)
 	if err != nil {
 		return err
 	}
@@ -220,11 +220,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	if response.Type == utilsapisv1.ErrorScanResponseType {
 		info = fmt.Sprintf("Kubescape scanID '%s' returned an error: %s", response.ID, response.Response)
 	}
-	errChan := make(chan error)
-	actionHandler.reporter.SendDetails(info, actionHandler.sendReport, errChan)
-	if err := <-errChan; err != nil {
-		logger.L().Ctx(ctx).Error("kubescapeScan::Done failed to send status report", helpers.Error(err))
-	}
+	actionHandler.reporter.SendDetails(info, actionHandler.sendReport)
 	logger.L().Info(info)
 
 	data := &kubescapeResponseData{

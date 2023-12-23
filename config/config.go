@@ -8,7 +8,8 @@ import (
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/backend/pkg/servicediscovery"
 	"github.com/kubescape/backend/pkg/servicediscovery/schema"
-	v1 "github.com/kubescape/backend/pkg/servicediscovery/v1"
+	v2 "github.com/kubescape/backend/pkg/servicediscovery/v2"
+	"github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/spf13/viper"
@@ -87,6 +88,100 @@ type Config struct {
 	ConcurrencyWorkers       int           `mapstructure:"workerConcurrency"`
 	TriggerSecurityFramework bool          `mapstructure:"triggerSecurityFramework"`
 	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
+	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
+	EventDeduplicationInterval time.Duration `mapstructure:"eventDeduplicationInterval"`
+}
+
+// IConfig is an interface for all config types used in the operator
+type IConfig interface {
+	Namespace() string
+	AccountID() string
+	AccessKey() string
+	ClusterName() string
+	EventReceiverURL() string
+	GatewayWebsocketURL() string
+	ConcurrencyWorkers() int
+	Components() Components
+	ContinuousScanEnabled() bool
+	CleanUpRoutineInterval() time.Duration
+	MatchingRulesFilename() string
+	TriggerSecurityFramework() bool
+	KubescapeURL() string
+	KubevulnURL() string
+}
+
+// OperatorConfig implements IConfig
+type OperatorConfig struct {
+	serviceConfig        Config
+	components           CapabilitiesConfig
+	clusterConfig        utilsmetadata.ClusterConfig
+	accountId            string
+	accessKey            string
+	eventReceiverRestURL string
+}
+
+func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
+	return &OperatorConfig{
+		components:           components,
+		serviceConfig:        serviceConfig,
+		clusterConfig:        clusterConfig,
+		accountId:            creds.Account,
+		accessKey:            creds.AccessKey,
+		eventReceiverRestURL: eventReceiverRestURL,
+	}
+}
+
+func (c *OperatorConfig) ContinuousScanEnabled() bool {
+	return c.components.Capabilities.ContinuousScan == "enable"
+}
+
+func (c *OperatorConfig) KubevulnURL() string {
+	return c.clusterConfig.KubevulnURL
+}
+
+func (c *OperatorConfig) KubescapeURL() string {
+	return c.clusterConfig.KubescapeURL
+}
+func (c *OperatorConfig) TriggerSecurityFramework() bool {
+	return c.serviceConfig.TriggerSecurityFramework
+}
+
+func (c *OperatorConfig) Namespace() string {
+	return c.serviceConfig.Namespace
+}
+
+func (c *OperatorConfig) CleanUpRoutineInterval() time.Duration {
+	return c.serviceConfig.CleanUpRoutineInterval
+}
+func (c *OperatorConfig) MatchingRulesFilename() string {
+	return c.serviceConfig.MatchingRulesFilename
+}
+
+func (c *OperatorConfig) GatewayWebsocketURL() string {
+	return c.clusterConfig.GatewayWebsocketURL
+}
+func (c *OperatorConfig) ConcurrencyWorkers() int {
+	return c.serviceConfig.ConcurrencyWorkers
+}
+
+func (c *OperatorConfig) Components() Components {
+	return c.components.Components
+}
+
+func (c *OperatorConfig) AccountID() string {
+	return c.accountId
+}
+
+func (c *OperatorConfig) AccessKey() string {
+	return c.accessKey
+}
+
+func (c *OperatorConfig) ClusterName() string {
+	return c.clusterConfig.ClusterName
+}
+
+func (c *OperatorConfig) EventReceiverURL() string {
+	return c.eventReceiverRestURL
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -100,6 +195,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("workerConcurrency", 3)
 	viper.SetDefault("triggerSecurityFramework", false)
 	viper.SetDefault("matchingRulesFilename", "/etc/config/matchingRules.json")
+	viper.SetDefault("eventDeduplicationInterval", 2*time.Minute)
 
 	viper.AutomaticEnv()
 
@@ -135,15 +231,16 @@ func GetServiceURLs(filePath string) (schema.IBackendServices, error) {
 	logger.L().Debug("discovery service URLs from file", helpers.String("path", pathAndFileName))
 
 	return servicediscovery.GetServices(
-		v1.NewServiceDiscoveryFileV1(pathAndFileName),
+		v2.NewServiceDiscoveryFileV2(pathAndFileName),
 	)
 }
 
-func ValidateConfig(clusterConfig utilsmetadata.ClusterConfig, components CapabilitiesConfig) error {
-	if clusterConfig.AccountID == "" && components.Components.ServiceDiscovery.Enabled {
-		return fmt.Errorf("missing customer guid in config")
+func ValidateConfig(config IConfig) error {
+	if config.AccountID() == "" && config.Components().ServiceDiscovery.Enabled {
+		return fmt.Errorf("missing account id")
 	}
-	if clusterConfig.ClusterName == "" {
+
+	if config.ClusterName() == "" {
 		return fmt.Errorf("missing cluster name in config")
 	}
 	return nil

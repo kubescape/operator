@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -37,7 +37,7 @@ func parseNotificationCommand(notification interface{}) (*apis.Commands, error) 
 	return cmds, err
 }
 
-func (notification *NotificationHandler) handleNotification(ctx context.Context, eventReceiverRestURL string, clusterConfig utilsmetadata.ClusterConfig, notif *notificationserver.Notification) error {
+func (notification *NotificationHandler) handleNotification(ctx context.Context, config config.IConfig, notif *notificationserver.Notification) error {
 	dst := notif.Target["dest"] // TODO: move target "dest" so it will be a constant
 	switch dst {
 	case "trigger", "kubescape": // the "kubescape" is for backward compatibility
@@ -46,7 +46,7 @@ func (notification *NotificationHandler) handleNotification(ctx context.Context,
 			return err
 		}
 		for _, cmd := range cmds.Commands {
-			sessionObj := utils.NewSessionObj(ctx, eventReceiverRestURL, clusterConfig, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
+			sessionObj := utils.NewSessionObj(ctx, notification.config, &cmd, "WebSocket", cmd.JobTracking.ParentID, cmd.JobTracking.JobID, 1)
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)
@@ -60,9 +60,9 @@ func (notification *NotificationHandler) handleNotification(ctx context.Context,
 
 }
 
-func initNotificationServerURL(clusterConfig utilsmetadata.ClusterConfig) string {
+func initNotificationServerURL(config config.IConfig) string {
 	urlObj := url.URL{}
-	host := clusterConfig.GatewayWebsocketURL
+	host := config.GatewayWebsocketURL()
 	if host == "" {
 		return ""
 	}
@@ -81,8 +81,8 @@ func initNotificationServerURL(clusterConfig utilsmetadata.ClusterConfig) string
 	urlObj.Path = notificationserver.PathWebsocketV1
 
 	q := urlObj.Query()
-	q.Add(notificationserver.TargetCustomer, clusterConfig.AccountID)
-	q.Add(notificationserver.TargetCluster, clusterConfig.ClusterName)
+	q.Add(notificationserver.TargetCustomer, config.AccountID())
+	q.Add(notificationserver.TargetCluster, config.ClusterName())
 	q.Add(notificationserver.TargetComponent, notificationserver.TargetComponentTriggerHandler)
 	urlObj.RawQuery = q.Encode()
 

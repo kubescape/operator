@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/go-logger"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/docs"
 	"github.com/panjf2000/ants/v2"
 
@@ -15,20 +15,18 @@ import (
 )
 
 type HTTPHandler struct {
-	keyPair              *tls.Certificate
-	pool                 *ants.PoolWithFunc
-	clusterConfig        utilsmetadata.ClusterConfig
-	eventReceiverRestURL string
-	sendReport           bool
+	keyPair    *tls.Certificate
+	pool       *ants.PoolWithFunc
+	config     config.IConfig
+	sendReport bool
 }
 
-func NewHTTPHandler(pool *ants.PoolWithFunc, clusterConfig utilsmetadata.ClusterConfig, eventReceiverRestURL string) *HTTPHandler {
+func NewHTTPHandler(pool *ants.PoolWithFunc, config config.IConfig) *HTTPHandler {
 	return &HTTPHandler{
-		keyPair:              nil,
-		pool:                 pool,
-		clusterConfig:        clusterConfig,
-		eventReceiverRestURL: eventReceiverRestURL,
-		sendReport:           eventReceiverRestURL != "",
+		keyPair:    nil,
+		pool:       pool,
+		config:     config,
+		sendReport: config.EventReceiverURL() != "",
 	}
 }
 

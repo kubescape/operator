@@ -4,15 +4,16 @@ import (
 	"testing"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
-	"github.com/kubescape/operator/utils"
+	beUtils "github.com/kubescape/backend/pkg/utils"
+	"github.com/kubescape/operator/config"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/boolutils"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
-
-	"github.com/armosec/armoapi-go/apis"
 )
 
 func TestGetKubescapeV1ScanRequest(t *testing.T) {
@@ -35,6 +36,24 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
 		assert.Equal(t, "json", req.Format)
+	}
+	{
+		actionHandler := ActionHandler{
+			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		assert.NoError(t, err)
+		assert.Equal(t, "all", req.TargetNames[0])
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
+	}
+	{
+		actionHandler := ActionHandler{
+			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		assert.NoError(t, err)
+		assert.Equal(t, "all", req.TargetNames[0])
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
 }
 
@@ -67,18 +86,19 @@ func TestFixK8sNameLimit(t *testing.T) {
 }
 
 func TestGetKubescapeV1ScanURL(t *testing.T) {
-	clusterConfig := utilsmetadata.ClusterConfig{
+	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "kubescape",
-	}
-	u := getKubescapeV1ScanURL(clusterConfig)
+	}, &beUtils.Credentials{}, "", config.Config{})
+	u := getKubescapeV1ScanURL(cfg)
 	assert.Equal(t, "http://kubescape/v1/scan?keep=false", u.String())
 }
 
 func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
-	clusterConfig := utilsmetadata.ClusterConfig{
+	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "armo-kubescape:8080",
-	}
-	url := getKubescapeV1ScanStatusURL(clusterConfig, "123").String()
+	}, &beUtils.Credentials{}, "", config.Config{})
+
+	url := getKubescapeV1ScanStatusURL(cfg, "123").String()
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")
 }
 
@@ -96,7 +116,7 @@ func TestAppendSecurityFramework(t *testing.T) {
 		{
 			name:            "framework scan with all",
 			postScanRequest: &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"all"}},
-			expected:        &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"all"}},
+			expected:        &utilsmetav1.PostScanRequest{TargetType: utilsapisv1.KindFramework, TargetNames: []string{"all", "security"}},
 		},
 		{
 			name:            "framework scan with security",

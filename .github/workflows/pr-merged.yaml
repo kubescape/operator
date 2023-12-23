@@ -20,7 +20,7 @@ jobs:
       IMAGE_NAME: quay.io/${{ github.repository_owner }}/operator
       IMAGE_TAG: v0.1.${{ github.run_number }}
       COMPONENT_NAME: operator
-      SYSTEM_TESTS_BRANCH: relevancy
+      SYSTEM_TESTS_BRANCH: master
       CGO_ENABLED: 0
       GO111MODULE: ""
       BUILD_PLATFORM: linux/amd64,linux/arm64
