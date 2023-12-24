@@ -362,7 +362,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "default-pod-reverse-proxy-2f07-68bd",
+							Name: "pod-reverse-proxy",
 							Annotations: map[string]string{
 								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
 							},
@@ -376,7 +376,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		},
 		{
 			name:                 "Adding a new Filtered SBOM with known instance ID slug should produce a matching scan command",
-			knownInstanceIDSlugs: []string{"default-pod-reverse-proxy-2f07-68bd"},
+			knownInstanceIDSlugs: []string{"pod-reverse-proxy"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
 				"wlid://cluster-relevant-clutser/namespace-default/deployment-nginx": {
 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
@@ -387,7 +387,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "default-pod-reverse-proxy-2f07-68bd",
+							Name: "pod-reverse-proxy",
 							Annotations: map[string]string{
 								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
 								instanceidv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
@@ -396,7 +396,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedObjectNames: []string{"default-pod-reverse-proxy-2f07-68bd"},
+			expectedObjectNames: []string{"pod-reverse-proxy"},
 			expectedCommands: []*apis.Command{
 				{
 					CommandName: apis.TypeScanImages,
@@ -412,7 +412,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		},
 		{
 			name:                 "Adding a new Filtered SBOM with known instance ID slug but missing WLID annotation should produce a matching error",
-			knownInstanceIDSlugs: []string{"default-pod-reverse-proxy-2f07-68bd"},
+			knownInstanceIDSlugs: []string{"pod-reverse-proxy"},
 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
 				"wlid://cluster-relevant-clutser/namespace-default/deployment-nginx": {
 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
@@ -423,7 +423,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "default-pod-reverse-proxy-2f07-68bd",
+							Name: "pod-reverse-proxy",
 							Annotations: map[string]string{
 								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
 							},
@@ -431,7 +431,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedObjectNames: []string{"default-pod-reverse-proxy-2f07-68bd"},
+			expectedObjectNames: []string{"pod-reverse-proxy"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{ErrMissingWLIDAnnotation},
 		},
@@ -448,7 +448,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "default-pod-reverse-proxy-1ba5-4aaf",
+							Name: "pod-reverse-proxy",
 							Annotations: map[string]string{
 								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
 							},
@@ -456,7 +456,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					},
 				},
 			},
-			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
+			expectedObjectNames: []string{"pod-reverse-proxy"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
 		},
@@ -468,13 +468,13 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Deleted,
 					Object: &spdxv1beta1.SBOMSPDXv2p3Filtered{
 						ObjectMeta: v1.ObjectMeta{
-							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Name:        "pod-reverse-proxy",
 							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
 			},
-			expectedObjectNames: []string{"default-pod-reverse-proxy-1ba5-4aaf"},
+			expectedObjectNames: []string{"pod-reverse-proxy"},
 			expectedCommands:    []*apis.Command{},
 			expectedErrors:      []error{},
 		},
@@ -486,7 +486,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Type: watch.Added,
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
-							Name:        "default-pod-reverse-proxy-1ba5-4aaf",
+							Name:        "pod-reverse-proxy",
 							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
