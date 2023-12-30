@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/kubescape/backend v0.0.17
 	github.com/kubescape/go-logger v0.0.21
-	github.com/kubescape/k8s-interface v0.0.153
+	github.com/kubescape/k8s-interface v0.0.155
 	github.com/kubescape/opa-utils v0.0.270
 	github.com/kubescape/storage v0.0.29
 	github.com/mitchellh/mapstructure v1.5.0
