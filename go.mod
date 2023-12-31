@@ -17,8 +17,8 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/kubescape/backend v0.0.17
-	github.com/kubescape/k8s-interface v0.0.155
 	github.com/kubescape/go-logger v0.0.22
+	github.com/kubescape/k8s-interface v0.0.155
 	github.com/kubescape/opa-utils v0.0.270
 	github.com/kubescape/storage v0.0.40-0.20231115211116-209bb0a90c91
 	github.com/mitchellh/mapstructure v1.5.0
