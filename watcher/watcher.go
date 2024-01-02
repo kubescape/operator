@@ -241,7 +241,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 	defer close(errorCh)
 
 	for e := range sfEvents {
-		obj, ok := e.Object.(*spdxv1beta1.SBOMSPDXv2p3Filtered)
+		obj, ok := e.Object.(*spdxv1beta1.SBOMSyftFiltered)
 		if !ok {
 			logger.L().Ctx(context.TODO()).Error(
 				fmt.Sprintf(
@@ -274,17 +274,9 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		}
 
 		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
-			logger.L().Ctx(context.TODO()).Info(
-				fmt.Sprintf(
-					`unrecognized instance ID "%s". Known: "%v", no triggering`,
-					hashedInstanceID,
-					wh.managedInstanceIDSlugs,
-				),
-			)
-			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			if err != nil {
-				errorCh <- err
-			}
+			wh.storageClient.SpdxV1beta1().SBOMSyftFiltereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			logger.L().Ctx(context.TODO()).Warning("unrecognized", helpers.String("instance ID", hashedInstanceID))
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			continue
 		}
 
@@ -333,7 +325,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 	defer close(errorCh)
 
 	for event := range sbomEvents {
-		obj, ok := event.Object.(*spdxv1beta1.SBOMSummary)
+		obj, ok := event.Object.(*spdxv1beta1.SBOMSyft)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
 			continue
@@ -363,15 +355,12 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 			// We assume that other components store summaries and
 			// SBOMs together with the same name, so we have to
 			// clean them up together
-			err := wh.storageClient.SpdxV1beta1().SBOMSummaries(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
+			err := wh.storageClient.SpdxV1beta1().SBOMSyfts(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			if err != nil {
 				errorCh <- err
 			}
 
-			err = wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			if err != nil {
-				errorCh <- err
-			}
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3s(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 
 			continue
 		}
@@ -379,7 +368,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sbomEvents <-chan watch.Event, errorCh 
 }
 
 func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
-	return wh.storageClient.SpdxV1beta1().SBOMSummaries("").Watch(context.TODO(), v1.ListOptions{})
+	return wh.storageClient.SpdxV1beta1().SBOMSyfts("").Watch(context.TODO(), v1.ListOptions{})
 }
 
 // watch for sbom changes, and trigger scans accordingly
@@ -443,7 +432,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 }
 
 func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
-	return wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds("").Watch(context.TODO(), v1.ListOptions{})
+	return wh.storageClient.SpdxV1beta1().SBOMSyftFiltereds("").Watch(context.TODO(), v1.ListOptions{})
 }
 
 // SBOMFilteredWatch watches and processes changes on Filtered SBOMs
