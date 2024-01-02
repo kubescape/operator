@@ -275,17 +275,8 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 
 		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
 			wh.storageClient.SpdxV1beta1().SBOMSyftFiltereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			logger.L().Ctx(context.TODO()).Info(
-				fmt.Sprintf(
-					`unrecognized instance ID "%s". Known: "%v", no triggering`,
-					hashedInstanceID,
-					wh.managedInstanceIDSlugs,
-				),
-			)
-			err := wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			if err != nil {
-				errorCh <- err
-			}
+			logger.L().Ctx(context.TODO()).Warning("unrecognized", helpers.String("instance ID", hashedInstanceID))
+			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			continue
 		}
 
