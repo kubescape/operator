@@ -138,6 +138,7 @@ func main() {
 	if logger.L().GetLevel() == helpers.DebugLevel.String() {
 		go func() {
 			// start pprof server -> https://pkg.go.dev/net/http/pprof
+
 			logger.L().Info("starting pprof server", helpers.String("port", "6060"))
 			logger.L().Error(http.ListenAndServe(":6060", nil).Error())
 		}()
