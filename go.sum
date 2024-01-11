@@ -450,8 +450,8 @@ github.com/kubescape/backend v0.0.17 h1:vxUwbvLAvtqcWBpq+8H+PMpT/1zOPPLqL9+sgYan
 github.com/kubescape/backend v0.0.17/go.mod h1:ug9NFmmxT4DcQx3sgdLRzlLPWMKGHE/fpbcYUm5G5Qo=
 github.com/kubescape/go-logger v0.0.21 h1:4ZRIEw3UGUH6BG/cH3yiqFipzQSfGAoCrxlsZuk37ys=
 github.com/kubescape/go-logger v0.0.21/go.mod h1:x3HBpZo3cMT/WIdy18BxvVVd5D0e/PWFVk/HiwBNu3g=
-github.com/kubescape/k8s-interface v0.0.155 h1:efShjU4a3AZTzyAu+z4R3+WOpTOry/ULyAvxIUq4ujM=
-github.com/kubescape/k8s-interface v0.0.155/go.mod h1:5sz+5Cjvo98lTbTVDiDA4MmlXxeHSVMW/wR0V3hV4K8=
+github.com/kubescape/k8s-interface v0.0.157-0.20240111111316-e6d8909fade9 h1:8Hv92PX/zewdpZYz3erUTW35wr4+LXQ3i55f86KEF5I=
+github.com/kubescape/k8s-interface v0.0.157-0.20240111111316-e6d8909fade9/go.mod h1:5sz+5Cjvo98lTbTVDiDA4MmlXxeHSVMW/wR0V3hV4K8=
 github.com/kubescape/opa-utils v0.0.270 h1:DXTw+p7vJE44s8btYlcxqJdpkFlXuhKeveSJWEFC0jM=
 github.com/kubescape/opa-utils v0.0.270/go.mod h1:VmplJnkhei6mDna+6z183k/HX6GOPgsXiwIlDW8mhKw=
 github.com/kubescape/rbac-utils v0.0.20 h1:1MMxsCsCZ3ntDi8f9ZYYcY+K7bv50bDW5ZvnGnhMhJw=
