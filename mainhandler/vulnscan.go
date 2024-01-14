@@ -464,7 +464,7 @@ func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload
 	// we need to find the pod that is owned by the workload
 	// we iterate over all the pods with the same labels as the workload until we find one pod that is owned by the workload
 	labels := workload.GetPodLabels()
-	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels)
+	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels, "status.phase=Running")
 	if err != nil {
 		return nil, fmt.Errorf("failed listing pods for workload %s", workload.GetName())
 	}

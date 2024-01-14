@@ -4,8 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
+
+	_ "net/http/pprof"
 
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -130,6 +133,14 @@ func main() {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 			}
 		}(mainHandler)
+	}
+
+	if logger.L().GetLevel() == helpers.DebugLevel.String() {
+		go func() {
+			// start pprof server -> https://pkg.go.dev/net/http/pprof
+			logger.L().Info("starting pprof server", helpers.String("port", "6060"))
+			logger.L().Error(http.ListenAndServe(":6060", nil).Error())
+		}()
 	}
 
 	<-ctx.Done()

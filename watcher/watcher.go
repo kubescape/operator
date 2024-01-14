@@ -57,7 +57,7 @@ type WatchHandler struct {
 // remove unused imageIDs and instanceIDs from storage. Update internal maps
 func (wh *WatchHandler) cleanUp(ctx context.Context) {
 	// list Pods, extract their imageIDs and instanceIDs
-	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{}, "")
 	if err != nil {
 		logger.L().Ctx(ctx).Error("could not complete cleanUp routine: error to ListPods", helpers.Error(err))
 		return
@@ -83,7 +83,7 @@ func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterfa
 	}
 
 	// list all Pods and extract their image IDs
-	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{}, "")
 	if err != nil {
 		return nil, err
 	}
@@ -645,7 +645,7 @@ func (wh *WatchHandler) restartResourceVersion(podWatch watch.Interface) error {
 }
 
 func (wh *WatchHandler) updateResourceVersion() error {
-	podsList, err := wh.k8sAPI.ListPods("", map[string]string{})
+	podsList, err := wh.k8sAPI.ListPods("", map[string]string{}, "")
 	if err != nil {
 		return err
 	}
