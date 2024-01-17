@@ -267,7 +267,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		}
 
 		if skipSBOM(obj.ObjectMeta.Annotations) {
-			logger.L().Ctx(context.TODO()).Debug("Skipping filtered SBOM", helpers.String("name", obj.ObjectMeta.Name), helpers.String("namespace", obj.ObjectMeta.Namespace))
+			logger.L().Debug("skipping filtered SBOM", helpers.String("name", obj.ObjectMeta.Name), helpers.String("namespace", obj.ObjectMeta.Namespace))
 			continue
 		}
 

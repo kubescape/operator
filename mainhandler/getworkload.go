@@ -45,7 +45,7 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 	}
 	for i := range initContainers {
 		c := ""
-		id := getContainerID(instanceIDs, containers[i].Name)
+		id := getContainerID(instanceIDs, initContainers[i].Name)
 		if id != nil {
 			c, _ = id.GetSlug()
 			containersData = append(containersData,
