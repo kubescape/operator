@@ -3,8 +3,9 @@ package mainhandler
 import (
 	"testing"
 
+	"github.com/kubescape/k8s-interface/instanceidhandler/v1/containerinstance"
+
 	"github.com/kubescape/k8s-interface/instanceidhandler"
-	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 )
 
 func Test_getContainer(t *testing.T) {
@@ -39,7 +40,7 @@ func Test_getContainer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
-			ins := &instanceidhandlerv1.InstanceID{}
+			ins := &containerinstance.InstanceID{}
 			ins.SetAPIVersion(tt.instanceID.apiVersion)
 			ins.SetNamespace(tt.instanceID.namespace)
 			ins.SetKind(tt.instanceID.kind)
