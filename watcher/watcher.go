@@ -151,7 +151,7 @@ func skipSBOM(annotations map[string]string) bool {
 		helpersv1.Completed,
 	}
 	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok {
-		return slices.Contains(ann, status)
+		return !slices.Contains(ann, status)
 	}
 	return false // do not skip
 }
@@ -267,6 +267,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 		}
 
 		if skipSBOM(obj.ObjectMeta.Annotations) {
+			logger.L().Ctx(context.TODO()).Debug("Skipping filtered SBOM", helpers.String("name", obj.ObjectMeta.Name), helpers.String("namespace", obj.ObjectMeta.Namespace))
 			continue
 		}
 

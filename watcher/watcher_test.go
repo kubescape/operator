@@ -1334,49 +1334,50 @@ func Test_cleanUpIDs(t *testing.T) {
 	assert.Equal(t, 0, len(wh.managedInstanceIDSlugs))
 }
 func TestSkipSBOM(t *testing.T) {
-	t.Run("Empty annotations should not skip", func(t *testing.T) {
-		annotations := make(map[string]string)
-		skip := skipSBOM(annotations)
-		assert.False(t, skip, "Expected skip to be false")
-	})
+	tt := []struct {
+		annotations map[string]string
+		name        string
+		expected    bool
+	}{
+		{
+			name:        "Empty annotations",
+			annotations: map[string]string{},
+			expected:    false,
+		},
+		{
+			name: "Annotations with empty status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: "",
+			},
+			expected: false,
+		},
+		{
+			name: "Annotations with Ready status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: helpersv1.Ready,
+			},
+			expected: false,
+		},
+		{
+			name: "Annotations with Completed status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: helpersv1.Completed,
+			},
+			expected: false,
+		},
+		{
+			name: "Annotations with other status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: "SomeStatus",
+			},
+			expected: true,
+		},
+	}
 
-	t.Run("Annotations with empty status should skip", func(t *testing.T) {
-		annotations := map[string]string{
-			helpersv1.StatusMetadataKey: "",
-		}
-		skip := skipSBOM(annotations)
-		assert.True(t, skip, "Expected skip to be true")
-	})
-
-	t.Run("Annotations with Ready status should skip", func(t *testing.T) {
-		annotations := map[string]string{
-			helpersv1.StatusMetadataKey: helpersv1.Ready,
-		}
-		skip := skipSBOM(annotations)
-		assert.True(t, skip, "Expected skip to be true")
-	})
-
-	t.Run("Annotations with Completed status should skip", func(t *testing.T) {
-		annotations := map[string]string{
-			helpersv1.StatusMetadataKey: helpersv1.Completed,
-		}
-		skip := skipSBOM(annotations)
-		assert.True(t, skip, "Expected skip to be true")
-	})
-
-	t.Run("Annotations with other status should not skip", func(t *testing.T) {
-		annotations := map[string]string{
-			helpersv1.StatusMetadataKey: "InProgress",
-		}
-		skip := skipSBOM(annotations)
-		assert.False(t, skip, "Expected skip to be false")
-	})
-
-	t.Run("Annotations without status should not skip", func(t *testing.T) {
-		annotations := map[string]string{
-			"otherKey": "otherValue",
-		}
-		skip := skipSBOM(annotations)
-		assert.False(t, skip, "Expected skip to be false")
-	})
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := skipSBOM(tc.annotations)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
 }
