@@ -81,7 +81,6 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *
 		sendReport:             config.EventReceiverURL() != "",
 	}
 	pool, _ := ants.NewPoolWithFunc(config.ConcurrencyWorkers(), func(i interface{}) {
-		logger.L().Debug("ants pool received job", helpers.Interface("job", i))
 		j, ok := i.(utils.Job)
 		if !ok {
 			logger.L().Error("failed to cast job", helpers.Interface("job", i))
