@@ -14,6 +14,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
@@ -125,7 +126,7 @@ func (wh *WatchHandler) GetWlidsToContainerToImageIDMap() WlidsToContainerToImag
 }
 
 func annotationsToInstanceID(annotations map[string]string) (string, error) {
-	rawInstanceID, ok := annotations[instanceidhandlerv1.InstanceIDMetadataKey]
+	rawInstanceID, ok := annotations[helpersv1.InstanceIDMetadataKey]
 	if !ok {
 		return rawInstanceID, ErrMissingInstanceIDAnnotation
 	}
@@ -141,6 +142,18 @@ func annotationsToInstanceID(annotations map[string]string) (string, error) {
 		return "", err
 	}
 	return slug, nil
+}
+
+func skipSBOM(annotations map[string]string) bool {
+	ann := []string{
+		"", // empty string for backward compatibility
+		helpersv1.Ready,
+		helpersv1.Completed,
+	}
+	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok {
+		return !slices.Contains(ann, status)
+	}
+	return false // do not skip
 }
 
 func (wh *WatchHandler) getVulnerabilityManifestWatcher() (watch.Interface, error) {
@@ -181,7 +194,7 @@ func (wh *WatchHandler) VulnerabilityManifestWatch(ctx context.Context, workerPo
 			}
 		case err, ok := <-errorCh:
 			if ok {
-				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in VulnerabilityManifestWatch: %v", err.Error()))
 			} else {
 				notifyWatcherDown(watcherUnavailable)
 			}
@@ -243,18 +256,18 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 	for e := range sfEvents {
 		obj, ok := e.Object.(*spdxv1beta1.SBOMSyftFiltered)
 		if !ok {
-			logger.L().Ctx(context.TODO()).Error(
-				fmt.Sprintf(
-					`Unsupported object. Got: %v`,
-					e.Object,
-				),
-			)
+			logger.L().Ctx(context.TODO()).Error("Unsupported object", helpers.String("expected", "spdxv1beta1.SBOMSyftFiltered"), helpers.Interface("got", e.Object))
 			errorCh <- ErrUnsupportedObject
 			continue
 		}
 
 		// Deleting an already deleted object makes no sense
 		if e.Type == watch.Deleted {
+			continue
+		}
+
+		if skipSBOM(obj.ObjectMeta.Annotations) {
+			logger.L().Debug("skipping filtered SBOM", helpers.String("name", obj.ObjectMeta.Name), helpers.String("namespace", obj.ObjectMeta.Namespace))
 			continue
 		}
 
@@ -280,7 +293,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 			continue
 		}
 
-		wlid, ok := obj.ObjectMeta.Annotations[instanceidhandlerv1.WlidMetadataKey]
+		wlid, ok := obj.ObjectMeta.Annotations[helpersv1.WlidMetadataKey]
 		if !ok {
 			logger.L().Ctx(context.TODO()).Error(
 				fmt.Sprintf(
@@ -311,7 +324,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 }
 
 func annotationsToImageID(annotations map[string]string) (string, error) {
-	imgID, ok := annotations[instanceidhandlerv1.ImageIDMetadataKey]
+	imgID, ok := annotations[helpersv1.ImageIDMetadataKey]
 	if !ok {
 		return "", ErrMissingImageIDAnnotation
 	}

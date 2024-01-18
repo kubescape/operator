@@ -11,7 +11,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	beUtils "github.com/kubescape/backend/pkg/utils"
-	instanceidv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
@@ -364,7 +364,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
-								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
+								helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
 							},
 						},
 					},
@@ -389,8 +389,8 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
-								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
-								instanceidv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
+								helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
+								helpersv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
 							},
 						},
 					},
@@ -425,7 +425,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
-								instanceidv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
+								helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
 							},
 						},
 					},
@@ -450,7 +450,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 						ObjectMeta: v1.ObjectMeta{
 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
 							Annotations: map[string]string{
-								instanceidv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+								helpersv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
 							},
 						},
 					},
@@ -469,7 +469,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Object: &spdxv1beta1.SBOMSyftFiltered{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        "pod-reverse-proxy-nginx-2f07-68bd",
-							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+							Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
@@ -487,7 +487,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					Object: &spdxv1beta1.VulnerabilityManifest{
 						ObjectMeta: v1.ObjectMeta{
 							Name:        "pod-reverse-proxy-nginx-2f07-68bd",
-							Annotations: map[string]string{instanceidv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+							Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
 						},
 					},
 				},
@@ -571,7 +571,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 
 func TestHandleSBOMEvents(t *testing.T) {
 	validAnnotation := map[string]string{
-		instanceidv1.ImageIDMetadataKey: validImageID,
+		helpersv1.ImageIDMetadataKey: validImageID,
 	}
 	tt := []struct {
 		name              string
@@ -633,7 +633,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 							Name:      "ab" + validImageID[2:],
 							Namespace: "kubescape",
 							Annotations: map[string]string{
-								instanceidv1.ImageIDMetadataKey: validImageID,
+								helpersv1.ImageIDMetadataKey: validImageID,
 							},
 						},
 					},
@@ -674,7 +674,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 							Name:      validImageIDSlug,
 							Namespace: "kubescape",
 							Annotations: map[string]string{
-								instanceidv1.ImageIDMetadataKey: validImageID + "a",
+								helpersv1.ImageIDMetadataKey: validImageID + "a",
 							},
 						},
 					},
@@ -1333,9 +1333,51 @@ func Test_cleanUpIDs(t *testing.T) {
 	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
 	assert.Equal(t, 0, len(wh.managedInstanceIDSlugs))
 }
+func TestSkipSBOM(t *testing.T) {
+	tt := []struct {
+		annotations map[string]string
+		name        string
+		expected    bool
+	}{
+		{
+			name:        "Empty annotations",
+			annotations: map[string]string{},
+			expected:    false,
+		},
+		{
+			name: "Annotations with empty status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: "",
+			},
+			expected: false,
+		},
+		{
+			name: "Annotations with Ready status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: helpersv1.Ready,
+			},
+			expected: false,
+		},
+		{
+			name: "Annotations with Completed status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: helpersv1.Completed,
+			},
+			expected: false,
+		},
+		{
+			name: "Annotations with other status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: "SomeStatus",
+			},
+			expected: true,
+		},
+	}
 
-//go:embed testdata/deployment-two-containers.json
-var deploymentTwoContainersJson []byte
-
-//go:embed testdata/deployment.json
-var deploymentJson []byte
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := skipSBOM(tc.annotations)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}

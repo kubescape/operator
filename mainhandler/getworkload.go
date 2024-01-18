@@ -35,8 +35,6 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 				},
 			)
 			logger.L().Debug("instanceID", helpers.String("str", id.GetStringFormatted()), helpers.String("id", id.GetHashed()), helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
-		} else {
-			logger.L().Debug("instanceID is nil, skipping", helpers.String("workloadID", workload.GetID()), helpers.String("container", containers[i].Name), helpers.String("image", containers[i].Image))
 		}
 	}
 	initContainers, err := workload.GetInitContainers()
@@ -44,13 +42,19 @@ func listWorkloadImages(workload k8sinterface.IWorkload, instanceIDs []instancei
 		return containersData, err
 	}
 	for i := range initContainers {
-		containersData = append(containersData,
-			ContainerData{
-				image:     initContainers[i].Image,
-				container: initContainers[i].Name,
-				// id:        getContainer(instanceIDs, containers[i].Name), // TODO: Currently not supported in the k8s-interface
-			},
-		)
+		c := ""
+		id := getContainerID(instanceIDs, initContainers[i].Name)
+		if id != nil {
+			c, _ = id.GetSlug()
+			containersData = append(containersData,
+				ContainerData{
+					image:     initContainers[i].Image,
+					container: initContainers[i].Name,
+					id:        c,
+				},
+			)
+			logger.L().Debug("instanceID", helpers.String("str", id.GetStringFormatted()), helpers.String("id", id.GetHashed()), helpers.String("workloadID", workload.GetID()), helpers.String("initContainer", initContainers[i].Name), helpers.String("image", initContainers[i].Image))
+		}
 	}
 
 	return containersData, nil
