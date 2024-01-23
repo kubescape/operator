@@ -141,6 +141,7 @@ func annotationsToInstanceID(annotations map[string]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return slug, nil
 }
 
@@ -288,7 +289,6 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 
 		if !slices.Contains(wh.managedInstanceIDSlugs, hashedInstanceID) {
 			wh.storageClient.SpdxV1beta1().SBOMSyftFiltereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
-			logger.L().Ctx(context.TODO()).Warning("unrecognized", helpers.String("instance ID", hashedInstanceID))
 			wh.storageClient.SpdxV1beta1().SBOMSPDXv2p3Filtereds(obj.ObjectMeta.Namespace).Delete(context.TODO(), obj.ObjectMeta.Name, v1.DeleteOptions{})
 			continue
 		}
