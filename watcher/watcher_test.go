@@ -1381,3 +1381,44 @@ func TestSkipSBOM(t *testing.T) {
 		})
 	}
 }
+func TestAnnotationsToInstanceID(t *testing.T) {
+	t.Run("Valid instance ID annotation", func(t *testing.T) {
+		annotations := map[string]string{
+			helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-default/kind-ReplicaSet/name-collection-65c5c5856b/containerName-wordpress",
+		}
+
+		expectedSlug := "replicaset-collection-65c5c5856b-wordpress-23be-a82a"
+
+		instanceID, err := annotationsToInstanceID(annotations)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedSlug, instanceID)
+	})
+
+	t.Run("Valid instance ID annotation", func(t *testing.T) {
+		annotations := map[string]string{
+			helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-default/kind-ReplicaSet/name-collection-65c5c5856b/initContainerName-wordpress",
+		}
+
+		expectedSlug := "replicaset-collection-65c5c5856b-wordpress-f36f-61df"
+
+		instanceID, err := annotationsToInstanceID(annotations)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedSlug, instanceID)
+	})
+
+	t.Run("Missing instance ID annotation", func(t *testing.T) {
+		annotations := map[string]string{}
+
+		_, err := annotationsToInstanceID(annotations)
+		assert.ErrorIs(t, err, ErrMissingInstanceIDAnnotation)
+	})
+
+	t.Run("Invalid instance ID format", func(t *testing.T) {
+		annotations := map[string]string{
+			helpersv1.InstanceIDMetadataKey: "invalid-instance-id",
+		}
+
+		_, err := annotationsToInstanceID(annotations)
+		assert.Error(t, err)
+	})
+}
