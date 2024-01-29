@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"time"
 
+	core1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
@@ -29,6 +32,7 @@ import (
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
+	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 )
@@ -44,10 +48,10 @@ type MainHandler struct {
 type ActionHandler struct {
 	command                apis.Command
 	reporter               beClientV1.IReportSender
+	config                 config.IConfig
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
-	config                 config.IConfig
 	sendReport             bool
 }
 
@@ -86,21 +90,7 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *
 			logger.L().Error("failed to cast job", helpers.Interface("job", i))
 			return
 		}
-		logger.L().Debug(
-			"handling request",
-			helpers.String("jobID", j.Obj().Command.JobTracking.JobID),
-			helpers.String("parentID", j.Obj().Command.JobTracking.ParentID),
-			helpers.String("commandName", string(j.Obj().Command.CommandName)),
-			helpers.String("wlid", j.Obj().Command.Wlid),
-		)
 		mainHandler.handleRequest(j)
-		logger.L().Debug(
-			"request handled",
-			helpers.String("jobID", j.Obj().Command.JobTracking.JobID),
-			helpers.String("parentID", j.Obj().Command.JobTracking.ParentID),
-			helpers.String("commandName", string(j.Obj().Command.CommandName)),
-			helpers.String("wlid", j.Obj().Command.Wlid),
-		)
 	})
 	mainHandler.eventWorkerPool = pool
 	return mainHandler
@@ -162,45 +152,20 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		return
 	}
 
-	// wait for vuln scan to be ready
+	// wait for the kubevuln component to be ready
 	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
 	waitFunc(mainHandler.config)
 
-	// generate list of commands to scan all workloads
-	wlids := watchHandler.GetWlidsToContainerToImageIDMap()
-	commandsList := []*apis.Command{}
-	for wlid := range wlids {
-		cmd := buildScanCommandForWorkload(ctx, wlid, watchHandler.GetContainerToImageIDForWlid(wlid), apis.TypeScanImages)
-		commandsList = append(commandsList, cmd)
-	}
-
-	// insert commands to channel
-	mainHandler.insertCommandsToChannel(ctx, commandsList)
+	// dwertent - make sure this works
 
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
-	go watchHandler.SBOMWatch(ctx, mainHandler.eventWorkerPool)
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
-	go watchHandler.VulnerabilityManifestWatch(ctx, mainHandler.eventWorkerPool)
 }
 
 func (h *MainHandler) StartContinuousScanning(ctx context.Context) error {
 	return nil
-}
-
-func (mainHandler *MainHandler) insertCommandsToChannel(ctx context.Context, commandsList []*apis.Command) {
-	for _, cmd := range commandsList {
-		utils.AddCommandToChannel(ctx, mainHandler.config, cmd, mainHandler.eventWorkerPool)
-	}
-}
-
-func buildScanCommandForWorkload(ctx context.Context, wlid string, mapContainerToImageID map[string]string, command apis.NotificationPolicyType) *apis.Command {
-	return &apis.Command{
-		Wlid:        wlid,
-		CommandName: command,
-		Args:        map[string]interface{}{utils.ContainerToImageIdsArg: mapContainerToImageID},
-	}
 }
 
 // HandlePostmanRequest Parse received commands and run the command
@@ -231,7 +196,13 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 	}
 
 	if isToItemizeScopeCommand {
-		mainHandler.HandleScopedRequest(ctx, &sessionObj) // this might be a heavy action, do not send to a goroutine
+		if sessionObj.Command.CommandName == apis.TypeScanImages {
+			mainHandler.HandleImageScanningScopedRequest(ctx, &sessionObj)
+		} else {
+			// TODO: handle scope request
+			// I'm not sure when we will need this case
+			mainHandler.HandleScopedRequest(ctx, &sessionObj) // this might be a heavy action, do not send to a goroutine
+		}
 	} else {
 		// handle requests
 		mainHandler.HandleSingleRequest(ctx, &sessionObj)
@@ -266,7 +237,9 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 
 	switch c.CommandName {
 	case apis.TypeScanImages:
-		return actionHandler.scanWorkload(ctx, sessionObj)
+		return actionHandler.scanImage(ctx, sessionObj)
+	case utils.CommandScanFilteredSBOM:
+		actionHandler.scanFilteredSBOM(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan(ctx)
 	case apis.TypeSetKubescapeCronJob:
@@ -322,9 +295,11 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	if len(namespaces) == 0 {
 		namespaces = append(namespaces, "")
 	}
+
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	logger.L().Info(info)
 	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
+
 	ids, errs := mainHandler.getIDs(namespaces, labels, fields, []string{"pods"})
 	for i := range errs {
 		logger.L().Ctx(ctx).Warning(errs[i].Error())
@@ -363,6 +338,101 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
 		mainHandler.HandleSingleRequest(ctx, newSessionObj)
 
+	}
+}
+
+// HandleScopedRequest handle a request of a scope e.g. all workloads in a namespace
+func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Context, sessionObj *utils.SessionObj) {
+	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleImageScanningScopedRequest")
+	defer span.End()
+
+	if sessionObj.Command.GetID() == "" {
+		logger.L().Ctx(ctx).Error("Received empty id")
+		return
+	}
+
+	namespaces := make([]string, 0, 1)
+	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
+	labels := sessionObj.Command.GetLabels()
+	fields := sessionObj.Command.GetFieldSelector()
+	if len(sessionObj.Command.Designators) > 0 {
+		namespaces = make([]string, 0, 3)
+		for desiIdx := range sessionObj.Command.Designators {
+			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok {
+				namespaces = append(namespaces, ns)
+			}
+		}
+	}
+	if len(namespaces) == 0 {
+		namespaces = append(namespaces, "")
+	}
+
+	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
+	logger.L().Info(info)
+	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
+
+	listOptions := metav1.ListOptions{
+		LabelSelector: k8sinterface.SelectorToString(labels),
+		FieldSelector: k8sinterface.SelectorToString(fields),
+	}
+
+	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
+
+	slugs := map[string]bool{}
+
+	for _, ns := range namespaces {
+		pods, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, listOptions)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("failed to list pods", helpers.String("namespace", ns), helpers.Error(err))
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+			continue
+		}
+		for i := range pods.Items {
+			pod := pods.Items[i]
+			if pod.Status.Phase != core1.PodRunning {
+				// skip non-running pods, for some reason the list includes non-running pods
+				continue
+			}
+			// get pod instanceIDs
+			instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromPod(&pod)
+			if err != nil {
+				logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+				continue
+			}
+
+			for _, instanceID := range instanceIDs {
+				s, _ := instanceID.GetSlug()
+				if ok := slugs[s]; ok {
+					// slug already scanned, there is no need to scan again in this request
+					continue
+				}
+
+				// get container data
+				containerData, err := utils.PodToContainerData(mainHandler.k8sAPI, &pod, instanceID, mainHandler.config.ClusterName())
+				if err != nil {
+					// if pod is not running, we can't get the image id
+					continue
+				}
+
+				// set scanning command
+				cmd := &apis.Command{
+					Wlid:        containerData.Wlid,
+					CommandName: apis.TypeScanImages,
+					Args: map[string]interface{}{
+						utils.ArgsContainerData: containerData,
+						utils.ArgsPod:           &pod,
+					},
+				}
+
+				// send specific command to the channel
+				newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+
+				logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
+				mainHandler.HandleSingleRequest(ctx, newSessionObj)
+
+				slugs[s] = true
+			}
+		}
 	}
 }
 

@@ -13,6 +13,15 @@ type SessionObj struct {
 	Reporter beClientV1.IReportSender `json:"reporter"`
 }
 
+type ContainerData struct {
+	ImageTag      string // imageTag (from container.Image)
+	ImageID       string // imageID (from containerStatus.ImageID)
+	ContainerName string // containerName
+	ContainerType string // containerType (init or regular)
+	Slug          string // represent the unique identifier of the container
+	Wlid          string // workloadID
+}
+
 // CredStruct holds the various credentials needed to do login into CA BE
 type CredStruct struct {
 	User     string `json:"user"`

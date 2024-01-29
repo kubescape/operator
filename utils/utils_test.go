@@ -6,14 +6,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
+
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestExtractContainersToImageIDsFromPod(t *testing.T) {
 	tests := []struct {
-		name     string
 		pod      *core1.Pod
 		expected map[string]string
+		name     string
 	}{
 		{
 			name: "one container",

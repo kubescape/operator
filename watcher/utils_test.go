@@ -11,9 +11,9 @@ import (
 
 func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 	tests := []struct {
-		name     string
 		pod      *core1.Pod
 		expected map[string][]string
+		name     string
 	}{
 		{
 			name: "one container",

@@ -18,11 +18,11 @@ const (
 )
 
 type CommandResponseData struct {
-	commandName                        string
-	isCommandResponseNeedToBeRehandled bool
+	payload                            interface{}
 	nextHandledTime                    *time.Duration
 	handleCallBack                     HandleCommandResponseCallBack
-	payload                            interface{}
+	commandName                        string
+	isCommandResponseNeedToBeRehandled bool
 }
 
 type timerData struct {
