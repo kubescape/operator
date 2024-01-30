@@ -1,1183 +1,608 @@
 package watcher
 
-// import (
-// 	"context"
-// 	_ "embed"
-// 	"reflect"
-// 	"sort"
-// 	"sync"
-// 	"testing"
-
-// 	"github.com/armosec/armoapi-go/apis"
-// 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
-// 	beUtils "github.com/kubescape/backend/pkg/utils"
-// 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
-// 	"github.com/kubescape/operator/config"
-// 	"github.com/kubescape/operator/utils"
-// 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
-// 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
-// 	"github.com/stretchr/testify/assert"
-// 	core1 "k8s.io/api/core/v1"
-// 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// 	"k8s.io/apimachinery/pkg/runtime"
-// 	"k8s.io/apimachinery/pkg/watch"
-// 	k8sfake "k8s.io/client-go/kubernetes/fake"
-// )
-
-// const (
-// 	deletesQuickFix = "Deletes have been disabled for a quick hack"
-
-// 	validImageID     = "docker-pullable://alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee"
-// 	validImageIDSlug = "docker-pullable-alpine-sha256-c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee-70f2ee"
-// )
-
-// func NewWatchHandlerMock() *WatchHandler {
-// 	return &WatchHandler{
-// 		iwMap:                             NewImageHashWLIDsMap(),
-// 		wlidsToContainerToImageIDMap:      make(map[string]map[string]string),
-// 		wlidsToContainerToImageIDMapMutex: &sync.RWMutex{},
-// 	}
-// }
-
-// func TestNewWatchHandlerProducesValidResult(t *testing.T) {
-// 	tt := []struct {
-// 		name                string
-// 		imageIDsToWLIDSsMap map[string][]string
-// 		expectedIWMap       map[string][]string
-// 	}{
-// 		{
-// 			name:                "Creating with provided empty map returns matching empty map",
-// 			imageIDsToWLIDSsMap: map[string][]string{},
-// 			expectedIWMap:       map[string][]string{},
-// 		},
-// 		{
-// 			name:                "Creating with provided nil map returns matching empty map",
-// 			imageIDsToWLIDSsMap: nil,
-// 			expectedIWMap:       map[string][]string{},
-// 		},
-// 		{
-// 			name: "Creating with provided non-empty map returns matching map",
-// 			imageIDsToWLIDSsMap: map[string][]string{
-// 				"imageid-01": {"wlid-01"},
-// 			},
-// 			expectedIWMap: map[string][]string{
-// 				"imageid-01": {"wlid-01"},
-// 			},
-// 		},
-// 	}
-
-// 	for _, tc := range tt {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			ctx := context.TODO()
-// 			clusterConfig := utilsmetadata.ClusterConfig{}
-// 			cfg, err := config.LoadConfig("../configuration")
-// 			assert.NoError(t, err)
-// 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
-
-// 			k8sClient := k8sfake.NewSimpleClientset()
-// 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-// 			storageClient := kssfake.NewSimpleClientset()
-
-// 			wh, err := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, tc.imageIDsToWLIDSsMap, nil)
-
-// 			actualMap := wh.iwMap.Map()
-// 			for imageID := range actualMap {
-// 				sort.Strings(actualMap[imageID])
-// 			}
-// 			assert.NoErrorf(t, err, "Constructing should produce no errors")
-// 			assert.NotNilf(t, wh, "Constructing should create a non-nil object")
-// 			assert.Equal(t, tc.expectedIWMap, actualMap)
-// 		})
-// 	}
-// }
-
-// func Test_getSBOMWatcher(t *testing.T) {
-// 	ctx := context.TODO()
-// 	clusterConfig := utilsmetadata.ClusterConfig{}
-// 	cfg, err := config.LoadConfig("../configuration")
-// 	assert.NoError(t, err)
-// 	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
-// 	k8sClient := k8sfake.NewSimpleClientset()
-// 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-// 	storageClient := kssfake.NewSimpleClientset()
-// 	wh, _ := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, nil, nil)
-
-// 	sbomWatcher, err := wh.getSBOMWatcher()
-
-// 	assert.NoErrorf(t, err, "Should get no errors")
-// 	assert.NotNilf(t, sbomWatcher, "Returned value should not be nil")
-// }
-
-// func TestHandleSBOMFilteredEvents(t *testing.T) {
-// 	tt := []struct {
-// 		name                           string
-// 		knownInstanceIDSlugs           []string
-// 		wlidsToContainersToImageIDsMap WlidsToContainerToImageIDMap
-// 		inputEvents                    []watch.Event
-// 		expectedObjectNames            []string
-// 		expectedCommands               []*apis.Command
-// 		expectedErrors                 []error
-// 	}{
-// 		{
-// 			name:                 "Adding a new Filtered SBOM with an unknown instance ID slug should delete it from storage",
-// 			knownInstanceIDSlugs: []string{},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyftFiltered{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
-// 							Annotations: map[string]string{
-// 								helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedObjectNames: []string{},
-// 			expectedCommands:    []*apis.Command{},
-// 			expectedErrors:      []error{},
-// 		},
-// 		{
-// 			name:                 "Adding a new Filtered SBOM with known instance ID slug should produce a matching scan command",
-// 			knownInstanceIDSlugs: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-// 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
-// 				"wlid://cluster-relevant-clutser/namespace-default/deployment-nginx": {
-// 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
-// 				},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyftFiltered{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
-// 							Annotations: map[string]string{
-// 								helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
-// 								helpersv1.WlidMetadataKey:       "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-// 			expectedCommands: []*apis.Command{
-// 				{
-// 					CommandName: apis.TypeScanImages,
-// 					Wlid:        "wlid://cluster-relevant-clutser/namespace-default/deployment-nginx",
-// 					Args: map[string]interface{}{
-// 						utils.ArgdContainerToImageIds: map[string]string{
-// 							"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedErrors: []error{},
-// 		},
-// 		{
-// 			name:                 "Adding a new Filtered SBOM with known instance ID slug but missing WLID annotation should produce a matching error",
-// 			knownInstanceIDSlugs: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-// 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
-// 				"wlid://cluster-relevant-clutser/namespace-default/deployment-nginx": {
-// 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
-// 				},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyftFiltered{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
-// 							Annotations: map[string]string{
-// 								helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-// 			expectedCommands:    []*apis.Command{},
-// 			expectedErrors:      []error{ErrMissingWLIDAnnotation},
-// 		},
-// 		{
-// 			name:                 "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
-// 			knownInstanceIDSlugs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-// 			wlidsToContainersToImageIDsMap: WlidsToContainerToImageIDMap{
-// 				"wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx": {
-// 					"nginx": "nginx@sha256:1f4e3b6489888647ce1834b601c6c06b9f8c03dee6e097e13ed3e28c01ea3ac8c",
-// 				},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyftFiltered{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name: "pod-reverse-proxy-nginx-2f07-68bd",
-// 							Annotations: map[string]string{
-// 								helpersv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-// 			expectedCommands:    []*apis.Command{},
-// 			expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
-// 		},
-// 		{
-// 			name:                 "Filtered SBOM deletion events should be ignored",
-// 			knownInstanceIDSlugs: []string{},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Deleted,
-// 					Object: &spdxv1beta1.SBOMSyftFiltered{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:        "pod-reverse-proxy-nginx-2f07-68bd",
-// 							Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-// 			expectedCommands:    []*apis.Command{},
-// 			expectedErrors:      []error{},
-// 		},
-// 		{
-// 			name:                 "Addition events for unsupported objects should produce a matching error",
-// 			knownInstanceIDSlugs: []string{},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.VulnerabilityManifest{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:        "pod-reverse-proxy-nginx-2f07-68bd",
-// 							Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedObjectNames: []string{},
-// 			expectedCommands:    []*apis.Command{},
-// 			expectedErrors:      []error{ErrUnsupportedObject},
-// 		},
-// 	}
-
-// 	for _, tc := range tt {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			// Prepare starting startingObjects for storage
-// 			startingObjects := []runtime.Object{}
-// 			for _, e := range tc.inputEvents {
-// 				startingObjects = append(startingObjects, e.Object)
-// 			}
-
-// 			ctx := context.Background()
-// 			clusterConfig := utilsmetadata.ClusterConfig{}
-// 			cfg, err := config.LoadConfig("../configuration")
-// 			assert.NoError(t, err)
-// 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
-
-// 			k8sClient := k8sfake.NewSimpleClientset()
-// 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-// 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
-// 			iwMap := map[string][]string(nil)
-
-// 			inputEvents := make(chan watch.Event)
-// 			cmdCh := make(chan *apis.Command)
-// 			errorCh := make(chan error)
-
-// 			wh, _ := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, iwMap, tc.knownInstanceIDSlugs)
-// 			wh.wlidsToContainerToImageIDMap = tc.wlidsToContainersToImageIDsMap
-
-// 			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
-
-// 			go func() {
-// 				for _, e := range tc.inputEvents {
-// 					inputEvents <- e
-// 				}
-
-// 				close(inputEvents)
-// 			}()
-
-// 			done := false
-// 			actualErrors := []error{}
-// 			actualCommands := []*apis.Command{}
-// 			for !done {
-// 				select {
-// 				case err, ok := <-errorCh:
-// 					if !ok {
-// 						done = true
-// 						break
-// 					}
-// 					actualErrors = append(actualErrors, err)
-// 				case cmd, ok := <-cmdCh:
-// 					if !ok {
-// 						done = true
-// 						break
-// 					}
-// 					actualCommands = append(actualCommands, cmd)
-// 				}
-// 			}
-
-// 			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSyftFiltereds("").List(ctx, v1.ListOptions{})
-
-// 			actualObjectNames := []string{}
-// 			for _, obj := range actualObjects.Items {
-// 				actualObjectNames = append(actualObjectNames, obj.ObjectMeta.Name)
-// 			}
-
-// 			assert.Equal(t, tc.expectedObjectNames, actualObjectNames, "Objects in the storage don’t match")
-// 			assert.Equal(t, tc.expectedErrors, actualErrors, "Errors don’t match")
-// 			assert.Equal(t, tc.expectedCommands, actualCommands, "Commands don’t match")
-// 		})
-
-// 	}
-// }
-
-// func TestHandleSBOMEvents(t *testing.T) {
-// 	validAnnotation := map[string]string{
-// 		helpersv1.ImageIDMetadataKey: validImageID,
-// 	}
-// 	tt := []struct {
-// 		name              string
-// 		imageIDstoWlids   map[string][]string
-// 		inputEvents       []watch.Event
-// 		expectedSBOMNames []string
-// 		expectedErrors    []error
-// 	}{
-// 		{
-// 			name: "New SBOM with recognized image hash gets kept",
-// 			imageIDstoWlids: map[string][]string{
-// 				validImageID: {"wlid://some-wlid"},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:        validImageIDSlug,
-// 							Namespace:   "kubescape",
-// 							Annotations: validAnnotation,
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{validImageIDSlug},
-// 			expectedErrors:    []error{},
-// 		},
-// 		{
-// 			name: "New SBOM with missing image ID annotation produces an error and gets deleted",
-// 			imageIDstoWlids: map[string][]string{
-// 				validImageID: {"wlid://some-wlid"},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:        validImageID,
-// 							Namespace:   "kubescape",
-// 							Annotations: map[string]string{},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{},
-// 			expectedErrors:    []error{ErrMissingImageIDAnnotation},
-// 		},
-// 		{
-// 			name: "New SBOM with recognized image ID as name but unrecognized image ID in annotation gets deleted",
-// 			imageIDstoWlids: map[string][]string{
-// 				"ab" + validImageID[2:]: {"wlid://some-wlid"},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:      "ab" + validImageID[2:],
-// 							Namespace: "kubescape",
-// 							Annotations: map[string]string{
-// 								helpersv1.ImageIDMetadataKey: validImageID,
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{},
-// 			expectedErrors:    []error{},
-// 		},
-// 		{
-// 			name: "New SBOM with recognized image ID as name but missing image ID annotation should produce an error",
-// 			imageIDstoWlids: map[string][]string{
-// 				validImageID: {"wlid://some-wlid"},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:      validImageID,
-// 							Namespace: "kubescape",
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{},
-// 			expectedErrors:    []error{ErrMissingImageIDAnnotation},
-// 		},
-// 		{
-// 			name: "New SBOM with unrecognized image ID gets deleted",
-// 			imageIDstoWlids: map[string][]string{
-// 				validImageID: {"wlid://some-wlid"},
-// 			},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:      validImageIDSlug,
-// 							Namespace: "kubescape",
-// 							Annotations: map[string]string{
-// 								helpersv1.ImageIDMetadataKey: validImageID + "a",
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{},
-// 			expectedErrors:    []error{},
-// 		},
-// 		{
-// 			name:            "Non-SBOM objects get ignored",
-// 			imageIDstoWlids: map[string][]string{},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Added,
-// 					Object: &spdxv1beta1.VulnerabilityManifest{
-// 						ObjectMeta: v1.ObjectMeta{Name: "testName"},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{},
-// 			expectedErrors:    []error{ErrUnsupportedObject},
-// 		},
-// 		{
-// 			name:            "Modified SBOM with unrecognized imageHash as name gets deleted",
-// 			imageIDstoWlids: map[string][]string{},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Modified,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{
-// 							Name:        validImageIDSlug,
-// 							Namespace:   "kubescape",
-// 							Annotations: validAnnotation,
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{},
-// 			expectedErrors:    []error{},
-// 		},
-// 		{
-// 			name:            "Deleted SBOM with unrecognized imageHash gets ignored",
-// 			imageIDstoWlids: map[string][]string{},
-// 			inputEvents: []watch.Event{
-// 				{
-// 					Type: watch.Deleted,
-// 					Object: &spdxv1beta1.SBOMSyft{
-// 						ObjectMeta: v1.ObjectMeta{Name: "testName", Namespace: "kubescape"},
-// 					},
-// 				},
-// 			},
-// 			expectedSBOMNames: []string{"testName"},
-// 			expectedErrors:    []error{},
-// 		},
-// 	}
-
-// 	for _, tc := range tt {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			k8sClient := k8sfake.NewSimpleClientset()
-
-// 			// Arrange SBOMSummary objects in the storage fro input events
-// 			inputObjects := []runtime.Object{}
-
-// 			for _, event := range tc.inputEvents {
-// 				obj, ok := event.Object.(*spdxv1beta1.SBOMSyft)
-// 				if !ok {
-// 					continue
-// 				}
-// 				objMeta := obj.ObjectMeta
-// 				matchingSBOM := &spdxv1beta1.SBOMSyft{ObjectMeta: objMeta}
-// 				inputObjects = append(inputObjects, matchingSBOM)
-// 			}
-
-// 			clusterConfig := utilsmetadata.ClusterConfig{}
-// 			cfg, err := config.LoadConfig("../configuration")
-// 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
-// 			assert.NoError(t, err)
-// 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-// 			ksStorageClient := kssfake.NewSimpleClientset(inputObjects...)
-// 			wh, _ := NewWatchHandler(context.TODO(), operatorConfig, k8sAPI, ksStorageClient, tc.imageIDstoWlids, nil)
-
-// 			errCh := make(chan error)
-
-// 			sbomEvents := make(chan watch.Event)
-
-// 			go func() {
-// 				for _, event := range tc.inputEvents {
-// 					sbomEvents <- event
-// 				}
-
-// 				close(sbomEvents)
-// 			}()
-
-// 			go wh.HandleSBOMEvents(sbomEvents, errCh)
-
-// 			actualErrors := []error{}
-
-// 			var done bool
-// 			for !done {
-// 				select {
-// 				case err, ok := <-errCh:
-// 					if ok {
-// 						actualErrors = append(actualErrors, err)
-// 					} else {
-// 						done = true
-// 					}
-// 				}
-// 			}
-
-// 			storedSummaries, _ := ksStorageClient.SpdxV1beta1().SBOMSyfts("").List(context.TODO(), v1.ListOptions{})
-// 			remainingSBOMSummaryNames := []string{}
-// 			for _, obj := range storedSummaries.Items {
-// 				remainingSBOMSummaryNames = append(remainingSBOMSummaryNames, obj.ObjectMeta.Name)
-// 			}
-
-// 			assert.Equalf(t, tc.expectedSBOMNames, remainingSBOMSummaryNames, "Remaining SBOM Summaries should match")
-// 			assert.Equalf(t, tc.expectedErrors, actualErrors, "Errors should match")
-// 		})
-// 	}
-// }
-
-// func TestSBOMWatch(t *testing.T) {
-// 	t.Skipf(
-// 		"vladklokun: blocks and deadlocks while listening on the sbomWatcher.ResultChan(). " +
-// 			"Does not reproduce in a live cluster on a live Watch() object",
-// 	)
-
-// 	// k8sClient := k8sfake.NewSimpleClientset()
-
-// 	// expectedWlid := "some-imageID"
-// 	// imageIDsToWlids := map[string][]string{
-// 	// 	"some-imageID": {expectedWlid},
-// 	// }
-
-// 	// k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
-// 	// ksStorageClient := kssfake.NewSimpleClientset()
-// 	// wh, _ := NewWatchHandler(context.TODO(), k8sAPI, ksStorageClient, imageIDsToWlids, nil)
-
-// 	// sessionObjCh := make(chan utils.SessionObj)
-// 	// sessionObjChPtr := &sessionObjCh
-
-// 	// ctx := context.TODO()
-// 	// sbomClient := ksStorageClient.SpdxV1beta1().SBOMSPDXv2p3s("")
-// 	// sbomWatcher, _ := sbomClient.Watch(ctx, v1.ListOptions{})
-// 	// sbomWatcher.ResultChan()
-
-// 	// SBOMStub := spdxv1beta1.SBOMSPDXv2p3{
-// 	// 	ObjectMeta: v1.ObjectMeta{Name: "some-imageID"},
-// 	// }
-
-// 	// expectedCommands := []apis.Command{{CommandName: apis.TypeScanImages, Wlid: expectedWlid}}
-
-// 	// doneCh := make(chan struct{})
-// 	// go wh.SBOMWatch(context.TODO(), sessionObjChPtr)
-
-// 	// go func() {
-// 	// 	sbomClient.Create(ctx, &SBOMStub, v1.CreateOptions{})
-// 	// 	doneCh <- struct{}{}
-// 	// }()
-
-// 	// <-doneCh
-
-// 	// actualCommands := []apis.Command{}
-// 	// sessionObj := <-*sessionObjChPtr
-// 	// actualCommands = append(actualCommands, sessionObj.Command)
-
-// 	// assert.Equalf(t, expectedCommands, actualCommands, "Produced commands should match")
-
-// }
-
-// // func TestBuildImageIDsToWlidsMap(t *testing.T) {
-// // 	tests := []struct {
-// // 		name                string
-// // 		podList             core1.PodList
-// // 		expectedImageIDsMap map[string][]string
-// // 	}{
-// // 		{
-// // 			name: "remove prefix docker-pullable://",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 							},
-// // 						},
-// // 					}}},
-// // 			expectedImageIDsMap: map[string][]string{
-// // 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// // 			},
-// // 		},
-// // 		{
-// // 			name: "image id without docker-pullable:// prefix",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 							},
-// // 						},
-// // 					}}},
-// // 			expectedImageIDsMap: map[string][]string{
-// // 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// // 			},
-// // 		},
-// // 		{
-// // 			name: "two wlids for the same image id",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 							},
-// // 						},
-// // 					},
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test2",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:1",
-// // 									Name:    "container2",
-// // 								},
-// // 							},
-// // 						},
-// // 					},
-// // 				},
-// // 			},
-// // 			expectedImageIDsMap: map[string][]string{
-// // 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test"), pkgwlid.GetWLID("", "default", "pod", "test2")},
-// // 			},
-// // 		},
-// // 		{
-// // 			name: "two wlids two image ids",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 							},
-// // 						},
-// // 					},
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test2",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:2",
-// // 									Name:    "container2",
-// // 								},
-// // 							},
-// // 						},
-// // 					}}},
-// // 			expectedImageIDsMap: map[string][]string{
-// // 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// // 				"alpine@sha256:2": {pkgwlid.GetWLID("", "default", "pod", "test2")},
-// // 			},
-// // 		},
-// // 		{
-// // 			name: "one wlid two image ids",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "test",
-// // 							Namespace: "default",
-// // 						},
-// // 						TypeMeta: v1.TypeMeta{
-// // 							Kind: "pod",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:2",
-// // 									Name:    "container2",
-// // 								},
-// // 							},
-// // 						},
-// // 					}}},
-// // 			expectedImageIDsMap: map[string][]string{
-// // 				"alpine@sha256:1": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// // 				"alpine@sha256:2": {pkgwlid.GetWLID("", "default", "pod", "test")},
-// // 			},
-// // 		},
-// // 	}
-
-// // 	for _, tt := range tests {
-// // 		wh := NewWatchHandlerMock()
-// // 		t.Run(tt.name, func(t *testing.T) {
-// // 			wh.buildIDs(context.TODO(), &tt.podList)
-// // 			assert.True(t, reflect.DeepEqual(wh.getImagesIDsToWlidMap(), tt.expectedImageIDsMap))
-// // 		})
-// // 	}
-// // }
-
-// // func TestBuildWlidsToContainerToImageIDMap(t *testing.T) {
-// // 	tests := []struct {
-// // 		name                                 string
-// // 		podList                              core1.PodList
-// // 		expectedwlidsToContainerToImageIDMap WlidsToContainerToImageIDMap
-// // 	}{
-// // 		{
-// // 			name: "imageID with docker-pullable prefix",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "pod1",
-// // 							Namespace: "namespace1",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 							},
-// // 						},
-// // 					}},
-// // 			},
-// // 			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
-// // 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
-// // 					"container1": "alpine@sha256:1",
-// // 				},
-// // 			},
-// // 		},
-// // 		{
-// // 			name: "imageID without docker-pullable prefix",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "pod1",
-// // 							Namespace: "namespace1",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "alpine@sha256:1",
-// // 									Name:    "container1",
-// // 								},
-// // 							},
-// // 						},
-// // 					}},
-// // 			},
-// // 			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
-// // 				pkgwlid.GetWLID("", "namespace1", "pod", "pod1"): {
-// // 					"container1": "alpine@sha256:1",
-// // 				},
-// // 			},
-// // 		},
-// // 		{
-// // 			name: "two containers for same wlid",
-// // 			podList: core1.PodList{
-// // 				Items: []core1.Pod{
-// // 					{
-// // 						ObjectMeta: v1.ObjectMeta{
-// // 							Name:      "pod3",
-// // 							Namespace: "namespace3",
-// // 						},
-// // 						Status: core1.PodStatus{
-// // 							ContainerStatuses: []core1.ContainerStatus{
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:3",
-// // 									Name:    "container3",
-// // 								},
-// // 								{
-// // 									ImageID: "docker-pullable://alpine@sha256:4",
-// // 									Name:    "container4",
-// // 								},
-// // 							},
-// // 						},
-// // 					},
-// // 				}},
-// // 			expectedwlidsToContainerToImageIDMap: WlidsToContainerToImageIDMap{
-// // 				pkgwlid.GetWLID("", "namespace3", "pod", "pod3"): {
-// // 					"container3": "alpine@sha256:3",
-// // 					"container4": "alpine@sha256:4",
-// // 				},
-// // 			},
-// // 		},
-// // 	}
-
-// // 	for _, tt := range tests {
-// // 		wh := NewWatchHandlerMock()
-// // 		t.Run(tt.name, func(t *testing.T) {
-// // 			wh.buildIDs(context.TODO(), &tt.podList)
-// // 			got := wh.GetWlidsToContainerToImageIDMap()
-// // 			assert.True(t, reflect.DeepEqual(got, tt.expectedwlidsToContainerToImageIDMap))
-// // 		})
-// // 	}
-// // }
-
-// func Test_addToImageIDToWlidsMap(t *testing.T) {
-// 	type inputOperation struct {
-// 		imageID string
-// 		wlid    string
-// 	}
-
-// 	tt := []struct {
-// 		name            string
-// 		inputOperations []inputOperation
-// 		expectedMap     map[string][]string
-// 	}{
-// 		{
-// 			name: "Adding imageName@hashType:imageHash keys with wlids produces expected maps",
-// 			inputOperations: []inputOperation{
-// 				{"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid1"},
-// 				{"alpine@sha256:486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7", "wlid2"},
-// 				// add the new wlid to the same imageID
-// 				{"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "wlid3"},
-// 			},
-// 			expectedMap: map[string][]string{
-// 				"alpine@sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824": {"wlid1", "wlid3"},
-// 				"alpine@sha256:486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7": {"wlid2"},
-// 			},
-// 		},
-// 	}
-
-// 	for _, tc := range tt {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			wh := NewWatchHandlerMock()
-
-// 			for _, op := range tc.inputOperations {
-// 				wh.addToImageIDToWlidsMap(op.imageID, op.wlid)
-// 			}
-
-// 			actualMap := wh.iwMap.Map()
-// 			for imageID := range actualMap {
-// 				sort.Strings(actualMap[imageID])
-// 			}
-
-// 			assert.Equal(t, tc.expectedMap, actualMap)
-// 		})
-// 	}
-// }
-
-// func TestAddTowlidsToContainerToImageIDMap(t *testing.T) {
-// 	wh := NewWatchHandlerMock()
-
-// 	wh.addToWlidsToContainerToImageIDMap("wlid1", "container1", "alpine@sha256:1")
-// 	wh.addToWlidsToContainerToImageIDMap("wlid2", "container2", "alpine@sha256:2")
-
-// 	assert.True(t, reflect.DeepEqual(wh.GetWlidsToContainerToImageIDMap(), WlidsToContainerToImageIDMap{
-// 		"wlid1": {
-// 			"container1": "alpine@sha256:1",
-// 		},
-// 		"wlid2": {
-// 			"container2": "alpine@sha256:2",
-// 		},
-// 	}))
-// }
-
-// func TestGetNewImageIDsToContainerFromPod(t *testing.T) {
-// 	wh := NewWatchHandlerMock()
-
-// 	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
-// 		"alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e": {"wlid"},
-// 		"alpine@sha256:313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70": {"wlid"},
-// 		"alpine@sha256:5b183f918bfb0de9a21b7cd33cea3171627f6ae1f753d370afef6c2555bd76eb": {"wlid"},
-// 	})
-
-// 	tests := []struct {
-// 		name     string
-// 		pod      *core1.Pod
-// 		expected map[string]string
-// 	}{
-// 		{
-// 			name: "no new images",
-// 			pod: &core1.Pod{
-// 				ObjectMeta: v1.ObjectMeta{
-// 					Name:      "pod1",
-// 					Namespace: "namespace1",
-// 				},
-// 				Status: core1.PodStatus{
-// 					ContainerStatuses: []core1.ContainerStatus{
-// 						{
-// 							State: core1.ContainerState{
-// 								Running: &core1.ContainerStateRunning{},
-// 							},
-// 							ImageID: "docker-pullable://alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e",
-// 							Name:    "container1",
-// 						},
-// 						{
-// 							State: core1.ContainerState{
-// 								Running: &core1.ContainerStateRunning{},
-// 							},
-// 							ImageID: "docker-pullable://alpine@sha256:313ce8b6e98d02254f84aa2193c9b3a45b8d6ab16aeb966aa680d373ebda4e70",
-// 							Name:    "container2",
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expected: map[string]string{},
-// 		},
-// 		{
-// 			name: "one new image",
-// 			pod: &core1.Pod{
-// 				ObjectMeta: v1.ObjectMeta{
-// 					Name:      "pod2",
-// 					Namespace: "namespace2",
-// 				},
-// 				Status: core1.PodStatus{
-// 					ContainerStatuses: []core1.ContainerStatus{
-// 						{
-// 							State: core1.ContainerState{
-// 								Running: &core1.ContainerStateRunning{},
-// 							},
-// 							ImageID: "docker-pullable://alpine@sha256:a4f71a32837ac3c5bd06ddda91b7093429c6bc5f04732451bd90c1c2f15dde8e",
-// 							Name:    "container1",
-// 						},
-// 						{
-// 							State: core1.ContainerState{
-// 								Running: &core1.ContainerStateRunning{},
-// 							},
-// 							ImageID: "docker-pullable://alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
-// 							Name:    "container4",
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expected: map[string]string{
-// 				"container4": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
-// 			},
-// 		},
-// 		{
-// 			name: "two new images",
-// 			pod: &core1.Pod{
-// 				ObjectMeta: v1.ObjectMeta{
-// 					Name:      "pod3",
-// 					Namespace: "namespace3",
-// 				},
-// 				Status: core1.PodStatus{
-// 					ContainerStatuses: []core1.ContainerStatus{
-// 						{
-// 							State: core1.ContainerState{
-// 								Running: &core1.ContainerStateRunning{},
-// 							},
-// 							ImageID: "docker-pullable://alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
-// 							Name:    "container4",
-// 						},
-// 						{
-// 							State: core1.ContainerState{
-// 								Running: &core1.ContainerStateRunning{},
-// 							},
-// 							ImageID: "docker-pullable://alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
-// 							Name:    "container5",
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expected: map[string]string{
-// 				"container4": "alpine@sha256:c5360b25031e2982544581b9404c8c0eb24f455a8ef2304103d3278dff70f2ee",
-// 				"container5": "alpine@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d",
-// 			},
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			assert.Equal(t, tt.expected, wh.getNewContainerToImageIDsFromPod(tt.pod))
-// 		})
-// 	}
-// }
-
-// func TestCleanUpWlidsToContainerToImageIDMap(t *testing.T) {
-// 	wh := NewWatchHandlerMock()
-// 	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
-// 		"pod1": {"container1": "alpine@sha256:1"},
-// 		"pod2": {"container2": "alpine@sha256:2"},
-// 		"pod3": {"container3": "alpine@sha256:3"},
-// 	}
-// 	wh.cleanUpWlidsToContainerToImageIDMap()
-
-// 	assert.Equal(t, len(wh.wlidsToContainerToImageIDMap), 0)
-// }
-
-// func Test_cleanUpIDs(t *testing.T) {
-// 	wh := NewWatchHandlerMock()
-// 	wh.iwMap = NewImageHashWLIDsMapFrom(map[string][]string{
-// 		"alpine@sha256:1": {"pod1"},
-// 		"alpine@sha256:2": {"pod2"},
-// 		"alpine@sha256:3": {"pod3"},
-// 	})
-// 	wh.wlidsToContainerToImageIDMap = map[string]map[string]string{
-// 		"pod1": {"container1": "alpine@sha256:1"},
-// 		"pod2": {"container2": "alpine@sha256:2"},
-// 		"pod3": {"container3": "alpine@sha256:3"},
-// 	}
-
-// 	wh.cleanUpIDs()
-
-// 	assert.Equal(t, 0, len(wh.iwMap.Map()))
-// 	assert.Equal(t, 0, len(wh.wlidsToContainerToImageIDMap))
-// }
-// func TestSkipSBOM(t *testing.T) {
-// 	tt := []struct {
-// 		annotations map[string]string
-// 		name        string
-// 		expected    bool
-// 	}{
-// 		{
-// 			name:        "Empty annotations",
-// 			annotations: map[string]string{},
-// 			expected:    false,
-// 		},
-// 		{
-// 			name: "Annotations with empty status",
-// 			annotations: map[string]string{
-// 				helpersv1.StatusMetadataKey: "",
-// 			},
-// 			expected: false,
-// 		},
-// 		{
-// 			name: "Annotations with Ready status",
-// 			annotations: map[string]string{
-// 				helpersv1.StatusMetadataKey: helpersv1.Ready,
-// 			},
-// 			expected: false,
-// 		},
-// 		{
-// 			name: "Annotations with Completed status",
-// 			annotations: map[string]string{
-// 				helpersv1.StatusMetadataKey: helpersv1.Completed,
-// 			},
-// 			expected: false,
-// 		},
-// 		{
-// 			name: "Annotations with other status",
-// 			annotations: map[string]string{
-// 				helpersv1.StatusMetadataKey: "SomeStatus",
-// 			},
-// 			expected: true,
-// 		},
-// 	}
-
-// 	for _, tc := range tt {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			actual := skipSBOM(tc.annotations)
-// 			assert.Equal(t, tc.expected, actual)
-// 		})
-// 	}
-// }
-// func TestAnnotationsToInstanceID(t *testing.T) {
-// 	t.Run("Valid instance ID annotation", func(t *testing.T) {
-// 		annotations := map[string]string{
-// 			helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-default/kind-ReplicaSet/name-collection-65c5c5856b/containerName-wordpress",
-// 		}
-
-// 		expectedSlug := "replicaset-collection-65c5c5856b-wordpress-23be-a82a"
-
-// 		instanceID, err := annotationsToInstanceID(annotations)
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, expectedSlug, instanceID)
-// 	})
-
-// 	t.Run("Valid instance ID annotation", func(t *testing.T) {
-// 		annotations := map[string]string{
-// 			helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-default/kind-ReplicaSet/name-collection-65c5c5856b/initContainerName-wordpress",
-// 		}
-
-// 		expectedSlug := "replicaset-collection-65c5c5856b-wordpress-f36f-61df"
-
-// 		instanceID, err := annotationsToInstanceID(annotations)
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, expectedSlug, instanceID)
-// 	})
-
-// 	t.Run("Missing instance ID annotation", func(t *testing.T) {
-// 		annotations := map[string]string{}
-
-// 		_, err := annotationsToInstanceID(annotations)
-// 		assert.ErrorIs(t, err, ErrMissingInstanceIDAnnotation)
-// 	})
-
-// 	t.Run("Invalid instance ID format", func(t *testing.T) {
-// 		annotations := map[string]string{
-// 			helpersv1.InstanceIDMetadataKey: "invalid-instance-id",
-// 		}
-
-// 		_, err := annotationsToInstanceID(annotations)
-// 		assert.Error(t, err)
-// 	})
-// }
+import (
+	"context"
+	_ "embed"
+	"testing"
+
+	"github.com/armosec/armoapi-go/apis"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	beUtils "github.com/kubescape/backend/pkg/utils"
+	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
+	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
+	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
+)
+
+func TestNewWatchHandlerProducesValidResult(t *testing.T) {
+	tt := []struct {
+		imageIDsToWLIDSsMap map[string][]string
+		expectedIWMap       map[string][]string
+		name                string
+	}{
+		{
+			name:                "Creating with provided empty map returns matching empty map",
+			imageIDsToWLIDSsMap: map[string][]string{},
+			expectedIWMap:       map[string][]string{},
+		},
+		{
+			name:                "Creating with provided nil map returns matching empty map",
+			imageIDsToWLIDSsMap: nil,
+			expectedIWMap:       map[string][]string{},
+		},
+		{
+			name: "Creating with provided non-empty map returns matching map",
+			imageIDsToWLIDSsMap: map[string][]string{
+				"imageid-01": {"wlid-01"},
+			},
+			expectedIWMap: map[string][]string{
+				"imageid-01": {"wlid-01"},
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.TODO()
+			clusterConfig := utilsmetadata.ClusterConfig{}
+			cfg, err := config.LoadConfig("../configuration")
+			assert.NoError(t, err)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
+
+			k8sClient := k8sfake.NewSimpleClientset()
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			storageClient := kssfake.NewSimpleClientset()
+
+			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient)
+
+			assert.NotNilf(t, wh, "Constructing should create a non-nil object")
+		})
+	}
+}
+
+func TestHandleSBOMFilteredEvents(t *testing.T) {
+	tt := []struct {
+		name                      string
+		inputEvents               []watch.Event
+		expectedObjectNames       []string
+		expectedCommands          []*apis.Command
+		expectedErrors            []error
+		expectedSlugToImageIDMap  map[string]string
+		expectedWlidAndImageIDMap []string
+	}{
+		{
+			name: "Adding a new Filtered SBOM should produce a matching scan command",
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSyftFiltered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+							Annotations: map[string]string{
+								helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
+								helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+								helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+								helpersv1.ImageTagMetadataKey:      "nginx:1.14.0",
+								helpersv1.ContainerNameMetadataKey: "nginx",
+							},
+						},
+					},
+				},
+				{
+					Type: watch.Modified,
+					Object: &spdxv1beta1.SBOMSyftFiltered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
+							Annotations: map[string]string{
+								helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/initContainerName-nginx",
+								helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+								helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+								helpersv1.ImageTagMetadataKey:      "nginx:1.14.0",
+								helpersv1.ContainerNameMetadataKey: "nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedCommands: []*apis.Command{
+				{
+					CommandName: utils.CommandScanFilteredSBOM,
+					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+					Args: map[string]interface{}{
+						utils.ArgsContainerData: &utils.ContainerData{
+							Slug:          "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+							ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+							ImageTag:      "nginx:1.14.0",
+							ContainerName: "nginx",
+							ContainerType: "container",
+							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+						},
+					},
+				},
+				{
+					CommandName: utils.CommandScanFilteredSBOM,
+					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+					Args: map[string]interface{}{
+						utils.ArgsContainerData: &utils.ContainerData{
+							Slug:          "replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
+							ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+							ImageTag:      "nginx:1.14.0",
+							ContainerName: "nginx",
+							ContainerType: "initContainer",
+							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+						},
+					},
+				},
+			},
+			expectedObjectNames: []string{
+				"replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+				"replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
+			},
+			expectedSlugToImageIDMap: map[string]string{
+				"replicaset-nginx-6ccd565b7d-nginx-49d3-1861": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				"replicaset-nginx-6ccd565b7d-nginx-e4ff-657a": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+			},
+			expectedWlidAndImageIDMap: []string{
+				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx" + "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+			},
+			expectedErrors: []error{},
+		},
+		{
+			name: "Missing image tag",
+			inputEvents: []watch.Event{
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.SBOMSyftFiltered{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+							Annotations: map[string]string{
+								helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
+								helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+								helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+								helpersv1.ImageTagMetadataKey:      "", // missing image tag
+								helpersv1.ContainerNameMetadataKey: "nginx",
+							},
+						},
+					},
+				},
+			},
+			expectedCommands:          []*apis.Command{},
+			expectedObjectNames:       []string{"replicaset-nginx-6ccd565b7d-nginx-49d3-1861"},
+			expectedSlugToImageIDMap:  map[string]string{},
+			expectedWlidAndImageIDMap: []string{},
+			expectedErrors: []error{
+				ErrMissingImageTag,
+			},
+		},
+		{
+			name: "Delete event",
+			inputEvents: []watch.Event{
+				{
+					Type:   watch.Deleted,
+					Object: &spdxv1beta1.SBOMSyftFiltered{},
+				},
+			},
+			expectedCommands:          []*apis.Command{},
+			expectedObjectNames:       []string{""},
+			expectedSlugToImageIDMap:  map[string]string{},
+			expectedWlidAndImageIDMap: []string{},
+			expectedErrors:            []error{},
+		},
+		// {
+		// 	name:                 "Adding a new Filtered SBOM with known instance ID slug but missing WLID annotation should produce a matching error",
+		// 	knownInstanceIDSlugs: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
+		// 	inputEvents: []watch.Event{
+		// 		{
+		// 			Type: watch.Added,
+		// 			Object: &spdxv1beta1.SBOMSyftFiltered{
+		// 				ObjectMeta: v1.ObjectMeta{
+		// 					Name: "pod-reverse-proxy-nginx-2f07-68bd",
+		// 					Annotations: map[string]string{
+		// 						helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
+		// 					},
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
+		// 	expectedCommands:    []*apis.Command{},
+		// 	expectedErrors:      []error{ErrMissingWLIDAnnotation},
+		// },
+		// {
+		// 	name:                 "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
+		// 	knownInstanceIDSlugs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+		// 	inputEvents: []watch.Event{
+		// 		{
+		// 			Type: watch.Added,
+		// 			Object: &spdxv1beta1.SBOMSyftFiltered{
+		// 				ObjectMeta: v1.ObjectMeta{
+		// 					Name: "pod-reverse-proxy-nginx-2f07-68bd",
+		// 					Annotations: map[string]string{
+		// 						helpersv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
+		// 					},
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
+		// 	expectedCommands:    []*apis.Command{},
+		// 	expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
+		// },
+		// {
+		// 	name:                 "Filtered SBOM deletion events should be ignored",
+		// 	knownInstanceIDSlugs: []string{},
+		// 	inputEvents: []watch.Event{
+		// 		{
+		// 			Type: watch.Deleted,
+		// 			Object: &spdxv1beta1.SBOMSyftFiltered{
+		// 				ObjectMeta: v1.ObjectMeta{
+		// 					Name:        "pod-reverse-proxy-nginx-2f07-68bd",
+		// 					Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
+		// 	expectedCommands:    []*apis.Command{},
+		// 	expectedErrors:      []error{},
+		// },
+		// {
+		// 	name:                 "Addition events for unsupported objects should produce a matching error",
+		// 	knownInstanceIDSlugs: []string{},
+		// 	inputEvents: []watch.Event{
+		// 		{
+		// 			Type: watch.Added,
+		// 			Object: &spdxv1beta1.VulnerabilityManifest{
+		// 				ObjectMeta: v1.ObjectMeta{
+		// 					Name:        "pod-reverse-proxy-nginx-2f07-68bd",
+		// 					Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedObjectNames: []string{},
+		// 	expectedCommands:    []*apis.Command{},
+		// 	expectedErrors:      []error{ErrUnsupportedObject},
+		// },
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare starting startingObjects for storage
+			startingObjects := []runtime.Object{}
+			for _, e := range tc.inputEvents {
+				startingObjects = append(startingObjects, e.Object)
+			}
+
+			ctx := context.Background()
+			clusterConfig := utilsmetadata.ClusterConfig{}
+			cfg, err := config.LoadConfig("../configuration")
+			assert.NoError(t, err)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
+
+			k8sClient := k8sfake.NewSimpleClientset()
+			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+			storageClient := kssfake.NewSimpleClientset(startingObjects...)
+
+			inputEvents := make(chan watch.Event)
+			cmdCh := make(chan *apis.Command)
+			errorCh := make(chan error)
+
+			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient)
+
+			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
+
+			go func() {
+				for _, e := range tc.inputEvents {
+					inputEvents <- e
+				}
+
+				close(inputEvents)
+			}()
+
+			done := false
+			actualErrors := []error{}
+			actualCommands := []*apis.Command{}
+			for !done {
+				select {
+				case err, ok := <-errorCh:
+					if !ok {
+						done = true
+						break
+					}
+					actualErrors = append(actualErrors, err)
+				case cmd, ok := <-cmdCh:
+					if !ok {
+						done = true
+						break
+					}
+					actualCommands = append(actualCommands, cmd)
+				}
+			}
+
+			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSyftFiltereds("").List(ctx, v1.ListOptions{})
+
+			actualObjectNames := []string{}
+			for _, obj := range actualObjects.Items {
+				actualObjectNames = append(actualObjectNames, obj.ObjectMeta.Name)
+			}
+
+			// test slug to image ID map
+			assert.Equal(t, len(tc.expectedSlugToImageIDMap), wh.SlugToImageID.Len(), "Slug to image ID map doesn’t match")
+			for k, v := range tc.expectedSlugToImageIDMap {
+				assert.Equal(t, v, wh.SlugToImageID.Get(k), "Slug to image ID map doesn’t match")
+			}
+
+			// test expectedWlidAndImageIDMap
+			assert.Equal(t, len(tc.expectedWlidAndImageIDMap), wh.WlidAndImageID.Cardinality(), "Wlid and image ID map doesn’t match")
+			for _, v := range tc.expectedWlidAndImageIDMap {
+				assert.True(t, wh.WlidAndImageID.Contains(v), "Wlid and image ID map doesn’t match")
+			}
+
+			assert.Equal(t, tc.expectedObjectNames, actualObjectNames, "Objects in the storage don’t match")
+			assert.Equal(t, tc.expectedErrors, actualErrors, "Errors don’t match")
+			assert.Equal(t, tc.expectedCommands, actualCommands, "Commands don’t match")
+		})
+
+	}
+}
+func TestGetContainerDataFilteredSBOM(t *testing.T) {
+	tests := []struct {
+		obj     *spdxv1beta1.SBOMSyftFiltered
+		want    *utils.ContainerData
+		name    string
+		wantErr bool
+	}{
+		{
+			name: "valid SBOMSyftFiltered object",
+			obj: &spdxv1beta1.SBOMSyftFiltered{
+				ObjectMeta: v1.ObjectMeta{
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
+						helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+						helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+						helpersv1.ImageTagMetadataKey:      "nginx:1.14.1",
+						helpersv1.ContainerNameMetadataKey: "nginx",
+					},
+				},
+			},
+			want: &utils.ContainerData{
+				Slug:          "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+				Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+				ContainerName: "nginx",
+				ContainerType: "container",
+				ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				ImageTag:      "nginx:1.14.1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid SBOMSyftFiltered object - missing instanceID",
+			obj: &spdxv1beta1.SBOMSyftFiltered{
+				ObjectMeta: v1.ObjectMeta{
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey:    "",
+						helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+						helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+						helpersv1.ImageTagMetadataKey:      "nginx:1.14.1",
+						helpersv1.ContainerNameMetadataKey: "nginx",
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "invalid SBOMSyftFiltered object - missing other fields",
+			obj: &spdxv1beta1.SBOMSyftFiltered{
+				ObjectMeta: v1.ObjectMeta{
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
+						helpersv1.WlidMetadataKey:          "",
+						helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+						helpersv1.ImageTagMetadataKey:      "nginx:1.14.1",
+						helpersv1.ContainerNameMetadataKey: "nginx",
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+
+	wh := &WatchHandler{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := wh.getContainerDataFilteredSBOM(tt.obj)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.wantErr, err != nil)
+		})
+	}
+}
+func TestAnnotationsToContainerData(t *testing.T) {
+	tests := []struct {
+		annotations map[string]string
+		wantData    *utils.ContainerData
+		name        string
+		wantErr     bool
+	}{
+		{
+			name: "valid annotations",
+			annotations: map[string]string{
+				helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
+				helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+				helpersv1.ImageIDMetadataKey:    "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				helpersv1.ImageTagMetadataKey:   "nginx:1.14.1",
+			},
+			wantData: &utils.ContainerData{
+				Slug:          "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+				Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+				ContainerName: "nginx",
+				ContainerType: "container",
+				ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				ImageTag:      "nginx:1.14.1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing instance ID annotation",
+			annotations: map[string]string{
+				helpersv1.WlidMetadataKey:     "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+				helpersv1.ImageIDMetadataKey:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				helpersv1.ImageTagMetadataKey: "nginx:1.14.1",
+			},
+			wantData: &utils.ContainerData{},
+			wantErr:  true,
+		},
+		{
+			name: "invalid instance ID annotation",
+			annotations: map[string]string{
+				helpersv1.InstanceIDMetadataKey: "invalidInstanceID",
+				helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+				helpersv1.ImageIDMetadataKey:    "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				helpersv1.ImageTagMetadataKey:   "nginx:1.14.1",
+			},
+			wantData: &utils.ContainerData{},
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotData, gotErr := annotationsToContainerData(tt.annotations)
+			assert.Equal(t, tt.wantData, gotData)
+			assert.Equal(t, tt.wantErr, gotErr != nil)
+		})
+	}
+}
+func TestSkipSBOM(t *testing.T) {
+	tests := []struct {
+		annotations map[string]string
+		name        string
+		wantSkip    bool
+	}{
+		{
+			name: "status is empty",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: "",
+			},
+			wantSkip: false,
+		},
+		{
+			name: "status is Ready",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: helpersv1.Ready,
+			},
+			wantSkip: false,
+		},
+		{
+			name: "status is Completed",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: helpersv1.Completed,
+			},
+			wantSkip: false,
+		},
+		{
+			name: "status is not recognized",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey: "NotRecognized",
+			},
+			wantSkip: true,
+		},
+		{
+			name:        "no status annotation",
+			annotations: map[string]string{},
+			wantSkip:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotSkip := skipSBOM(tt.annotations)
+			assert.Equal(t, tt.wantSkip, gotSkip)
+		})
+	}
+}
+func TestValidateContainerDataFilteredSBOM(t *testing.T) {
+	tests := []struct {
+		wantErr       error
+		containerData *utils.ContainerData
+		name          string
+	}{
+		{
+			name: "missing ContainerName",
+			containerData: &utils.ContainerData{
+				ImageID:  "imageID",
+				Slug:     "slug",
+				Wlid:     "wlid",
+				ImageTag: "imageTag",
+			},
+			wantErr: ErrMissingContainerName,
+		},
+		{
+			name: "missing ImageID",
+			containerData: &utils.ContainerData{
+				ContainerName: "containerName",
+				Slug:          "slug",
+				Wlid:          "wlid",
+				ImageTag:      "imageTag",
+			},
+			wantErr: ErrMissingImageID,
+		},
+		{
+			name: "missing Slug",
+			containerData: &utils.ContainerData{
+				ContainerName: "containerName",
+				ImageID:       "imageID",
+				Wlid:          "wlid",
+				ImageTag:      "imageTag",
+			},
+			wantErr: ErrMissingSlug,
+		},
+		{
+			name: "missing WLID",
+			containerData: &utils.ContainerData{
+				ContainerName: "containerName",
+				ImageID:       "imageID",
+				Slug:          "slug",
+				ImageTag:      "imageTag",
+			},
+			wantErr: ErrMissingWLID,
+		},
+		{
+			name: "missing ImageTag",
+			containerData: &utils.ContainerData{
+				ContainerName: "containerName",
+				ImageID:       "imageID",
+				Slug:          "slug",
+				Wlid:          "wlid",
+			},
+			wantErr: ErrMissingImageTag,
+		},
+		{
+			name: "valid ContainerData",
+			containerData: &utils.ContainerData{
+				ContainerName: "containerName",
+				ImageID:       "imageID",
+				Slug:          "slug",
+				Wlid:          "wlid",
+				ImageTag:      "imageTag",
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateContainerDataFilteredSBOM(tt.containerData)
+			assert.Equal(t, tt.wantErr, err)
+		})
+	}
+}

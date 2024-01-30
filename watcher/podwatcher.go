@@ -40,15 +40,13 @@ type WatchHandler struct {
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, imageIDsToWLIDsMap map[string][]string, instanceIDs []string) (*WatchHandler, error) {
-
-	wh := &WatchHandler{
+func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface) *WatchHandler {
+	return &WatchHandler{
 		storageClient:  storageClient,
 		k8sAPI:         k8sAPI,
 		cfg:            cfg,
 		WlidAndImageID: mapset.NewSet[string](),
 	}
-	return wh, nil
 }
 func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) error {
 	watchOpts := v1.ListOptions{

@@ -19,7 +19,15 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-const retryInterval = 5 * time.Second
+const retryInterval = 1 * time.Second
+
+var (
+	ErrMissingWLID          = fmt.Errorf("missing WLID")
+	ErrMissingSlug          = fmt.Errorf("missing slug")
+	ErrMissingImageTag      = fmt.Errorf("missing image ID")
+	ErrMissingImageID       = fmt.Errorf("missing image tag")
+	ErrMissingContainerName = fmt.Errorf("missing container name")
+)
 
 // SBOMFilteredWatch watches and processes changes on Filtered SBOMs
 func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
@@ -114,6 +122,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 				helpers.String("namespace", obj.ObjectMeta.Namespace),
 				helpers.Interface("annotations", obj.ObjectMeta.Annotations),
 				helpers.Error(err))
+			errorCh <- err
 			continue
 		}
 
@@ -145,13 +154,7 @@ func (wh *WatchHandler) getContainerDataFilteredSBOM(obj *spdxv1beta1.SBOMSyftFi
 		return nil, err
 	}
 
-	// use cached image ID and tag. this is needed for backward compatibility
-	// FIXME: use the annotations after adding imageID and imageTag to the filtered SBOM
-	// containerData.ImageTag = wh.SlugToImageTag.Get(containerData.Slug)
-	// containerData.ImageID = wh.SlugToImageID.Get(containerData.Slug)
-
 	if err := validateContainerDataFilteredSBOM(containerData); err != nil {
-		// missing data, fallback
 		return nil, err
 	}
 	return containerData, nil
@@ -191,6 +194,11 @@ func skipSBOM(annotations map[string]string) bool {
 		helpersv1.Ready,
 		helpersv1.Completed,
 	}
+
+	if len(annotations) == 0 {
+		return true // skip
+	}
+
 	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok {
 		return !slices.Contains(ann, status)
 	}
@@ -203,19 +211,19 @@ func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
 
 func validateContainerDataFilteredSBOM(containerData *utils.ContainerData) error {
 	if containerData.ContainerName == "" {
-		return fmt.Errorf("missing container name")
+		return ErrMissingContainerName
 	}
 	if containerData.ImageID == "" {
-		return fmt.Errorf("missing image ID")
+		return ErrMissingImageID
 	}
 	if containerData.Slug == "" {
-		return fmt.Errorf("missing slug")
+		return ErrMissingSlug
 	}
 	if containerData.Wlid == "" {
-		return fmt.Errorf("missing WLID")
+		return ErrMissingWLID
 	}
 	if containerData.ImageTag == "" {
-		return fmt.Errorf("missing image tag")
+		return ErrMissingImageTag
 	}
 	return nil
 }
