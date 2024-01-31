@@ -59,7 +59,7 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset()
 
-			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient)
+			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, nil)
 
 			assert.NotNilf(t, wh, "Constructing should create a non-nil object")
 		})
@@ -194,82 +194,6 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			expectedWlidAndImageIDMap: []string{},
 			expectedErrors:            []error{},
 		},
-		// {
-		// 	name:                 "Adding a new Filtered SBOM with known instance ID slug but missing WLID annotation should produce a matching error",
-		// 	knownInstanceIDSlugs: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-		// 	inputEvents: []watch.Event{
-		// 		{
-		// 			Type: watch.Added,
-		// 			Object: &spdxv1beta1.SBOMSyftFiltered{
-		// 				ObjectMeta: v1.ObjectMeta{
-		// 					Name: "pod-reverse-proxy-nginx-2f07-68bd",
-		// 					Annotations: map[string]string{
-		// 						helpersv1.InstanceIDMetadataKey: "apiVersion-v1/namespace-default/kind-Pod/name-reverse-proxy/containerName-nginx",
-		// 					},
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-		// 	expectedCommands:    []*apis.Command{},
-		// 	expectedErrors:      []error{ErrMissingWLIDAnnotation},
-		// },
-		// {
-		// 	name:                 "Adding a new Filtered SBOM with missing InstanceID annotation should produce a matching error",
-		// 	knownInstanceIDSlugs: []string{"60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-		// 	inputEvents: []watch.Event{
-		// 		{
-		// 			Type: watch.Added,
-		// 			Object: &spdxv1beta1.SBOMSyftFiltered{
-		// 				ObjectMeta: v1.ObjectMeta{
-		// 					Name: "pod-reverse-proxy-nginx-2f07-68bd",
-		// 					Annotations: map[string]string{
-		// 						helpersv1.WlidMetadataKey: "wlid://cluster-relevant-clutser/namespace-routing/deployment-nginx",
-		// 					},
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-		// 	expectedCommands:    []*apis.Command{},
-		// 	expectedErrors:      []error{ErrMissingInstanceIDAnnotation},
-		// },
-		// {
-		// 	name:                 "Filtered SBOM deletion events should be ignored",
-		// 	knownInstanceIDSlugs: []string{},
-		// 	inputEvents: []watch.Event{
-		// 		{
-		// 			Type: watch.Deleted,
-		// 			Object: &spdxv1beta1.SBOMSyftFiltered{
-		// 				ObjectMeta: v1.ObjectMeta{
-		// 					Name:        "pod-reverse-proxy-nginx-2f07-68bd",
-		// 					Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedObjectNames: []string{"pod-reverse-proxy-nginx-2f07-68bd"},
-		// 	expectedCommands:    []*apis.Command{},
-		// 	expectedErrors:      []error{},
-		// },
-		// {
-		// 	name:                 "Addition events for unsupported objects should produce a matching error",
-		// 	knownInstanceIDSlugs: []string{},
-		// 	inputEvents: []watch.Event{
-		// 		{
-		// 			Type: watch.Added,
-		// 			Object: &spdxv1beta1.VulnerabilityManifest{
-		// 				ObjectMeta: v1.ObjectMeta{
-		// 					Name:        "pod-reverse-proxy-nginx-2f07-68bd",
-		// 					Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "60d3737f69e6bd1e1573ecbdb395937219428d00687b4e5f1553f6f192c63e6c"},
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedObjectNames: []string{},
-		// 	expectedCommands:    []*apis.Command{},
-		// 	expectedErrors:      []error{ErrUnsupportedObject},
-		// },
 	}
 
 	for _, tc := range tt {
@@ -294,7 +218,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
-			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient)
+			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, nil)
 
 			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
 

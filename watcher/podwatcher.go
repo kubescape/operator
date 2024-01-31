@@ -37,15 +37,17 @@ type WatchHandler struct {
 	storageClient  kssc.Interface
 	cfg            config.IConfig
 	k8sAPI         *k8sinterface.KubernetesApi
+	eventQueue     *CooldownQueue
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface) *WatchHandler {
+func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, eventQueue *CooldownQueue) *WatchHandler {
 	return &WatchHandler{
 		storageClient:  storageClient,
 		k8sAPI:         k8sAPI,
 		cfg:            cfg,
 		WlidAndImageID: mapset.NewSet[string](),
+		eventQueue:     eventQueue,
 	}
 }
 func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) error {
@@ -54,17 +56,14 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 		FieldSelector: "status.phase=Running", // only when the pod is running
 	}
 
-	// begin watch
-	eventQueue := NewCooldownQueue(DefaultQueueSize, DefaultTTL)
-
 	// list pods and add them to the queue, this is for the pods that were created before the watch started
-	wh.listPods(ctx, eventQueue)
+	wh.listPods(ctx)
 
 	// start watching
-	go wh.watchRetry(ctx, watchOpts, eventQueue)
+	go wh.watchRetry(ctx, watchOpts)
 
 	// process events
-	for event := range eventQueue.ResultChan {
+	for event := range wh.eventQueue.ResultChan {
 		// skip non-pod objects
 		pod, ok := event.Object.(*core1.Pod)
 		if !ok {
@@ -177,7 +176,7 @@ func (wh *WatchHandler) scanImage(ctx context.Context, pod *core1.Pod, container
 	utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
 }
 
-func (wh *WatchHandler) listPods(ctx context.Context, eventQueue *CooldownQueue) error {
+func (wh *WatchHandler) listPods(ctx context.Context) error {
 	pods, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").List(ctx, v1.ListOptions{
 		FieldSelector: "status.phase=Running", // only running pods
 	})
@@ -192,7 +191,7 @@ func (wh *WatchHandler) listPods(ctx context.Context, eventQueue *CooldownQueue)
 
 		pods.Items[i].APIVersion = "v1"
 		pods.Items[i].Kind = "Pod"
-		eventQueue.Enqueue(watch.Event{
+		wh.eventQueue.Enqueue(watch.Event{
 			Type:   watch.Added,
 			Object: &pods.Items[i],
 		})

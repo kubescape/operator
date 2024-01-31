@@ -145,7 +145,8 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient)
+	eventQueue := watcher.NewCooldownQueue(watcher.DefaultQueueSize, watcher.DefaultTTL)
+	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
 	// wait for the kubevuln component to be ready
 	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")

@@ -1,0 +1,394 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "kubectl.kubernetes.io/restartedAt": "2024-01-29T11:05:37+02:00"
+        },
+        "creationTimestamp": "2024-01-29T12:43:54Z",
+        "generateName": "collection-69c659f8cb-",
+        "labels": {
+            "app": "collection",
+            "pod-template-hash": "69c659f8cb"
+        },
+        "name": "collection-69c659f8cb-lkjcf",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "collection-69c659f8cb",
+                "uid": "a5c777fc-016c-4321-affd-76c13dfb9f3b"
+            }
+        ],
+        "resourceVersion": "21274606",
+        "uid": "5c6a0021-8326-483b-95e8-70102e392155"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "-c",
+                    "nc -lnvp 8080"
+                ],
+                "command": [
+                    "/bin/sh"
+                ],
+                "image": "alpine:3.18.2",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "alpine-container",
+                "ports": [
+                    {
+                        "containerPort": 8080,
+                        "protocol": "TCP"
+                    }
+                ],
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/config",
+                        "name": "config-volume"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hz9xc",
+                        "readOnly": true
+                    }
+                ]
+            },
+            {
+                "args": [
+                    "wget https://kubernetes.io/; sleep 30; wget https://cloud.armosec.io/; sleep 30; wget https://console.cloud.google.com/; sleep 30; redis-server"
+                ],
+                "command": [
+                    "/bin/sh",
+                    "-c"
+                ],
+                "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "redis",
+                "ports": [
+                    {
+                        "containerPort": 6379,
+                        "name": "redis",
+                        "protocol": "TCP"
+                    }
+                ],
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/data",
+                        "name": "redis-data"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hz9xc",
+                        "readOnly": true
+                    }
+                ]
+            },
+            {
+                "env": [
+                    {
+                        "name": "WORDPRESS_DB_HOST",
+                        "value": "XXXXXX"
+                    },
+                    {
+                        "name": "WORDPRESS_DB_NAME",
+                        "value": "XXXXXX"
+                    },
+                    {
+                        "name": "WORDPRESS_DB_USER",
+                        "value": "XXXXXX"
+                    },
+                    {
+                        "name": "WORDPRESS_DB_PASSWORD",
+                        "value": "XXXXXX"
+                    },
+                    {
+                        "name": "WORDPRESS_DEBUG",
+                        "value": "XXXXXX"
+                    }
+                ],
+                "image": "wordpress:6.0.1-php7.4",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "wordpress",
+                "ports": [
+                    {
+                        "containerPort": 80,
+                        "name": "wordpress",
+                        "protocol": "TCP"
+                    }
+                ],
+                "resources": {
+                    "limits": {
+                        "cpu": "700m",
+                        "memory": "1Gi"
+                    },
+                    "requests": {
+                        "cpu": "700m",
+                        "memory": "1Gi"
+                    }
+                },
+                "securityContext": {
+                    "readOnlyRootFilesystem": false
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hz9xc",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "initContainers": [
+            {
+                "command": [
+                    "sh",
+                    "-c",
+                    "echo \"Initialization complete.\""
+                ],
+                "image": "busybox:1.34.0",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "busybox",
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hz9xc",
+                        "readOnly": true
+                    }
+                ]
+            },
+            {
+                "command": [
+                    "/bin/sh",
+                    "-c",
+                    "echo \"Performing initialization tasks...\"\napk add --no-cache curl\n# Add more initialization tasks as needed\n"
+                ],
+                "image": "alpine:3.14.2",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "alpine",
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hz9xc",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "nodeName": "gke-dwertent-syft-default-pool-d4e9ae18-l42n",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "emptyDir": {},
+                "name": "redis-data"
+            },
+            {
+                "configMap": {
+                    "defaultMode": 420,
+                    "name": "alpine-configmap"
+                },
+                "name": "config-volume"
+            },
+            {
+                "name": "kube-api-access-hz9xc",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-29T12:43:59Z",
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-29T12:44:00Z",
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-29T12:44:00Z",
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-29T12:43:54Z",
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "containerID": "containerd://3a7e64d825838fe6d9ff5918d8310144f2c5e17516fb52f0b85339d533c6dc3a",
+                "image": "docker.io/library/alpine:3.18.2",
+                "imageID": "docker.io/library/alpine@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
+                "lastState": {},
+                "name": "alpine-container",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2024-01-29T12:43:59Z"
+                    }
+                }
+            },
+            {
+                "containerID": "containerd://dc515de4ca4335e977658bf55afbad2619f36772b760c7ee7cc0b826d04bb918",
+                "image": "sha256:a5b1aed421143f36e2445cb2def7135ab7edb69eaa8066d07c3fa344f1052902",
+                "imageID": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+                "lastState": {},
+                "name": "redis",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2024-01-29T12:43:59Z"
+                    }
+                }
+            },
+            {
+                "containerID": "containerd://4bd03a0412dfab23325a0dc217250dd43e52f1fe86baad246fd73816e650ae0a",
+                "image": "docker.io/library/wordpress:6.0.1-php7.4",
+                "imageID": "docker.io/library/wordpress@sha256:5f1873a461105cb1dc1a75731671125f1fb406b18e3fcf63210e8f7f84ce560b",
+                "lastState": {},
+                "name": "wordpress",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2024-01-29T12:43:59Z"
+                    }
+                }
+            }
+        ],
+        "hostIP": "10.128.0.48",
+        "initContainerStatuses": [
+            {
+                "containerID": "containerd://49a0f9c507ab4c491ed5221c1c7ca5400fb913b9b2c5dfc9980374ffc438eda0",
+                "image": "docker.io/library/busybox:1.34.0",
+                "imageID": "docker.io/library/busybox@sha256:e8e5cca392e3cf056fcdb3093e7ac2bf83fcf28b3bcf5818fe8ae71cf360c231",
+                "lastState": {},
+                "name": "busybox",
+                "ready": true,
+                "restartCount": 0,
+                "state": {
+                    "terminated": {
+                        "containerID": "containerd://49a0f9c507ab4c491ed5221c1c7ca5400fb913b9b2c5dfc9980374ffc438eda0",
+                        "exitCode": 0,
+                        "finishedAt": "2024-01-29T12:43:56Z",
+                        "reason": "Completed",
+                        "startedAt": "2024-01-29T12:43:56Z"
+                    }
+                }
+            },
+            {
+                "containerID": "containerd://cdfdddbdeb6f03f9d8ba400b46132e1d21e75eae62940470c336f9c6dbb020a5",
+                "image": "docker.io/library/alpine:3.14.2",
+                "imageID": "docker.io/library/alpine@sha256:e1c082e3d3c45cccac829840a25941e679c25d438cc8412c2fa221cf1a824e6a",
+                "lastState": {},
+                "name": "alpine",
+                "ready": true,
+                "restartCount": 0,
+                "state": {
+                    "terminated": {
+                        "containerID": "containerd://cdfdddbdeb6f03f9d8ba400b46132e1d21e75eae62940470c336f9c6dbb020a5",
+                        "exitCode": 0,
+                        "finishedAt": "2024-01-29T12:43:58Z",
+                        "reason": "Completed",
+                        "startedAt": "2024-01-29T12:43:58Z"
+                    }
+                }
+            }
+        ],
+        "phase": "Running",
+        "podIP": "10.16.2.38",
+        "podIPs": [
+            {
+                "ip": "10.16.2.38"
+            }
+        ],
+        "qosClass": "Burstable",
+        "startTime": "2024-01-29T12:43:55Z"
+    }
+}

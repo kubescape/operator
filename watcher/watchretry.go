@@ -19,7 +19,7 @@ type resourceVersionGetter interface {
 
 var errWatchClosed = errors.New("watch channel closed")
 
-func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts v1.ListOptions, eventQueue *CooldownQueue) {
+func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts v1.ListOptions) {
 	if err := backoff.RetryNotify(func() error {
 		watcher, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").Watch(context.Background(), watchOpts)
 		if err != nil {
@@ -32,7 +32,7 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts v1.ListOptions
 			if metaObject, ok := event.Object.(resourceVersionGetter); ok {
 				watchOpts.ResourceVersion = metaObject.GetResourceVersion()
 			}
-			if eventQueue.Closed() {
+			if wh.eventQueue.Closed() {
 				watcher.Stop()
 				return backoff.Permanent(errors.New("event queue closed"))
 			}
@@ -43,7 +43,7 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts v1.ListOptions
 			if event.Type == watch.Error {
 				return fmt.Errorf("watch error: %s", event.Object)
 			}
-			eventQueue.Enqueue(event)
+			wh.eventQueue.Enqueue(event)
 		}
 	}, newBackOff(), func(err error, d time.Duration) {
 		if !errors.Is(err, errWatchClosed) {

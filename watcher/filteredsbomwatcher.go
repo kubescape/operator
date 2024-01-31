@@ -87,6 +87,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.
 			}
 		}
 	}
+
 }
 
 func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, producedCommands chan<- *apis.Command, errorCh chan<- error) {
@@ -95,7 +96,6 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 	for e := range sfEvents {
 		obj, ok := e.Object.(*spdxv1beta1.SBOMSyftFiltered)
 		if !ok {
-			logger.L().Ctx(context.TODO()).Error("Unsupported object", helpers.String("expected", "spdxv1beta1.SBOMSyftFiltered"), helpers.Interface("got", e.Object))
 			errorCh <- ErrUnsupportedObject
 			continue
 		}
