@@ -3,19 +3,20 @@
     "kind": "Pod",
     "metadata": {
         "creationTimestamp": "2024-01-31T09:55:46Z",
-        "generateName": "nginx-77b4fdf86c-",
+        "generateName": "redis-77b4fdf86c-",
         "labels": {
-            "app": "nginx",
+            "app": "redis",
             "pod-template-hash": "77b4fdf86c"
         },
-        "name": "nginx-77b4fdf86c-mpgp8",
+        "name": "redis-77b4fdf86c-mpgp8",
+        "namespace": "default",
         "ownerReferences": [
             {
                 "apiVersion": "apps/v1",
                 "blockOwnerDeletion": true,
                 "controller": true,
                 "kind": "ReplicaSet",
-                "name": "nginx-77b4fdf86c",
+                "name": "redis-77b4fdf86c",
                 "uid": "1bd7e4b7-0290-46bf-be83-830655657759"
             }
         ],
@@ -25,9 +26,9 @@
     "spec": {
         "containers": [
             {
-                "image": "nginx",
+                "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
                 "imagePullPolicy": "Always",
-                "name": "nginx",
+                "name": "redis",
                 "resources": {},
                 "terminationMessagePath": "/dev/termination-log",
                 "terminationMessagePolicy": "File",
@@ -136,10 +137,10 @@
         "containerStatuses": [
             {
                 "containerID": "containerd://582e1ee9a58eacd5faef2d526bbfb280551823e0e2701e6b7fb0f04a3b1794f8",
-                "image": "docker.io/library/nginx:latest",
-                "imageID": "docker.io/library/nginx@sha256:4c0fdaa8b6341bfdeca5f18f7837462c80cff90527ee35ef185571e1c327beac",
+                "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+                "imageID": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
                 "lastState": {},
-                "name": "nginx",
+                "name": "redis",
                 "ready": true,
                 "restartCount": 0,
                 "started": true,

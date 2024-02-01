@@ -3,20 +3,21 @@
     "kind": "Pod",
     "metadata": {
         "creationTimestamp": "2024-01-31T16:08:34Z",
-        "generateName": "nginx-7bfdd886d9-",
+        "generateName": "redis-7bfdd886d9-",
         "labels": {
-            "app": "nginx",
+            "app": "redis",
             "bla": "bla",
             "pod-template-hash": "7bfdd886d9"
         },
-        "name": "nginx-7bfdd886d9-zqcng",
+        "name": "redis-7bfdd886d9-zqcng",
+        "namespace": "default",
         "ownerReferences": [
             {
                 "apiVersion": "apps/v1",
                 "blockOwnerDeletion": true,
                 "controller": true,
                 "kind": "ReplicaSet",
-                "name": "nginx-7bfdd886d9",
+                "name": "redis-7bfdd886d9",
                 "uid": "12772063-53f5-45ac-97c3-502f14f728d3"
             }
         ],
@@ -26,9 +27,9 @@
     "spec": {
         "containers": [
             {
-                "image": "nginx",
+                "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
                 "imagePullPolicy": "Always",
-                "name": "nginx",
+                "name": "redis",
                 "resources": {},
                 "terminationMessagePath": "/dev/termination-log",
                 "terminationMessagePolicy": "File",
@@ -137,10 +138,10 @@
         "containerStatuses": [
             {
                 "containerID": "containerd://6ad4870431b5590667fe4e85b4ffee337cc3d6d9dc38bad56a8cb46093213240",
-                "image": "docker.io/library/nginx:latest",
-                "imageID": "docker.io/library/nginx@sha256:4c0fdaa8b6341bfdeca5f18f7837462c80cff90527ee35ef185571e1c327beac",
+                "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+                "imageID": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
                 "lastState": {},
-                "name": "nginx",
+                "name": "redis",
                 "ready": true,
                 "restartCount": 0,
                 "started": true,

@@ -32,13 +32,16 @@ import (
 )
 
 var (
-	podCollection                 = "testdata/pod-collection.json"
-	podCollectionWithoutNamespace = "testdata/pod-collection-without-ns.json"
-	podCollectionDifferentImage   = "testdata/pod-collection-different-image.json"
-	replicaSetCollection          = "testdata/replicaset-collection.json"
-	deploymentCollection          = "testdata/deployment-collection.json"
-	podPartialStatus              = "testdata/pod-with-some-empty-status.json"
-	simpleNginxPod                = "testdata/pod-nginx.json"
+	podCollection               = "testdata/pod-collection.json"
+	podCollectionDifferentImage = "testdata/pod-collection-different-image.json"
+	replicaSetCollection        = "testdata/replicaset-collection.json"
+	deploymentCollection        = "testdata/deployment-collection.json"
+	podPartialStatus            = "testdata/pod-with-some-empty-status.json"
+	podRedis                    = "testdata/pod-redis.json"
+	replicaSetRedis             = "testdata/rs-redis.json"
+	podRedis2                   = "testdata/pod-redis-2.json"
+	replicaSetRedis2            = "testdata/rs-redis-2.json"
+	deploymentRedis             = "testdata/deployment-redis.json"
 )
 
 func readFileToBytes(filePath string) []byte {
@@ -78,7 +81,7 @@ func TestPodWatch(t *testing.T) {
 		{
 			name: "Adding pods",
 			pods: []*core1.Pod{
-				bytesToPod(readFileToBytes(podCollectionWithoutNamespace)),
+				bytesToPod(readFileToBytes(podCollection)),
 			},
 			parentObjects: []runtime.Object{
 				bytesToRuntimeObj(readFileToBytes(deploymentCollection)),
@@ -86,7 +89,7 @@ func TestPodWatch(t *testing.T) {
 			},
 			numberOfExpectedCommands: 5,
 			expectedObjectNames: []string{
-				bytesToPod(readFileToBytes(podCollectionWithoutNamespace)).Name,
+				bytesToPod(readFileToBytes(podCollection)).Name,
 			},
 			expectedErrors: []error{},
 		},
@@ -128,6 +131,7 @@ func TestPodWatch(t *testing.T) {
 
 			go func() {
 				for i := range tc.pods {
+					tc.pods[i].Namespace = ""
 					wh.k8sAPI.KubernetesClient.CoreV1().Pods("default").Create(ctx, tc.pods[i], v1.CreateOptions{})
 				}
 			}()
@@ -158,7 +162,7 @@ func Test_handlePodWatcher(t *testing.T) {
 		expectedWlidAndImageIDMap []string
 	}{
 		{
-			name: "Adding pods should produce a matching scan command",
+			name: "Testing pod with many containers",
 			pods: []*core1.Pod{
 				// pod with 5 containers, this will test:
 				// (1) new workload, new image - new wlid, new slug, new image // scan
@@ -170,16 +174,19 @@ func Test_handlePodWatcher(t *testing.T) {
 				// same pod as above, different image ID. this will test:
 				// (4) existing workload, existing slug, new image hash - existing wlid, existing slug, new image. This can happen when restarting a workload that has same imageTag but the image hash changed // scan
 				bytesToPod(readFileToBytes(podCollectionDifferentImage)),
-				// // new pod as above, different image hash, this will test:
-				// // (2) new workload, existing image - new wlid, new slug, existing image // scan
-				// bytesToPod(simpleNginxPod),
-				// // same pod as above, different replicaSet parent. this will test:
-				// // (5) existing workload, existing image - existing wlid, new slug, existing image. This can happen when restarting a workload // ignore
-				// bytesToPod(simpleNginxPod),
+				// new pod, with existing image. this will test:
+				// (2) new workload, existing image - new wlid, new slug, existing image // scan
+				bytesToPod(readFileToBytes(podRedis)),
+				// same pod as above, different replicaSet parent. this will test:
+				// (5) existing workload, existing image - existing wlid, new slug, existing image. This can happen when restarting a workload // ignore
+				bytesToPod(readFileToBytes(podRedis2)),
 			},
 			parentObjects: []runtime.Object{
 				bytesToRuntimeObj(readFileToBytes(deploymentCollection)),
 				bytesToRuntimeObj(readFileToBytes(replicaSetCollection)),
+				bytesToRuntimeObj(readFileToBytes(deploymentRedis)),
+				bytesToRuntimeObj(readFileToBytes(replicaSetRedis)),
+				bytesToRuntimeObj(readFileToBytes(replicaSetRedis2)),
 			},
 			expectedCommands: []apis.Command{
 				{
@@ -194,6 +201,7 @@ func Test_handlePodWatcher(t *testing.T) {
 							ContainerType: "container",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection",
 						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podCollection)),
 					},
 				},
 				{
@@ -208,6 +216,7 @@ func Test_handlePodWatcher(t *testing.T) {
 							ContainerType: "container",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection",
 						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podCollection)),
 					},
 				},
 				{
@@ -222,6 +231,7 @@ func Test_handlePodWatcher(t *testing.T) {
 							ContainerType: "container",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection",
 						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podCollection)),
 					},
 				},
 				{
@@ -236,7 +246,7 @@ func Test_handlePodWatcher(t *testing.T) {
 							ContainerType: "initContainer",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection",
 						},
-						utils.ArgsPod: bytesToPod(readFileToBytes(podCollectionWithoutNamespace)),
+						utils.ArgsPod: bytesToPod(readFileToBytes(podCollection)),
 					},
 				},
 				{
@@ -251,6 +261,7 @@ func Test_handlePodWatcher(t *testing.T) {
 							ContainerType: "initContainer",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection",
 						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podCollection)),
 					},
 				},
 				{
@@ -265,6 +276,22 @@ func Test_handlePodWatcher(t *testing.T) {
 							ContainerType: "container",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection",
 						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podCollectionDifferentImage)),
+					},
+				},
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-redis",
+					Args: map[string]interface{}{
+						utils.ArgsContainerData: &utils.ContainerData{
+							Slug:          "replicaset-redis-77b4fdf86c-redis-ef54-393f",
+							ImageID:       "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+							ImageTag:      "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+							ContainerName: "redis",
+							ContainerType: "container",
+							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-redis",
+						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podRedis)),
 					},
 				},
 			},
@@ -278,6 +305,8 @@ func Test_handlePodWatcher(t *testing.T) {
 				"replicaset-collection-69c659f8cb-alpine-container-9858-6638": "docker.io/library/alpine@sha256:e1c082e3d3c45cccac829840a25941e679c25d438cc8412c2fa221cf1a824e6a",
 				"replicaset-collection-69c659f8cb-redis-beb0-de8a":            "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
 				"replicaset-collection-69c659f8cb-wordpress-05df-a39f":        "docker.io/library/wordpress@sha256:5f1873a461105cb1dc1a75731671125f1fb406b18e3fcf63210e8f7f84ce560b",
+				"replicaset-redis-77b4fdf86c-redis-ef54-393f":                 "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+				"replicaset-redis-7bfdd886d9-redis-8235-d67e":                 "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
 			},
 			expectedWlidAndImageIDMap: []string{
 				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection" + "alpine-container" + "docker.io/library/alpine@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
@@ -286,6 +315,7 @@ func Test_handlePodWatcher(t *testing.T) {
 				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection" + "busybox" + "docker.io/library/busybox@sha256:e8e5cca392e3cf056fcdb3093e7ac2bf83fcf28b3bcf5818fe8ae71cf360c231",
 				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection" + "alpine" + "docker.io/library/alpine@sha256:e1c082e3d3c45cccac829840a25941e679c25d438cc8412c2fa221cf1a824e6a",
 				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection" + "alpine-container" + "docker.io/library/alpine@sha256:e1c082e3d3c45cccac829840a25941e679c25d438cc8412c2fa221cf1a824e6a",
+				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-redis" + "redis" + "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
 			},
 			expectedErrors: []error{},
 		},
@@ -352,6 +382,7 @@ func Test_handlePodWatcher(t *testing.T) {
 					}
 					assert.Equal(t, tc.expectedCommands[i].CommandName, actualCommands[j].CommandName, "Command names don’t match")
 					assert.Equal(t, tc.expectedCommands[i].Wlid, actualCommands[j].Wlid, "Wlid don’t match")
+					assert.Equal(t, tc.expectedCommands[i].Args[utils.ArgsPod], actualCommands[j].Args[utils.ArgsPod], "pods don’t match")
 					found++
 				}
 			}
@@ -369,12 +400,12 @@ func Test_listPods(t *testing.T) {
 		{
 			name: "list pods",
 			pods: []*core1.Pod{
-				bytesToPod(readFileToBytes(podCollectionWithoutNamespace)),
-				bytesToPod(readFileToBytes(simpleNginxPod)),
+				bytesToPod(readFileToBytes(podCollection)),
+				bytesToPod(readFileToBytes(podRedis)),
 			},
 			expectedObjectNames: []string{
-				bytesToPod(readFileToBytes(podCollectionWithoutNamespace)).Name,
-				bytesToPod(readFileToBytes(simpleNginxPod)).Name,
+				bytesToPod(readFileToBytes(podCollection)).Name,
+				bytesToPod(readFileToBytes(podRedis)).Name,
 			},
 		},
 	}
@@ -394,6 +425,7 @@ func Test_listPods(t *testing.T) {
 
 			for i := range tc.pods {
 				resourcesCreatedWg.Add(1)
+				tc.pods[i].Namespace = ""
 				_, err := k8sAPI.KubernetesClient.CoreV1().Pods("").Create(ctx, tc.pods[i], v1.CreateOptions{})
 				assert.NoError(t, err)
 			}

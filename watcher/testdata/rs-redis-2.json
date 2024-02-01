@@ -5,15 +5,16 @@
         "annotations": {
             "deployment.kubernetes.io/desired-replicas": "1",
             "deployment.kubernetes.io/max-replicas": "2",
-            "deployment.kubernetes.io/revision": "1"
+            "deployment.kubernetes.io/revision": "2"
         },
-        "creationTimestamp": "2024-01-31T09:55:46Z",
+        "creationTimestamp": "2024-01-31T16:08:34Z",
         "generation": 1,
         "labels": {
-            "app": "nginx",
-            "pod-template-hash": "77b4fdf86c"
+            "app": "redis",
+            "bla": "bla",
+            "pod-template-hash": "7bfdd886d9"
         },
-        "name": "nginx-77b4fdf86c",
+        "name": "redis-7bfdd886d9",
         "namespace": "default",
         "ownerReferences": [
             {
@@ -21,35 +22,36 @@
                 "blockOwnerDeletion": true,
                 "controller": true,
                 "kind": "Deployment",
-                "name": "nginx",
+                "name": "redis",
                 "uid": "5ebc9233-4ef3-4882-8805-975555b24c11"
             }
         ],
-        "resourceVersion": "22510674",
-        "uid": "1bd7e4b7-0290-46bf-be83-830655657759"
+        "resourceVersion": "22680954",
+        "uid": "12772063-53f5-45ac-97c3-502f14f728d3"
     },
     "spec": {
         "replicas": 1,
         "selector": {
             "matchLabels": {
-                "app": "nginx",
-                "pod-template-hash": "77b4fdf86c"
+                "app": "redis",
+                "pod-template-hash": "7bfdd886d9"
             }
         },
         "template": {
             "metadata": {
                 "creationTimestamp": null,
                 "labels": {
-                    "app": "nginx",
-                    "pod-template-hash": "77b4fdf86c"
+                    "app": "redis",
+                    "bla": "bla",
+                    "pod-template-hash": "7bfdd886d9"
                 }
             },
             "spec": {
                 "containers": [
                     {
-                        "image": "nginx",
+                        "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
                         "imagePullPolicy": "Always",
-                        "name": "nginx",
+                        "name": "redis",
                         "resources": {},
                         "terminationMessagePath": "/dev/termination-log",
                         "terminationMessagePolicy": "File"

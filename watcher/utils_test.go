@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	core1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -226,4 +227,17 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 			assert.True(t, reflect.DeepEqual(extractImageIDsToContainersFromPod(tt.pod), tt.expected))
 		})
 	}
+}
+
+func TestGetWlidAndImageID(t *testing.T) {
+	containerData := &utils.ContainerData{
+		Wlid:          "wlid1",
+		ContainerName: "container1",
+		ImageID:       "imageID1",
+	}
+
+	expected := "wlid1container1imageID1"
+	result := getWlidAndImageID(containerData)
+
+	assert.Equal(t, expected, result)
 }

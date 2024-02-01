@@ -8,9 +8,9 @@
         "creationTimestamp": "2024-01-31T09:55:46Z",
         "generation": 1,
         "labels": {
-            "app": "nginx"
+            "app": "redis"
         },
-        "name": "nginx",
+        "name": "redis",
         "namespace": "default",
         "resourceVersion": "22510675",
         "uid": "5ebc9233-4ef3-4882-8805-975555b24c11"
@@ -21,7 +21,7 @@
         "revisionHistoryLimit": 10,
         "selector": {
             "matchLabels": {
-                "app": "nginx"
+                "app": "redis"
             }
         },
         "strategy": {
@@ -35,15 +35,15 @@
             "metadata": {
                 "creationTimestamp": null,
                 "labels": {
-                    "app": "nginx"
+                    "app": "redis"
                 }
             },
             "spec": {
                 "containers": [
                     {
-                        "image": "nginx",
+                        "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
                         "imagePullPolicy": "Always",
-                        "name": "nginx",
+                        "name": "redis",
                         "resources": {},
                         "terminationMessagePath": "/dev/termination-log",
                         "terminationMessagePolicy": "File"
@@ -71,7 +71,7 @@
             {
                 "lastTransitionTime": "2024-01-31T09:55:46Z",
                 "lastUpdateTime": "2024-01-31T09:55:47Z",
-                "message": "ReplicaSet \"nginx-77b4fdf86c\" has successfully progressed.",
+                "message": "ReplicaSet \"redis-77b4fdf86c\" has successfully progressed.",
                 "reason": "NewReplicaSetAvailable",
                 "status": "True",
                 "type": "Progressing"
