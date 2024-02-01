@@ -45,3 +45,6 @@ func extractImageIDsFromPod(pod *core1.Pod) []string {
 
 	return imageIDs
 }
+func getWlidAndImageID(containerData *utils.ContainerData) string {
+	return containerData.Wlid + containerData.ContainerName + containerData.ImageID
+}

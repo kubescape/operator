@@ -128,11 +128,11 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 
 		if imageID, ok := wh.SlugToImageID.Load(containerData.Slug); !ok {
 			wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
-			wh.WlidAndImageID.Add(containerData.Wlid + containerData.ImageID)
+			wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 		} else {
 			if imageID != containerData.ImageID {
 				wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
-				wh.WlidAndImageID.Add(containerData.Wlid + containerData.ImageID)
+				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 			}
 		}
 

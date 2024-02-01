@@ -130,7 +130,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wo
 				wh.scanImage(ctx, pod, containerData, workerPool)
 
 				wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
-				wh.WlidAndImageID.Add(containerData.Wlid + containerData.ImageID)
+				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 			}
 		} else {
 			// new workload
@@ -144,7 +144,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wo
 			// cache the new slug
 			wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
 
-			if wh.WlidAndImageID.Contains(containerData.Wlid + containerData.ImageID) {
+			if wh.WlidAndImageID.Contains(getWlidAndImageID(containerData)) {
 				// wlid+imageID already exists, ignoring event
 				// this can happen when the workload restarted but the image was not changed
 				// use-case 5
@@ -155,7 +155,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wo
 			// scan image
 			wh.scanImage(ctx, pod, containerData, workerPool)
 
-			wh.WlidAndImageID.Add(containerData.Wlid + containerData.ImageID)
+			wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 		}
 	}
 
