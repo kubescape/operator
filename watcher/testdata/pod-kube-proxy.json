@@ -1,0 +1,199 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "kubernetes.io/config.hash": "d4de88bcd20542787d3d1bb81f71686a",
+            "kubernetes.io/config.mirror": "d4de88bcd20542787d3d1bb81f71686a",
+            "kubernetes.io/config.seen": "2024-01-31T02:27:45.046592438Z",
+            "kubernetes.io/config.source": "file"
+        },
+        "creationTimestamp": "2024-01-31T02:27:50Z",
+        "labels": {
+            "component": "kube-proxy",
+            "tier": "node"
+        },
+        "name": "kube-proxy-gke-cluster-pool-d4e9ae18-tgdf",
+        "namespace": "kube-system",
+        "ownerReferences": [
+            {
+                "apiVersion": "v1",
+                "controller": true,
+                "kind": "Node",
+                "name": "gke-cluster-pool-d4e9ae18-tgdf",
+                "uid": "49da3bff-d712-4620-8c21-14c8907974c9"
+            }
+        ],
+        "resourceVersion": "22305791",
+        "uid": "ef302fc3-7a3e-4736-912c-fb17b6bbe315"
+    },
+    "spec": {
+        "containers": [
+            {
+                "command": [],
+                "image": "gke.gcr.io/kube-proxy-amd64:v1.27.8-gke.1067004",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "kube-proxy",
+                "resources": {
+                    "requests": {
+                        "cpu": "100m"
+                    }
+                },
+                "securityContext": {
+                    "privileged": true
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/ssl/certs",
+                        "name": "etc-ssl-certs",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/usr/share/ca-certificates",
+                        "name": "usr-ca-certs",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/var/log",
+                        "name": "varlog"
+                    },
+                    {
+                        "mountPath": "/var/lib/kube-proxy/kubeconfig",
+                        "name": "kubeconfig"
+                    },
+                    {
+                        "mountPath": "/run/xtables.lock",
+                        "name": "iptableslock"
+                    },
+                    {
+                        "mountPath": "/lib/modules",
+                        "name": "lib-modules",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "hostNetwork": true,
+        "nodeName": "gke-cluster-pool-d4e9ae18-tgdf",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 2000001000,
+        "priorityClassName": "system-node-critical",
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "operator": "Exists"
+            },
+            {
+                "effect": "NoSchedule",
+                "operator": "Exists"
+            }
+        ],
+        "volumes": [
+            {
+                "hostPath": {
+                    "path": "/usr/share/ca-certificates",
+                    "type": ""
+                },
+                "name": "usr-ca-certs"
+            },
+            {
+                "hostPath": {
+                    "path": "/etc/ssl/certs",
+                    "type": ""
+                },
+                "name": "etc-ssl-certs"
+            },
+            {
+                "hostPath": {
+                    "path": "/var/lib/kube-proxy/kubeconfig",
+                    "type": "FileOrCreate"
+                },
+                "name": "kubeconfig"
+            },
+            {
+                "hostPath": {
+                    "path": "/var/log",
+                    "type": ""
+                },
+                "name": "varlog"
+            },
+            {
+                "hostPath": {
+                    "path": "/run/xtables.lock",
+                    "type": "FileOrCreate"
+                },
+                "name": "iptableslock"
+            },
+            {
+                "hostPath": {
+                    "path": "/lib/modules",
+                    "type": ""
+                },
+                "name": "lib-modules"
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-31T02:27:50Z",
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-31T02:27:52Z",
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-31T02:27:52Z",
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2024-01-31T02:27:50Z",
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "containerID": "containerd://9f5ca046aa6de9b18ca39aff4335154f0e910976758349f87c9b1eda49aeb215",
+                "image": "gke.gcr.io/kube-proxy-amd64:v1.27.8-gke.1067004",
+                "imageID": "sha256:0ad81254b1418683a21277e576d0b2229a46dac438ca5578180bed8e6963e6bf",
+                "lastState": {},
+                "name": "kube-proxy",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2024-01-31T02:27:51Z"
+                    }
+                }
+            }
+        ],
+        "hostIP": "10.128.0.66",
+        "phase": "Running",
+        "podIP": "10.128.0.66",
+        "podIPs": [
+            {
+                "ip": "10.128.0.66"
+            }
+        ],
+        "qosClass": "Burstable",
+        "startTime": "2024-01-31T02:27:50Z"
+    }
+}

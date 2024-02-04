@@ -32,6 +32,7 @@ import (
 )
 
 var (
+	podKubeProxy                = "testdata/pod-kube-proxy.json"
 	podCollection               = "testdata/pod-collection.json"
 	podCollectionDifferentImage = "testdata/pod-collection-different-image.json"
 	replicaSetCollection        = "testdata/replicaset-collection.json"
@@ -319,6 +320,38 @@ func Test_handlePodWatcher(t *testing.T) {
 			},
 			expectedErrors: []error{},
 		},
+		{
+			name:          "Testing pod with owner node",
+			pods:          []*core1.Pod{bytesToPod(readFileToBytes(podKubeProxy))},
+			parentObjects: []runtime.Object{},
+			expectedCommands: []apis.Command{
+				{
+					CommandName: apis.TypeScanImages,
+					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-kube-system/pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf",
+					Args: map[string]interface{}{
+						utils.ArgsContainerData: &utils.ContainerData{
+							Slug:          "pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf-kube-proxy-ebb6-8b3d",
+							ImageID:       "sha256:0ad81254b1418683a21277e576d0b2229a46dac438ca5578180bed8e6963e6bf",
+							ImageTag:      "gke.gcr.io/kube-proxy-amd64:v1.27.8-gke.1067004",
+							ContainerName: "kube-proxy",
+							ContainerType: "container",
+							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-kube-system/pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf",
+						},
+						utils.ArgsPod: bytesToPod(readFileToBytes(podKubeProxy)),
+					},
+				},
+			},
+			expectedObjectNames: []string{
+				bytesToPod(readFileToBytes(podKubeProxy)).Name,
+			},
+			expectedSlugToImageIDMap: map[string]string{
+				"pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf-kube-proxy-ebb6-8b3d": "sha256:0ad81254b1418683a21277e576d0b2229a46dac438ca5578180bed8e6963e6bf",
+			},
+			expectedWlidAndImageIDMap: []string{
+				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-kube-system/pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf" + "kube-proxy" + "sha256:0ad81254b1418683a21277e576d0b2229a46dac438ca5578180bed8e6963e6bf",
+			},
+			expectedErrors: []error{},
+		},
 	}
 
 	for _, tc := range tt {
@@ -356,7 +389,6 @@ func Test_handlePodWatcher(t *testing.T) {
 			for i := range tc.pods {
 				wh.handlePodWatcher(ctx, tc.pods[i], pool)
 			}
-
 			resourcesCreatedWg.Wait()
 
 			// test slug to image ID map
