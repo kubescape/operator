@@ -153,8 +153,6 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
 	waitFunc(mainHandler.config)
 
-	// dwertent - make sure this works
-
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
