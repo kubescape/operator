@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -30,9 +30,6 @@ import (
 
 	"github.com/armosec/utils-go/httputils"
 	"github.com/kubescape/k8s-interface/cloudsupport"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1"
-	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/k8s-interface/workloadinterface"
 )
 
 const (
@@ -67,6 +64,9 @@ func getRegistryScanURL(config config.IConfig) *url.URL {
 	}
 }
 
+// ==========================================================================================================================
+// ======================================== Registry scanning ===============================================================
+// ==========================================================================================================================
 func sendAllImagesToRegistryScan(ctx context.Context, config config.IConfig, registryScanCMDList []*apis.RegistryScanCommand) error {
 	var err error
 	errs := make([]error, 0)
@@ -133,7 +133,7 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
-		return errors.New("Kubevuln is not enabled")
+		return errors.New("kubevuln is not enabled")
 	}
 
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
@@ -177,7 +177,7 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(ctx context.Context
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
-		return errors.New("Kubevuln is not enabled")
+		return errors.New("kubevuln is not enabled")
 	}
 
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
@@ -300,63 +300,116 @@ func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *
 	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
 }
 
-func (actionHandler *ActionHandler) scanWorkload(ctx context.Context, sessionObj *utils.SessionObj) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanWorkload")
+func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanImage")
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
-		return errors.New("Kubevuln is not enabled")
+		return errors.New("kubevuln is not enabled")
+	}
+
+	pod, ok := actionHandler.command.Args[utils.ArgsPod].(*corev1.Pod)
+	if !ok || pod == nil {
+		return fmt.Errorf("failed to get pod for image %s", actionHandler.command.Args[utils.ArgsPod])
+	}
+
+	containerData, ok := actionHandler.command.Args[utils.ArgsContainerData].(*utils.ContainerData)
+	if !ok {
+		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
+	}
+
+	authConfig, err := actionHandler.getAuthConfig(pod, containerData.ImageTag)
+	if err != nil {
+		return fmt.Errorf("failed to get auth config for image %s", containerData.ImageTag)
 	}
 
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
+	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, authConfig)
 
-	workload, err := actionHandler.k8sAPI.GetWorkloadByWlid(actionHandler.wlid)
+	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, sessionObj.Command.CommandName); err != nil {
+		return fmt.Errorf("failed to send command to scanner with err %v", err)
+	}
+	return nil
+}
+
+func (actionHandler *ActionHandler) scanFilteredSBOM(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanFilteredSBOM")
+	defer span.End()
+
+	if !actionHandler.config.Components().Kubevuln.Enabled {
+		return errors.New("kubevuln is not enabled")
+	}
+
+	containerData, ok := actionHandler.command.Args[utils.ArgsContainerData].(*utils.ContainerData)
+	if !ok {
+		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
+	}
+
+	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
+	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, []dockerregistry.AuthConfig{})
+
+	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanImages); err != nil {
+		return fmt.Errorf("failed to send command to scanner with err %v", err)
+	}
+	return nil
+}
+func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, sessionObj *utils.SessionObj, authConfig []dockerregistry.AuthConfig) *apis.WebsocketScanCommand {
+	cmd := &apis.WebsocketScanCommand{
+		ImageScanParams: apis.ImageScanParams{
+			Session: apis.SessionChain{
+				ActionTitle: string(sessionObj.Command.CommandName),
+				JobIDs:      make([]string, 0),
+				Timestamp:   sessionObj.Reporter.GetTimestamp(),
+			},
+			ImageTag:        containerData.ImageTag,
+			Credentialslist: authConfig,
+			JobID:           sessionObj.Reporter.GetJobID(),
+		},
+		Wlid:          containerData.Wlid,
+		ContainerName: containerData.ContainerName,
+		ImageHash:     containerData.ImageID,
+	}
+
+	// Add instanceID only if container is not empty
+	if containerData.Slug != "" {
+		cmd.InstanceID = &containerData.Slug
+	}
+	if actionHandler.reporter != nil {
+		prepareSessionChain(sessionObj, cmd, actionHandler)
+	}
+
+	return cmd
+}
+
+func (actionHandler *ActionHandler) getAuthConfig(pod *corev1.Pod, imageTag string) ([]dockerregistry.AuthConfig, error) {
+	registryAuth := []dockerregistry.AuthConfig{}
+
+	// build a list of secrets from the ImagePullSecrets
+	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, actionHandler.config.Namespace(), ""); err == nil && len(secrets) > 0 {
+		for i := range secrets {
+			if auth, err := parseRegistryAuthSecret(secrets[i]); err == nil {
+				for _, authConfig := range auth {
+					registryAuth = append(registryAuth, dockerregistry.AuthConfig{
+						Username:      authConfig.Username,
+						Password:      authConfig.Password,
+						ServerAddress: authConfig.Registry,
+					})
+				}
+			}
+		}
+	}
+
+	// TODO: this should not happen every scan
+	// build a list of secrets from the the registry secrets
+	secrets, err := cloudsupport.GetImageRegistryCredentials(imageTag, pod)
 	if err != nil {
-		return fmt.Errorf("failed to get workload %s with err %v", actionHandler.wlid, err)
+		return nil, err
+	}
+	for i := range secrets {
+		registryAuth = append(registryAuth, secrets[i])
 	}
 
-	if workload.GetKind() == "CronJob" {
-		logger.L().Ctx(ctx).Debug("workload is CronJob, skipping")
-		return nil
-	}
-
-	pod, err := actionHandler.getPodByWLID(workload)
-	if err != nil {
-		err = fmt.Errorf("failed to get container to image ID map for workload %s with err %v", actionHandler.wlid, err)
-		logger.L().Ctx(ctx).Error(err.Error())
-		return err
-	}
-
-	// get container to imageID map
-	var mapContainerToImageID map[string]string // map of container name to image ID. Container name is unique per pod
-
-	// look for container to imageID map in the command args. If not found, look for it on Pod
-	if val, ok := actionHandler.command.Args[utils.ContainerToImageIdsArg].(map[string]string); !ok {
-		mapContainerToImageID = actionHandler.getContainerToImageIDsFromWorkload(pod)
-	} else {
-		// get from args
-		mapContainerToImageID = val
-	}
-
-	if len(mapContainerToImageID) == 0 {
-		logger.L().Debug(fmt.Sprintf("workload %s has no running containers, skipping", actionHandler.wlid))
-		return nil
-	}
-
-	// get pod instanceID
-	// logger.L().Debug(pod.GetOwnerReferences(), pod.Spec.Containers, , pod.GetNamespace(), pod.Kind, pod.GetName())
-	instanceIDs, err := instanceidhandler.GenerateInstanceIDFromPod(pod)
-	if err != nil {
-		return fmt.Errorf("failed to get instanceID for pod '%s' of workload '%s' err '%v'", pod.GetName(), workload.GetID(), err)
-	}
-
-	// get all images of workload
-	containers, err := listWorkloadImages(workload, instanceIDs)
-	if err != nil {
-		return fmt.Errorf("failed to get workloads from k8s, wlid: %s, reason: %s", actionHandler.wlid, err.Error())
-	}
-
-	return actionHandler.sendCommandForContainers(ctx, containers, mapContainerToImageID, pod, sessionObj, apis.TypeScanImages)
+	return registryAuth, nil
 }
 
 func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *apis.WebsocketScanCommand, actionHandler *ActionHandler) {
@@ -442,193 +495,6 @@ func sendWorkloadToCVEScan(ctx context.Context, config config.IConfig, websocket
 	return sendWorkloadWithCredentials(ctx, getVulnScanURL(config), websocketScanCommand)
 }
 
-func (actionHandler *ActionHandler) getPodByWLID(workload k8sinterface.IWorkload) (*corev1.Pod, error) {
-	// if the workload is a pod, we can get the pod directly by parsing the workload
-	if workload.GetKind() == "Pod" {
-		pod := &corev1.Pod{}
-		w, err := json.Marshal(workload.GetObject())
-		if err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(w, pod); err != nil {
-			return nil, err
-		}
-
-		// set the api version and kind to be pod - this is needed for the the resourceID
-		pod.APIVersion = "v1"
-		pod.Kind = "Pod"
-
-		return pod, nil
-	}
-
-	// we need to find the pod that is owned by the workload
-	// we iterate over all the pods with the same labels as the workload until we find one pod that is owned by the workload
-	labels := workload.GetPodLabels()
-	pods, err := actionHandler.k8sAPI.ListPods(workload.GetNamespace(), labels, "status.phase=Running")
-	if err != nil {
-		return nil, fmt.Errorf("failed listing pods for workload %s", workload.GetName())
-	}
-
-	if len(pods.Items) == 0 {
-		return nil, fmt.Errorf("no pods found for workload %s", workload.GetName())
-	}
-
-	relPods := []corev1.Pod{}
-
-	// list the pods that are related to the workload
-	for i := range pods.Items {
-
-		// set the api version and kind to be pod - this is needed for the the resourceID
-		// we need to do this because this is missing when listing pods
-		pods.Items[i].APIVersion = "v1"
-		pods.Items[i].Kind = "Pod"
-
-		podMarshalled, err := json.Marshal(pods.Items[i])
-		if err != nil {
-			return nil, err
-		}
-
-		wl, err := workloadinterface.NewWorkload(podMarshalled)
-		if err != nil {
-			continue
-		}
-
-		kind, name, err := actionHandler.k8sAPI.CalculateWorkloadParentRecursive(wl)
-		if err != nil {
-			return nil, err
-		}
-
-		if kind == workload.GetKind() && name == workload.GetName() {
-			relPods = append(relPods, pods.Items[i])
-		}
-	}
-
-	if len(relPods) == 0 {
-		return nil, fmt.Errorf("could not get Pod of workload: %s, kind: %s, namespace: %s", workload.GetName(), workload.GetKind(), workload.GetNamespace())
-	}
-
-	// find the latest pod
-	latestPod := relPods[0]
-	latestTime := latestPod.CreationTimestamp.Time
-
-	for i := range relPods {
-		if relPods[i].CreationTimestamp.Time.After(latestTime) {
-			latestPod = relPods[i]
-			latestTime = relPods[i].CreationTimestamp.Time
-		}
-	}
-	return &latestPod, nil
-
-}
-
-// get a workload, retrieves its pod and returns a map of container name to image id
-func (actionHandler *ActionHandler) getContainerToImageIDsFromWorkload(pod *corev1.Pod) map[string]string {
-	var mapContainerToImageID = make(map[string]string)
-
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		if containerStatus.State.Running != nil {
-			imageID := containerStatus.ImageID
-			mapContainerToImageID[containerStatus.Name] = utils.ExtractImageID(imageID)
-		}
-	}
-
-	return mapContainerToImageID
-}
-
-func (actionHandler *ActionHandler) getCommand(container ContainerData, pod *corev1.Pod, imageID string, sessionObj *utils.SessionObj, command apis.NotificationPolicyType, containerRegistryAuths []registryAuth) (*apis.WebsocketScanCommand, error) {
-	websocketScanCommand := &apis.WebsocketScanCommand{
-		ImageScanParams: apis.ImageScanParams{
-			Session:  apis.SessionChain{ActionTitle: string(command), JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
-			ImageTag: container.image,
-			JobID:    sessionObj.Reporter.GetJobID(),
-		},
-		Wlid:          actionHandler.wlid,
-		ContainerName: container.container,
-		ImageHash:     utils.ExtractImageID(imageID),
-	}
-
-	// Add instanceID only if container is not empty
-	if container.id != "" {
-		websocketScanCommand.InstanceID = &container.id
-	}
-	if actionHandler.reporter != nil {
-		prepareSessionChain(sessionObj, websocketScanCommand, actionHandler)
-	}
-
-	if pod != nil {
-		secrets, err := cloudsupport.GetImageRegistryCredentials(websocketScanCommand.ImageTag, pod)
-		if err != nil {
-			return nil, err
-		} else if len(secrets) > 0 {
-			for secretName := range secrets {
-				websocketScanCommand.ImageScanParams.Credentialslist = append(websocketScanCommand.Credentialslist, secrets[secretName])
-			}
-
-			/*
-				the websocketScanCommand.Credentials is deprecated, still use it for backward computability
-			*/
-			if len(websocketScanCommand.Credentialslist) != 0 {
-				websocketScanCommand.Credentials = &websocketScanCommand.Credentialslist[0]
-			}
-		}
-	}
-
-	// add relevant credentials if exist in the registry scan secrets
-	for _, creds := range containerRegistryAuths {
-		if strings.Contains(websocketScanCommand.ImageTag, creds.Registry) && creds.Password != "" {
-			logger.L().Debug(fmt.Sprintf("found registry scan secret for image: %s", websocketScanCommand.ImageTag), helpers.String("ImageTag", websocketScanCommand.ImageTag))
-			websocketScanCommand.Credentialslist = append(websocketScanCommand.Credentialslist, types.AuthConfig{ServerAddress: creds.Registry, Username: creds.Username, Password: creds.Password})
-		}
-	}
-
-	return websocketScanCommand, nil
-}
-
-func (actionHandler *ActionHandler) sendCommandForContainers(ctx context.Context, containers []ContainerData, mapContainerToImageID map[string]string, pod *corev1.Pod, sessionObj *utils.SessionObj, command apis.NotificationPolicyType) error {
-	errs := ""
-
-	// we build a list of all registry scan secrets
-	containerRegistryAuths := []registryAuth{}
-	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, actionHandler.config.Namespace(), ""); err == nil && len(secrets) > 0 {
-		for i := range secrets {
-			if auths, err := parseRegistryAuthSecret(secrets[i]); err == nil {
-				containerRegistryAuths = append(containerRegistryAuths, auths...)
-			}
-		}
-	}
-
-	for i := range containers {
-		imgID := ""
-		if val, ok := mapContainerToImageID[containers[i].container]; !ok {
-			logger.L().Ctx(ctx).Debug("container %s is not running, skipping", helpers.String("container", containers[i].container))
-			continue
-		} else {
-			imgID = val
-		}
-
-		// some images don't have imageID prefix, we will add it for them
-		imgID = getImageIDFromContainer(containers[i], imgID)
-		websocketScanCommand, err := actionHandler.getCommand(containers[i], pod, imgID, sessionObj, command, containerRegistryAuths)
-		if err != nil {
-			errs += err.Error()
-			logger.L().Error("failed to get command", helpers.String("image", containers[i].image), helpers.Error(err))
-			continue
-		}
-		logger.L().Ctx(ctx).Debug("sending scan command", helpers.String("id", containers[i].id), helpers.String("image", containers[i].image), helpers.String("container", containers[i].container))
-
-		if err := sendCommandToScanner(ctx, actionHandler.config, websocketScanCommand, command); err != nil {
-			errs += err.Error()
-			logger.L().Error("scanning failed", helpers.String("image", websocketScanCommand.ImageTag), helpers.Error(err))
-		}
-	}
-
-	if errs != "" {
-		return fmt.Errorf(errs)
-	}
-
-	return nil
-}
-
 func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
 	var err error
 	switch command {
@@ -638,11 +504,4 @@ func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketS
 		err = fmt.Errorf("unknown command: %s", command)
 	}
 	return err
-}
-
-func getImageIDFromContainer(container ContainerData, imageID string) string {
-	if strings.HasPrefix(imageID, "sha256") {
-		imageID = container.image + "@" + imageID
-	}
-	return imageID
 }

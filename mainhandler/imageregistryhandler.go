@@ -49,20 +49,19 @@ const (
 
 type registryScanConfig struct {
 	Registry string   `json:"registry"`
-	Depth    int      `json:"depth"`
 	Include  []string `json:"include,omitempty"`
 	Exclude  []string `json:"exclude,omitempty"`
+	Depth    int      `json:"depth"`
 }
 type registryAuth struct {
-	Registry      string `json:"registry,omitempty"`
-	AuthMethod    string `json:"auth_method,omitempty"`
-	Username      string `json:"username,omitempty"`
-	Password      string `json:"password,omitempty"`
-	RegistryToken string `json:"registryToken,omitempty"`
-
-	Kind          regCommon.RegistryKind `json:"kind,omitempty"`
 	SkipTLSVerify *bool                  `json:"skipTLSVerify,omitempty"`
 	Insecure      *bool                  `json:"http,omitempty"`
+	Registry      string                 `json:"registry,omitempty"`
+	AuthMethod    string                 `json:"auth_method,omitempty"`
+	Username      string                 `json:"username,omitempty"`
+	Password      string                 `json:"password,omitempty"`
+	RegistryToken string                 `json:"registryToken,omitempty"`
+	Kind          regCommon.RegistryKind `json:"kind,omitempty"`
 }
 
 type registry struct {
@@ -71,24 +70,24 @@ type registry struct {
 }
 
 type registryScan struct {
-	k8sAPI         *k8sinterface.KubernetesApi
-	registry       registry
-	registryInfo   armotypes.RegistryInfo
-	mapImageToTags map[string][]string
 	config         config.IConfig
+	k8sAPI         *k8sinterface.KubernetesApi
+	mapImageToTags map[string][]string
+	registryInfo   armotypes.RegistryInfo
+	registry       registry
 	sendReport     bool
 }
 
 type RepositoriesAndTagsParams struct {
-	Repositories []armotypes.Repository `json:"repositories"`
 	CustomerGUID string                 `json:"customerGUID"`
 	RegistryName string                 `json:"registryName"`
 	JobID        string                 `json:"jobID"`
+	Repositories []armotypes.Repository `json:"repositories"`
 }
 
 type registryCreds struct {
-	registryName string
 	auth         *types.AuthConfig
+	registryName string
 }
 
 func NewRegistryScanConfig(registryName string) *registryScanConfig {

@@ -1,0 +1,75 @@
+{
+    "apiVersion": "apps/v1",
+    "kind": "ReplicaSet",
+    "metadata": {
+        "annotations": {
+            "deployment.kubernetes.io/desired-replicas": "1",
+            "deployment.kubernetes.io/max-replicas": "2",
+            "deployment.kubernetes.io/revision": "2"
+        },
+        "creationTimestamp": "2024-01-31T16:08:34Z",
+        "generation": 1,
+        "labels": {
+            "app": "redis",
+            "bla": "bla",
+            "pod-template-hash": "7bfdd886d9"
+        },
+        "name": "redis-7bfdd886d9",
+        "namespace": "default",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "Deployment",
+                "name": "redis",
+                "uid": "5ebc9233-4ef3-4882-8805-975555b24c11"
+            }
+        ],
+        "resourceVersion": "22680954",
+        "uid": "12772063-53f5-45ac-97c3-502f14f728d3"
+    },
+    "spec": {
+        "replicas": 1,
+        "selector": {
+            "matchLabels": {
+                "app": "redis",
+                "pod-template-hash": "7bfdd886d9"
+            }
+        },
+        "template": {
+            "metadata": {
+                "creationTimestamp": null,
+                "labels": {
+                    "app": "redis",
+                    "bla": "bla",
+                    "pod-template-hash": "7bfdd886d9"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+                        "imagePullPolicy": "Always",
+                        "name": "redis",
+                        "resources": {},
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File"
+                    }
+                ],
+                "dnsPolicy": "ClusterFirst",
+                "restartPolicy": "Always",
+                "schedulerName": "default-scheduler",
+                "securityContext": {},
+                "terminationGracePeriodSeconds": 30
+            }
+        }
+    },
+    "status": {
+        "availableReplicas": 1,
+        "fullyLabeledReplicas": 1,
+        "observedGeneration": 1,
+        "readyReplicas": 1,
+        "replicas": 1
+    }
+}

@@ -208,7 +208,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 }
 
 func (actionHandler *ActionHandler) deleteRegistryScanCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteRegistryScanCronJo")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.deleteRegistryScanCronJo")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubevulnScheduler.Enabled {

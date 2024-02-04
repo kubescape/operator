@@ -17,7 +17,7 @@ import (
 const VulnScanCronjobTemplateName = "kubevuln-cronjob-template"
 
 func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setVulnScanCronJob")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.setVulnScanCronJob")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
@@ -57,7 +57,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 }
 
 func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateVulnScanCronJob")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.updateVulnScanCronJob")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubevulnScheduler.Enabled {
@@ -92,7 +92,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 }
 
 func (actionHandler *ActionHandler) deleteVulnScanCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteVulnScanCronJob")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.deleteVulnScanCronJob")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubevulnScheduler.Enabled {

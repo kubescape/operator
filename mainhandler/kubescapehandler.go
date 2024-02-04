@@ -33,7 +33,7 @@ type kubescapeResponseData struct {
 }
 
 func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.deleteKubescapeCronJob")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.deleteKubescapeCronJob")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubescapeScheduler.Enabled {
@@ -56,7 +56,7 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 }
 
 func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.updateKubescapeCronJob")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.updateKubescapeCronJob")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubescapeScheduler.Enabled {
@@ -88,7 +88,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 }
 
 func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.setKubescapeCronJob")
+	_, span := otel.Tracer("").Start(ctx, "actionHandler.setKubescapeCronJob")
 	defer span.End()
 
 	if !actionHandler.config.Components().KubescapeScheduler.Enabled {
@@ -190,7 +190,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubescape.Enabled {
-		return errors.New("Kubescape is not enabled")
+		return errors.New("kubescape is not enabled")
 	}
 
 	request, err := getKubescapeV1ScanRequest(actionHandler.command.Args)

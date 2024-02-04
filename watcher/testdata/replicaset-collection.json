@@ -1,0 +1,213 @@
+{
+    "apiVersion": "apps/v1",
+    "kind": "ReplicaSet",
+    "metadata": {
+        "annotations": {
+            "deployment.kubernetes.io/desired-replicas": "1",
+            "deployment.kubernetes.io/max-replicas": "2",
+            "deployment.kubernetes.io/revision": "28"
+        },
+        "creationTimestamp": "2024-01-30T10:21:29Z",
+        "generation": 1,
+        "labels": {
+            "app": "collection",
+            "pod-template-hash": "69c659f8cb"
+        },
+        "name": "collection-69c659f8cb",
+        "namespace": "default",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "Deployment",
+                "name": "collection",
+                "uid": "9da0b5f5-0fdb-4478-934c-1cbeb3190275"
+            }
+        ],
+        "resourceVersion": "21866468",
+        "uid": "0b6d2f8c-467a-4744-bf63-b7cd3eee29cd"
+    },
+    "spec": {
+        "replicas": 1,
+        "selector": {
+            "matchLabels": {
+                "app": "collection",
+                "pod-template-hash": "69c659f8cb"
+            }
+        },
+        "template": {
+            "metadata": {
+                "annotations": {
+                    "kubectl.kubernetes.io/restartedAt": "2024-01-30T12:21:29+02:00"
+                },
+                "creationTimestamp": null,
+                "labels": {
+                    "app": "collection",
+                    "pod-template-hash": "69c659f8cb"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "args": [
+                            "-c",
+                            "nc -lnvp 8080"
+                        ],
+                        "command": [
+                            "/bin/sh"
+                        ],
+                        "image": "alpine:3.18.2",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "alpine-container",
+                        "ports": [
+                            {
+                                "containerPort": 8080,
+                                "protocol": "TCP"
+                            }
+                        ],
+                        "resources": {},
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File",
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/config",
+                                "name": "config-volume"
+                            }
+                        ]
+                    },
+                    {
+                        "args": [
+                            "wget https://kubernetes.io/; sleep 30; wget https://cloud.armosec.io/; sleep 30; wget https://console.cloud.google.com/; sleep 30; redis-server"
+                        ],
+                        "command": [
+                            "/bin/sh",
+                            "-c"
+                        ],
+                        "image": "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "redis",
+                        "ports": [
+                            {
+                                "containerPort": 6379,
+                                "name": "redis",
+                                "protocol": "TCP"
+                            }
+                        ],
+                        "resources": {},
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File",
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/data",
+                                "name": "redis-data"
+                            }
+                        ]
+                    },
+                    {
+                        "env": [
+                            {
+                                "name": "WORDPRESS_DB_HOST",
+                                "value": "XXXXXX"
+                            },
+                            {
+                                "name": "WORDPRESS_DB_NAME",
+                                "value": "XXXXXX"
+                            },
+                            {
+                                "name": "WORDPRESS_DB_USER",
+                                "value": "XXXXXX"
+                            },
+                            {
+                                "name": "WORDPRESS_DB_PASSWORD",
+                                "value": "XXXXXX"
+                            },
+                            {
+                                "name": "WORDPRESS_DEBUG",
+                                "value": "XXXXXX"
+                            }
+                        ],
+                        "image": "wordpress:6.0.1-php7.4",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "wordpress",
+                        "ports": [
+                            {
+                                "containerPort": 80,
+                                "name": "wordpress",
+                                "protocol": "TCP"
+                            }
+                        ],
+                        "resources": {
+                            "limits": {
+                                "cpu": "700m",
+                                "memory": "1Gi"
+                            },
+                            "requests": {
+                                "cpu": "700m",
+                                "memory": "1Gi"
+                            }
+                        },
+                        "securityContext": {
+                            "readOnlyRootFilesystem": false
+                        },
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File"
+                    }
+                ],
+                "dnsPolicy": "ClusterFirst",
+                "initContainers": [
+                    {
+                        "command": [
+                            "sh",
+                            "-c",
+                            "echo \"Initialization complete.\""
+                        ],
+                        "image": "busybox:1.34.0",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "busybox",
+                        "resources": {},
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File"
+                    },
+                    {
+                        "command": [
+                            "/bin/sh",
+                            "-c",
+                            "echo \"Performing initialization tasks...\"\napk add --no-cache curl\n# Add more initialization tasks as needed\n"
+                        ],
+                        "image": "alpine:3.14.2",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "alpine",
+                        "resources": {},
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File"
+                    }
+                ],
+                "restartPolicy": "Always",
+                "schedulerName": "default-scheduler",
+                "securityContext": {},
+                "terminationGracePeriodSeconds": 30,
+                "volumes": [
+                    {
+                        "emptyDir": {},
+                        "name": "redis-data"
+                    },
+                    {
+                        "configMap": {
+                            "defaultMode": 420,
+                            "name": "alpine-configmap"
+                        },
+                        "name": "config-volume"
+                    }
+                ]
+            }
+        }
+    },
+    "status": {
+        "availableReplicas": 1,
+        "fullyLabeledReplicas": 1,
+        "observedGeneration": 1,
+        "readyReplicas": 1,
+        "replicas": 1
+    }
+}

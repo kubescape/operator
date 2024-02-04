@@ -104,9 +104,9 @@ func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
 
 func TestAppendSecurityFramework(t *testing.T) {
 	tests := []struct {
-		name            string
 		postScanRequest *utilsmetav1.PostScanRequest
 		expected        *utilsmetav1.PostScanRequest
+		name            string
 	}{
 		{
 			name:            "framework scan with one framework ",

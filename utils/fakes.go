@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"context"
+
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	k8s "k8s.io/client-go/kubernetes"
 )
@@ -12,5 +14,9 @@ import (
 // For example, the official fake Kubernetes client, so unit tests would have a
 // suitable test double instead of trying to talk to a real cluster
 func NewK8sInterfaceFake(k8sClient k8s.Interface) *k8sinterface.KubernetesApi {
-	return &k8sinterface.KubernetesApi{KubernetesClient: k8sClient}
+	return &k8sinterface.KubernetesApi{
+		KubernetesClient: k8sClient,
+		DynamicClient:    nil,
+		Context:          context.Background(),
+	}
 }
