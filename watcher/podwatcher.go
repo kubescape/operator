@@ -173,7 +173,10 @@ func (wh *WatchHandler) scanImage(ctx context.Context, pod *core1.Pod, container
 	}
 
 	// send
-	utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
+	logger.L().Info("scanning image", helpers.String("wlid", cmd.Wlid), helpers.String("slug", containerData.Slug), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+	if err := utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool); err != nil {
+		logger.L().Ctx(ctx).Error("failed to add command to channel", helpers.Error(err), helpers.String("slug", containerData.Slug), helpers.String("imageID", containerData.ImageID))
+	}
 }
 
 func (wh *WatchHandler) listPods(ctx context.Context) error {

@@ -12,8 +12,6 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/google/uuid"
-	"github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	"github.com/kubescape/k8s-interface/instanceidhandler/v1/containerinstance"
 	"github.com/kubescape/k8s-interface/instanceidhandler/v1/initcontainerinstance"
@@ -64,22 +62,11 @@ func ExtractImageID(imageID string) string {
 	return strings.TrimPrefix(imageID, dockerPullableURN)
 }
 
-func AddCommandToChannel(ctx context.Context, config config.IConfig, cmd *apis.Command, workerPool *ants.PoolWithFunc) {
-	logger.L().Ctx(ctx).Info(
-		"issuing scan command",
-		helpers.String("wlid", cmd.Wlid),
-		helpers.String("command", string(cmd.CommandName)),
-	)
+func AddCommandToChannel(ctx context.Context, config config.IConfig, cmd *apis.Command, workerPool *ants.PoolWithFunc) error {
+
 	newSessionObj := NewSessionObj(ctx, config, cmd, "Websocket", "", uuid.NewString(), 1)
 
-	if err := workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj}); err != nil {
-		logger.L().Ctx(ctx).Error(
-			"failed to invoke job",
-			helpers.String("wlid", cmd.Wlid),
-			helpers.String("command", string(cmd.CommandName)),
-			helpers.Error(err),
-		)
-	}
+	return workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj})
 }
 
 func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
