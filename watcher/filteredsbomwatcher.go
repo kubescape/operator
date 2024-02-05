@@ -143,6 +143,8 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 				utils.ArgsContainerData: containerData,
 			},
 		}
+		// send
+		logger.L().Info("scanning filtered SBOM", helpers.String("wlid", cmd.Wlid), helpers.String("slug", containerData.Slug), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 		producedCommands <- cmd
 	}
 }

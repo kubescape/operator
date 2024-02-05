@@ -84,8 +84,8 @@ func eventToUnstructured(e watch.Event) (*unstructured.Unstructured, error) {
 }
 
 func triggerScan(ctx context.Context, wp *ants.PoolWithFunc, clusterConfig config.IConfig, command *armoapi.Command) error {
-	utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
-	return nil
+
+	return utils.AddCommandToChannel(ctx, clusterConfig, command, wp)
 }
 
 func unstructuredToScanObject(uObject *unstructured.Unstructured) (*objectsenvelopes.ScanObject, error) {
@@ -99,7 +99,9 @@ func unstructuredToScanObject(uObject *unstructured.Unstructured) (*objectsenvel
 func triggerScanFor(ctx context.Context, uObject *unstructured.Unstructured, isDelete bool, wp *ants.PoolWithFunc, clusterConfig config.IConfig) error {
 	logger.L().Ctx(ctx).Info(
 		"triggering scan",
-		helpers.String("clusterName", clusterConfig.ClusterName()),
+		helpers.String("kind", uObject.GetKind()),
+		helpers.String("name", uObject.GetName()),
+		helpers.String("namespace", uObject.GetNamespace()),
 	)
 	sc := makeScanCommand(clusterConfig.ClusterName(), uObject, isDelete)
 	return triggerScan(ctx, wp, clusterConfig, sc)

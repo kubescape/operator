@@ -199,27 +199,26 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 		}
 	} else {
 		// handle requests
-		mainHandler.HandleSingleRequest(ctx, &sessionObj)
+		if err := mainHandler.HandleSingleRequest(ctx, &sessionObj); err != nil {
+			logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+		} else {
+			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+			logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+		}
 	}
 	span.End()
 }
 
-func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) {
+func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) error {
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
 	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport)
-	err := actionHandler.runCommand(ctx, sessionObj)
-	if err != nil {
-		logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
-		actionHandler.reporter.SendError(err, mainHandler.sendReport, true)
-		return
-	}
 
-	actionHandler.reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
-	logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+	return actionHandler.runCommand(ctx, sessionObj)
 
 }
 
@@ -330,8 +329,13 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		}
 
 		logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
-		mainHandler.HandleSingleRequest(ctx, newSessionObj)
-
+		if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
+			logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+			continue
+		}
+		sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+		logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 	}
 }
 
@@ -387,6 +391,9 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				// skip non-running pods, for some reason the list includes non-running pods
 				continue
 			}
+			pod.APIVersion = "v1"
+			pod.Kind = "Pod"
+
 			// get pod instanceIDs
 			instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromPod(&pod)
 			if err != nil {
@@ -421,9 +428,14 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				// send specific command to the channel
 				newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
-				logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
-				mainHandler.HandleSingleRequest(ctx, newSessionObj)
-
+				logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+				if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
+					logger.L().Info("failed to complete action", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+					newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+					continue
+				}
+				newSessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+				logger.L().Info("action completed successfully", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 				slugs[s] = true
 			}
 		}
