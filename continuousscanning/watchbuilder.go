@@ -25,11 +25,11 @@ func NewDynamicWatch(ctx context.Context, client dynamic.Interface, gvr schema.G
 }
 
 type SelfHealingWatch struct {
-	client        dynamic.Interface
-	gvr           schema.GroupVersionResource
 	opts          metav1.ListOptions
-	makeWatchFunc func(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, opts metav1.ListOptions) (watch.Interface, error)
+	client        dynamic.Interface
 	currWatch     watch.Interface
+	makeWatchFunc func(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, opts metav1.ListOptions) (watch.Interface, error)
+	gvr           schema.GroupVersionResource
 }
 
 func NewSelfHealingWatch(client dynamic.Interface, gvr schema.GroupVersionResource, opts metav1.ListOptions) *SelfHealingWatch {
