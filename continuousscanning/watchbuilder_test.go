@@ -28,10 +28,10 @@ func assertWatchAction(t *testing.T, gotAction ktest.Action, wantGVR schema.Grou
 
 func TestNewDynamicWatch(t *testing.T) {
 	tt := []struct {
-		name        string
-		inputGVR    schema.GroupVersionResource
-		wantActions []ktest.Action
 		wantErr     error
+		inputGVR    schema.GroupVersionResource
+		name        string
+		wantActions []ktest.Action
 	}{
 		{
 			name: "",
