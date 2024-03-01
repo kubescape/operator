@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/docker/docker/api/types"
+	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, secretName string, authConfig *types.AuthConfig) error {
+func (actionHandler *ActionHandler) updateSecret(sessionObj *utils.SessionObj, secretName string, authConfig *dockerregistry.AuthConfig) error {
 	secretObj, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Get(context.Background(), secretName, metav1.GetOptions{})
 	if err != nil {
 		return err

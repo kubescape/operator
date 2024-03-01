@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"time"
 
 	v1 "github.com/kubescape/backend/pkg/client/v1"
@@ -207,7 +208,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL(actionHandler.config).String(), nil, body)
+	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL(actionHandler.config).String(), nil, body, -1, func(resp *http.Response) bool { return true })
 	if err != nil {
 		return err
 	}

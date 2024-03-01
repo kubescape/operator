@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	_ "net/http/pprof"
 
@@ -142,6 +143,9 @@ func main() {
 			logger.L().Error(http.ListenAndServe(":6060", nil).Error())
 		}()
 	}
+
+	// send reports every 24 hours
+	go mainHandler.SendReports(ctx, 24*time.Hour)
 
 	<-ctx.Done()
 }

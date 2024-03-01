@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"fmt"
+	"github.com/kubescape/backend/pkg/versioncheck"
 	"os"
 	"regexp"
 	"time"
@@ -487,6 +488,20 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 
 func (mainHandler *MainHandler) EventWorkerPool() *ants.PoolWithFunc {
 	return mainHandler.eventWorkerPool
+}
+
+func (mainHandler *MainHandler) SendReports(ctx context.Context, period time.Duration) {
+	for {
+		v := versioncheck.NewVersionCheckHandler()
+		versionCheckRequest := versioncheck.NewVersionCheckRequest(
+			mainHandler.config.AccountID(), versioncheck.BuildNumber, "", "",
+			"daily-report", mainHandler.k8sAPI.KubernetesClient)
+		err := v.CheckLatestVersion(ctx, versionCheckRequest)
+		if err != nil {
+			logger.L().Ctx(ctx).Error("failed to send daily report", helpers.Error(err))
+		}
+		time.Sleep(period)
+	}
 }
 
 func GetStartupActions(config config.IConfig) []apis.Command {
