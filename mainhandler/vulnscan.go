@@ -365,6 +365,7 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 				JobIDs:      make([]string, 0),
 				Timestamp:   sessionObj.Reporter.GetTimestamp(),
 			},
+			Args:            map[string]interface{}{},
 			ImageTag:        containerData.ImageTag,
 			Credentialslist: imageScanConfig.authConfigs,
 			JobID:           sessionObj.Reporter.GetJobID(),
