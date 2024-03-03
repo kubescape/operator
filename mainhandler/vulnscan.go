@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/distribution/reference"
 	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
@@ -27,6 +28,7 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/armoapi-go/identifiers"
+	"github.com/armosec/utils-k8s-go/armometadata"
 
 	"github.com/armosec/utils-go/httputils"
 	"github.com/kubescape/k8s-interface/cloudsupport"
@@ -318,13 +320,13 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *u
 		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
 	}
 
-	authConfig, err := actionHandler.getAuthConfig(pod, containerData.ImageTag)
+	imageScanConfig, err := getImageScanConfig(actionHandler.k8sAPI, actionHandler.config.Namespace(), pod, containerData.ImageTag)
 	if err != nil {
 		return fmt.Errorf("failed to get auth config for image %s", containerData.ImageTag)
 	}
 
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
-	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, authConfig)
+	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, imageScanConfig)
 
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, sessionObj.Command.CommandName); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
@@ -345,15 +347,17 @@ func (actionHandler *ActionHandler) scanFilteredSBOM(ctx context.Context, sessio
 		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
 	}
 
+	// scanning a filtered SBOM (SBOM already downloaded) so AuthConfig can be empty
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
-	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, []dockerregistry.AuthConfig{})
+	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, &ImageScanConfig{})
 
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanImages); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
 	}
 	return nil
 }
-func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, sessionObj *utils.SessionObj, authConfig []dockerregistry.AuthConfig) *apis.WebsocketScanCommand {
+func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, sessionObj *utils.SessionObj, imageScanConfig *ImageScanConfig) *apis.WebsocketScanCommand {
+
 	cmd := &apis.WebsocketScanCommand{
 		ImageScanParams: apis.ImageScanParams{
 			Session: apis.SessionChain{
@@ -362,12 +366,22 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 				Timestamp:   sessionObj.Reporter.GetTimestamp(),
 			},
 			ImageTag:        containerData.ImageTag,
-			Credentialslist: authConfig,
+			Credentialslist: imageScanConfig.authConfigs,
 			JobID:           sessionObj.Reporter.GetJobID(),
 		},
 		Wlid:          containerData.Wlid,
 		ContainerName: containerData.ContainerName,
 		ImageHash:     containerData.ImageID,
+	}
+
+	if imageScanConfig.skipTLSVerify != nil && *imageScanConfig.skipTLSVerify {
+		logger.L().Debug("setting skipTLSVerify (true) in image scan command", helpers.String("imageTag", containerData.ImageTag))
+		cmd.Args[identifiers.AttributeSkipTLSVerify] = true
+	}
+
+	if imageScanConfig.insecure != nil && *imageScanConfig.insecure {
+		logger.L().Debug("setting insecure (true) in image scan command", helpers.String("imageTag", containerData.ImageTag))
+		cmd.Args[identifiers.AttributeUseHTTP] = true
 	}
 
 	// Add instanceID only if container is not empty
@@ -381,15 +395,29 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 	return cmd
 }
 
-func (actionHandler *ActionHandler) getAuthConfig(pod *corev1.Pod, imageTag string) ([]dockerregistry.AuthConfig, error) {
-	registryAuth := []dockerregistry.AuthConfig{}
+type ImageScanConfig struct {
+	skipTLSVerify *bool
+	insecure      *bool
+	authConfigs   []dockerregistry.AuthConfig
+}
+
+func getImageScanConfig(k8sAPI IWorkloadsGetter, namespace string, pod *corev1.Pod, imageTag string) (*ImageScanConfig, error) {
+	imageScanConfig := ImageScanConfig{}
+	registryName := getRegistryNameFromImageTag(imageTag)
+	logger.L().Debug("parsed registry name from image tag", helpers.String("registryName", registryName), helpers.String("imageTag", imageTag))
 
 	// build a list of secrets from the ImagePullSecrets
-	if secrets, err := getRegistryScanSecrets(actionHandler.k8sAPI, actionHandler.config.Namespace(), ""); err == nil && len(secrets) > 0 {
+	if secrets, err := getRegistryScanSecrets(k8sAPI, namespace, ""); err == nil && len(secrets) > 0 {
 		for i := range secrets {
 			if auth, err := parseRegistryAuthSecret(secrets[i]); err == nil {
 				for _, authConfig := range auth {
-					registryAuth = append(registryAuth, dockerregistry.AuthConfig{
+					// if we have a registry name and it matches the current registry, check if we need to skip TLS verification
+					if registryName != "" && containsIgnoreCase(authConfig.Registry, registryName) {
+						imageScanConfig.skipTLSVerify = authConfig.SkipTLSVerify
+						imageScanConfig.insecure = authConfig.Insecure
+					}
+
+					imageScanConfig.authConfigs = append(imageScanConfig.authConfigs, dockerregistry.AuthConfig{
 						Username:      authConfig.Username,
 						Password:      authConfig.Password,
 						ServerAddress: authConfig.Registry,
@@ -406,10 +434,10 @@ func (actionHandler *ActionHandler) getAuthConfig(pod *corev1.Pod, imageTag stri
 		return nil, err
 	}
 	for i := range secrets {
-		registryAuth = append(registryAuth, secrets[i])
+		imageScanConfig.authConfigs = append(imageScanConfig.authConfigs, secrets[i])
 	}
 
-	return registryAuth, nil
+	return &imageScanConfig, nil
 }
 
 func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *apis.WebsocketScanCommand, actionHandler *ActionHandler) {
@@ -504,4 +532,26 @@ func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketS
 		err = fmt.Errorf("unknown command: %s", command)
 	}
 	return err
+}
+
+func normalizeReference(ref string) string {
+	n, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return ref
+	}
+	return n.String()
+}
+
+func getRegistryNameFromImageTag(imageTag string) string {
+	imageTagNormalized := normalizeReference(imageTag)
+	imageInfo, err := armometadata.ImageTagToImageInfo(imageTagNormalized)
+	if err != nil {
+		return ""
+	}
+	return imageInfo.Registry
+}
+
+// containsIgnoreCase reports whether substr is within s (ignoring case)
+func containsIgnoreCase(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
