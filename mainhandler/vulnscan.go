@@ -427,14 +427,16 @@ func getImageScanConfig(k8sAPI IWorkloadsGetter, namespace string, pod *corev1.P
 		}
 	}
 
-	// TODO: this should not happen every scan
-	// build a list of secrets from the the registry secrets
-	secrets, err := cloudsupport.GetImageRegistryCredentials(imageTag, pod)
-	if err != nil {
-		return nil, err
-	}
-	for i := range secrets {
-		imageScanConfig.authConfigs = append(imageScanConfig.authConfigs, secrets[i])
+	if pod != nil {
+		// TODO: this should not happen every scan
+		// build a list of secrets from the the registry secrets
+		secrets, err := cloudsupport.GetImageRegistryCredentials(imageTag, pod)
+		if err != nil {
+			return nil, err
+		}
+		for i := range secrets {
+			imageScanConfig.authConfigs = append(imageScanConfig.authConfigs, secrets[i])
+		}
 	}
 
 	return &imageScanConfig, nil

@@ -9,7 +9,6 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/api/core/v1"
 )
 
 //go:embed testdata/vulnscan/registry-secret.json
@@ -45,13 +44,13 @@ func Test_ActionHandler_getImageScanConfig(t *testing.T) {
 
 	k8sApiMock := &WorkloadsGetterMock{}
 
-	res, err := getImageScanConfig(k8sApiMock, "", &v1.Pod{}, "nginx:latest") // no registry treated as docker.io
+	res, err := getImageScanConfig(k8sApiMock, "", nil, "nginx:latest") // no registry treated as docker.io
 	assert.NoError(t, err)
 	assert.Equal(t, expectedAuthConfigs, res.authConfigs)
 	assert.True(t, *res.insecure)
 	assert.Nil(t, res.skipTLSVerify)
 
-	res, err = getImageScanConfig(k8sApiMock, "", &v1.Pod{}, "quay.IO/kubescape/nginx:latest")
+	res, err = getImageScanConfig(k8sApiMock, "", nil, "quay.IO/kubescape/nginx:latest")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedAuthConfigs, res.authConfigs)
 	assert.Nil(t, res.insecure)
