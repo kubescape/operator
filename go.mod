@@ -10,6 +10,7 @@ require (
 	github.com/armosec/utils-k8s-go v0.0.24
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/deckarep/golang-set/v2 v2.6.0
+	github.com/distribution/reference v0.5.0
 	github.com/docker/docker v24.0.7+incompatible
 	github.com/go-openapi/runtime v0.26.0
 	github.com/google/go-containerregistry v0.16.1
@@ -98,7 +99,6 @@ require (
 	github.com/containerd/typeurl/v2 v2.1.1 // indirect
 	github.com/coreos/go-oidc v2.2.1+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/distribution/reference v0.5.0 // indirect
 	github.com/docker/cli v24.0.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
