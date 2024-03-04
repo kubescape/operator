@@ -800,7 +800,13 @@ func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *arm
 	registryInfo.Exclude = registryConfig.Exclude
 }
 
-func getRegistryScanSecrets(k8sAPI *k8sinterface.KubernetesApi, namespace, secretName string) ([]k8sinterface.IWorkload, error) {
+// KubernetesApiSecrets is an interface for getting workloads from k8s api
+type IWorkloadsGetter interface {
+	GetWorkload(namespace, kind, name string) (k8sinterface.IWorkload, error)
+	ListWorkloads2(namespace, kind string) ([]k8sinterface.IWorkload, error)
+}
+
+func getRegistryScanSecrets(k8sAPI IWorkloadsGetter, namespace, secretName string) ([]k8sinterface.IWorkload, error) {
 	if secretName != "" {
 		secret, err := k8sAPI.GetWorkload(namespace, "Secret", secretName)
 		if err == nil && secret != nil {
