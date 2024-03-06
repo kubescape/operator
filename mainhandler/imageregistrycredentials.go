@@ -3,7 +3,7 @@ package mainhandler
 import (
 	"fmt"
 
-	"github.com/docker/docker/api/types"
+	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/kubescape/k8s-interface/cloudsupport"
 )
@@ -34,19 +34,19 @@ func (regCreds *registryCreds) Authorization() (*authn.AuthConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("ECR get Authorization failed with err %v", err.Error())
 		}
-		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
+		*regCreds.auth = dockerregistry.AuthConfig{Username: username, Password: password}
 	} else if cloudsupport.CheckIsGCRImage(regCreds.registryName + "/") {
 		username, password, err = cloudsupport.GetLoginDetailsForGCR(regCreds.registryName)
 		if err != nil {
 			return nil, fmt.Errorf("GCR get Authorization failed with err %v", err.Error())
 		}
-		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
+		*regCreds.auth = dockerregistry.AuthConfig{Username: username, Password: password}
 	} else if cloudsupport.CheckIsACRImage(regCreds.registryName + "/") {
 		username, password, err = cloudsupport.GetLoginDetailsForAzurCR(regCreds.registryName)
 		if err != nil {
 			return nil, fmt.Errorf("ACR get Authorization failed with err %v", err.Error())
 		}
-		*regCreds.auth = types.AuthConfig{Username: username, Password: password}
+		*regCreds.auth = dockerregistry.AuthConfig{Username: username, Password: password}
 	} else {
 		return &authn.AuthConfig{}, nil
 	}

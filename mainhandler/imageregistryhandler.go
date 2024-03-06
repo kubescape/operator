@@ -22,7 +22,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/docker/docker/api/types"
+	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
@@ -86,7 +86,7 @@ type RepositoriesAndTagsParams struct {
 }
 
 type registryCreds struct {
-	auth         *types.AuthConfig
+	auth         *dockerregistry.AuthConfig
 	registryName string
 }
 
@@ -152,10 +152,10 @@ func (rs *registryScan) registryCredentials() *registryCreds {
 	return regCreds
 }
 
-func (rs *registryScan) authConfig() *types.AuthConfig {
-	var authConfig *types.AuthConfig
+func (rs *registryScan) authConfig() *dockerregistry.AuthConfig {
+	var authConfig *dockerregistry.AuthConfig
 	if rs.isPrivate() {
-		authConfig = &types.AuthConfig{
+		authConfig = &dockerregistry.AuthConfig{
 			Username: rs.registryInfo.AuthMethod.Username,
 			Password: rs.registryInfo.AuthMethod.Password,
 			Auth:     rs.registryInfo.AuthMethod.Type,
