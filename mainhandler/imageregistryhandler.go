@@ -316,15 +316,9 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 	}
 	logger.L().Info(fmt.Sprintf("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos)))
 
-	reposToTags := make(chan map[string][]string, len(repos))
 	for _, repo := range repos {
-		currentRepo := repo
-		go registryScan.setImageToTagsMap(ctx, currentRepo, reporter, reposToTags)
-	}
-	for i := 0; i < len(repos); i++ {
-		res := <-reposToTags
-		for k, v := range res {
-			registryScan.mapImageToTags[k] = v
+		if err := registryScan.setImageToTagsMap(ctx, repo, reporter, registryScan.mapImageToTags); err != nil {
+			logger.L().Ctx(ctx).Error("setImageToTagsMap failed", helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
 		}
 	}
 
@@ -344,7 +338,7 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 	return nil
 }
 
-func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, sender beClientV1.IReportSender, c chan map[string][]string) error {
+func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, sender beClientV1.IReportSender, imageToTags map[string][]string) error {
 	logger.L().Info(fmt.Sprintf("Fetching repository %s tags", repo))
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
@@ -389,9 +383,7 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 				}
 			}
 		}
-		c <- map[string][]string{
-			registryScan.registry.hostname + "/" + repo: tags,
-		}
+		imageToTags[registryScan.registry.hostname+"/"+repo] = tags
 
 	} else { //fallback to list images lexicographically
 		logger.L().Ctx(ctx).Error("get latestTags failed, fetching lexicographical list of tags", helpers.String("repository", repo), helpers.Error(err))
@@ -413,9 +405,7 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 				break
 			}
 		}
-		c <- map[string][]string{
-			registryScan.registry.hostname + "/" + repo: tags,
-		}
+		imageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
 	return nil
 }

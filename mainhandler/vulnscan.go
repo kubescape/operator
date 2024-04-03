@@ -260,7 +260,7 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 
 	// check that we can pull tags. One is enough
 	if len(repos) > 0 {
-		reposToTags := make(chan map[string][]string, 1)
+		reposToTags := make(map[string][]string)
 		if err := registry.setImageToTagsMap(ctx, repos[0], sessionObj.Reporter, reposToTags); err != nil {
 			sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
 			return fmt.Errorf("setImageToTagsMap failed with err %v", err)
