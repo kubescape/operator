@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/distribution/reference v0.5.0
-	github.com/docker/docker v25.0.1+incompatible
+	github.com/docker/docker v25.0.5+incompatible
 	github.com/go-openapi/runtime v0.27.1
 	github.com/google/go-containerregistry v0.19.0
 	github.com/google/uuid v1.6.0
