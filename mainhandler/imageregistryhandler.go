@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
@@ -127,13 +128,6 @@ func NewRegistryScan(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) 
 func (rs *registryScan) makeRegistryInterface() (regInterfaces.IRegistry, error) {
 	return regFactory.Factory(&authn.AuthConfig{Username: rs.registryInfo.AuthMethod.Username, Password: rs.registryInfo.AuthMethod.Password, RegistryToken: rs.registryInfo.RegistryToken}, rs.registry.hostname,
 		regCommon.MakeRegistryOptions(false, !*rs.registryInfo.IsHTTPS, *rs.registryInfo.SkipTLSVerify, "", "", rs.registry.projectID, regCommon.RegistryKind(rs.registryInfo.Kind)))
-}
-
-func makeRegistryAuth(registryName string) registryAuth {
-	kind, _ := regCommon.GetRegistryKind(strings.Split(registryName, "/")[0])
-	falseInsecure := false
-	falseSkipTLS := false
-	return registryAuth{SkipTLSVerify: &falseSkipTLS, Insecure: &falseInsecure, Kind: kind}
 }
 
 func (rs *registryScan) isPrivate() bool {
@@ -405,34 +399,6 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 	return nil
 }
 
-func updateTagsCandidates(tagsCandidates []string, tagsPage []string, tagsDepth int, latestTagFound bool) []string {
-	prevCandidates := tagsCandidates
-	tagsCandidates = []string{}
-	lastIndexInPage := len(tagsPage) - 1
-	for i := 0; len(tagsCandidates) < tagsDepth && i <= lastIndexInPage; i++ {
-		if tagsPage[lastIndexInPage-i] == "latest" {
-			continue
-		}
-		tagsCandidates = append(tagsCandidates, tagsPage[lastIndexInPage-i])
-	}
-
-	for i := 0; i < len(prevCandidates) && len(tagsPage) < tagsDepth; i++ {
-		if prevCandidates[i] == "latest" {
-			continue
-		}
-		tagsCandidates = append(tagsCandidates, prevCandidates[i])
-	}
-
-	if latestTagFound {
-		tagsCandidates = append([]string{"latest"}, tagsCandidates...)
-	}
-	if len(tagsCandidates) > tagsDepth {
-		tagsCandidates = tagsCandidates[:tagsDepth]
-	}
-
-	return tagsCandidates
-}
-
 func (registryScan *registryScan) isExceedScanLimit(limit int) bool {
 	return registryScan.getNumOfImagesToScan() > limit
 }
@@ -608,6 +574,9 @@ func (registryScan *registryScan) getRegistryProvider() string {
 
 // parse registry information from secret, configmap and command, giving priority to command
 func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj *utils.SessionObj) error {
+	registryScan.setRegistryKind()
+	registryScan.setHostnameAndProject()
+
 	if err := registryScan.setRegistryAuthFromSecret(ctx); err != nil {
 		logger.L().Info("parseRegistry: could not parse auth from secret, parsing from command", helpers.Error(err))
 	} else {
@@ -624,12 +593,6 @@ func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj 
 		return fmt.Errorf("get registry auth failed with err %w", e)
 	}
 
-	registryScan.setRegistryKind()
-	if err != nil {
-		return fmt.Errorf("parseRegistry: err %w", err)
-	}
-
-	registryScan.setHostnameAndProject()
 	return nil
 }
 
@@ -653,9 +616,66 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 	return nil
 }
 
+func makeRegistryAuth(registryName string) registryAuth {
+
+	kind, _ := regCommon.GetRegistryKind(strings.Split(registryName, "/")[0])
+	falseInsecure := false
+	falseSkipTLS := false
+	return registryAuth{SkipTLSVerify: &falseSkipTLS, Insecure: &falseInsecure, Kind: kind}
+}
+func updateTagsCandidates(tagsCandidates []string, tagsPage []string, tagsDepth int, latestTagFound bool) []string {
+	prevCandidates := tagsCandidates
+	tagsCandidates = []string{}
+	lastIndexInPage := len(tagsPage) - 1
+	for i := 0; len(tagsCandidates) < tagsDepth && i <= lastIndexInPage; i++ {
+		if tagsPage[lastIndexInPage-i] == "latest" {
+			continue
+		}
+		tagsCandidates = append(tagsCandidates, tagsPage[lastIndexInPage-i])
+	}
+
+	for i := 0; i < len(prevCandidates) && len(tagsPage) < tagsDepth; i++ {
+		if prevCandidates[i] == "latest" {
+			continue
+		}
+		tagsCandidates = append(tagsCandidates, prevCandidates[i])
+	}
+
+	if latestTagFound {
+		tagsCandidates = append([]string{"latest"}, tagsCandidates...)
+	}
+	if len(tagsCandidates) > tagsDepth {
+		tagsCandidates = tagsCandidates[:tagsDepth]
+	}
+
+	return tagsCandidates
+}
+
 func (registryScan *registryScan) setRegistryAuthFromSecret(ctx context.Context) error {
 	var secretName string
 
+	// If the registry is ECR and the auth method is cloudProviderIAM, get the auth token from AWS
+	if registryScan.registryInfo.AuthMethod.Type == "cloudProviderIAM" {
+		logger.L().Debug("setRegistryAuthFromSecret", helpers.String("RegistryName", registryScan.registryInfo.RegistryName), helpers.String("RegistryProvider", registryScan.registryInfo.RegistryProvider), helpers.String("Type", registryScan.registryInfo.AuthMethod.Type))
+
+		// retrieve token and consider it as regular accesstoken auth
+		authConfig, err := cloudsupport.GetCloudVendorRegistryCredentials(registryScan.registryInfo.RegistryName)
+		if err != nil {
+			return fmt.Errorf("error getting credentials: %v", err)
+		}
+		var auth registryAuth
+		if authConfigReg, ok := authConfig[registryScan.registryInfo.RegistryName]; ok {
+			auth.Username = authConfigReg.Username
+			auth.Password = authConfigReg.Password
+			auth.AuthMethod = string(accessTokenAuth)
+			auth.Insecure = aws.Bool(false)
+		} else {
+			return fmt.Errorf("error getting credentials for: %v", registryScan.registryInfo.RegistryName)
+		}
+		registryScan.setRegistryInfoFromAuth(auth, &registryScan.registryInfo)
+		return nil
+
+	}
 	if registryScan.registryInfo.SecretName != "" {
 		// in newer versions the secret is sent as part of the command
 		secretName = registryScan.registryInfo.SecretName
@@ -875,4 +895,8 @@ func (registryScan *registryScan) setSecretName(secretName string) {
 
 func (registryScan *registryScan) setRegistryName(registryName string) {
 	registryScan.registryInfo.RegistryName = registryName
+}
+
+func (registryScan *registryScan) setRegistryAuthType(registryAuthType string) {
+	registryScan.registryInfo.AuthMethod.Type = registryAuthType
 }

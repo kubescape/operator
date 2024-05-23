@@ -3,10 +3,11 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	"github.com/kubescape/backend/pkg/versioncheck"
 	"os"
 	"regexp"
 	"time"
+
+	"github.com/kubescape/backend/pkg/versioncheck"
 
 	core1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -169,13 +170,6 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 	ctx := j.Context()
 	sessionObj := j.Obj()
 
-	// recover
-	defer func() {
-		if err := recover(); err != nil {
-			logger.L().Ctx(ctx).Fatal("recover in HandleRequest", helpers.Interface("error", err))
-		}
-	}()
-
 	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 
 	// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
@@ -287,56 +281,66 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		}
 	}
 	if len(namespaces) == 0 {
-		namespaces = append(namespaces, "")
+		namespacesList, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+			return
+		}
+		for _, ns := range namespacesList.Items {
+			namespaces = append(namespaces, ns.GetName())
+		}
 	}
 
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
 	logger.L().Info(info)
 	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 
-	ids, errs := mainHandler.getIDs(namespaces, labels, fields, []string{"pods"})
-	for i := range errs {
-		logger.L().Ctx(ctx).Warning(errs[i].Error())
-		sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true)
-	}
-
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
-
-	logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
-
-	for i := range ids {
-		cmd := sessionObj.Command.DeepCopy()
-
-		var err error
-		if pkgwlid.IsWlid(ids[i]) {
-			cmd.Wlid = ids[i]
-			err = pkgwlid.IsWlidValid(cmd.Wlid)
-		} else {
-			err = fmt.Errorf("unknown id")
+	for _, ns := range namespaces {
+		ids, errs := mainHandler.getIDs(ns, labels, fields, []string{"pods"})
+		for i := range errs {
+			logger.L().Ctx(ctx).Warning(errs[i].Error())
+			sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true)
 		}
 
-		// clean all scope request parameters
-		cmd.WildWlid = ""
-		cmd.Designators = make([]identifiers.PortalDesignator, 0)
+		sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
 
-		// send specific command to the channel
-		newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+		logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
 
-		if err != nil {
-			err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
-			logger.L().Ctx(ctx).Error(err.Error())
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-			continue
+		for i := range ids {
+			cmd := sessionObj.Command.DeepCopy()
+
+			var err error
+			if pkgwlid.IsWlid(ids[i]) {
+				cmd.Wlid = ids[i]
+				err = pkgwlid.IsWlidValid(cmd.Wlid)
+			} else {
+				err = fmt.Errorf("unknown id")
+			}
+
+			// clean all scope request parameters
+			cmd.WildWlid = ""
+			cmd.Designators = make([]identifiers.PortalDesignator, 0)
+
+			// send specific command to the channel
+			newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+
+			if err != nil {
+				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
+				logger.L().Ctx(ctx).Error(err.Error())
+				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+				continue
+			}
+
+			logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
+			if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
+				logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
+				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+				continue
+			}
+			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+			logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 		}
-
-		logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
-		if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
-			logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-			continue
-		}
-		sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
-		logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 	}
 }
 
@@ -443,11 +447,11 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 	}
 }
 
-func (mainHandler *MainHandler) getIDs(namespaces []string, labels, fields map[string]string, resources []string) ([]string, []error) {
+func (mainHandler *MainHandler) getIDs(namespace string, labels, fields map[string]string, resources []string) ([]string, []error) {
 	ids := []string{}
 	errs := []error{}
 	for _, resource := range resources {
-		workloads, err := mainHandler.listWorkloads(namespaces, resource, labels, fields)
+		workloads, err := mainHandler.listWorkloads(namespace, resource, labels, fields)
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -459,7 +463,7 @@ func (mainHandler *MainHandler) getIDs(namespaces []string, labels, fields map[s
 			errs = append(errs, e...)
 		}
 		if len(w) == 0 {
-			err := fmt.Errorf("resource: '%s', failed to calculate workloadIDs. namespaces: '%v', labels: '%v'", resource, namespaces, labels)
+			err := fmt.Errorf("resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
 			errs = append(errs, err)
 		}
 		ids = append(ids, w...)
