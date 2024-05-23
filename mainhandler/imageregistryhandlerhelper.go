@@ -188,7 +188,7 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	}
 
 	// create configmap with POST data to trigger websocket
-	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName, sessionObj.Command)
+	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name)
 	if err != nil {
 		logger.L().Info("In setRegistryScanCronJob: createTriggerRequestConfigMap failed", helpers.Error(err))
 		sessionObj.Reporter.SetDetails("createTriggerRequestConfigMap")

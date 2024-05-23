@@ -163,7 +163,7 @@ func (reg *registryAuth) initDefaultValues(ctx context.Context) error {
 	switch reg.AuthMethod {
 	case string(accessTokenAuth), "", "credentials":
 		if reg.Password == "" || reg.Username == "" {
-			return errorWithDocumentationRef("auth_method accesstoken requirers username and password")
+			return errorWithDocumentationRef("auth_method accesstoken requires username and password")
 		}
 	case "public":
 		//do nothing
@@ -203,7 +203,7 @@ func (reg *registryAuth) initDefaultValues(ctx context.Context) error {
 			return err
 		}
 	} else {
-		//try to get the kind from the reg name - if not found it will fallback to default kind
+		//try to get the kind from the reg name - if not found it will fall back to default kind
 		reg.Kind, _ = regCommon.GetRegistryKind(strings.Split(reg.Registry, "/")[0])
 	}
 	return err
@@ -213,7 +213,7 @@ func (rs *registryScan) filterRepositories(ctx context.Context, repos []string) 
 	if len(rs.registryInfo.Include) == 0 && len(rs.registryInfo.Exclude) == 0 {
 		return repos
 	}
-	filteredRepos := []string{}
+	var filteredRepos []string
 	for _, repo := range repos {
 		// if rs.registry.projectID != "" {
 		// 	if !strings.Contains(repo, rs.registry.projectID+"/") {
@@ -273,7 +273,7 @@ func (registryScan *registryScan) createTriggerRequestSecret(k8sAPI *k8sinterfac
 	return nil
 }
 
-func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name, registryName string, webSocketScanCMD apis.Command) error {
+func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, name string) error {
 	configMap := corev1.ConfigMap{}
 	configMap.Name = name
 	if configMap.Labels == nil {
@@ -292,7 +292,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	}
 
 	// command will be mounted into cronjob by using this configmap
-	configMap.Data[requestBodyFile] = string(command)
+	configMap.Data[requestBodyFile] = command
 
 	if _, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(registryScan.config.Namespace()).Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 		return err
@@ -301,7 +301,7 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 }
 
 func (registryScan *registryScan) getImagesForScanning(ctx context.Context, reporter beClientV1.IReportSender) error {
-	logger.L().Info("getImagesForScanning: enumerating repoes...")
+	logger.L().Info("getImagesForScanning: enumerating repos...")
 	errChan := make(chan error)
 	repos, err := registryScan.enumerateRepos(ctx)
 	if err != nil {
@@ -310,15 +310,9 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 	}
 	logger.L().Info(fmt.Sprintf("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos)))
 
-	reposToTags := make(chan map[string][]string, len(repos))
 	for _, repo := range repos {
-		currentRepo := repo
-		go registryScan.setImageToTagsMap(ctx, currentRepo, reporter, reposToTags)
-	}
-	for i := 0; i < len(repos); i++ {
-		res := <-reposToTags
-		for k, v := range res {
-			registryScan.mapImageToTags[k] = v
+		if err := registryScan.setImageToTagsMap(ctx, repo, reporter, registryScan.mapImageToTags); err != nil {
+			logger.L().Ctx(ctx).Error("setImageToTagsMap failed", helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
 		}
 	}
 
@@ -338,7 +332,7 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 	return nil
 }
 
-func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, sender beClientV1.IReportSender, c chan map[string][]string) error {
+func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, sender beClientV1.IReportSender, imageToTags map[string][]string) error {
 	logger.L().Info(fmt.Sprintf("Fetching repository %s tags", repo))
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
@@ -348,13 +342,13 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 	firstPage := regCommon.MakePagination(tagsPageSize)
 	latestTagFound := false
 	tagsDepth := registryScan.registryInfo.Depth
-	tags := []string{}
-	options := []remote.Option{}
+	var tags []string
+	var options []remote.Option
 	if registryScan.isPrivate() {
 		options = append(options, remote.WithAuth(registryScan.registryCredentials()))
 	}
 	if latestTags, err := iRegistry.GetLatestTags(repo, *tagsDepth, options...); err == nil {
-		tags := []string{}
+		var tags []string
 		for _, tag := range latestTags {
 			// filter out signature tags
 			if strings.HasSuffix(tag, ".sig") {
@@ -367,15 +361,10 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 			} else {
 				if tagsForDigestLen > *tagsDepth {
 					tags = append(tags, tagsForDigest[:*tagsDepth]...)
-					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, tagsDepth, strings.Join(tagsForDigest[:*tagsDepth], ","))
+					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, *tagsDepth, strings.Join(tagsForDigest[:*tagsDepth], ","))
 					if sender != nil {
-						errChan := make(chan error)
 						err := errorWithDocumentationRef(errMsg)
 						sender.SendWarning(err.Error(), registryScan.sendReport, true)
-						if err := <-errChan; err != nil {
-							logger.L().Ctx(ctx).Error("GetLatestTags failed to send error report",
-								helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
-						}
 					}
 					logger.L().Ctx(ctx).Warning("GetImagesForScanning: " + errMsg)
 				} else {
@@ -383,9 +372,7 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 				}
 			}
 		}
-		c <- map[string][]string{
-			registryScan.registry.hostname + "/" + repo: tags,
-		}
+		imageToTags[registryScan.registry.hostname+"/"+repo] = tags
 
 	} else { //fallback to list images lexicographically
 		logger.L().Ctx(ctx).Error("get latestTags failed, fetching lexicographical list of tags", helpers.String("repository", repo), helpers.Error(err))
@@ -407,9 +394,7 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 				break
 			}
 		}
-		c <- map[string][]string{
-			registryScan.registry.hostname + "/" + repo: tags,
-		}
+		imageToTags[registryScan.registry.hostname+"/"+repo] = tags
 	}
 	return nil
 }
@@ -514,7 +499,7 @@ func (registryScan *registryScan) getCommandForConfigMap() (string, error) {
 	return string(scanV1Bytes), nil
 }
 
-func (registryScan *registryScan) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, jobID, registryName string) error {
+func (registryScan *registryScan) setCronJobTemplate(jobTemplateObj *v1.CronJob, name, schedule, registryName string) error {
 	jobTemplateObj.Name = name
 	if schedule == "" {
 		return fmt.Errorf("schedule cannot be empty")
@@ -619,7 +604,7 @@ func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterfa
 		return err
 	}
 
-	err = registryScan.setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(command), command.JobTracking.JobID, registryName)
+	err = registryScan.setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(command), registryName)
 	if err != nil {
 		return err
 	}
@@ -799,9 +784,9 @@ func (registryScan *registryScan) getRegistryConfig(registryInfo *armotypes.Regi
 	if err != nil {
 		return string(cmDefaultMode), fmt.Errorf("error parsing ConfigMap: %s", err.Error())
 	}
-	for _, config := range registriesConfigs {
-		if config.Registry == registryInfo.RegistryName {
-			registryScan.setRegistryInfoFromConfigMap(registryInfo, config)
+	for _, c := range registriesConfigs {
+		if c.Registry == registryInfo.RegistryName {
+			registryScan.setRegistryInfoFromConfigMap(registryInfo, c)
 			return string(cmLoadedMode), nil
 		}
 	}
@@ -835,7 +820,7 @@ func getRegistryScanSecrets(k8sAPI IWorkloadsGetter, namespace, secretName strin
 	}
 
 	// when secret name is not provided, we will try to find all secrets starting with kubescape-registry-scan
-	registryScanSecrets := []k8sinterface.IWorkload{}
+	var registryScanSecrets []k8sinterface.IWorkload
 	all, err := k8sAPI.ListWorkloads2(namespace, "Secret")
 	if err == nil {
 		for _, secret := range all {
