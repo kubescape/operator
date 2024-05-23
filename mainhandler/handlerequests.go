@@ -3,10 +3,11 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	"github.com/kubescape/backend/pkg/versioncheck"
 	"os"
 	"regexp"
 	"time"
+
+	"github.com/kubescape/backend/pkg/versioncheck"
 
 	core1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -168,13 +169,6 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 
 	ctx := j.Context()
 	sessionObj := j.Obj()
-
-	// recover
-	defer func() {
-		if err := recover(); err != nil {
-			logger.L().Ctx(ctx).Fatal("recover in HandleRequest", helpers.Interface("error", err))
-		}
-	}()
 
 	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 

@@ -157,8 +157,9 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 
 func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessionObj *utils.SessionObj) (*registryScan, error) {
 	registryScan := NewRegistryScan(actionHandler.config, actionHandler.k8sAPI)
-	if regName := actionHandler.parseRegistryName(sessionObj); regName != "" {
+	if regName, authMethodType := actionHandler.parseRegistryName(sessionObj); regName != "" {
 		registryScan.setRegistryName(regName)
+		registryScan.setRegistryAuthType(authMethodType)
 	}
 
 	// for scan triggered by cronjob, we get the secret name
@@ -214,20 +215,23 @@ func (actionHandler *ActionHandler) parseSecretName(sessionObj *utils.SessionObj
 	return secretName
 }
 
-func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionObj) string {
+func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionObj) (string, string) {
 	registryInfo, ok := sessionObj.Command.Args[apitypes.RegistryInfoArgKey].(map[string]interface{})
 	if !ok {
-		return ""
+		return "", ""
 	}
 	registryName, ok := registryInfo[registryNameField].(string)
 	if !ok {
-		return ""
+		return "", ""
+	}
+	var authMethodType string
+	if authMethod, ok := registryInfo["authMethod"].(map[string]interface{}); ok {
+		authMethodType = authMethod["type"].(string)
 	}
 
-	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", identifiers.AttributeRegistryName,
-		registryName))
+	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", identifiers.AttributeRegistryName, registryName))
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), actionHandler.sendReport)
-	return registryName
+	return registryName, authMethodType
 }
 
 func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, registry *registryScan, sessionObj *utils.SessionObj) error {
