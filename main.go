@@ -32,6 +32,7 @@ import (
 func main() {
 	fmt.Println("ido operator")
 	servicehandler.ScanMain()
+	fmt.Println("finished scan")
 
 	ctx := context.Background()
 

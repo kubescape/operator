@@ -15,17 +15,15 @@ func (s Set) Contains(value string) bool {
 }
 
 func Scan(service extractor.ServiceAddress, filter Set) {
-	fmt.Println(service.Name)
 	for _, addres := range service.Addresses {
 
 		if filter != nil && filter.Contains(addres.Protocol) {
 			continue
 		}
 
-		fmt.Println(addres.Protocol, addres.Ip, addres.Port)
 		result, err := cmd.ScanTargets(addres.Ip, addres.Port)
 
-		fmt.Printf("the address is %s:%v is application: %s  | authenticate: %t | error: %s \n ", addres.Ip, addres.Port, result.ApplicationLayer, result.IsAuthenticated, err)
+		fmt.Printf("namespace: %s\n service:%s\n the address is %s:%v is application: %s  | authenticate: %t | error: %s \n ", service.NS, service.Name, addres.Ip, addres.Port, result.ApplicationLayer, result.IsAuthenticated, err)
 
 	}
 
