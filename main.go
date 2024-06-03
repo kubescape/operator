@@ -24,10 +24,15 @@ import (
 	"github.com/armosec/utils-k8s-go/probes"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	logger "github.com/kubescape/go-logger"
+
+	"github.com/kubescape/operator/servicehandler"
 )
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
+	fmt.Println("ido operator")
+	servicehandler.ScanMain()
+
 	ctx := context.Background()
 
 	flag.Parse()
