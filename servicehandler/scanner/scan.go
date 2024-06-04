@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	Timeout = time.Second * 5
+	Timeout = time.Second * 10
 )
 
+// Set object with contains method for filtering functionality
 type Set map[string]struct{}
 
 func (s Set) Contains(value string) bool {
@@ -22,7 +23,6 @@ func (s Set) Contains(value string) bool {
 }
 func scanAddress(ch chan bool, ip string, port int, name string) {
 
-	// Run cmd.ScanTargets in a separate goroutine
 	result, err := cmd.ScanTargets(ip, port)
 	if err != nil {
 		fmt.Println(err)
@@ -35,12 +35,14 @@ func scanAddress(ch chan bool, ip string, port int, name string) {
 func ScanService(service extractor.ServiceAddress, filter Set) {
 	var wg sync.WaitGroup
 	for _, address := range service.Addresses {
+		//filter out non-relevant protocols
 		if filter != nil && filter.Contains(address.Protocol) {
 			fmt.Println(address.Protocol, " - bad protocol , skipping")
 			continue
 		}
 
 		fmt.Printf(service.Name+": sacanning address %s:%v  %s\n", address.Ip, address.Port, address.Protocol)
+		//add 1 to the waitingGroup counter for each scanned address
 		wg.Add(1)
 		go func(addr extractor.Address) {
 			defer wg.Done()

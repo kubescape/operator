@@ -35,15 +35,15 @@ func (s ServiceAddress) String() string {
 	return result + "\n"
 }
 
-func __addresses_extractor(services *corev1.ServiceList) []ServiceAddress {
-	// get an ServiceList kube object and extract from each service item the port and ip and create an servcieAddr object
+func addressesExtractor(services *corev1.ServiceList) []ServiceAddress {
+	// get an ServiceList kube object and extract from each service it addresses
 	servicesList := []ServiceAddress{}
 	for _, svc := range services.Items {
 		var addresses []Address
 		name := svc.Name
 		ip := svc.Spec.ClusterIP
 
-		// there is  a possibality there is more than one open port for an ip
+		// there is a possibality there is more than one open port for an address
 		for _, port := range svc.Spec.Ports {
 			var addr = Address{
 				Ip:       ip,
@@ -54,7 +54,9 @@ func __addresses_extractor(services *corev1.ServiceList) []ServiceAddress {
 			addresses = append(addresses, addr)
 
 		}
+		//assign service object with it addreses
 		service := ServiceAddress{Name: name, Addresses: addresses, NS: svc.Namespace}
+
 		servicesList = append(servicesList, service)
 
 	}
@@ -68,7 +70,7 @@ func ServiceExtractor(clientset *kubernetes.Clientset) []ServiceAddress {
 	if err != nil {
 		panic("canntot extarct services")
 	}
-	services_list := __addresses_extractor(services)
+	services_list := addressesExtractor(services)
 
 	return services_list
 }

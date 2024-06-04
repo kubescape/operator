@@ -8,7 +8,7 @@ import (
 )
 
 func GetClient(in_cluster bool) *kubernetes.Clientset {
-	//
+	//get kubeconfig depand on in\out cluster flag
 	kubeconfig := ""
 	if in_cluster {
 		kubeconfig = ""
@@ -16,6 +16,7 @@ func GetClient(in_cluster bool) *kubernetes.Clientset {
 		kubeconfig = os.Getenv("HOME") + "/.kube/config"
 	}
 
+	//building the config
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		panic("couldnt find the insreted configurtion")
