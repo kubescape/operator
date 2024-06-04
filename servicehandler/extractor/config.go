@@ -8,6 +8,7 @@ import (
 )
 
 func GetClient(in_cluster bool) *kubernetes.Clientset {
+	//
 	kubeconfig := ""
 	if in_cluster {
 		kubeconfig = ""

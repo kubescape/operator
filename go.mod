@@ -310,3 +310,5 @@ require (
 )
 
 replace github.com/project-copacetic/copacetic => github.com/anubhav06/copacetic v0.0.0-20230821175613-0a7915a62e10
+// for testing and changing networkscanner - shoould not go in to production
+replace github.com/kubescape/kubescape-network-scanner => /Users/idohu/go/ido_projects/kubescape-network-scanner
