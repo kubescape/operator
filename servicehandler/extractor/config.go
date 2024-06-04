@@ -3,8 +3,6 @@ package extractor
 import (
 	"os"
 
-	//Q: metav1 is just a name?
-
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )

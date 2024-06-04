@@ -13,7 +13,7 @@ import (
 var UDP = "UDP"
 var TCP = "TCP"
 
-type address struct {
+type Address struct {
 	Ip       string
 	Port     int
 	Protocol string
@@ -22,14 +22,14 @@ type address struct {
 type ServiceAddress struct {
 	NS        string
 	Name      string
-	Addresses []address
+	Addresses []Address
 }
 
 func (s ServiceAddress) String() string {
 	result := fmt.Sprintf("Name: %s\n", s.Name)
 	result += "Addresses:\n"
 	for _, addr := range s.Addresses {
-		result += fmt.Sprintf("%s : %s:%d\n", addr.Protocol, addr.Ip, addr.Port)
+		result += fmt.Sprintf("%s-%s:%d", addr.Protocol, addr.Ip, addr.Port)
 
 	}
 	return result + "\n"
@@ -39,13 +39,13 @@ func __addresses_extractor(services *corev1.ServiceList) []ServiceAddress {
 	// get an ServiceList kube object and extract from each service item the port and ip and create an servcieAddr object
 	servicesList := []ServiceAddress{}
 	for _, svc := range services.Items {
-		var addresses []address
+		var addresses []Address
 		name := svc.Name
 		ip := svc.Spec.ClusterIP
 
 		// there is  a possibality there is more than one open port for an ip
 		for _, port := range svc.Spec.Ports {
-			var addr = address{
+			var addr = Address{
 				Ip:       ip,
 				Port:     int(port.Port),
 				Protocol: string(port.Protocol),

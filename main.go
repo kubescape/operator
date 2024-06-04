@@ -31,7 +31,7 @@ import (
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
 	fmt.Println("ido operator")
-	servicehandler.ScanMain()
+	servicehandler.ScanMain(true)
 	fmt.Println("finished scan")
 
 	ctx := context.Background()
