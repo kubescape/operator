@@ -3,7 +3,6 @@ package servicehandler
 import (
 	"flag"
 	"fmt"
-	"sync"
 
 	"github.com/kubescape/operator/servicehandler/extractor"
 	"github.com/kubescape/operator/servicehandler/scanner"
@@ -24,24 +23,32 @@ func ScanMain(inCluster bool) {
 	// get a list of all services in the cluster
 	services_list := extractor.ServiceExtractor(cluster_client)
 
+	test_list := []string{}
+	for _, service := range services_list {
+		//filter out non-relevant protocols
+		for _, address := range service.Addresses {
+			//filter out non-relevant protocols
+			if address.Protocol == "UDP" {
+				fmt.Println(address.Protocol, " - bad protocol , skipping")
+				continue
+			}
+			test_list = append(test_list, fmt.Sprintf("%s  %s:%v", service.Name, address.Ip, address.Port))
+		}
+	}
+	fmt.Println(test_list)
+
 	filterd_service_list := []extractor.ServiceAddress{}
 	// filter out services in mentioned namespaces
 	for _, service := range services_list {
 		if !namespaceFilter.Contains(service.NS) {
 			filterd_service_list = append(filterd_service_list, service)
-
 		}
 	}
 
 	// for each service start scanning his adresses
-	var wg sync.WaitGroup
 	for _, service := range filterd_service_list {
+
 		fmt.Printf("scanned service:%s | namespace:%s \n", service.Name, service.NS)
-		wg.Add(1)
-		go func(s extractor.ServiceAddress) {
-			defer wg.Done()
-			scanner.ScanService(s, protocolFilter)
-		}(service)
+		scanner.ScanService(service, protocolFilter)
 	}
-	wg.Wait()
 }
