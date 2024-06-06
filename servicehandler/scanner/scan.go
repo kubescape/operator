@@ -21,7 +21,8 @@ func (s Set) Contains(value string) bool {
 	return exists
 }
 
-func ScanService(service extractor.ServiceAddress, filter Set) {
+func ScanService(resultsChan chan cmd.DiscoveryResult, service extractor.ServiceAddress, filter Set) {
+
 	for _, address := range service.Addresses {
 		//filter out non-relevant protocols
 		if filter != nil && filter.Contains(address.Protocol) {
