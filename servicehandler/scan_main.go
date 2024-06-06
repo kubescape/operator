@@ -34,6 +34,8 @@ func ScanMain(inCluster bool) {
 
 	// for each service start scanning his adresses
 	var wg sync.WaitGroup
+	//TODO: add a result colector for all addres scan results
+	//IDEA: eaach service is a go routine that waits to get all its addreses and than return results to passed channel
 	for _, service := range filterd_service_list {
 		wg.Add(1)
 		scanner.ScanService(service, protocolFilter)

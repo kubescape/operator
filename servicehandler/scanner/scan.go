@@ -31,7 +31,6 @@ func ScanService(service extractor.ServiceAddress, filter Set) {
 
 		ctx, _ := context.WithTimeout(context.Background(), Timeout)
 		go func(context.Context) {
-
 			result, err := cmd.ScanTargets(ctx, address.Ip, address.Port)
 
 			if err != nil {
