@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -24,83 +25,22 @@ func ScanService(service extractor.ServiceAddress, filter Set) {
 	for _, address := range service.Addresses {
 		//filter out non-relevant protocols
 		if filter != nil && filter.Contains(address.Protocol) {
-			fmt.Println(address.Protocol, " - bad protocol , skipping")
+			fmt.Printf("service: %s | address %s:%v | bad protocol - %s skipping ", service.Name, address.Ip, address.Port, address.Protocol)
 			continue
 		}
 
-		ch := make(chan struct{})
-		fmt.Printf("Debug -> creating channel %p \n", &ch)
+		ctx, _ := context.WithTimeout(context.Background(), Timeout)
+		go func(context.Context) {
 
-		go func() {
+			result, err := cmd.ScanTargets(ctx, address.Ip, address.Port)
 
-			timer := time.After(Timeout)
-			result, err := cmd.ScanTargets(address.Ip, address.Port)
-			if err == nil {
-				fmt.Println(service.Name, result.ApplicationLayer, result.IsAuthenticated, result.Properties)
+			if err != nil {
+				fmt.Printf("service: %s | address: %s:%v | failed to scan", service.Name, address.Ip, address.Port)
 			} else {
-
-				fmt.Println(err)
-			}
-
-			select {
-			case <-timer:
-				fmt.Printf(service.Name+" | %s:%v |Timeout \n", address.Ip, address.Port)
-				return
-			default:
-				go func() {
-
-				}()
-				fmt.Printf(service.Name+" | %s:%v |finished scan succefully address \n", address.Ip, address.Port)
+				fmt.Printf("service: %s | address: %s:%v | is auth : %v | application: %s \n", service.Name, address.Ip, address.Port, result.IsAuthenticated, result.ApplicationLayer)
 
 			}
-		}()
-
-		fmt.Printf("Debug -> %s:%v waiting for an answer(timeout/result) \n", address.Ip, address.Port)
-
+		}(ctx)
 	}
+
 }
-
-// func ScanService(service extractor.ServiceAddress, filter Set) {
-// 	var wg sync.WaitGroup
-// 	for _, address := range service.Addresses {
-// 		//filter out non-relevant protocols
-// 		if filter != nil && filter.Contains(address.Protocol) {
-// 			fmt.Println(address.Protocol, " - bad protocol , skipping")
-// 			continue
-// 		}
-
-// 		//add 1 to the waitingGroup counter for each scanned address
-// 		wg.Add(1)
-
-// 		defer wg.Done()
-// 		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
-// 		defer cancel()
-
-// 		fmt.Printf("Debug -> creating context %p \n", &ctx)
-// 		ch := make(chan struct{})
-// 		fmt.Printf("Debug -> creating channel %p \n", &ch)
-// 		go func() {
-// 			fmt.Printf("start scanning : %s %s:%v \n", service.Name, address.Ip, address.Port)
-// 			result, err := cmd.ScanTargets(address.Ip, address.Port)
-
-// 			if err == nil {
-// 				fmt.Println(service.Name, result.ApplicationLayer, result.IsAuthenticated, result.Properties)
-// 			} else {
-
-// 				fmt.Println(err)
-// 			}
-// 			close(ch)
-// 		}()
-// 		fmt.Printf("Debug -> %s:%v waiting for an answer(timeout/result) \n", address.Ip, address.Port)
-// 		select {
-// 		case <-ctx.Done():
-// 			fmt.Printf("Got Timeout - service: %s | address: %s:%v\n ", service.Name, address.Ip, address.Port)
-// 			return
-// 		case <-ch:
-// 			fmt.Printf(service.Name+" | %s:%v |finished scan succefully address \n", address.Ip, address.Port)
-// 			return
-// 		}
-
-// 	}
-// 	wg.Wait()
-// }

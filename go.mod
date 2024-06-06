@@ -311,4 +311,4 @@ require (
 
 replace github.com/project-copacetic/copacetic => github.com/anubhav06/copacetic v0.0.0-20230821175613-0a7915a62e10
 
-replace github.com/kubescape/kubescape-network-scanner => github.com/idohuber/idos-kubescape-network-scanner v0.0.2
+replace github.com/kubescape/kubescape-network-scanner => github.com/idohuber/idos-kubescape-network-scanner v0.0.3
