@@ -6,7 +6,11 @@ import (
 	"github.com/kubescape/operator/servicehandler/scanner"
 )
 
-func AuthCRDHandler(scanResult scanner.ServiceResult) {
+type AuthServiceCRD struct {
+	Name string
+}
+
+func CRDHandler(serviceScanResult scanner.ScanResult) {
 	fmt.Println("AuthCRDHandler")
 }
 
@@ -24,4 +28,13 @@ func deleteCRD() {
 
 func getCRD() {
 	fmt.Println("getCRD")
+}
+
+func getCurerntCRDState() map[string]string {
+	fmt.Println("getCurerntCRDState")
+	return map[string]string{}
+}
+
+func AuthServicesCRDHandler(serviceScanResult map[string][]scanner.ScanResult) {
+	fmt.Println("AuthServicesCRDHandler")
 }

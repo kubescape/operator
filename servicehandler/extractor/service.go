@@ -38,6 +38,7 @@ func (s ServiceAddress) String() string {
 func addressesExtractor(services *corev1.ServiceList) []ServiceAddress {
 	// get an ServiceList kube object and extract from each service it addresses
 	servicesList := []ServiceAddress{}
+	// delete all protoc
 	for _, svc := range services.Items {
 		var addresses []Address
 		name := svc.Name

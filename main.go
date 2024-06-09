@@ -30,9 +30,6 @@ import (
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
-	fmt.Println("ido operator")
-	servicehandler.ScanMain(true)
-	fmt.Println("finished scan")
 
 	ctx := context.Background()
 
@@ -67,7 +64,6 @@ func main() {
 	var eventReceiverRestURL string
 	if components.Components.ServiceDiscovery.Enabled {
 		services, err := config.GetServiceURLs("/etc/config/services.json")
-		fmt.Println(services)
 		if err != nil {
 			logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
 		}
@@ -99,7 +95,15 @@ func main() {
 
 	initHttpHandlers(operatorConfig)
 	k8sApi := k8sinterface.NewKubernetesApi()
+
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
+
+	//my client k8sApi and then choose between dynamic and KubernetesClient
+
+	fmt.Println("ido operator")
+	servicehandler.DiscoveryServiceHandler(k8sApi)
+	fmt.Println("finished scan")
+	//write your code here
 
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi)

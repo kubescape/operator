@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/kubescape/kubescape-network-scanner/cmd"
@@ -31,32 +32,24 @@ type ScanResult struct {
 	Authenticated     bool
 }
 
-type ServiceResult struct {
-	Name        string
-	ScanResults []ScanResult
-}
-
-func ScanService(service extractor.ServiceAddress, filter Set) ServiceResult {
-	// Create an empty ServiceResult
-	serviceResult := ServiceResult{
-		Name:        service.Name,
-		ScanResults: []ScanResult{},
-	}
-
+func ScanService(service extractor.ServiceAddress, filter Set) []ScanResult {
+	slices.Contains([]string{"TCP", "UDP"}, "TCP")
 	// For each address in the service start a scan
+	serviceResults := []ScanResult{}
 	for _, address := range service.Addresses {
+		addr := address
 		// Filter out non-relevant protocols
-		if filter != nil && filter.Contains(address.Protocol) {
+		if filter != nil && filter.Contains(addr.Protocol) {
 			fmt.Printf("service: %s | address %s:%v | bad protocol - %s skipping ", service.Name, address.Ip, address.Port, address.Protocol)
 			continue
 		}
 
-		ctx, _ := context.WithTimeout(context.Background(), Timeout)
-		go func(context.Context, extractor.Address) {
+		ctx := context.Background()
+		go func(ctx context.Context, address extractor.Address) {
 			result, err := cmd.ScanTargets(ctx, address.Ip, address.Port)
 			if err != nil {
 				fmt.Printf("service: %s | address: %s:%v | failed to scan", service.Name, address.Ip, address.Port)
-				serviceResult.ScanResults = append(serviceResult.ScanResults, ScanResult{})
+				serviceResults = append(serviceResults, ScanResult{})
 			} else {
 				fmt.Printf("service: %s | address: %s:%v | is auth : %v | application: %s \n", service.Name, address.Ip, address.Port, result.IsAuthenticated, result.ApplicationLayer)
 
@@ -70,11 +63,11 @@ func ScanService(service extractor.ServiceAddress, filter Set) ServiceResult {
 					ApplicationLayer:  result.ApplicationLayer,
 					Authenticated:     result.IsAuthenticated,
 				}
-				serviceResult.ScanResults = append(serviceResult.ScanResults, scanResult)
+				serviceResults = append(serviceResults, scanResult)
 			}
-		}(ctx, address)
+		}(ctx, addr)
 	}
 
 	// Return the populated ServiceResult
-	return serviceResult
+	return serviceResults
 }
