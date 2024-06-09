@@ -67,6 +67,7 @@ func main() {
 	var eventReceiverRestURL string
 	if components.Components.ServiceDiscovery.Enabled {
 		services, err := config.GetServiceURLs("/etc/config/services.json")
+		fmt.Println(services)
 		if err != nil {
 			logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
 		}
