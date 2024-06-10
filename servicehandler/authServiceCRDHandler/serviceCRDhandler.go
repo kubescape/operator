@@ -3,14 +3,14 @@ package authservicecrdhandler
 import (
 	"fmt"
 
-	"github.com/kubescape/operator/servicehandler/scanner"
+	"github.com/kubescape/operator/servicehandler"
 )
 
 type AuthServiceCRD struct {
 	Name string
 }
 
-func CRDHandler(serviceScanResult scanner.ScanResult) {
+func CRDHandler(serviceScanResult servicehandler.AuthServicre) {
 	fmt.Println("AuthCRDHandler")
 }
 
@@ -35,6 +35,6 @@ func getCurerntCRDState() map[string]string {
 	return map[string]string{}
 }
 
-func AuthServicesCRDHandler(serviceScanResult map[string][]scanner.ScanResult) {
+func AuthServicesCRDHandler(serviceScanResult map[string][]servicehandler.AuthServicre) {
 	fmt.Println("AuthServicesCRDHandler")
 }

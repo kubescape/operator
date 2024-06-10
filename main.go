@@ -101,9 +101,8 @@ func main() {
 	//my client k8sApi and then choose between dynamic and KubernetesClient
 
 	fmt.Println("ido operator")
-	servicehandler.DiscoveryServiceHandler(k8sApi)
+	servicehandler.DiscoveryServiceHandler(ctx, k8sApi)
 	fmt.Println("finished scan")
-	//write your code here
 
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi)

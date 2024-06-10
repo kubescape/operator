@@ -3,10 +3,12 @@ package servicehandler
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/kubescape-network-scanner/cmd"
 )
 
 // var namespaceFilter = scanner.Set{"kube-system": {}}
@@ -16,10 +18,40 @@ var listOptions = metav1.ListOptions{
 
 var protocolFilter = []string{"UDP"}
 
-func DiscoveryServiceHandler(kubeClient *k8sinterface.KubernetesApi) {
+type AuthServicre struct {
+	Name          string
+	Namespace     string
+	Service       string
+	AddressesScan []AddressScan
+}
+
+type AddressScan struct {
+	Ip                string
+	Port              int
+	Protocol          string
+	SessionLayer      string
+	PresentationLayer string
+	ApplicationLayer  string
+	Authenticated     bool
+}
+
+func (as *AddressScan) ScanAddress(ctx context.Context) {
+	result, err := cmd.ScanTargets(ctx, as.Ip, as.Port)
+	if err != nil {
+		fmt.Printf("address: %s:%v | failed to scan", as.Ip, as.Port)
+	}
+
+	as.ApplicationLayer = result.ApplicationLayer
+	as.PresentationLayer = result.PresentationLayer
+	as.SessionLayer = result.SessionLayer
+	as.Authenticated = result.IsAuthenticated
+
+}
+
+func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi) {
 
 	//Q: how the operator passes the cluster config?
-	// get a list of all services in the cluster
+	// get a list of all  services in the cluster
 	services, err := kubeClient.KubernetesClient.CoreV1().Services("").List(context.TODO(), listOptions)
 	if err != nil {
 		//Q: what is the error handling strategy?
@@ -27,16 +59,41 @@ func DiscoveryServiceHandler(kubeClient *k8sinterface.KubernetesApi) {
 	}
 
 	for _, service := range services.Items {
-		fmt.Println(service.Name, service.Namespace)
+		nameSpace := service.Namespace
+		serviceName := service.Name
+		//Q: how we going to handle headless service? we need to check each pod seperetly?
+		ip := service.Spec.ClusterIP
+		//there is a default port
+		ports := service.Spec.Ports
+
+		for _, port := range ports {
+			fmt.Println(nameSpace, serviceName, port.Port, port.Protocol)
+			if slices.Contains(protocolFilter, string(port.Protocol)) {
+				continue
+			}
+
+			go func() {
+				addressScan := AddressScan{
+					Ip:       ip,
+					Port:     int(port.Port),
+					Protocol: string(port.Protocol),
+				}
+
+				addressScan.ScanAddress(ctx)
+				fmt.Println(addressScan)
+			}()
+
+		}
+
 	}
-
-	// // for each service start scanning his adresses
-	// servicesScanResults := make(map[string][]scanner.ScanResult)
-	// for _, service := range filterdServiceList {
-	// 	service_result := scanner.ScanService(service, protocolFilter)
-	// 	servicesScanResults[service.Name] = service_result
-	// }
-
-	// authservicecrdhandler.(servicesScanResults)
-
 }
+
+// for each service start scanning his adresses
+//TODO: add a result colector for all address scan results
+//IDEA: eaach service is a go routine that waits to get all its addreses and than return results to passed channel
+
+// servicesScanResults := []scanner.ServiceResult{}
+// for _, service := range filterd_service_list {
+// 	service_result := scanner.ScanService(service, protocolFilter)
+// 	servicesScanResults = append(servicesScanResults, service_result)
+// }
