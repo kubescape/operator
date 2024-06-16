@@ -98,11 +98,13 @@ func main() {
 
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
-	//my client k8sApi and then choose between dynamic and KubernetesClient
+	go func() {
+		for {
+			servicehandler.DiscoveryServiceHandler(ctx, k8sApi)
+			time.Sleep(12 * time.Hour)
+		}
 
-	fmt.Println("ido operator")
-	servicehandler.DiscoveryServiceHandler(ctx, k8sApi)
-	fmt.Println("finished scan")
+	}()
 
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi)

@@ -41,6 +41,11 @@ func (as *AddressScan) ScanAddress(ctx context.Context) {
 		fmt.Printf("address: %s:%v | failed to scan", as.Ip, as.Port)
 	}
 
+	if result.ApplicationLayer == "" {
+		result.ApplicationLayer = "Unknown"
+		result.IsAuthenticated = true
+	}
+
 	as.ApplicationLayer = result.ApplicationLayer
 	as.PresentationLayer = result.PresentationLayer
 	as.SessionLayer = result.SessionLayer
@@ -59,15 +64,16 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 	}
 
 	for _, service := range services.Items {
-		nameSpace := service.Namespace
-		serviceName := service.Name
+		authService := AuthServicre{
+			Name:      fmt.Sprintf("%s@authentication", service.Name),
+			Namespace: service.Namespace,
+		}
 		//Q: how we going to handle headless service? we need to check each pod seperetly?
 		ip := service.Spec.ClusterIP
-		//there is a default port
-		ports := service.Spec.Ports
 
-		for _, port := range ports {
-			fmt.Println(nameSpace, serviceName, port.Port, port.Protocol)
+		//there is a default port
+		for _, port := range service.Spec.Ports {
+			fmt.Println(authService.Namespace, authService.Service, port.Port, port.Protocol)
 			if slices.Contains(protocolFilter, string(port.Protocol)) {
 				continue
 			}
@@ -80,7 +86,8 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 				}
 
 				addressScan.ScanAddress(ctx)
-				fmt.Println(addressScan)
+				authService.AddressesScan = append(authService.AddressesScan, addressScan)
+				fmt.Println(authService)
 			}()
 
 		}
