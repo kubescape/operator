@@ -4,7 +4,8 @@
     "continuousScan": "disable",
     "nodeScan": "enable",
     "relevancy": "enable",
-    "vulnerabilityScan": "enable"
+    "vulnerabilityScan": "enable",
+    "admissionController": "enable"
   },
   "components": {
     "gateway": {
