@@ -7,18 +7,24 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	_ "net/http/pprof"
 
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	exporters "github.com/kubescape/operator/admission/exporter"
+	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/utils"
+	"k8s.io/apimachinery/pkg/runtime"
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
@@ -134,6 +140,36 @@ func main() {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 			}
 		}(mainHandler)
+	}
+
+	if operatorConfig.AdmissionControllerEnabled() {
+		// Handle SIGINT and SIGTERM by cancelling the root context
+		admissionContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+
+		waitGroup := sync.WaitGroup{}
+		serverContext, serverCancel := context.WithCancel(admissionContext)
+
+		addr := ":8443"
+
+		exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName())
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
+		}
+
+		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, exporter))
+		// Start HTTP REST server for webhook
+		waitGroup.Add(1)
+		go func() {
+			defer func() {
+				// Cancel the server context to stop other workers
+				serverCancel()
+				waitGroup.Done()
+			}()
+
+			cancellationReason := admissionController.Run(serverContext)
+			logger.L().Ctx(ctx).Error("server stopped", helpers.Error(cancellationReason))
+		}()
 	}
 
 	if logger.L().GetLevel() == helpers.DebugLevel.String() {
