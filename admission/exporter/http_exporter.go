@@ -35,9 +35,10 @@ type HTTPExporter struct {
 	ClusterName string `json:"clusterName"`
 	httpClient  *http.Client
 	// alertCount is the number of alerts sent in the last minute, used to limit the number of alerts sent, so we don't overload the system or reach the rate limit
-	alertCount      int
-	alertCountLock  sync.Mutex
-	alertCountStart time.Time
+	alertCount         int
+	alertCountLock     sync.Mutex
+	alertCountStart    time.Time
+	alertLimitNotified bool
 }
 
 type HTTPAlertsList struct {
@@ -109,8 +110,9 @@ func (exporter *HTTPExporter) sendAlertLimitReached() {
 
 func (exporter *HTTPExporter) SendAdmissionAlert(admissionAttrs *admission.Attributes, ruleID string, RuleDescription string) {
 	isLimitReached := exporter.checkAlertLimit()
-	if isLimitReached {
+	if isLimitReached && !exporter.alertLimitNotified {
 		exporter.sendAlertLimitReached()
+		exporter.alertLimitNotified = true
 		return
 	}
 	// populate the RuntimeAlert struct with the data from the failedRule
@@ -199,6 +201,7 @@ func (exporter *HTTPExporter) checkAlertLimit() bool {
 	if time.Since(exporter.alertCountStart) > time.Minute {
 		exporter.alertCountStart = time.Now()
 		exporter.alertCount = 0
+		exporter.alertLimitNotified = false
 	}
 
 	exporter.alertCount++
