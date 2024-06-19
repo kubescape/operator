@@ -34,7 +34,8 @@ import (
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	flag.Parse()
 
@@ -143,12 +144,8 @@ func main() {
 	}
 
 	if operatorConfig.AdmissionControllerEnabled() {
-		// Handle SIGINT and SIGTERM by cancelling the root context
-		admissionContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-
 		waitGroup := sync.WaitGroup{}
-		serverContext, serverCancel := context.WithCancel(admissionContext)
+		serverContext, serverCancel := context.WithCancel(ctx)
 
 		addr := ":8443"
 
@@ -182,8 +179,6 @@ func main() {
 
 	// send reports every 24 hours
 	go mainHandler.SendReports(ctx, 24*time.Hour)
-
-	<-ctx.Done()
 }
 
 func displayBuildTag() {
