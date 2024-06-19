@@ -10,7 +10,6 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	exporters "github.com/kubescape/operator/admission/exporter"
-	v1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -77,7 +76,7 @@ func (av *AdmissionValidator) validateAdminRoleBinding(attrs admission.Attribute
 		// If the role has * in the verbs, resources or apiGroups, return an error.
 		for _, rule := range role.Rules {
 			if slices.Contains(rule.Verbs, "*") && slices.Contains(rule.Resources, "*") && (slices.Contains(rule.APIGroups, "*") || slices.Contains(rule.APIGroups, "")) {
-				av.exporter.SendAdmissionAlert(&attrs, "R2006", fmt.Sprintf("roleBinding with wildcard role %s", attrs.GetName()))
+				av.exporter.SendAdmissionAlert(&attrs, "R2003", fmt.Sprintf("roleBinding with wildcard role %s", attrs.GetName()))
 				return admission.NewForbidden(attrs, fmt.Errorf("roleBinding with wildcard role is audited"))
 			}
 		}
@@ -105,7 +104,7 @@ func (av *AdmissionValidator) validateAdminClusterRoleBinding(attrs admission.At
 		// If the role has * in the verbs, resources or apiGroups, return an error.
 		for _, rule := range role.Rules {
 			if slices.Contains(rule.Verbs, "*") && slices.Contains(rule.Resources, "*") && (slices.Contains(rule.APIGroups, "*") || slices.Contains(rule.APIGroups, "")) {
-				av.exporter.SendAdmissionAlert(&attrs, "R2005", fmt.Sprintf("clusterRoleBinding with wildcard role %s", attrs.GetName()))
+				av.exporter.SendAdmissionAlert(&attrs, "R2004", fmt.Sprintf("clusterRoleBinding with wildcard role %s", attrs.GetName()))
 				return admission.NewForbidden(attrs, fmt.Errorf("clusterRoleBinding with wildcard role is audited"))
 			}
 		}
@@ -128,58 +127,9 @@ func (av *AdmissionValidator) validatePods(attrs admission.Attributes) error {
 		errs = errors.Join(errs, admission.NewForbidden(attrs, fmt.Errorf("attach to pod is audited")))
 	}
 
-	// Check if the request is for privileged container creation.
-	if attrs.GetOperation() == admission.Create {
-		pod, ok := attrs.GetObject().(*v1.Pod)
-		if !ok {
-			return nil
-		}
-
-		for _, container := range pod.Spec.Containers {
-			if container.SecurityContext != nil && container.SecurityContext.Privileged != nil && *container.SecurityContext.Privileged {
-				av.exporter.SendAdmissionAlert(&attrs, "R2002", fmt.Sprintf("privileged container in pod %s", attrs.GetName()))
-				errs = errors.Join(errs, admission.NewForbidden(attrs, fmt.Errorf("privileged container creation is audited")))
-			}
-		}
-	}
-
-	// Check if the request is for pod with insecure capabilities (SYS_ADMIN, SYS_MODULE, NET_ADMIN, NET_RAW, SYS_PTRACE, SYS_BOOT, SYS_RAWIO, BPF).
-	if attrs.GetOperation() == admission.Create {
-		pod, ok := attrs.GetObject().(*v1.Pod)
-		if !ok {
-			return nil
-		}
-
-		for _, container := range pod.Spec.Containers {
-			if container.SecurityContext != nil && container.SecurityContext.Capabilities != nil {
-				for _, capability := range container.SecurityContext.Capabilities.Add {
-					if capability == "SYS_ADMIN" || capability == "SYS_MODULE" || capability == "NET_ADMIN" || capability == "NET_RAW" || capability == "SYS_PTRACE" || capability == "SYS_BOOT" || capability == "SYS_RAWIO" || capability == "BPF" {
-						av.exporter.SendAdmissionAlert(&attrs, "R2003", fmt.Sprintf("insecure capability in pod %s", attrs.GetName()))
-						errs = errors.Join(errs, admission.NewForbidden(attrs, fmt.Errorf("insecure capability is audited")))
-					}
-				}
-			}
-		}
-	}
-
-	// Check if the request is for pod with hostMounts.
-	if attrs.GetOperation() == admission.Create {
-		pod, ok := attrs.GetObject().(*v1.Pod)
-		if !ok {
-			return nil
-		}
-
-		for _, volume := range pod.Spec.Volumes {
-			// If a volume is a hostPath, return an error.
-			if volume.HostPath != nil {
-				av.exporter.SendAdmissionAlert(&attrs, "R2004", fmt.Sprintf("hostPath volume in pod %s", attrs.GetName()))
-				errs = errors.Join(errs, admission.NewForbidden(attrs, fmt.Errorf("hostPath volume is audited")))
-			}
-		}
-	}
-
 	// Check if the request is for port-forwarding.
 	if attrs.GetSubresource() == "portforward" {
+		av.exporter.SendAdmissionAlert(&attrs, "R2002", fmt.Sprintf("port-forwarding to pod %s", attrs.GetName()))
 		errs = errors.Join(errs, admission.NewForbidden(attrs, fmt.Errorf("port-forwarding is audited")))
 	}
 
