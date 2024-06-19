@@ -14,7 +14,6 @@ import (
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	log "github.com/sirupsen/logrus"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,7 +27,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-type Interface interface {
+type AdmissionWebhookInterface interface {
 	// Runs the webhook server until the passed context is cancelled, or it
 	// experiences an internal error.
 	//
@@ -48,7 +47,7 @@ type webhook struct {
 	keyFile          string
 }
 
-func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validator admission.ValidationInterface) Interface {
+func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validator admission.ValidationInterface) AdmissionWebhookInterface {
 	codecs := serializer.NewCodecFactory(scheme)
 	return &webhook{
 		objectInferfaces: admission.NewObjectInterfacesFromScheme(scheme),
@@ -114,8 +113,8 @@ func (wh *webhook) Run(ctx context.Context) error {
 	var serverError error
 	var wg sync.WaitGroup
 
-	log.Info("starting webhook HTTP server")
-	defer log.Info("stopped webhook HTTP server")
+	logger.L().Info("starting webhook HTTP server")
+	defer logger.L().Info("stopping webhook HTTP server")
 	defer wg.Wait()
 
 	wg.Add(1)
@@ -162,7 +161,7 @@ loop:
 			if err := currentServer.Close(); err != nil {
 				// Errors with gracefully shutting down connections. Not fatal. Server
 				// is still closed.
-				log.Errorf("error closing server: %v", err)
+				logger.L().Error("error closing server", helpers.Error(err))
 			}
 			serverError = ctx.Err()
 			break loop
@@ -176,12 +175,12 @@ loop:
 				break loop
 			}
 
-			log.Info("TLS input has changed, restarting HTTP server")
+			logger.L().Info("TLS input has changed, restarting HTTP server")
 
 			// Graceful shutdown, ignore any errors
 			wg.Add(1)
 
-			q := currentServer
+			webhookServer := currentServer
 			go func() {
 				defer wg.Done()
 
@@ -190,7 +189,7 @@ loop:
 				shutdownCtx, shutdownCancel := context.WithTimeout(watchCtx, 5*time.Second)
 				defer shutdownCancel()
 
-				q.Shutdown(shutdownCtx)
+				webhookServer.Shutdown(shutdownCtx)
 			}()
 			currentServer, currentErrorChannel = launchServer()
 		}
@@ -211,7 +210,7 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 
 	failure := func(err error, status int) {
 		http.Error(w, err.Error(), status)
-		log.Errorf("review response: uid=%s, status=%d, err=%v", parsed.Request.UID, status, err)
+		logger.L().Error("review response", helpers.String("uid", string(parsed.Request.UID)), helpers.Int("status", status), helpers.Error(err))
 	}
 
 	err = nil

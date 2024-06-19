@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -144,7 +143,6 @@ func main() {
 	}
 
 	if operatorConfig.AdmissionControllerEnabled() {
-		waitGroup := sync.WaitGroup{}
 		serverContext, serverCancel := context.WithCancel(ctx)
 
 		addr := ":8443"
@@ -156,16 +154,14 @@ func main() {
 
 		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, exporter))
 		// Start HTTP REST server for webhook
-		waitGroup.Add(1)
 		go func() {
 			defer func() {
 				// Cancel the server context to stop other workers
 				serverCancel()
-				waitGroup.Done()
 			}()
 
-			cancellationReason := admissionController.Run(serverContext)
-			logger.L().Ctx(ctx).Error("server stopped", helpers.Error(cancellationReason))
+			err := admissionController.Run(serverContext)
+			logger.L().Ctx(ctx).Fatal("server stopped", helpers.Error(err))
 		}()
 	}
 
