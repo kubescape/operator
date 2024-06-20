@@ -1,0 +1,19 @@
+apiVersion: kubescape.io/v1
+kind: ServiceScanResult
+metadata:
+  name: example-scan-result
+spec:
+  clusterIP: "192.168.1.100"
+  ports:
+    - port: 80
+      protocol: "TCP"
+      sessionLayer: "OSI Layer 4"
+      presentationLayer: "OSI Layer 6"
+      applicationLayer: "HTTP"
+      authenticated: true
+    - port: 445
+      protocol: "TCP"
+      sessionLayer: "OSI Layer 4"
+      presentationLayer: "OSI Layer 6"
+      applicationLayer: "HTTPS"
+      authenticated: false

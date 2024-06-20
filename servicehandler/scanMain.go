@@ -94,13 +94,3 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 
 	}
 }
-
-// for each service start scanning his adresses
-//TODO: add a result colector for all address scan results
-//IDEA: eaach service is a go routine that waits to get all its addreses and than return results to passed channel
-
-// servicesScanResults := []scanner.ServiceResult{}
-// for _, service := range filterd_service_list {
-// 	service_result := scanner.ScanService(service, protocolFilter)
-// 	servicesScanResults = append(servicesScanResults, service_result)
-// }
