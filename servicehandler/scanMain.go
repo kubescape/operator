@@ -6,6 +6,8 @@ import (
 	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/kubescape-network-scanner/cmd"
@@ -93,4 +95,11 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 		}
 
 	}
+
+	kubeClient.DynamicClient.Resource(schema.GroupVersionResource{
+		Group:    "kubescape.io",
+		Version:  "v1",
+		Resource: "servicesscanresults",
+	}).Apply(context.TODO(), "ServiceScanResult", &unstructured.Unstructured{}, metav1.ApplyOptions{})
+
 }
