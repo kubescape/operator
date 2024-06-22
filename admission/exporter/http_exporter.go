@@ -11,7 +11,7 @@ import (
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"k8s.io/apiserver/pkg/admission"
+	"github.com/kubescape/operator/admission/rules"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 )
@@ -108,7 +108,7 @@ func (exporter *HTTPExporter) sendAlertLimitReached() {
 	exporter.sendInAlertList(httpAlert, apitypes.ProcessTree{})
 }
 
-func (exporter *HTTPExporter) SendAdmissionAlert(admissionAttrs *admission.Attributes, ruleID string, RuleDescription string) {
+func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) {
 	isLimitReached := exporter.checkAlertLimit()
 	if isLimitReached && !exporter.alertLimitNotified {
 		exporter.sendAlertLimitReached()
@@ -121,20 +121,20 @@ func (exporter *HTTPExporter) SendAdmissionAlert(admissionAttrs *admission.Attri
 	}
 
 	httpAlert := apitypes.RuntimeAlert{
-		Message:   RuleDescription,
+		Message:   ruleFailure.GetRuleAlert().RuleDescription,
 		HostName:  exporter.Host,
 		AlertType: apitypes.AlertTypeAdmission,
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			Timestamp: time.Now(),
 		},
 		AdmissionAlert: apitypes.AdmissionAlert{
-			AdmissionAttrs: admissionAttrs,
+			AdmissionAttrs: ruleFailure.GetAdmissionsAlert().AdmissionAttrs,
 		},
 		RuntimeAlertK8sDetails: k8sDetails,
 		RuleAlert: apitypes.RuleAlert{
-			RuleDescription: RuleDescription,
+			RuleDescription: ruleFailure.GetRuleAlert().RuleDescription,
 		},
-		RuleID: ruleID,
+		RuleID: ruleFailure.GetRuleId(),
 	}
 	exporter.sendInAlertList(httpAlert, apitypes.ProcessTree{})
 }

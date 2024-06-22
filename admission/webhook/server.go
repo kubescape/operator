@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"node-agent/pkg/watcher"
 	"os"
 	"reflect"
 	"sync"
@@ -45,9 +46,10 @@ type webhook struct {
 	addr             string
 	certFile         string
 	keyFile          string
+	watcher          watcher.Watcher
 }
 
-func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validator admission.ValidationInterface) AdmissionWebhookInterface {
+func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validator admission.ValidationInterface, watcher watcher.Watcher) AdmissionWebhookInterface {
 	codecs := serializer.NewCodecFactory(scheme)
 	return &webhook{
 		objectInferfaces: admission.NewObjectInterfacesFromScheme(scheme),
@@ -56,6 +58,7 @@ func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validato
 		addr:             addr,
 		certFile:         certFile,
 		keyFile:          keyFile,
+		watcher:          watcher,
 	}
 }
 
@@ -74,7 +77,6 @@ func notifyChanges(ctx context.Context, paths ...string) <-chan struct{} {
 			} else {
 				infos[v] = info{modTime: fileInfo.ModTime()}
 			}
-
 		}
 		return res
 	}
@@ -289,6 +291,9 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 		}
 
 		//!TODO: Parse options as v1.CreateOptions, v1.DeleteOptions, or v1.PatchOptions
+
+		wh.watcher.AddHandler(context.Background(), object.(*unstructured.Unstructured))
+		defer wh.watcher.DeleteHandler(context.Background(), object.(*unstructured.Unstructured))
 
 		attrs = admission.NewAttributesRecord(
 			object,
