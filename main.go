@@ -36,8 +36,10 @@ import (
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	// ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// defer stop()
+
+	ctx := context.Background()
 
 	flag.Parse()
 
@@ -176,6 +178,10 @@ func main() {
 			err := admissionController.Run(serverContext)
 			logger.L().Ctx(ctx).Fatal("server stopped", helpers.Error(err))
 		}()
+
+		// start watching
+		dWatcher.Start(ctx)
+		defer dWatcher.Stop(ctx)
 	}
 
 	if logger.L().GetLevel() == helpers.DebugLevel.String() {
@@ -188,6 +194,12 @@ func main() {
 
 	// send reports every 24 hours
 	go mainHandler.SendReports(ctx, 24*time.Hour)
+
+	// Wait for shutdown signal
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	<-shutdown
+	<-ctx.Done()
 }
 
 func displayBuildTag() {

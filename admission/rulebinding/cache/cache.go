@@ -93,7 +93,7 @@ func (c *RBCache) AddHandler(ctx context.Context, obj *unstructured.Unstructured
 	var rbs []rulebindingmanager.RuleBindingNotify
 
 	switch obj.GetKind() {
-	case "Pod":
+	case "PodExecOptions": // TODO: FIX THIS! @amitschendel
 		pod, err := unstructuredToPod(obj)
 		if err != nil {
 			logger.L().Error("failed to convert unstructured to pod", helpers.Error(err))
@@ -108,7 +108,7 @@ func (c *RBCache) AddHandler(ctx context.Context, obj *unstructured.Unstructured
 		}
 		rbs = c.addRuleBinding(ruleBinding)
 	default:
-		logger.L().Debug("AddHandler - unknown object", helpers.String("kind", obj.GetKind()))
+		logger.L().Info("AddHandler - unknown object", helpers.String("kind", obj.GetKind()))
 	}
 	// notify
 	for n := range c.notifiers {

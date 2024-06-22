@@ -34,7 +34,9 @@ func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attr
 
 	switch {
 	case kind == "Pod" || resource == "pods":
+		logger.L().Info("Validating pod")
 		rules := av.ruleBindingCache.ListRulesForPod(attrs.GetNamespace(), attrs.GetName())
+		logger.L().Info("Rules", helpers.Interface("rules", rules))
 		for _, rule := range rules {
 			failure := rule.ProcessEvent(attrs, nil)
 			if failure != nil {
