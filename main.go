@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"node-agent/pkg/rulebindingmanager"
+	"node-agent/pkg/watcher/dynamicwatcher"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	exporters "github.com/kubescape/operator/admission/exporter"
+	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
 	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
@@ -152,7 +155,17 @@ func main() {
 			logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
 		}
 
-		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, exporter))
+		// Create watchers
+		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi)
+
+		// create ruleBinding cache
+		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi)
+		dWatcher.AddAdaptor(ruleBindingCache)
+
+		ruleBindingNotify := make(chan rulebindingmanager.RuleBindingNotify, 100)
+		ruleBindingCache.AddNotifier(&ruleBindingNotify)
+
+		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, exporter, ruleBindingCache), ruleBindingCache)
 		// Start HTTP REST server for webhook
 		go func() {
 			defer func() {
