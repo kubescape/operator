@@ -8,6 +8,7 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/admission/rulebinding"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 )
 
@@ -29,33 +30,44 @@ func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, exporte
 
 // We are implementing the Validate method from the ValidationInterface interface.
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	kind := attrs.GetKind().GroupKind().Kind
-	resource := attrs.GetResource().Resource
+	// kind := attrs.GetKind().GroupKind().Kind
+	// resource := attrs.GetResource().Resource
 
-	switch {
-	case kind == "Pod" || resource == "pods":
-		logger.L().Info("Validating pod")
-		rules := av.ruleBindingCache.ListRulesForPod(attrs.GetNamespace(), attrs.GetName())
-		logger.L().Info("Rules", helpers.Interface("rules", rules))
-		for _, rule := range rules {
-			failure := rule.ProcessEvent(attrs, nil)
-			if failure != nil {
-				logger.L().Info("Rule failed", helpers.Interface("failure", failure))
-				av.exporter.SendAdmissionAlert(failure)
-				return admission.NewForbidden(attrs, nil)
-			}
+	rules := av.ruleBindingCache.ListRulesForObject(ctx, attrs.GetObject().(*unstructured.Unstructured))
+	logger.L().Info("Rules", helpers.Interface("rules", rules))
+	for _, rule := range rules {
+		failure := rule.ProcessEvent(attrs, nil)
+		if failure != nil {
+			logger.L().Info("Rule failed", helpers.Interface("failure", failure))
+			av.exporter.SendAdmissionAlert(failure)
+			return admission.NewForbidden(attrs, nil)
 		}
-		// If the request is for a pod, we call the validatePods function to validate the request.
-		// return av.validatePods(attrs)
-	// case kind == "ClusterRoleBinding" || resource == "clusterrolebindings":
-	// If the request is for a clusterRoleBinding, we call the validateClusterRoleBinding function to validate the request.
-	// return av.validateAdminClusterRoleBinding(attrs)
-	// case kind == "RoleBinding" || resource == "rolebindings":
-	// If the request is for a roleBinding, we call the validateRoleBinding function to validate the request.
-	// return av.validateAdminRoleBinding(attrs)
-	default:
-		return nil
 	}
+
+	// switch {
+	// case kind == "Pod" || resource == "pods":
+	// 	logger.L().Info("Validating pod")
+	// 	rules := av.ruleBindingCache.ListRulesForPod(attrs.GetNamespace(), attrs.GetName())
+	// 	logger.L().Info("Rules", helpers.Interface("rules", rules))
+	// 	for _, rule := range rules {
+	// 		failure := rule.ProcessEvent(attrs, nil)
+	// 		if failure != nil {
+	// 			logger.L().Info("Rule failed", helpers.Interface("failure", failure))
+	// 			av.exporter.SendAdmissionAlert(failure)
+	// 			return admission.NewForbidden(attrs, nil)
+	// 		}
+	// 	}
+	// 	// If the request is for a pod, we call the validatePods function to validate the request.
+	// 	// return av.validatePods(attrs)
+	// // case kind == "ClusterRoleBinding" || resource == "clusterrolebindings":
+	// // If the request is for a clusterRoleBinding, we call the validateClusterRoleBinding function to validate the request.
+	// // return av.validateAdminClusterRoleBinding(attrs)
+	// // case kind == "RoleBinding" || resource == "rolebindings":
+	// // If the request is for a roleBinding, we call the validateRoleBinding function to validate the request.
+	// // return av.validateAdminRoleBinding(attrs)
+	// default:
+	// 	return nil
+	// }
 
 	return nil
 }

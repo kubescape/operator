@@ -1,9 +1,10 @@
 package rulebinding
 
 import (
-	"node-agent/pkg/rulebindingmanager"
+	"context"
 
 	"github.com/kubescape/operator/admission/rules"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var _ RuleBindingCache = (*RuleBindingCacheMock)(nil)
@@ -11,8 +12,6 @@ var _ RuleBindingCache = (*RuleBindingCacheMock)(nil)
 type RuleBindingCacheMock struct {
 }
 
-func (r *RuleBindingCacheMock) ListRulesForPod(_, _ string) []rules.RuleEvaluator {
+func (r *RuleBindingCacheMock) ListRulesForObject(_ context.Context, _ *unstructured.Unstructured) []rules.RuleEvaluator {
 	return []rules.RuleEvaluator{}
-}
-func (r *RuleBindingCacheMock) AddNotifier(_ *chan rulebindingmanager.RuleBindingNotify) {
 }
