@@ -32,7 +32,8 @@ func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, exporte
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	// kind := attrs.GetKind().GroupKind().Kind
 	// resource := attrs.GetResource().Resource
-	if attrs.GetObject() == nil {
+	if attrs.GetObject() != nil {
+		logger.L().Info("validating object", helpers.Interface("object", attrs.GetObject()))
 		rules := av.ruleBindingCache.ListRulesForObject(ctx, attrs.GetObject().(*unstructured.Unstructured))
 		logger.L().Info("Rules", helpers.Interface("rules", rules))
 		for _, rule := range rules {
