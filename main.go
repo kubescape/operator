@@ -98,14 +98,10 @@ func main() {
 
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
-	go func() {
-		for {
-			logger.L().Ctx(ctx).Info("starting service discovery")
-			servicehandler.DiscoveryServiceHandler(ctx, k8sApi)
-			time.Sleep(40 * time.Second)
-		}
-
-	}()
+	if cfg.ServiceDiscoveryConfig.Enabled {
+		cfg.ServiceDiscoveryConfig.Duration = 40 * time.Second
+		servicehandler.DiscoveryServiceHandler(ctx, k8sApi, cfg.ServiceDiscoveryConfig.Duration)
+	}
 
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi)

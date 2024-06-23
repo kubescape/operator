@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +16,8 @@ import (
 	"github.com/kubescape/kubescape-network-scanner/cmd"
 
 	logger "github.com/kubescape/go-logger"
+
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -59,6 +62,8 @@ type Port struct {
 }
 
 func (sr ServicreAuthenticaion) Unstructured() *unstructured.Unstructured {
+
+	k8sruntime.DefaultUnstructuredConverter.ToUnstructured(ServicreAuthenticaion{})
 	unstructedService := make(map[string]interface{})
 	unstructedService["kind"] = kind
 	unstructedService["apiVersion"] = apiVersion
@@ -98,9 +103,9 @@ func (sr *ServicreAuthenticaion) initialPorts(ports []v1.ServicePort) {
 
 func (sr *ServicreAuthenticaion) Scan() {
 
-	wg := sync.WaitGroup{}
+	portsScanWg := sync.WaitGroup{}
 	for _, pr := range sr.ports {
-		wg.Add(1)
+		portsScanWg.Add(1)
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
@@ -108,11 +113,11 @@ func (sr *ServicreAuthenticaion) Scan() {
 		go func(pr Port) {
 			pr.scanPort(sr.ctx, sr.clusterIP)
 			sr.ports = append(sr.ports, pr)
-			wg.Done()
+			portsScanWg.Done()
 		}(pr)
 
 	}
-	wg.Wait()
+	portsScanWg.Wait()
 
 	_, err := sr.client.Apply(context.TODO(), sr.name, sr.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
 	if err != nil {
@@ -162,36 +167,33 @@ func (csl currentServiceList) deleteServices(kubeClient *k8sinterface.Kubernetes
 	}
 }
 
-func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi) {
-	currentServiceList := make(currentServiceList)
+func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi, timeout time.Duration) {
+	for {
+		currentServiceList := make(currentServiceList)
 
-	// get a list of all  services in the cluster
-	services, err := kubeClient.KubernetesClient.CoreV1().Services("").List(context.TODO(), serviceListOptions)
-	if err != nil {
-		logger.L().Ctx(ctx).Error(err.Error())
-		return
-	}
-
-	//Q: how we going to handle headless service? we need to check each pod seperetly?
-	wg := sync.WaitGroup{}
-	for _, service := range services.Items {
-		wg.Add(1)
-		sra := ServicreAuthenticaion{
-			client:    kubeClient.DynamicClient.Resource(Schema).Namespace(service.Namespace),
-			name:      service.Name,
-			namespace: service.Namespace,
-			clusterIP: service.Spec.ClusterIP,
+		// get a list of all  services in the cluster
+		services, err := kubeClient.KubernetesClient.CoreV1().Services("").List(context.TODO(), serviceListOptions)
+		if err != nil {
+			logger.L().Ctx(ctx).Error(err.Error())
+			return
 		}
 
-		currentServiceList[sra.name] = sra
-		sra.initialPorts(service.Spec.Ports)
+		//Q: how we going to handle headless service? we need to check each pod seperetly?
+		for _, service := range services.Items {
+			sra := ServicreAuthenticaion{
+				client:    kubeClient.DynamicClient.Resource(Schema).Namespace(service.Namespace),
+				name:      service.Name,
+				namespace: service.Namespace,
+				clusterIP: service.Spec.ClusterIP,
+			}
 
-		go func() {
+			currentServiceList[sra.name] = sra
+			sra.initialPorts(service.Spec.Ports)
 			sra.Scan()
-			wg.Done()
-		}()
+		}
+		currentServiceList.deleteServices(kubeClient)
+
+		time.Sleep(timeout)
 	}
-	wg.Wait()
-	currentServiceList.deleteServices(kubeClient)
 
 }

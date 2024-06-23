@@ -81,6 +81,11 @@ func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
 	return c, err
 }
 
+type serviceDiscoveryConfig struct {
+	Enabled  bool          `json:"enabled"`
+	Duration time.Duration `json:"duration"`
+}
+
 type Config struct {
 	Namespace                string        `mapstructure:"namespace"`
 	RestAPIPort              string        `mapstructure:"port"`
@@ -89,7 +94,8 @@ type Config struct {
 	TriggerSecurityFramework bool          `mapstructure:"triggerSecurityFramework"`
 	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
 	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
-	EventDeduplicationInterval time.Duration `mapstructure:"eventDeduplicationInterval"`
+	EventDeduplicationInterval time.Duration          `mapstructure:"eventDeduplicationInterval"`
+	ServiceDiscoveryConfig     serviceDiscoveryConfig `mapstructure:"serviceDiscoveryConfig"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -108,6 +114,7 @@ type IConfig interface {
 	TriggerSecurityFramework() bool
 	KubescapeURL() string
 	KubevulnURL() string
+	ServiceDiscoveryConfig() serviceDiscoveryConfig
 }
 
 // OperatorConfig implements IConfig
@@ -182,6 +189,10 @@ func (c *OperatorConfig) ClusterName() string {
 
 func (c *OperatorConfig) EventReceiverURL() string {
 	return c.eventReceiverRestURL
+}
+
+func (c *OperatorConfig) ServiceDiscoveryConfig() serviceDiscoveryConfig {
+	return c.serviceConfig.ServiceDiscoveryConfig
 }
 
 func LoadConfig(path string) (Config, error) {
