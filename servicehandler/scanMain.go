@@ -42,6 +42,7 @@ type currentServiceList map[string]ServicreAuthenticaion
 
 type ServicreAuthenticaion struct {
 	client    dynamic.ResourceInterface
+	ctx       context.Context
 	name      string
 	namespace string
 	clusterIP string
@@ -95,7 +96,7 @@ func (sr *ServicreAuthenticaion) initialPorts(ports []v1.ServicePort) {
 	}
 }
 
-func (sr *ServicreAuthenticaion) Scan(ctx context.Context) {
+func (sr *ServicreAuthenticaion) Scan() {
 
 	wg := sync.WaitGroup{}
 	for _, pr := range sr.ports {
@@ -105,7 +106,7 @@ func (sr *ServicreAuthenticaion) Scan(ctx context.Context) {
 		}
 
 		go func(pr Port) {
-			pr.scanPort(ctx, sr.clusterIP)
+			pr.scanPort(sr.ctx, sr.clusterIP)
 			sr.ports = append(sr.ports, pr)
 			wg.Done()
 		}(pr)
@@ -115,15 +116,15 @@ func (sr *ServicreAuthenticaion) Scan(ctx context.Context) {
 
 	_, err := sr.client.Apply(context.TODO(), sr.name, sr.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
 	if err != nil {
-		logger.L().Ctx(ctx).Error(err.Error())
+		logger.L().Ctx(sr.ctx).Error(err.Error())
 	}
 
 }
 
-func (sra ServicreAuthenticaion) Delete(ctx context.Context) {
+func (sra ServicreAuthenticaion) Delete() {
 	err := sra.client.Delete(context.TODO(), sra.name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.L().Ctx(ctx).Error(err.Error())
+		logger.L().Ctx(sra.ctx).Error(err.Error())
 	}
 }
 
@@ -145,7 +146,7 @@ func (port *Port) scanPort(ctx context.Context, ip string) {
 	port.authenticated = result.IsAuthenticated
 
 }
-func (csl currentServiceList) deleteServices(ctx context.Context, kubeClient *k8sinterface.KubernetesApi) {
+func (csl currentServiceList) deleteServices(kubeClient *k8sinterface.KubernetesApi) {
 	logger.L().Info("Deleting services that are not in the current list")
 	auhtServices, err := kubeClient.DynamicClient.Resource(Schema).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -155,7 +156,7 @@ func (csl currentServiceList) deleteServices(ctx context.Context, kubeClient *k8
 	for _, service := range auhtServices.Items {
 		if _, ok := csl[service.GetName()]; !ok {
 			//delete the service
-			csl[service.GetName()].Delete(ctx)
+			csl[service.GetName()].Delete()
 		}
 
 	}
@@ -185,13 +186,13 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 		sra.initialPorts(service.Spec.Ports)
 
 		go func() {
-			sra.Scan(ctx)
+			sra.Scan()
 			wg.Done()
 		}()
 
 		//Q: how we going to handle headless service? we need to check each pod seperetly?
 	}
 	wg.Wait()
-	currentServiceList.deleteServices(ctx, kubeClient)
+	currentServiceList.deleteServices(kubeClient)
 
 }
