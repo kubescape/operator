@@ -172,6 +172,7 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 		return
 	}
 
+	//Q: how we going to handle headless service? we need to check each pod seperetly?
 	wg := sync.WaitGroup{}
 	for _, service := range services.Items {
 		wg.Add(1)
@@ -189,8 +190,6 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 			sra.Scan()
 			wg.Done()
 		}()
-
-		//Q: how we going to handle headless service? we need to check each pod seperetly?
 	}
 	wg.Wait()
 	currentServiceList.deleteServices(kubeClient)
