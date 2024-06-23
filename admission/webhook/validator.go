@@ -32,15 +32,16 @@ func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, exporte
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	// kind := attrs.GetKind().GroupKind().Kind
 	// resource := attrs.GetResource().Resource
-
-	rules := av.ruleBindingCache.ListRulesForObject(ctx, attrs.GetObject().(*unstructured.Unstructured))
-	logger.L().Info("Rules", helpers.Interface("rules", rules))
-	for _, rule := range rules {
-		failure := rule.ProcessEvent(attrs, nil)
-		if failure != nil {
-			logger.L().Info("Rule failed", helpers.Interface("failure", failure))
-			av.exporter.SendAdmissionAlert(failure)
-			return admission.NewForbidden(attrs, nil)
+	if attrs.GetObject() == nil {
+		rules := av.ruleBindingCache.ListRulesForObject(ctx, attrs.GetObject().(*unstructured.Unstructured))
+		logger.L().Info("Rules", helpers.Interface("rules", rules))
+		for _, rule := range rules {
+			failure := rule.ProcessEvent(attrs, nil)
+			if failure != nil {
+				logger.L().Info("Rule failed", helpers.Interface("failure", failure))
+				av.exporter.SendAdmissionAlert(failure)
+				return admission.NewForbidden(attrs, nil)
+			}
 		}
 	}
 

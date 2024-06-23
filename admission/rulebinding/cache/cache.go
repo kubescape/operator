@@ -217,7 +217,6 @@ func (c *RBCache) createRules(rulesForPod []typesv1.RuntimeAlertRuleBindingRule)
 }
 
 func (c *RBCache) createRule(r *typesv1.RuntimeAlertRuleBindingRule) []rules.RuleEvaluator {
-
 	if r.RuleID != "" {
 		if ruleDesc := c.ruleCreator.CreateRuleByID(r.RuleID); ruleDesc != nil {
 			if r.Parameters != nil {

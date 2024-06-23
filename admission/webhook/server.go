@@ -291,10 +291,6 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 		}
 
 		//!TODO: Parse options as v1.CreateOptions, v1.DeleteOptions, or v1.PatchOptions
-		if object != nil {
-			wh.watcher.AddHandler(context.Background(), object.(*unstructured.Unstructured))
-			defer wh.watcher.DeleteHandler(context.Background(), object.(*unstructured.Unstructured))
-		}
 
 		attrs = admission.NewAttributesRecord(
 			object,
