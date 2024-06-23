@@ -2,45 +2,136 @@ package servicehandler
 
 import (
 	"context"
-	"fmt"
 	"slices"
+	"sync"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/kubescape-network-scanner/cmd"
+
+	logger "github.com/kubescape/go-logger"
 )
 
-// var namespaceFilter = scanner.Set{"kube-system": {}}
-var listOptions = metav1.ListOptions{
+const (
+	kind         = "ServiceScanResult"
+	resource     = "servicesscanresults"
+	group        = "kubescape.io"
+	version      = "v1"
+	apiVersion   = group + "/" + version
+	FieldManager = "kubescape|operator|serviceDiscoveryHandler"
+)
+
+var Schema = schema.GroupVersionResource{
+	Group:    group,
+	Version:  version,
+	Resource: resource,
+}
+
+var serviceListOptions = metav1.ListOptions{
 	FieldSelector: "metadata.namespace!=kube-system",
 }
 
 var protocolFilter = []string{"UDP"}
 
-type AuthServicre struct {
-	Name          string
-	Namespace     string
-	Service       string
-	AddressesScan []AddressScan
+type currentServiceList map[string]ServicreAuthenticaion
+
+type ServicreAuthenticaion struct {
+	client    dynamic.ResourceInterface
+	name      string
+	namespace string
+	clusterIP string
+	ports     []Port
 }
 
-type AddressScan struct {
-	Ip                string
-	Port              int
-	Protocol          string
-	SessionLayer      string
-	PresentationLayer string
-	ApplicationLayer  string
-	Authenticated     bool
+type Port struct {
+	port              int
+	protocol          string
+	sessionLayer      string
+	presentationLayer string
+	applicationLayer  string
+	authenticated     bool
 }
 
-func (as *AddressScan) ScanAddress(ctx context.Context) {
-	result, err := cmd.ScanTargets(ctx, as.Ip, as.Port)
+func (sr ServicreAuthenticaion) Unstructured() *unstructured.Unstructured {
+	unstructedService := make(map[string]interface{})
+	unstructedService["kind"] = kind
+	unstructedService["apiVersion"] = apiVersion
+
+	unstructedService["metadata"] = map[string]interface{}{
+		"name": sr.name,
+	}
+	unstructedService["spec"] = map[string]interface{}{
+		"clusterIP": sr.clusterIP,
+		"ports":     []map[string]interface{}{},
+	}
+	var portsSlice []map[string]interface{}
+	for _, port := range sr.ports {
+		portMap := map[string]interface{}{
+			"port":              port.port,
+			"protocol":          port.protocol,
+			"sessionLayer":      port.sessionLayer,
+			"presentationLayer": port.presentationLayer,
+			"applicationLayer":  port.applicationLayer,
+			"authenticated":     port.authenticated,
+		}
+		portsSlice = append(portsSlice, portMap)
+	}
+	unstructedService["spec"].(map[string]interface{})["ports"] = portsSlice
+	return &unstructured.Unstructured{Object: unstructedService}
+}
+
+func (sr *ServicreAuthenticaion) initialPorts(ports []v1.ServicePort) {
+	sr.ports = make([]Port, 0, len(ports))
+	for _, port := range ports {
+		sr.ports = append(sr.ports, Port{
+			port:     int(port.Port),
+			protocol: string(port.Protocol),
+		})
+	}
+}
+
+func (sr *ServicreAuthenticaion) Scan(ctx context.Context) {
+
+	wg := sync.WaitGroup{}
+	for _, pr := range sr.ports {
+		wg.Add(1)
+		if slices.Contains(protocolFilter, string(pr.protocol)) {
+			continue
+		}
+
+		go func(pr Port) {
+			pr.scanPort(ctx, sr.clusterIP)
+			sr.ports = append(sr.ports, pr)
+			wg.Done()
+		}(pr)
+
+	}
+	wg.Wait()
+
+	_, err := sr.client.Apply(context.TODO(), sr.name, sr.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
 	if err != nil {
-		fmt.Printf("address: %s:%v | failed to scan", as.Ip, as.Port)
+		logger.L().Ctx(ctx).Error(err.Error())
+	}
+
+}
+
+func (sra ServicreAuthenticaion) Delete(ctx context.Context) {
+	err := sra.client.Delete(context.TODO(), sra.name, metav1.DeleteOptions{})
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error())
+	}
+}
+
+func (port *Port) scanPort(ctx context.Context, ip string) {
+	result, err := cmd.ScanTargets(ctx, ip, port.port)
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error())
+		return
 	}
 
 	if result.ApplicationLayer == "" {
@@ -48,58 +139,59 @@ func (as *AddressScan) ScanAddress(ctx context.Context) {
 		result.IsAuthenticated = true
 	}
 
-	as.ApplicationLayer = result.ApplicationLayer
-	as.PresentationLayer = result.PresentationLayer
-	as.SessionLayer = result.SessionLayer
-	as.Authenticated = result.IsAuthenticated
+	port.applicationLayer = result.ApplicationLayer
+	port.presentationLayer = result.PresentationLayer
+	port.sessionLayer = result.SessionLayer
+	port.authenticated = result.IsAuthenticated
 
 }
-
-func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi) {
-
-	//Q: how the operator passes the cluster config?
-	// get a list of all  services in the cluster
-	services, err := kubeClient.KubernetesClient.CoreV1().Services("").List(context.TODO(), listOptions)
+func (csl currentServiceList) deleteServices(ctx context.Context, kubeClient *k8sinterface.KubernetesApi) {
+	logger.L().Info("Deleting services that are not in the current list")
+	auhtServices, err := kubeClient.DynamicClient.Resource(Schema).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		//Q: what is the error handling strategy?
 		return
 	}
 
-	for _, service := range services.Items {
-		authService := AuthServicre{
-			Name:      fmt.Sprintf("%s@authentication", service.Name),
-			Namespace: service.Namespace,
-		}
-		//Q: how we going to handle headless service? we need to check each pod seperetly?
-		ip := service.Spec.ClusterIP
-
-		//there is a default port
-		for _, port := range service.Spec.Ports {
-			fmt.Println(authService.Namespace, authService.Service, port.Port, port.Protocol)
-			if slices.Contains(protocolFilter, string(port.Protocol)) {
-				continue
-			}
-
-			go func() {
-				addressScan := AddressScan{
-					Ip:       ip,
-					Port:     int(port.Port),
-					Protocol: string(port.Protocol),
-				}
-
-				addressScan.ScanAddress(ctx)
-				authService.AddressesScan = append(authService.AddressesScan, addressScan)
-				fmt.Println(authService)
-			}()
-
+	for _, service := range auhtServices.Items {
+		if _, ok := csl[service.GetName()]; !ok {
+			//delete the service
+			csl[service.GetName()].Delete(ctx)
 		}
 
 	}
+}
 
-	kubeClient.DynamicClient.Resource(schema.GroupVersionResource{
-		Group:    "kubescape.io",
-		Version:  "v1",
-		Resource: "servicesscanresults",
-	}).Apply(context.TODO(), "ServiceScanResult", &unstructured.Unstructured{}, metav1.ApplyOptions{})
+func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi) {
+	currentServiceList := make(currentServiceList)
+
+	// get a list of all  services in the cluster
+	services, err := kubeClient.KubernetesClient.CoreV1().Services("").List(context.TODO(), serviceListOptions)
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error())
+		return
+	}
+
+	wg := sync.WaitGroup{}
+	for _, service := range services.Items {
+		wg.Add(1)
+		sra := ServicreAuthenticaion{
+			client:    kubeClient.DynamicClient.Resource(Schema).Namespace(service.Namespace),
+			name:      service.Name,
+			namespace: service.Namespace,
+			clusterIP: service.Spec.ClusterIP,
+		}
+
+		currentServiceList[sra.name] = sra
+		sra.initialPorts(service.Spec.Ports)
+
+		go func() {
+			sra.Scan(ctx)
+			wg.Done()
+		}()
+
+		//Q: how we going to handle headless service? we need to check each pod seperetly?
+	}
+	wg.Wait()
+	currentServiceList.deleteServices(ctx, kubeClient)
 
 }

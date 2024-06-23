@@ -102,7 +102,7 @@ func main() {
 		for {
 			logger.L().Ctx(ctx).Info("starting service discovery")
 			servicehandler.DiscoveryServiceHandler(ctx, k8sApi)
-			time.Sleep(12 * time.Hour)
+			time.Sleep(40 * time.Second)
 		}
 
 	}()
