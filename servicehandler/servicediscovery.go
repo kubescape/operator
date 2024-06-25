@@ -26,17 +26,17 @@ const (
 	FieldManager = "kubescape|operator|serviceDiscoveryHandler"
 )
 
-var Schema = schema.GroupVersionResource{
-	Group:    group,
-	Version:  version,
-	Resource: resource,
-}
+var protocolFilter = []string{"UDP"}
 
 var serviceListOptions = metav1.ListOptions{
 	FieldSelector: "metadata.namespace!=kube-system",
 }
 
-var protocolFilter = []string{"UDP"}
+var Schema = schema.GroupVersionResource{
+	Group:    group,
+	Version:  version,
+	Resource: resource,
+}
 
 type currentServiceList [][2]string
 
@@ -139,7 +139,6 @@ func (port *Port) Scan(ctx context.Context, ip string) {
 
 }
 func (csl currentServiceList) deleteServices(client dynamic.NamespaceableResourceInterface) error {
-	logger.L().Info("Deleting services that are not in the current list")
 	auhtServices, err := client.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -150,7 +149,9 @@ func (csl currentServiceList) deleteServices(client dynamic.NamespaceableResourc
 			err := client.Namespace(service.GetNamespace()).Delete(context.TODO(), service.GetName(), metav1.DeleteOptions{})
 			if err != nil {
 				logger.L().Error(err.Error())
+				continue
 			}
+			logger.L().Info("Authentication Service " + service.GetName() + " in namespace " + service.GetNamespace() + " deleted")
 
 		}
 	}
@@ -181,10 +182,9 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 				sra.metadata.name = service.Name
 				sra.metadata.namespace = service.Namespace
 				sra.spec.clusterIP = service.Spec.ClusterIP
-				sra.spec.ports = []Port{}
+				sra.initialPorts(service.Spec.Ports)
 
 				currentServiceList = append(currentServiceList, [2]string{service.Name, service.Namespace})
-				sra.initialPorts(service.Spec.Ports)
 				sra.Discover(ctx, dynamicClient)
 			}
 			currentServiceList.deleteServices(dynamicClient)
