@@ -47,6 +47,11 @@ type Components struct {
 	Storage            Component `mapstructure:"storage"`
 }
 
+type ServiceScanConfig struct {
+	Enabled  bool          `json:"enabled"`
+	Interval time.Duration `json:"interval"`
+}
+
 type Server struct {
 	Account      string `json:"account"`
 	DiscoveryURL string `json:"discoveryUrl"`
@@ -59,9 +64,10 @@ type Configurations struct {
 }
 
 type CapabilitiesConfig struct {
-	Capabilities   Capabilities   `mapstructure:"capabilities"`
-	Components     Components     `mapstructure:"components"`
-	Configurations Configurations `mapstructure:"configurations"`
+	Capabilities      Capabilities      `mapstructure:"capabilities"`
+	Components        Components        `mapstructure:"components"`
+	Configurations    Configurations    `mapstructure:"configurations"`
+	ServiceScanConfig ServiceScanConfig `mapstructure:"serviceScanConfig"`
 }
 
 func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
@@ -81,11 +87,6 @@ func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
 	return c, err
 }
 
-type serviceDiscoveryConfig struct {
-	Enabled  bool          `json:"enabled"`
-	Duration time.Duration `json:"duration"`
-}
-
 type Config struct {
 	Namespace                string        `mapstructure:"namespace"`
 	RestAPIPort              string        `mapstructure:"port"`
@@ -94,8 +95,7 @@ type Config struct {
 	TriggerSecurityFramework bool          `mapstructure:"triggerSecurityFramework"`
 	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
 	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
-	EventDeduplicationInterval time.Duration          `mapstructure:"eventDeduplicationInterval"`
-	ServiceDiscoveryConfig     serviceDiscoveryConfig `mapstructure:"serviceDiscoveryConfig"`
+	EventDeduplicationInterval time.Duration `mapstructure:"eventDeduplicationInterval"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -114,7 +114,6 @@ type IConfig interface {
 	TriggerSecurityFramework() bool
 	KubescapeURL() string
 	KubevulnURL() string
-	ServiceDiscoveryConfig() serviceDiscoveryConfig
 }
 
 // OperatorConfig implements IConfig
@@ -191,15 +190,10 @@ func (c *OperatorConfig) EventReceiverURL() string {
 	return c.eventReceiverRestURL
 }
 
-func (c *OperatorConfig) ServiceDiscoveryConfig() serviceDiscoveryConfig {
-	return c.serviceConfig.ServiceDiscoveryConfig
-}
-
 func LoadConfig(path string) (Config, error) {
 	viper.AddConfigPath(path)
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
-
 	viper.SetDefault("namespace", "kubescape")
 	viper.SetDefault("port", "4002")
 	viper.SetDefault("cleanupDelay", 10*time.Minute)

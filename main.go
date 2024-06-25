@@ -98,10 +98,9 @@ func main() {
 
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
-	if true { //cfg.ServiceDiscoveryConfig.Enabled {
-		//cfg.ServiceDiscoveryConfig.Duration = 40 * time.Second
-		logger.L().Ctx(ctx).Info("service discovery enabeld and started ", helpers.String("duration", cfg.ServiceDiscoveryConfig.Duration.String()))
-		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, 40*time.Second)
+	if components.ServiceScanConfig.Enabled {
+		logger.L().Ctx(ctx).Info("service discovery enabeld and started with interval: ", helpers.String("interval", components.ServiceScanConfig.Interval.String()))
+		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
 	}
 
 	// setup main handler

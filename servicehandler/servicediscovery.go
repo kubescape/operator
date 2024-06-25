@@ -49,7 +49,6 @@ func (sl currentServiceList) contains(name string, namespace string) bool {
 }
 
 type ServicreAuthenticaion struct {
-	metadata  string
 	name      string
 	namespace string
 	clusterIP string
@@ -66,6 +65,7 @@ type Port struct {
 }
 
 func (sra ServicreAuthenticaion) Unstructured() *unstructured.Unstructured {
+	//TODO: use the default converter and not create sructure manually
 	// a, _ := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(sra)
 	unstructedService := make(map[string]interface{})
 	unstructedService["kind"] = kind
@@ -109,13 +109,15 @@ func (sra *ServicreAuthenticaion) Scan(ctx context.Context, client dynamic.Names
 	portsScanWg := sync.WaitGroup{}
 
 	for _, pr := range sra.ports {
+		//TODO: add worker pool for scans instead of goroutine for each port
 		portsScanWg.Add(1)
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
 
+		srvDnsName := sra.name + "." + sra.namespace
 		go func(pr Port) {
-			pr.scanPort(ctx, sra.clusterIP)
+			pr.scanPort(ctx, srvDnsName)
 			sra.ports = append(sra.ports, pr)
 			portsScanWg.Done()
 		}(pr)
