@@ -41,7 +41,10 @@ var TestAuthentications = ServiceAuthentication{
 }
 
 func TestUnstructured(t *testing.T) {
-	obj := TestAuthentications.Unstructured()
+	obj, err := TestAuthentications.Unstructured()
+	if err == nil {
+		t.Errorf("Unstructured() got an error: %v", err)
+	}
 	if obj == nil {
 		t.Errorf("Unstructured() returned nil")
 	}

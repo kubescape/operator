@@ -123,24 +123,24 @@ func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.Wa
 
 func (port *Port) Scan(ctx context.Context, ip string) {
 	result, err := cmd.ScanTargets(ctx, ip, port.port)
+
+	port.applicationLayer = result.ApplicationLayer
+	port.presentationLayer = result.PresentationLayer
+	port.sessionLayer = result.SessionLayer
+	port.authenticated = result.IsAuthenticated
+
+	if result.ApplicationLayer == "" {
+		port.applicationLayer = "Unknown"
+		port.authenticated = true
+	}
+
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error())
 		result.ApplicationLayer = "Unknown"
 		result.PresentationLayer = "Unknown"
 		result.SessionLayer = "Unknown"
 		result.IsAuthenticated = true
-		return
 	}
-
-	if result.ApplicationLayer == "" {
-		result.ApplicationLayer = "Unknown"
-		result.IsAuthenticated = true
-	}
-
-	port.applicationLayer = result.ApplicationLayer
-	port.presentationLayer = result.PresentationLayer
-	port.sessionLayer = result.SessionLayer
-	port.authenticated = result.IsAuthenticated
 
 }
 
