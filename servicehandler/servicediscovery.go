@@ -12,6 +12,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
@@ -49,10 +50,16 @@ func (sl currentServiceList) contains(name string, namespace string) bool {
 }
 
 type ServicreAuthenticaion struct {
-	name      string
-	namespace string
-	clusterIP string
-	ports     []Port
+	kind       string
+	apiVersion string
+	metadata   struct {
+		name      string
+		namespace string
+	}
+	spec struct {
+		clusterIP string
+		ports     []Port
+	}
 }
 
 type Port struct {
@@ -65,73 +72,51 @@ type Port struct {
 }
 
 func (sra ServicreAuthenticaion) Unstructured() *unstructured.Unstructured {
-	//TODO: use the default converter and not create sructure manually
-	// a, _ := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(sra)
-	unstructedService := make(map[string]interface{})
-	unstructedService["kind"] = kind
-	unstructedService["apiVersion"] = apiVersion
-
-	unstructedService["metadata"] = map[string]interface{}{
-		"name": sra.name,
+	a, err := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(&sra)
+	if err != nil {
+		logger.L().Error(err.Error())
 	}
-	unstructedService["spec"] = map[string]interface{}{
-		"clusterIP": sra.clusterIP,
-		"ports":     []map[string]interface{}{},
-	}
-	var portsSlice []map[string]interface{}
-	for _, port := range sra.ports {
-		portMap := map[string]interface{}{
-			"port":              port.port,
-			"protocol":          port.protocol,
-			"sessionLayer":      port.sessionLayer,
-			"presentationLayer": port.presentationLayer,
-			"applicationLayer":  port.applicationLayer,
-			"authenticated":     port.authenticated,
-		}
-		portsSlice = append(portsSlice, portMap)
-	}
-	unstructedService["spec"].(map[string]interface{})["ports"] = portsSlice
-	return &unstructured.Unstructured{Object: unstructedService}
+	return &unstructured.Unstructured{Object: a}
 }
 
 func (sra *ServicreAuthenticaion) initialPorts(ports []v1.ServicePort) {
-	sra.ports = make([]Port, 0, len(ports))
+	sra.spec.ports = make([]Port, 0, len(ports))
 	for _, port := range ports {
-		sra.ports = append(sra.ports, Port{
+		sra.spec.ports = append(sra.spec.ports, Port{
 			port:     int(port.Port),
 			protocol: string(port.Protocol),
 		})
 	}
 }
 
-func (sra *ServicreAuthenticaion) Scan(ctx context.Context, client dynamic.NamespaceableResourceInterface) {
+func (sra *ServicreAuthenticaion) Discover(ctx context.Context, client dynamic.NamespaceableResourceInterface) {
 
 	portsScanWg := sync.WaitGroup{}
 
-	for _, pr := range sra.ports {
+	for _, pr := range sra.spec.ports {
 		//TODO: add worker pool for scans instead of goroutine for each port
 		portsScanWg.Add(1)
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
 
-		srvDnsName := sra.name + "." + sra.namespace
+		srvDnsName := sra.metadata.name + "." + sra.metadata.namespace
 		go func(pr Port) {
-			pr.scanPort(ctx, srvDnsName)
-			sra.ports = append(sra.ports, pr)
+			pr.Scan(ctx, srvDnsName)
+			sra.spec.ports = append(sra.spec.ports, pr)
 			portsScanWg.Done()
 		}(pr)
 
 	}
 	portsScanWg.Wait()
 
-	_, err := client.Namespace(sra.namespace).Apply(context.TODO(), sra.name, sra.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
+	_, err := client.Namespace(sra.metadata.namespace).Apply(context.TODO(), sra.metadata.name, sra.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error())
 	}
 }
 
-func (port *Port) scanPort(ctx context.Context, ip string) {
+func (port *Port) Scan(ctx context.Context, ip string) {
 	result, err := cmd.ScanTargets(ctx, ip, port.port)
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error())
@@ -190,15 +175,17 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 			//Q: how we going to handle headless service? we need to check each pod seperetly?
 
 			for _, service := range services.Items {
-				sra := ServicreAuthenticaion{
-					name:      service.Name,
-					namespace: service.Namespace,
-					clusterIP: service.Spec.ClusterIP,
-				}
+				sra := ServicreAuthenticaion{}
+				sra.kind = kind
+				sra.apiVersion = apiVersion
+				sra.metadata.name = service.Name
+				sra.metadata.namespace = service.Namespace
+				sra.spec.clusterIP = service.Spec.ClusterIP
+				sra.spec.ports = []Port{}
 
 				currentServiceList = append(currentServiceList, [2]string{service.Name, service.Namespace})
 				sra.initialPorts(service.Spec.Ports)
-				sra.Scan(ctx, dynamicClient)
+				sra.Discover(ctx, dynamicClient)
 			}
 			currentServiceList.deleteServices(dynamicClient)
 
