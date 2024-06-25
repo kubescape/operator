@@ -1,7 +1,6 @@
 package servicehandler
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -43,9 +42,7 @@ var TestAuthentications = ServiceAuthentication{
 
 func TestUnstructured(t *testing.T) {
 	obj := TestAuthentications.Unstructured()
-	fmt.Print(obj)
 	if obj == nil {
 		t.Errorf("Unstructured() returned nil")
 	}
-
 }

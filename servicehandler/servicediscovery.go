@@ -73,12 +73,13 @@ type Port struct {
 	authenticated     bool
 }
 
-func (sra ServiceAuthentication) Unstructured() *unstructured.Unstructured {
+func (sra ServiceAuthentication) Unstructured() (*unstructured.Unstructured, error) {
 	a, err := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(&sra)
 	if err != nil {
 		logger.L().Error(err.Error())
+		return nil, err
 	}
-	return &unstructured.Unstructured{Object: a}
+	return &unstructured.Unstructured{Object: a}, err
 }
 
 func (sra *ServiceAuthentication) initialPorts(ports []v1.ServicePort) {
@@ -108,9 +109,15 @@ func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.Wa
 		})
 	}
 
-	_, err := client.Namespace(sra.metadata.namespace).Apply(context.TODO(), sra.metadata.name, sra.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
-	if err != nil {
-		logger.L().Ctx(ctx).Error(err.Error())
+	serviceObj, structuredErr := sra.Unstructured()
+	if structuredErr != nil {
+		logger.L().Ctx(ctx).Error(structuredErr.Error())
+		return
+	}
+	_, deleteErr := client.Namespace(sra.metadata.namespace).Apply(context.TODO(), sra.metadata.name, serviceObj, metav1.ApplyOptions{FieldManager: FieldManager})
+
+	if deleteErr != nil {
+		logger.L().Ctx(ctx).Error(deleteErr.Error())
 	}
 }
 
