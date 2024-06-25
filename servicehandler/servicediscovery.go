@@ -94,7 +94,6 @@ func (sra *ServiceAuthentication) initialPorts(ports []v1.ServicePort) {
 func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.WaitGroup, antsPool *ants.Pool, client dynamic.NamespaceableResourceInterface) {
 
 	for _, pr := range sra.spec.ports {
-		//TODO: add worker pool for scans instead of goroutine for each port
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
@@ -102,7 +101,6 @@ func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.Wa
 		srvDnsName := sra.metadata.name + "." + sra.metadata.namespace
 
 		scansWg.Add(1)
-		fmt.Println(antsPool.Running(), "added a new scan to the pool")
 		antsPool.Submit(func() {
 			pr.Scan(ctx, srvDnsName)
 			sra.spec.ports = append(sra.spec.ports, pr)
