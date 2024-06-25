@@ -2,6 +2,7 @@ package servicehandler
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	logger "github.com/kubescape/go-logger"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/kubescape-network-scanner/cmd"
+	"github.com/panjf2000/ants/v2"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -49,7 +51,7 @@ func (sl currentServiceList) contains(name string, namespace string) bool {
 	return false
 }
 
-type ServicreAuthenticaion struct {
+type ServiceAuthentication struct {
 	kind       string
 	apiVersion string
 	metadata   struct {
@@ -71,7 +73,7 @@ type Port struct {
 	authenticated     bool
 }
 
-func (sra ServicreAuthenticaion) Unstructured() *unstructured.Unstructured {
+func (sra ServiceAuthentication) Unstructured() *unstructured.Unstructured {
 	a, err := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(&sra)
 	if err != nil {
 		logger.L().Error(err.Error())
@@ -79,7 +81,7 @@ func (sra ServicreAuthenticaion) Unstructured() *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: a}
 }
 
-func (sra *ServicreAuthenticaion) initialPorts(ports []v1.ServicePort) {
+func (sra *ServiceAuthentication) initialPorts(ports []v1.ServicePort) {
 	sra.spec.ports = make([]Port, 0, len(ports))
 	for _, port := range ports {
 		sra.spec.ports = append(sra.spec.ports, Port{
@@ -89,26 +91,24 @@ func (sra *ServicreAuthenticaion) initialPorts(ports []v1.ServicePort) {
 	}
 }
 
-func (sra *ServicreAuthenticaion) Discover(ctx context.Context, client dynamic.NamespaceableResourceInterface) {
-
-	portsScanWg := sync.WaitGroup{}
+func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.WaitGroup, antsPool *ants.Pool, client dynamic.NamespaceableResourceInterface) {
 
 	for _, pr := range sra.spec.ports {
 		//TODO: add worker pool for scans instead of goroutine for each port
-		portsScanWg.Add(1)
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
 
 		srvDnsName := sra.metadata.name + "." + sra.metadata.namespace
-		go func(pr Port) {
+
+		scansWg.Add(1)
+		fmt.Println(antsPool.Running(), "added a new scan to the pool")
+		antsPool.Submit(func() {
 			pr.Scan(ctx, srvDnsName)
 			sra.spec.ports = append(sra.spec.ports, pr)
-			portsScanWg.Done()
-		}(pr)
-
+			scansWg.Done()
+		})
 	}
-	portsScanWg.Wait()
 
 	_, err := client.Namespace(sra.metadata.namespace).Apply(context.TODO(), sra.metadata.name, sra.Unstructured(), metav1.ApplyOptions{FieldManager: FieldManager})
 	if err != nil {
@@ -138,21 +138,21 @@ func (port *Port) Scan(ctx context.Context, ip string) {
 	port.authenticated = result.IsAuthenticated
 
 }
-func (csl currentServiceList) deleteServices(client dynamic.NamespaceableResourceInterface) error {
-	auhtServices, err := client.List(context.TODO(), metav1.ListOptions{})
+
+func (csl currentServiceList) deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInterface) error {
+	authServices, err := client.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 
-	for _, service := range auhtServices.Items {
+	for _, service := range authServices.Items {
 		if !csl.contains(service.GetName(), service.GetNamespace()) {
 			err := client.Namespace(service.GetNamespace()).Delete(context.TODO(), service.GetName(), metav1.DeleteOptions{})
 			if err != nil {
 				logger.L().Error(err.Error())
 				continue
 			}
-			logger.L().Info("Authentication Service " + service.GetName() + " in namespace " + service.GetNamespace() + " deleted")
-
+			logger.L().Ctx(ctx).Info("Authentication Service " + service.GetName() + " in namespace " + service.GetNamespace() + " deleted")
 		}
 	}
 	return err
@@ -161,22 +161,24 @@ func (csl currentServiceList) deleteServices(client dynamic.NamespaceableResourc
 func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi, timeout time.Duration) {
 	{
 		dynamicClient := kubeClient.DynamicClient.Resource(Schema)
-		regularclient := kubeClient.KubernetesClient.CoreV1()
+		regularClient := kubeClient.KubernetesClient.CoreV1()
 
 		for {
+			logger.L().Ctx(ctx).Info("starting a new service discovery handling")
 			currentServiceList := make(currentServiceList, 0)
 
 			// get a list of all  services in the cluster
-			services, err := regularclient.Services("").List(context.TODO(), serviceListOptions)
+			services, err := regularClient.Services("").List(context.TODO(), serviceListOptions)
 			if err != nil {
 				logger.L().Ctx(ctx).Error(err.Error())
 				return
 			}
 
-			//Q: how we going to handle headless service? we need to check each pod seperetly?
+			scansWg := sync.WaitGroup{}
+			antsPool, _ := ants.NewPool(20)
 
 			for _, service := range services.Items {
-				sra := ServicreAuthenticaion{}
+				sra := ServiceAuthentication{}
 				sra.kind = kind
 				sra.apiVersion = apiVersion
 				sra.metadata.name = service.Name
@@ -185,12 +187,15 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 				sra.initialPorts(service.Spec.Ports)
 
 				currentServiceList = append(currentServiceList, [2]string{service.Name, service.Namespace})
-				sra.Discover(ctx, dynamicClient)
+				sra.Discover(ctx, &scansWg, antsPool, dynamicClient)
 			}
-			currentServiceList.deleteServices(dynamicClient)
+			scansWg.Wait()
+			antsPool.Release()
+			fmt.Println(antsPool.Running())
+			logger.L().Ctx(ctx).Info("finished service discovery cycle")
+			currentServiceList.deleteServices(ctx, dynamicClient)
 
 			time.Sleep(timeout)
 		}
-
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-var TestAuthentications = ServicreAuthenticaion{
+var TestAuthentications = ServiceAuthentication{
 	kind:       "ServiceScanResult",
 	apiVersion: "servicesscanresults",
 	metadata: struct {
