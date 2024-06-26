@@ -141,7 +141,6 @@ func (port *Port) Scan(ctx context.Context, ip string) {
 		result.SessionLayer = "Unknown"
 		result.IsAuthenticated = true
 	}
-
 }
 
 func (csl currentServiceList) deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInterface) error {

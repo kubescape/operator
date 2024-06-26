@@ -2,6 +2,8 @@ package servicehandler
 
 import (
 	"testing"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 var TestAuthentications = ServiceAuthentication{
@@ -49,3 +51,37 @@ func TestUnstructured(t *testing.T) {
 		t.Errorf("Unstructured() returned nil")
 	}
 }
+
+func TestContains(t *testing.T) {
+	services := currentServiceList{
+		{"test", "test"},
+	}
+	if !services.contains("test", "test") {
+		t.Errorf("contains() returned false")
+	}
+}
+
+func TestInitialPorts(t *testing.T) {
+	ports := []v1.ServicePort{
+		{
+			Port:     80,
+			Protocol: "TCP",
+		},
+		{
+			Port:     443,
+			Protocol: "TCP",
+		},
+	}
+	TestAuthentications.initialPorts(ports)
+	if len(TestAuthentications.spec.ports) != 2 {
+		t.Errorf("initialPorts() did not add all ports")
+	}
+}
+
+//TODO: Add more tests
+
+//TODO use fake client
+
+//TODO add tests to strict functionallity
+
+//TODO use kwok for perfomnace by using scale
