@@ -684,6 +684,8 @@ github.com/kubescape/go-logger v0.0.22 h1:gle7wH6emOiGv9ljdpVi82pWLQ3jGucrUucvil
 github.com/kubescape/go-logger v0.0.22/go.mod h1:x3HBpZo3cMT/WIdy18BxvVVd5D0e/PWFVk/HiwBNu3g=
 github.com/kubescape/k8s-interface v0.0.161 h1:v6b3/kmA4o/2niNrejrbXj5X9MLfH0UrpI3s+e/fdwc=
 github.com/kubescape/k8s-interface v0.0.161/go.mod h1:oF+Yxug3Kpfu9Yr2j63wy7gwswrKXpiqI0mLk/7gF/s=
+github.com/kubescape/kubescape-network-scanner v0.0.12 h1:azPKWePbwnTjxj7pZH2CKAWiphAXTYS2c/PUJclv3MU=
+github.com/kubescape/kubescape-network-scanner v0.0.12/go.mod h1:fqTzRCWsuniGEEZHtOEdITxnqx+i5ICdOVuenSQJd3U=
 github.com/kubescape/kubescape/v3 v3.0.4 h1:gZ5d8QMxLYZQ6Yz9wRvGcDQlBUIV+v/Y/41g56/YDy8=
 github.com/kubescape/kubescape/v3 v3.0.4/go.mod h1:upPCVTCRT3+LuZ1bawGtjreRmr/Xa+LT0fHtPzlylRU=
 github.com/kubescape/opa-utils v0.0.278 h1:x0akigrjYjocD0HzlRZ4+ZgL+ZK33286d2L48z6m0PE=
