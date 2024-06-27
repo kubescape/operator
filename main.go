@@ -24,6 +24,8 @@ import (
 	"github.com/armosec/utils-k8s-go/probes"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	logger "github.com/kubescape/go-logger"
+
+	"github.com/kubescape/operator/servicehandler"
 )
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
@@ -93,6 +95,11 @@ func main() {
 	initHttpHandlers(operatorConfig)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
+
+	if components.ServiceScanConfig.Enabled {
+		logger.L().Ctx(ctx).Info("service discovery enabeld and started with interval: ", helpers.String("interval", components.ServiceScanConfig.Interval.String()))
+		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
+	}
 
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi)
