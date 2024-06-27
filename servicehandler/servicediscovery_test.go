@@ -1,9 +1,11 @@
 package servicehandler
 
 import (
+	"reflect"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var TestAuthentications = ServiceAuthentication{
@@ -43,12 +45,16 @@ var TestAuthentications = ServiceAuthentication{
 }
 
 func TestUnstructured(t *testing.T) {
-	obj, err := TestAuthentications.Unstructured()
-	if err == nil {
+	unstructuredObject, err := TestAuthentications.Unstructured()
+	if err != nil {
 		t.Errorf("Unstructured() got an error: %v", err)
 	}
-	if obj == nil {
-		t.Errorf("Unstructured() returned nil")
+	objType := reflect.TypeOf(unstructuredObject)
+	if unstructuredType := reflect.TypeOf(&unstructured.Unstructured{}); objType != unstructuredType {
+		t.Errorf("Unstructured() returned an object of unexpected type")
+	}
+	if unstructuredObject.Object == nil {
+		t.Errorf("Unstructured() returned an object with nil value")
 	}
 }
 
