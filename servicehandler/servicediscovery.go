@@ -53,14 +53,18 @@ func (sl currentServiceList) contains(name string, namespace string) bool {
 type ServiceAuthentication struct {
 	kind       string
 	apiVersion string
-	metadata   struct {
-		name      string
-		namespace string
-	}
-	spec struct {
-		clusterIP string
-		ports     []Port
-	}
+	metadata   Metadata
+	spec       Spec
+}
+
+type Metadata struct {
+	name      string
+	namespace string
+}
+
+type Spec struct {
+	clusterIP string
+	ports     []Port
 }
 
 type Port struct {
