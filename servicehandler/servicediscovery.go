@@ -93,11 +93,13 @@ func (sra *ServiceAuthentication) initialPorts(ports []v1.ServicePort) {
 
 func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.WaitGroup, antsPool *ants.Pool, client dynamic.NamespaceableResourceInterface) {
 
+	// get all ports , each port equal different address
 	for _, pr := range sra.spec.ports {
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
 
+		//use DNS name to scan - this is the most reliable way to scan
 		srvDnsName := sra.metadata.name + "." + sra.metadata.namespace
 
 		scansWg.Add(1)
@@ -113,8 +115,8 @@ func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.Wa
 		logger.L().Ctx(ctx).Error(structuredErr.Error())
 		return
 	}
-	_, deleteErr := client.Namespace(sra.metadata.namespace).Apply(context.TODO(), sra.metadata.name, serviceObj, metav1.ApplyOptions{FieldManager: FieldManager})
 
+	_, deleteErr := client.Namespace(sra.metadata.namespace).Apply(context.TODO(), sra.metadata.name, serviceObj, metav1.ApplyOptions{FieldManager: FieldManager})
 	if deleteErr != nil {
 		logger.L().Ctx(ctx).Error(deleteErr.Error())
 	}
@@ -128,11 +130,13 @@ func (port *Port) Scan(ctx context.Context, ip string) {
 	port.authenticated = result.IsAuthenticated
 
 	if result.ApplicationLayer == "" {
+		// if we can't get the application layer, then we change to Unknown
 		port.applicationLayer = "Unknown"
 		port.authenticated = true
 	}
 
 	if err != nil {
+		//if we have an error, we log it and set all layers to Unknown
 		logger.L().Ctx(ctx).Error(err.Error())
 		result.ApplicationLayer = "Unknown"
 		result.PresentationLayer = "Unknown"
@@ -142,6 +146,8 @@ func (port *Port) Scan(ctx context.Context, ip string) {
 }
 
 func (csl currentServiceList) deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInterface) error {
+	// get all services from the current cycle and compare them with the current CRDs
+
 	authServices, err := client.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
