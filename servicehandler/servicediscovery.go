@@ -2,7 +2,6 @@ package servicehandler
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -194,9 +193,9 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 			}
 			scansWg.Wait()
 			antsPool.Release()
-			fmt.Println(antsPool.Running())
-			logger.L().Ctx(ctx).Info("finished service discovery cycle")
+
 			currentServiceList.deleteServices(ctx, dynamicClient)
+			logger.L().Ctx(ctx).Info("finished service discovery cycle")
 
 			time.Sleep(timeout)
 		}
