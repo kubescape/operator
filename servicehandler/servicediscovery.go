@@ -123,7 +123,6 @@ func (sra *ServiceAuthentication) Discover(ctx context.Context, scansWg *sync.Wa
 
 func (port *Port) Scan(ctx context.Context, ip string) {
 	result, err := cmd.ScanTargets(ctx, ip, port.port)
-
 	port.applicationLayer = result.ApplicationLayer
 	port.presentationLayer = result.PresentationLayer
 	port.sessionLayer = result.SessionLayer
