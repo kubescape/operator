@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-var TestAuthentications = ServiceAuthentication{
+var TestAuthentications = serviceAuthentication{
 	kind:       "ServiceScanResult",
 	apiVersion: "servicesscanresults",
 	metadata: struct {
@@ -45,7 +45,7 @@ var TestAuthentications = ServiceAuthentication{
 }
 
 func TestUnstructured(t *testing.T) {
-	unstructuredObject, err := TestAuthentications.Unstructured()
+	unstructuredObject, err := TestAuthentications.unstructured()
 	if err != nil {
 		t.Errorf("Unstructured() got an error: %v", err)
 	}
@@ -55,15 +55,6 @@ func TestUnstructured(t *testing.T) {
 	}
 	if unstructuredObject.Object == nil {
 		t.Errorf("Unstructured() returned an object with nil value")
-	}
-}
-
-func TestContains(t *testing.T) {
-	services := currentServiceList{
-		{"test", "test"},
-	}
-	if !services.contains("test", "test") {
-		t.Errorf("contains() returned false")
 	}
 }
 
