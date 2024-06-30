@@ -25,16 +25,13 @@ func (port *Port) scan(ctx context.Context, ip string) {
 
 	if result.ApplicationLayer == "" {
 		// if we can't get the application layer, then we change to Unknown
-		port.applicationLayer = unknown
 		port.authenticated = true
 	}
 
 	if err != nil {
 		//if we have an error, we log it and set all layers to Unknown
 		logger.L().Ctx(ctx).Error(err.Error())
-		result.ApplicationLayer = unknown
-		result.PresentationLayer = unknown
-		result.SessionLayer = unknown
-		result.IsAuthenticated = true
+		port.applicationLayer = "failed_to_scan"
+		port.authenticated = false
 	}
 }

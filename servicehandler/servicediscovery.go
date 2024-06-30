@@ -25,7 +25,6 @@ const (
 	version      = "v1"
 	apiVersion   = group + "/" + version
 	fieldManager = "kubescape|operator|serviceDiscoveryHandler"
-	unknown      = "Unknown"
 )
 
 var protocolFilter = []string{"UDP"}
@@ -40,7 +39,7 @@ var serviceScanSchema = schema.GroupVersionResource{
 	Resource: resource,
 }
 
-func deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInterface, currentServices []metadata) {
+func deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInterface, currentServicesMetadata []metadata) {
 	// get all services from the current cycle and compare them with the current CRDs
 
 	authServices, err := client.List(ctx, metav1.ListOptions{})
@@ -55,7 +54,7 @@ func deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInt
 			namespace: service.GetNamespace(),
 		}
 
-		if slices.Contains(currentServices, crdMetadata) {
+		if !slices.Contains(currentServicesMetadata, crdMetadata) {
 			err := client.Namespace(service.GetNamespace()).Delete(ctx, service.GetName(), metav1.DeleteOptions{})
 			if err != nil {
 				logger.L().Ctx(ctx).Error(err.Error())
@@ -101,22 +100,19 @@ func (sra *serviceAuthentication) initialPorts(ports []v1.ServicePort) {
 	}
 }
 
-func (sra *serviceAuthentication) serviceScan(ctx context.Context, scansWg *sync.WaitGroup, antsPool *ants.Pool, client dynamic.NamespaceableResourceInterface) {
+func (sra *serviceAuthentication) serviceScan(ctx context.Context, client dynamic.NamespaceableResourceInterface) {
 	// get all ports , each port equal different address
-	for _, pr := range sra.spec.ports {
+	for idx := range sra.spec.ports {
+
+		pr := &sra.spec.ports[idx]
 		if slices.Contains(protocolFilter, string(pr.protocol)) {
 			continue
 		}
 
 		//use DNS name to scan - this is the most reliable way to scan
 		srvDnsName := sra.metadata.name + "." + sra.metadata.namespace
+		pr.scan(ctx, srvDnsName)
 
-		scansWg.Add(1)
-		antsPool.Submit(func() {
-			pr.scan(ctx, srvDnsName)
-			sra.spec.ports = append(sra.spec.ports, pr)
-			scansWg.Done()
-		})
 	}
 
 	serviceObj, structuredErr := sra.unstructured()
@@ -132,7 +128,6 @@ func (sra *serviceAuthentication) serviceScan(ctx context.Context, scansWg *sync
 }
 
 func serviceDiscovery(ctx context.Context, regularClient kubernetes.Interface, dynamicClient dynamic.NamespaceableResourceInterface) {
-
 	// get a list of all  services in the cluster
 	services, err := regularClient.CoreV1().Services("").List(ctx, serviceListOptions)
 	if err != nil {
@@ -158,7 +153,12 @@ func serviceDiscovery(ctx context.Context, regularClient kubernetes.Interface, d
 		sra.initialPorts(service.Spec.Ports)
 
 		currentServiceList = append(currentServiceList, sra.metadata)
-		sra.serviceScan(ctx, &scansWg, antsPool, dynamicClient)
+
+		scansWg.Add(1)
+		antsPool.Submit(func() {
+			sra.serviceScan(ctx, dynamicClient)
+			scansWg.Done()
+		})
 	}
 	scansWg.Wait()
 	antsPool.Release()

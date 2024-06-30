@@ -1,8 +1,7 @@
 DOCKERFILE_PATH=./build/Dockerfile
 BINARY_NAME=operator
 
-IMAGE?=operator
-TAG?=latest
+IMAGE?=quay.io/dwertent/$(BINARY_NAME)
 
 
 build:
