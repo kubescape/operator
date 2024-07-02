@@ -56,11 +56,6 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		return nil
 	}
 
-	pod, err := unstructuredToPod(event.GetObject().(*unstructured.Unstructured))
-	if err != nil {
-		return nil
-	}
-
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
@@ -87,11 +82,11 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			OldObject: event.GetOldObject().(*unstructured.Unstructured),
 		},
 		RuleAlert: apitypes.RuleAlert{
-			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", pod.Name),
+			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", event.GetName()),
 		},
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
-			PodName:   pod.Name,
-			Namespace: pod.Namespace,
+			PodName:   event.GetName(),
+			Namespace: event.GetNamespace(),
 		},
 		RuleID: R2000ID,
 	}
