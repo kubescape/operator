@@ -51,5 +51,9 @@
       "discoveryUrl": "foo.com",
       "otelUrl": null
     }
-  }
+  }, 
+    "serviceScanConfig":{
+      "enabled": true,
+      "interval": "60s"
+    }
 }
