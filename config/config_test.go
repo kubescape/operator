@@ -52,6 +52,10 @@ func TestLoadCapabilities(t *testing.T) {
 						DiscoveryURL: "foo.com",
 					},
 				},
+				ServiceScanConfig: ServiceScanConfig{
+					Interval: 60 * time.Second,
+					Enabled:  true,
+				},
 			},
 		},
 	}

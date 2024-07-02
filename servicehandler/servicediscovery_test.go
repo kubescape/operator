@@ -1,141 +1,261 @@
 package servicehandler
 
 import (
-	"reflect"
+	"context"
+	"slices"
 	"testing"
 
+	"gotest.tools/v3/assert"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicFake "k8s.io/client-go/dynamic/fake"
+	kubernetesFake "k8s.io/client-go/kubernetes/fake"
 )
 
 var TestAuthentications = serviceAuthentication{
 	kind:       "ServiceScanResult",
 	apiVersion: "servicesscanresults",
-	metadata: struct {
-		name      string
-		namespace string
-	}{
+	metadata: metadata{
 		name:      "test",
 		namespace: "test",
 	},
-	spec: struct {
-		clusterIP string
-		ports     []Port
-	}{
-		clusterIP: "127.0.0.1",
+	spec: spec{
+		clusterIP: "test",
 		ports: []Port{
 			{
 				port:              80,
 				protocol:          "TCP",
-				sessionLayer:      "test",
-				presentationLayer: "test",
-				applicationLayer:  "test",
+				applicationLayer:  "sql",
 				authenticated:     true,
+				sessionLayer:      "tcp",
+				presentationLayer: "http",
 			},
 			{
 				port:              443,
 				protocol:          "TCP",
-				sessionLayer:      "test",
-				presentationLayer: "test",
-				applicationLayer:  "test",
+				applicationLayer:  "kafka",
 				authenticated:     true,
+				sessionLayer:      "tcp",
+				presentationLayer: "http",
 			},
 		},
 	},
 }
 
-func TestUnstructured(t *testing.T) {
-	unstructuredObject, err := TestAuthentications.unstructured()
-	if err != nil {
-		t.Errorf("Unstructured() got an error: %v", err)
+func Test_translate(t *testing.T) {
+	tests := []struct {
+		name  string
+		ports []v1.ServicePort
+		want  []Port
+	}{
+		{
+			name:  "empty",
+			ports: []v1.ServicePort{},
+			want:  []Port{},
+		},
+		{
+			name: "one port",
+			ports: []v1.ServicePort{
+				{
+					Port:     80,
+					Protocol: "TCP",
+				},
+			},
+			want: []Port{
+				{
+					port:     80,
+					protocol: "TCP",
+				},
+			},
+		},
+		{
+			name: "two ports",
+			ports: []v1.ServicePort{
+				{
+					Port:     80,
+					Protocol: "TCP",
+				},
+				{
+					Port:     443,
+					Protocol: "TCP",
+				},
+			},
+			want: []Port{
+				{
+					port:     80,
+					protocol: "TCP",
+				},
+				{
+					port:     443,
+					protocol: "TCP",
+				},
+			},
+		},
+
+		// add several ports
+		// add duplicate ports (not sure if it's your use case?)
 	}
-	objType := reflect.TypeOf(unstructuredObject)
-	if unstructuredType := reflect.TypeOf(&unstructured.Unstructured{}); objType != unstructuredType {
-		t.Errorf("Unstructured() returned an object of unexpected type")
-	}
-	if unstructuredObject.Object == nil {
-		t.Errorf("Unstructured() returned an object with nil value")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := K8sPortsTranslator(tt.ports)
+			for i := range tt.want {
+				assert.Equal(t, tt.want[i], got[i], "Elements at index %d are not equal", i)
+			}
+		})
 	}
 }
 
-func TestInitialPorts(t *testing.T) {
-	ports := []v1.ServicePort{
+func TestDiscoveryServiceHandler(t *testing.T) {
+	//write a component test that creates fake client and test the service discovery and see if it creates a crd
+	//and if it deletes the crd
+	testCases := []struct {
+		name     string
+		services []runtime.Object
+		want     []metadata
+	}{
 		{
-			Port:     80,
-			Protocol: "TCP",
+			name: "existing_services_found",
+			services: []runtime.Object{
+				&v1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "service1",
+						Namespace: "test1",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{
+								Port:     80,
+								Protocol: "TCP",
+							},
+							{
+								Port:     443,
+								Protocol: "UDP",
+							},
+						},
+					},
+				},
+
+				&v1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "service2",
+						Namespace: "test2",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{
+								Port:     80,
+								Protocol: "TCP",
+							},
+							{
+								Port:     443,
+								Protocol: "UDP",
+							},
+						},
+					},
+				},
+			},
+			want: []metadata{
+				{
+					name:      "service1",
+					namespace: "test1",
+				},
+				{
+					name:      "service2",
+					namespace: "test2",
+				},
+			},
 		},
 		{
-			Port:     443,
-			Protocol: "TCP",
+			name:     "no_services",
+			services: []runtime.Object{},
+			want:     []metadata{},
+		},
+		{
+			name: "existing_service_missing_port",
+			services: []runtime.Object{
+				&v1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "service1",
+						Namespace: "test1",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{
+								Port:     80,
+								Protocol: "TCP",
+							},
+							{
+								Port:     443,
+								Protocol: "UDP",
+							},
+						},
+					},
+				},
+			},
+			want: []metadata{
+				{
+					name:      "service1",
+					namespace: "test1",
+				},
+			},
+		},
+		{
+			name: "headless_service",
+			services: []runtime.Object{
+				&v1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "service1",
+						Namespace: "test1",
+						Labels: map[string]string{
+							"label1": "value1",
+						},
+					},
+					Spec: v1.ServiceSpec{
+						ClusterIP: "None",
+						Ports:     []v1.ServicePort{},
+					},
+				},
+			},
+			want: []metadata{
+				{
+					name:      "service1",
+					namespace: "test1",
+				},
+			},
 		},
 	}
-	TestAuthentications.initialPorts(ports)
-	if len(TestAuthentications.spec.ports) != 2 {
-		t.Errorf("initialPorts() did not add all ports")
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			testSchema := runtime.NewScheme()
+			dynamicClient := dynamicFake.NewSimpleDynamicClientWithCustomListKinds(testSchema, map[schema.GroupVersionResource]string{
+				ServiceScanSchema: "ServiceScanList",
+			},
+			)
+
+			services, _ := serviceExtractor(ctx, kubernetesFake.NewSimpleClientset(tc.services...))
+			for _, service := range services {
+				obj, _ := service.unstructured()
+				dynamicClient.Resource(ServiceScanSchema).Namespace(service.metadata.namespace).Create(ctx, obj, metav1.CreateOptions{})
+			}
+			discoveryService(context.Background(), kubernetesFake.NewSimpleClientset(tc.services...), dynamicClient)
+
+			crds, _ := dynamicClient.Resource(ServiceScanSchema).List(ctx, metav1.ListOptions{})
+
+			for _, crd := range crds.Items {
+				crdMetadata := metadata{
+					name:      crd.GetName(),
+					namespace: crd.GetNamespace(),
+				}
+				t.Log(crdMetadata)
+				if !slices.Contains(tc.want, crdMetadata) {
+					t.Errorf("unexpected CRD %v", crd)
+				}
+			}
+		})
 	}
+
 }
-
-// func TestDiscoveryServiceHandler(t *testing.T) {
-
-// 	ctx := context.Background()
-
-// 	kubeconfig := os.Getenv("HOME") + "/.kube/config" // Adjust path as necessary
-
-// 	// Build kubeconfig from file
-// 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-
-// 	// Create Kubernetes clientset
-// 	clientset, err := kubernetes.NewForConfig(config)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-
-// 	kubeClient := clientset.CoreV1()
-// 	dynamicClient, _ := dynamic.NewForConfig(config)
-// 	dynamicClient1 := dynamicClient.Resource(Schema)
-// 	logger.L().Ctx(ctx).Info(kubeconfig)
-
-// 	logger.L().Ctx(ctx).Info("starting a new service discovery handling")
-// 	currentServiceList := make(currentServiceList, 0)
-
-// 	// get a list of all  services in the cluster
-// 	services, err := kubeClient.Services("").List(context.TODO(), serviceListOptions)
-// 	t.Log(services, err)
-// 	if err != nil {
-// 		logger.L().Ctx(ctx).Error(err.Error())
-// 		return
-// 	}
-
-// 	scansWg := sync.WaitGroup{}
-// 	antsPool, _ := ants.NewPool(20)
-
-// 	for _, service := range services.Items {
-// 		logger.L().Ctx(ctx).Info(fmt.Sprint(service.Name, service.Namespace))
-// 		sra := ServiceAuthentication{}
-// 		sra.kind = kind
-// 		sra.apiVersion = apiVersion
-// 		sra.metadata.name = service.Name
-// 		sra.metadata.namespace = service.Namespace
-// 		sra.spec.clusterIP = service.Spec.ClusterIP
-// 		sra.initialPorts(service.Spec.Ports)
-
-// 		currentServiceList = append(currentServiceList, [2]string{service.Name, service.Namespace})
-// 		sra.Discover(ctx, &scansWg, antsPool, dynamicClient1)
-// 	}
-// 	scansWg.Wait()
-// 	antsPool.Release()
-
-// 	currentServiceList.deleteServices(ctx, dynamicClient1)
-// 	logger.L().Ctx(ctx).Info("finished service discovery cycle")
-// }
-
-//TODO: Add more tests
-
-//TODO use fake client
-
-//TODO add tests to strict functionallity
-
-//TODO use kwok for perfomnace by using scale
