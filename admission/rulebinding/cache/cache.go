@@ -74,7 +74,6 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 				continue
 			}
 
-			// check if the object is cluster object
 			rbNames = append(rbNames, rbName)
 			continue
 		}
