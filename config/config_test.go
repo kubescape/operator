@@ -26,11 +26,12 @@ func TestLoadCapabilities(t *testing.T) {
 			},
 			want: CapabilitiesConfig{
 				Capabilities: Capabilities{
-					ConfigurationScan: "enable",
-					ContinuousScan:    "disable",
-					NodeScan:          "enable",
-					Relevancy:         "enable",
-					VulnerabilityScan: "enable",
+					ConfigurationScan:   "enable",
+					ContinuousScan:      "disable",
+					NodeScan:            "enable",
+					Relevancy:           "enable",
+					VulnerabilityScan:   "enable",
+					AdmissionController: "enable",
 				},
 				Components: Components{
 					Gateway:            Component{Enabled: true},

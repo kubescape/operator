@@ -6,19 +6,27 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"node-agent/pkg/rulebindingmanager"
+	"node-agent/pkg/watcher/dynamicwatcher"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	_ "net/http/pprof"
 
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	exporters "github.com/kubescape/operator/admission/exporter"
+	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
+	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/utils"
+	"k8s.io/apimachinery/pkg/runtime"
 	restclient "k8s.io/client-go/rest"
 
 	"github.com/armosec/utils-k8s-go/probes"
@@ -28,6 +36,9 @@ import (
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
+	// ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// defer stop()
+
 	ctx := context.Background()
 
 	flag.Parse()
@@ -136,6 +147,43 @@ func main() {
 		}(mainHandler)
 	}
 
+	if operatorConfig.AdmissionControllerEnabled() {
+		serverContext, serverCancel := context.WithCancel(ctx)
+
+		addr := ":8443"
+
+		exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName())
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
+		}
+
+		// Create watchers
+		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi)
+
+		// create ruleBinding cache
+		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi)
+		dWatcher.AddAdaptor(ruleBindingCache)
+
+		ruleBindingNotify := make(chan rulebindingmanager.RuleBindingNotify, 100)
+		ruleBindingCache.AddNotifier(&ruleBindingNotify)
+
+		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, exporter, ruleBindingCache), ruleBindingCache)
+		// Start HTTP REST server for webhook
+		go func() {
+			defer func() {
+				// Cancel the server context to stop other workers
+				serverCancel()
+			}()
+
+			err := admissionController.Run(serverContext)
+			logger.L().Ctx(ctx).Fatal("server stopped", helpers.Error(err))
+		}()
+
+		// start watching
+		dWatcher.Start(ctx)
+		defer dWatcher.Stop(ctx)
+	}
+
 	if logger.L().GetLevel() == helpers.DebugLevel.String() {
 		go func() {
 			// start pprof server -> https://pkg.go.dev/net/http/pprof
@@ -147,6 +195,10 @@ func main() {
 	// send reports every 24 hours
 	go mainHandler.SendReports(ctx, 24*time.Hour)
 
+	// Wait for shutdown signal
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	<-shutdown
 	<-ctx.Done()
 }
 
