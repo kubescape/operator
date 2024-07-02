@@ -6,6 +6,7 @@ import (
 	"github.com/kubescape/operator/admission/rules"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
+	"k8s.io/apiserver/pkg/authentication/user"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	corev1 "k8s.io/api/core/v1"
@@ -51,12 +52,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		return nil
 	}
 
-	if event.GetKind().Kind != "Pod" {
-		return nil
-	}
-
-	// Check if the sub resource is exec
-	if event.GetSubresource() != "exec" {
+	if event.GetKind().Kind != "PodExecOptions" {
 		return nil
 	}
 
@@ -72,7 +68,23 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			Severity:       R2000ExecToPodRuleDescriptor.Priority,
 		},
 		AdmissionAlert: apitypes.AdmissionAlert{
-			AdmissionAttrs: &event,
+			Kind:             event.GetKind(),
+			ObjectName:       event.GetName(),
+			RequestNamespace: event.GetNamespace(),
+			Resource:         event.GetResource(),
+			Operation:        event.GetOperation(),
+			Object:           event.GetObject().(*unstructured.Unstructured),
+			Subresource:      event.GetSubresource(),
+			UserInfo: &user.DefaultInfo{
+				Name:   event.GetUserInfo().GetName(),
+				UID:    event.GetUserInfo().GetUID(),
+				Groups: event.GetUserInfo().GetGroups(),
+				Extra:  event.GetUserInfo().GetExtra(),
+			},
+
+			DryRun:    event.IsDryRun(),
+			Options:   event.GetOperationOptions().(*unstructured.Unstructured),
+			OldObject: event.GetOldObject().(*unstructured.Unstructured),
 		},
 		RuleAlert: apitypes.RuleAlert{
 			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", pod.Name),

@@ -105,7 +105,6 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 		rbNames = append(rbNames, rbName)
 	}
 
-	//append rules for pod
 	for _, ruleName := range rbNames {
 		if c.rbNameToRules.Has(ruleName) {
 			rulesSlice = append(rulesSlice, c.rbNameToRules.Get(ruleName)...)

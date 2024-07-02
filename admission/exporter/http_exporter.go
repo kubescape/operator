@@ -127,9 +127,7 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			Timestamp: time.Now(),
 		},
-		AdmissionAlert: apitypes.AdmissionAlert{
-			AdmissionAttrs: ruleFailure.GetAdmissionsAlert().AdmissionAttrs,
-		},
+		AdmissionAlert:         ruleFailure.GetAdmissionsAlert(),
 		RuntimeAlertK8sDetails: k8sDetails,
 		RuleAlert: apitypes.RuleAlert{
 			RuleDescription: ruleFailure.GetRuleAlert().RuleDescription,
