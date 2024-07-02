@@ -9,8 +9,6 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
-	corev1 "k8s.io/api/core/v1"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -56,6 +54,16 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		return nil
 	}
 
+	var oldObject *unstructured.Unstructured
+	if event.GetOldObject() != nil {
+		oldObject = event.GetOldObject().(*unstructured.Unstructured)
+	}
+
+	var options *unstructured.Unstructured
+	if event.GetOperationOptions() != nil {
+		options = event.GetOperationOptions().(*unstructured.Unstructured)
+	}
+
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
@@ -78,8 +86,8 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			},
 
 			DryRun:    event.IsDryRun(),
-			Options:   event.GetOperationOptions().(*unstructured.Unstructured),
-			OldObject: event.GetOldObject().(*unstructured.Unstructured),
+			Options:   options,
+			OldObject: oldObject,
 		},
 		RuleAlert: apitypes.RuleAlert{
 			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", event.GetName()),
@@ -92,13 +100,4 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 	}
 
 	return &ruleFailure
-}
-
-func unstructuredToPod(obj *unstructured.Unstructured) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-	if err := k8sruntime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, pod); err != nil {
-		return nil, err
-	}
-	return pod, nil
-
 }
