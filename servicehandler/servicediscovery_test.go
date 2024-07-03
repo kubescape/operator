@@ -2,17 +2,19 @@ package servicehandler
 
 import (
 	"context"
-	"slices"
 	"testing"
 
-	"gotest.tools/v3/assert"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicFake "k8s.io/client-go/dynamic/fake"
 	kubernetesFake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 )
 
 var TestAuthentications = serviceAuthentication{
@@ -29,7 +31,7 @@ var TestAuthentications = serviceAuthentication{
 				port:              80,
 				protocol:          "TCP",
 				applicationLayer:  "sql",
-				authenticated:     true,
+				authenticated:     ptr.To(true),
 				sessionLayer:      "tcp",
 				presentationLayer: "http",
 			},
@@ -37,7 +39,7 @@ var TestAuthentications = serviceAuthentication{
 				port:              443,
 				protocol:          "TCP",
 				applicationLayer:  "kafka",
-				authenticated:     true,
+				authenticated:     ptr.To(true),
 				sessionLayer:      "tcp",
 				presentationLayer: "http",
 			},
@@ -111,10 +113,11 @@ func Test_translate(t *testing.T) {
 func TestDiscoveryServiceHandler(t *testing.T) {
 	//write a component test that creates fake client and test the service discovery and see if it creates a crd
 	//and if it deletes the crd
+	//IMPORTANT: fake cilent doesnt have an Apply option like the real client so we need to create the crd and check if it exists -it will blog errors but will pass
 	testCases := []struct {
 		name     string
 		services []runtime.Object
-		want     []metadata
+		want     []unstructured.Unstructured
 		delete   []runtime.Object
 	}{
 		{
@@ -158,21 +161,27 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 					},
 				},
 			},
-			want: []metadata{
-				{
-					name:      "service1",
-					namespace: "test1",
-				},
-				{
-					name:      "service2",
-					namespace: "test2",
-				},
+			want: []unstructured.Unstructured{
+				{Object: map[string]interface{}{"apiVersion": "kubescape.io/v1", "kind": "ServiceScanResult",
+					"metadata": map[string]interface{}{"name": "service1", "namespace": "test1"},
+					"spec": map[string]interface{}{"clusterIP": "",
+						"ports": []interface{}{
+							map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(80), "presentationLayer": "", "protocol": "TCP", "sessionLayer": ""},
+							map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(443), "presentationLayer": "", "protocol": "UDP", "sessionLayer": ""},
+						}}}},
+				{Object: map[string]interface{}{"apiVersion": "kubescape.io/v1", "kind": "ServiceScanResult",
+					"metadata": map[string]interface{}{"name": "service2", "namespace": "test2"},
+					"spec": map[string]interface{}{"clusterIP": "",
+						"ports": []interface{}{
+							map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(80), "presentationLayer": "", "protocol": "TCP", "sessionLayer": ""},
+							map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(443), "presentationLayer": "", "protocol": "UDP", "sessionLayer": ""},
+						}}}},
 			},
 		},
 		{
 			name:     "no_services",
 			services: []runtime.Object{},
-			want:     []metadata{},
+			want:     nil,
 		},
 		{
 			name: "existing_service_missing_port",
@@ -196,11 +205,14 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 					},
 				},
 			},
-			want: []metadata{
-				{
-					name:      "service1",
-					namespace: "test1",
-				},
+			want: []unstructured.Unstructured{
+				{Object: map[string]interface{}{"apiVersion": "kubescape.io/v1", "kind": "ServiceScanResult",
+					"metadata": map[string]interface{}{"name": "service1", "namespace": "test1"},
+					"spec": map[string]interface{}{"clusterIP": "",
+						"ports": []interface{}{
+							map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(80), "presentationLayer": "", "protocol": "TCP", "sessionLayer": ""},
+							map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(443), "presentationLayer": "", "protocol": "UDP", "sessionLayer": ""},
+						}}}},
 			},
 		},
 		{
@@ -220,11 +232,12 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 					},
 				},
 			},
-			want: []metadata{
-				{
-					name:      "service1",
-					namespace: "test1",
-				},
+			want: []unstructured.Unstructured{
+				{Object: map[string]interface{}{"apiVersion": "kubescape.io/v1", "kind": "ServiceScanResult",
+					"metadata": map[string]interface{}{"name": "service1", "namespace": "test1"},
+					"spec": map[string]interface{}{"clusterIP": "None",
+						"ports": []interface{}{},
+					}}},
 			},
 		},
 		{
@@ -248,11 +261,10 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 					},
 				},
 			},
-			want: []metadata{
-				{
-					name:      "service1",
-					namespace: "test1",
-				},
+			want: []unstructured.Unstructured{
+				{Object: map[string]interface{}{"apiVersion": "kubescape.io/v1", "kind": "ServiceScanResult",
+					"metadata": map[string]interface{}{"name": "service1", "namespace": "test1"},
+					"spec":     map[string]interface{}{"clusterIP": "", "ports": []interface{}{map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(80), "presentationLayer": "", "protocol": "TCP", "sessionLayer": ""}}}}},
 			},
 			delete: []runtime.Object{
 				&v1.Service{
@@ -289,33 +301,31 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 			regClient := kubernetesFake.NewSimpleClientset(inObjects...)
 
 			var crds *unstructured.UnstructuredList
-			for i := 0; i < 2; i++ {
+			for i := 0; i < 10; i++ {
 				services, _ := serviceExtractor(ctx, regClient)
 				for _, service := range services {
 					obj, _ := service.unstructured()
-					dynamicClient.Resource(ServiceScanSchema).Namespace(service.metadata.namespace).Create(ctx, obj, metav1.CreateOptions{})
+					_, err := dynamicClient.Resource(ServiceScanSchema).Namespace(service.metadata.namespace).Create(ctx, obj, metav1.CreateOptions{})
+					if !errors.IsAlreadyExists(err) {
+						require.NoError(t, err)
+					}
+
 				}
-				discoveryService(context.Background(), regClient, dynamicClient)
+
+				err := discoveryService(context.Background(), regClient, dynamicClient)
+				assert.NoError(t, err)
 
 				crds, _ = dynamicClient.Resource(ServiceScanSchema).List(ctx, metav1.ListOptions{})
-
 				if tc.delete != nil {
 					for _, delService := range tc.delete {
-						regClient.CoreV1().Services(delService.(*v1.Service).Namespace).Delete(ctx, delService.(*v1.Service).Name, metav1.DeleteOptions{})
-
+						err = regClient.CoreV1().Services(delService.(*v1.Service).Namespace).Delete(ctx, delService.(*v1.Service).Name, metav1.DeleteOptions{})
+						require.NoError(t, err)
+						tc.delete = nil
 					}
 				}
 			}
-			for _, crd := range crds.Items {
-				crdMetadata := metadata{
-					name:      crd.GetName(),
-					namespace: crd.GetNamespace(),
-				}
-				t.Log(crdMetadata)
-				if !slices.Contains(tc.want, crdMetadata) {
-					t.Errorf("unexpected CRD %v", crd)
-				}
-			}
+
+			assert.Equal(t, tc.want, crds.Items, "CRDs mismatch")
 		})
 
 	}

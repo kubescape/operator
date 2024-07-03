@@ -59,6 +59,7 @@ func deleteServices(ctx context.Context, client dynamic.NamespaceableResourceInt
 			err := client.Namespace(service.GetNamespace()).Delete(ctx, service.GetName(), metav1.DeleteOptions{})
 			if err != nil {
 				logger.L().Ctx(ctx).Error(err.Error())
+				continue
 			}
 			logger.L().Ctx(ctx).Info("Authentication Service " + service.GetName() + " in namespace " + service.GetNamespace() + " deleted")
 		}
@@ -91,20 +92,21 @@ func (sra serviceAuthentication) unstructured() (*unstructured.Unstructured, err
 	return &unstructured.Unstructured{Object: a}, err
 }
 
-func (sra *serviceAuthentication) applyCrd(ctx context.Context, client dynamic.NamespaceableResourceInterface) {
+func (sra *serviceAuthentication) applyCrd(ctx context.Context, client dynamic.NamespaceableResourceInterface) error {
 	serviceObj, structuredErr := sra.unstructured()
 	if structuredErr != nil {
 		logger.L().Ctx(ctx).Error(structuredErr.Error())
-		return
+		return nil
 	}
 
 	_, applyErr := client.Namespace(sra.metadata.namespace).Apply(ctx, sra.metadata.name, serviceObj, metav1.ApplyOptions{FieldManager: fieldManager})
 	if applyErr != nil {
-		logger.L().Ctx(ctx).Error(applyErr.Error())
+		return applyErr
 	}
-
+	return nil
 }
-func (sra *serviceAuthentication) serviceScan(ctx context.Context, client dynamic.NamespaceableResourceInterface) {
+
+func (sra *serviceAuthentication) serviceScan(ctx context.Context, client dynamic.NamespaceableResourceInterface) error {
 	// get all ports , each port equal different address
 	for idx := range sra.spec.ports {
 
@@ -119,7 +121,7 @@ func (sra *serviceAuthentication) serviceScan(ctx context.Context, client dynami
 		pr.scan(ctx, srvDnsName)
 	}
 
-	sra.applyCrd(ctx, client)
+	return sra.applyCrd(ctx, client)
 }
 
 func getClusterServices(ctx context.Context, regularClient kubernetes.Interface) (*v1.ServiceList, error) {
@@ -161,9 +163,15 @@ func discoveryService(ctx context.Context, regularClient kubernetes.Interface, d
 
 	scanWg := sync.WaitGroup{}
 	p, err := ants.NewPoolWithFunc(workerNum, func(i interface{}) {
-		sra := i.(serviceAuthentication)
-		sra.serviceScan(ctx, dynamicClient.Resource(ServiceScanSchema))
-		scanWg.Done()
+		defer scanWg.Done()
+		sra, ok := i.(serviceAuthentication)
+		if !ok {
+			return
+		}
+		scanErr := sra.serviceScan(ctx, dynamicClient.Resource(ServiceScanSchema))
+		if scanErr != nil {
+			logger.L().Ctx(ctx).Error(scanErr.Error())
+		}
 	})
 
 	if err != nil {
@@ -185,7 +193,7 @@ func discoveryService(ctx context.Context, regularClient kubernetes.Interface, d
 	return nil
 }
 
-func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi, timeout time.Duration) {
+func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.KubernetesApi, interval time.Duration) {
 	dynamicClient := kubeClient.DynamicClient
 	regularClient := kubeClient.KubernetesClient
 
@@ -197,7 +205,7 @@ func DiscoveryServiceHandler(ctx context.Context, kubeClient *k8sinterface.Kuber
 		} else {
 			logger.L().Ctx(ctx).Info("finished service discovery cycle")
 		}
-		time.Sleep(timeout)
+		time.Sleep(interval)
 
 	}
 }
