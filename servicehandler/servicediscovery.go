@@ -25,7 +25,7 @@ const (
 	version      = "v1"
 	apiVersion   = group + "/" + version
 	fieldManager = "kubescape|operator|serviceDiscoveryHandler"
-	workerNum    = 20
+	workerNum    = int(20)
 )
 
 var protocolFilter = []string{"UDP"}
@@ -115,8 +115,8 @@ func (sra *serviceAuthentication) serviceScan(ctx context.Context, client dynami
 
 		//use DNS name to scan - this is the most reliable way to scan
 		srvDnsName := sra.metadata.name + "." + sra.metadata.namespace
+		//FIXME: application scan can return different applicationLayer result at different scans
 		pr.scan(ctx, srvDnsName)
-
 	}
 
 	sra.applyCrd(ctx, client)
@@ -139,7 +139,7 @@ func serviceExtractor(ctx context.Context, regularClient kubernetes.Interface) (
 	}
 
 	currentServiceList := make([]serviceAuthentication, 0, len(services.Items))
-	metadataList := make([]metadata, len(services.Items))
+	metadataList := make([]metadata, 0, len(services.Items))
 	for _, service := range services.Items {
 		sra := serviceAuthentication{}
 		sra.kind = kind
@@ -159,22 +159,27 @@ func serviceExtractor(ctx context.Context, regularClient kubernetes.Interface) (
 func discoveryService(ctx context.Context, regularClient kubernetes.Interface, dynamicClient dynamic.Interface) error {
 	serviceList, metadataList := serviceExtractor(ctx, regularClient)
 
-	scansWg := sync.WaitGroup{}
-	antsPool, err := ants.NewPool(workerNum)
+	scanWg := sync.WaitGroup{}
+	p, err := ants.NewPoolWithFunc(workerNum, func(i interface{}) {
+		sra := i.(serviceAuthentication)
+		sra.serviceScan(ctx, dynamicClient.Resource(ServiceScanSchema))
+		scanWg.Done()
+	})
+
 	if err != nil {
-		logger.L().Ctx(ctx).Error(err.Error())
 		return err
 	}
 
 	for _, sra := range serviceList {
-		scansWg.Add(1)
-		antsPool.Submit(func() {
-			sra.serviceScan(ctx, dynamicClient.Resource(ServiceScanSchema))
-			scansWg.Done()
-		})
+		scanWg.Add(1)
+		err := p.Invoke(sra)
+		if err != nil {
+			logger.L().Ctx(ctx).Error(err.Error())
+			continue
+		}
 	}
-	scansWg.Wait()
-	antsPool.Release()
+	scanWg.Wait()
+	p.Release()
 
 	deleteServices(ctx, dynamicClient.Resource(ServiceScanSchema), metadataList)
 	return nil

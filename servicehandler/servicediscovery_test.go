@@ -8,6 +8,7 @@ import (
 	"gotest.tools/v3/assert"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicFake "k8s.io/client-go/dynamic/fake"
@@ -114,6 +115,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 		name     string
 		services []runtime.Object
 		want     []metadata
+		delete   []runtime.Object
 	}{
 		{
 			name: "existing_services_found",
@@ -225,6 +227,54 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "delete_service",
+			services: []runtime.Object{
+				&v1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "service1",
+						Namespace: "test1",
+						Labels: map[string]string{
+							"label1": "value1",
+						},
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{
+								Port:     80,
+								Protocol: "TCP",
+							},
+						},
+					},
+				},
+			},
+			want: []metadata{
+				{
+					name:      "service1",
+					namespace: "test1",
+				},
+			},
+			delete: []runtime.Object{
+				&v1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "deleteService",
+						Namespace: "delete",
+					},
+					Spec: v1.ServiceSpec{
+						Ports: []v1.ServicePort{
+							{
+								Port:     80,
+								Protocol: "TCP",
+							},
+							{
+								Port:     443,
+								Protocol: "UDP",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -235,16 +285,27 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 				ServiceScanSchema: "ServiceScanList",
 			},
 			)
+			inObjects := append(tc.services, tc.delete...)
+			regClient := kubernetesFake.NewSimpleClientset(inObjects...)
 
-			services, _ := serviceExtractor(ctx, kubernetesFake.NewSimpleClientset(tc.services...))
-			for _, service := range services {
-				obj, _ := service.unstructured()
-				dynamicClient.Resource(ServiceScanSchema).Namespace(service.metadata.namespace).Create(ctx, obj, metav1.CreateOptions{})
+			var crds *unstructured.UnstructuredList
+			for i := 0; i < 2; i++ {
+				services, _ := serviceExtractor(ctx, regClient)
+				for _, service := range services {
+					obj, _ := service.unstructured()
+					dynamicClient.Resource(ServiceScanSchema).Namespace(service.metadata.namespace).Create(ctx, obj, metav1.CreateOptions{})
+				}
+				discoveryService(context.Background(), regClient, dynamicClient)
+
+				crds, _ = dynamicClient.Resource(ServiceScanSchema).List(ctx, metav1.ListOptions{})
+
+				if tc.delete != nil {
+					for _, delService := range tc.delete {
+						regClient.CoreV1().Services(delService.(*v1.Service).Namespace).Delete(ctx, delService.(*v1.Service).Name, metav1.DeleteOptions{})
+
+					}
+				}
 			}
-			discoveryService(context.Background(), kubernetesFake.NewSimpleClientset(tc.services...), dynamicClient)
-
-			crds, _ := dynamicClient.Resource(ServiceScanSchema).List(ctx, metav1.ListOptions{})
-
 			for _, crd := range crds.Items {
 				crdMetadata := metadata{
 					name:      crd.GetName(),
@@ -256,6 +317,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 				}
 			}
 		})
+
 	}
 
 }
