@@ -10,16 +10,16 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-func TestR2000(t *testing.T) {
+func TestR2001(t *testing.T) {
 	event := admission.NewAttributesRecord(
 		&unstructured.Unstructured{
 			Object: map[string]interface{}{
-				"kind": "PodExecOptions",
+				"kind": "PodPortForwardOptions",
 			},
 		},
 		nil,
 		schema.GroupVersionKind{
-			Kind: "PodExecOptions",
+			Kind: "PodPortForwardOptions",
 		},
 		"test-namespace",
 		"test-pod",
@@ -36,11 +36,11 @@ func TestR2000(t *testing.T) {
 		},
 	)
 
-	rule := CreateRuleR2000ExecToPod()
+	rule := CreateRuleR2001PortForward()
 	result := rule.ProcessEvent(event, nil)
 
 	assert.NotNil(t, result)
-	assert.Equal(t, "Exec to pod detected on pod test-pod", result.GetRuleAlert().RuleDescription)
+	assert.Equal(t, "Port forward detected on pod test-pod", result.GetRuleAlert().RuleDescription)
 	assert.Equal(t, "test-pod", result.GetRuntimeAlertK8sDetails().PodName)
 	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().Namespace)
 }

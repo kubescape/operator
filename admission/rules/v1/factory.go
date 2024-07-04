@@ -14,6 +14,7 @@ func NewRuleCreator() *RuleCreatorImpl {
 	return &RuleCreatorImpl{
 		ruleDescriptions: []RuleDescriptor{
 			R2000ExecToPodRuleDescriptor,
+			R2001PortForwardRuleDescriptor,
 		},
 	}
 }

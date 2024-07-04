@@ -12,45 +12,45 @@ import (
 )
 
 const (
-	R2000ID   = "R2000"
-	R2000Name = "Exec to pod"
+	R2001ID   = "R2001"
+	R2001Name = "Port forward"
 )
 
-var R2000ExecToPodRuleDescriptor = RuleDescriptor{
-	ID:          R2000ID,
-	Name:        R2000Name,
-	Description: "Detecting exec to pod",
-	Tags:        []string{"exec"},
+var R2001PortForwardRuleDescriptor = RuleDescriptor{
+	ID:          R2001ID,
+	Name:        R2001Name,
+	Description: "Detecting port forward",
+	Tags:        []string{"portforward"},
 	Priority:    RulePriorityLow,
 	RuleCreationFunc: func() rules.RuleEvaluator {
-		return CreateRuleR2000ExecToPod()
+		return CreateRuleR2001PortForward()
 	},
 }
 
-type R2000ExecToPod struct {
+type R2001PortForward struct {
 	BaseRule
 }
 
-func CreateRuleR2000ExecToPod() *R2000ExecToPod {
-	return &R2000ExecToPod{}
+func CreateRuleR2001PortForward() *R2001PortForward {
+	return &R2001PortForward{}
 }
-func (rule *R2000ExecToPod) Name() string {
-	return R2000Name
-}
-
-func (rule *R2000ExecToPod) ID() string {
-	return R2000ID
+func (rule *R2001PortForward) Name() string {
+	return R2001Name
 }
 
-func (rule *R2000ExecToPod) DeleteRule() {
+func (rule *R2001PortForward) ID() string {
+	return R2001ID
 }
 
-func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access interface{}) rules.RuleFailure {
+func (rule *R2001PortForward) DeleteRule() {
+}
+
+func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access interface{}) rules.RuleFailure {
 	if event == nil {
 		return nil
 	}
 
-	if event.GetKind().Kind != "PodExecOptions" {
+	if event.GetKind().Kind != "PodPortForwardOptions" {
 		return nil
 	}
 
@@ -68,7 +68,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
 			FixSuggestions: "If this is a legitimate action, please consider removing this workload from the binding of this rule",
-			Severity:       R2000ExecToPodRuleDescriptor.Priority,
+			Severity:       R2001PortForwardRuleDescriptor.Priority,
 		},
 		AdmissionAlert: apitypes.AdmissionAlert{
 			Kind:             event.GetKind(),
@@ -90,13 +90,13 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			OldObject: oldObject,
 		},
 		RuleAlert: apitypes.RuleAlert{
-			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", event.GetName()),
+			RuleDescription: fmt.Sprintf("Port forward detected on pod %s", event.GetName()),
 		},
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
 			PodName:   event.GetName(),
 			Namespace: event.GetNamespace(),
 		},
-		RuleID: R2000ID,
+		RuleID: R2001ID,
 	}
 
 	return &ruleFailure
