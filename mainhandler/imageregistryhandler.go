@@ -592,7 +592,8 @@ func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj 
 	if e := registryScan.parseRegistryFromCommand(sessionObj); e != nil {
 		return fmt.Errorf("get registry auth failed with err %w", e)
 	}
-
+	registryScan.setRegistryKind()
+	registryScan.setHostnameAndProject()
 	return nil
 }
 
