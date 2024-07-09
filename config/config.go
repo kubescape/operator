@@ -47,6 +47,11 @@ type Components struct {
 	Storage            Component `mapstructure:"storage"`
 }
 
+type ServiceScanConfig struct {
+	Enabled  bool          `json:"enabled"`
+	Interval time.Duration `json:"interval"`
+}
+
 type Server struct {
 	Account      string `json:"account"`
 	DiscoveryURL string `json:"discoveryUrl"`
@@ -59,9 +64,10 @@ type Configurations struct {
 }
 
 type CapabilitiesConfig struct {
-	Capabilities   Capabilities   `mapstructure:"capabilities"`
-	Components     Components     `mapstructure:"components"`
-	Configurations Configurations `mapstructure:"configurations"`
+	Capabilities      Capabilities      `mapstructure:"capabilities"`
+	Components        Components        `mapstructure:"components"`
+	Configurations    Configurations    `mapstructure:"configurations"`
+	ServiceScanConfig ServiceScanConfig `mapstructure:"serviceScanConfig"`
 }
 
 func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
