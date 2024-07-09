@@ -27,7 +27,7 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 
-	uuid "github.com/google/uuid"
+	"github.com/google/uuid"
 	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 
@@ -297,6 +297,9 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 
 	for _, ns := range namespaces {
+		if mainHandler.config.SkipNamespace(ns) {
+			continue
+		}
 		ids, errs := mainHandler.getIDs(ns, labels, fields, []string{"pods"})
 		for i := range errs {
 			logger.L().Ctx(ctx).Warning(errs[i].Error())
@@ -384,6 +387,9 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 	slugs := map[string]bool{}
 
 	for _, ns := range namespaces {
+		if mainHandler.config.SkipNamespace(ns) {
+			continue
+		}
 		pods, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, listOptions)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("failed to list pods", helpers.String("namespace", ns), helpers.Error(err))
@@ -448,8 +454,8 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 }
 
 func (mainHandler *MainHandler) getIDs(namespace string, labels, fields map[string]string, resources []string) ([]string, []error) {
-	ids := []string{}
-	errs := []error{}
+	var ids []string
+	var errs []error
 	for _, resource := range resources {
 		workloads, err := mainHandler.listWorkloads(namespace, resource, labels, fields)
 		if err != nil {

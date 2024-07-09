@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -96,6 +97,8 @@ type Config struct {
 	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
 	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
 	EventDeduplicationInterval time.Duration `mapstructure:"eventDeduplicationInterval"`
+	ExcludeNamespaces          []string      `mapstructure:"excludeNamespaces"`
+	IncludeNamespaces          []string      `mapstructure:"includeNamespaces"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -114,6 +117,7 @@ type IConfig interface {
 	TriggerSecurityFramework() bool
 	KubescapeURL() string
 	KubevulnURL() string
+	SkipNamespace(ns string) bool
 }
 
 // OperatorConfig implements IConfig
@@ -125,6 +129,8 @@ type OperatorConfig struct {
 	accessKey            string
 	eventReceiverRestURL string
 }
+
+var _ IConfig = (*OperatorConfig)(nil)
 
 func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
 	return &OperatorConfig{
@@ -148,6 +154,7 @@ func (c *OperatorConfig) KubevulnURL() string {
 func (c *OperatorConfig) KubescapeURL() string {
 	return c.clusterConfig.KubescapeURL
 }
+
 func (c *OperatorConfig) TriggerSecurityFramework() bool {
 	return c.serviceConfig.TriggerSecurityFramework
 }
@@ -159,6 +166,7 @@ func (c *OperatorConfig) Namespace() string {
 func (c *OperatorConfig) CleanUpRoutineInterval() time.Duration {
 	return c.serviceConfig.CleanUpRoutineInterval
 }
+
 func (c *OperatorConfig) MatchingRulesFilename() string {
 	return c.serviceConfig.MatchingRulesFilename
 }
@@ -184,6 +192,21 @@ func (c *OperatorConfig) AccessKey() string {
 
 func (c *OperatorConfig) ClusterName() string {
 	return c.clusterConfig.ClusterName
+}
+
+func (c *OperatorConfig) SkipNamespace(ns string) bool {
+	if includeNamespaces := c.serviceConfig.IncludeNamespaces; len(includeNamespaces) > 0 {
+		if !slices.Contains(includeNamespaces, ns) {
+			// skip ns not in IncludeNamespaces
+			return true
+		}
+	} else if excludeNamespaces := c.serviceConfig.ExcludeNamespaces; len(excludeNamespaces) > 0 {
+		if slices.Contains(excludeNamespaces, ns) {
+			// skip ns in ExcludeNamespaces
+			return true
+		}
+	}
+	return false
 }
 
 func (c *OperatorConfig) EventReceiverURL() string {

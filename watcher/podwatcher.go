@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/pager"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/goradd/maps"
@@ -180,28 +182,32 @@ func (wh *WatchHandler) scanImage(ctx context.Context, pod *core1.Pod, container
 }
 
 func (wh *WatchHandler) listPods(ctx context.Context) error {
-	pods, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").List(ctx, v1.ListOptions{
+	if err := pager.New(func(ctx context.Context, opts v1.ListOptions) (runtime.Object, error) {
+		return wh.k8sAPI.KubernetesClient.CoreV1().Pods("").List(ctx, opts)
+	}).EachListItem(ctx, v1.ListOptions{
 		FieldSelector: "status.phase=Running", // only running pods
-	})
-	if err != nil {
-		return err
-	}
-	for i := range pods.Items {
-		if pods.Items[i].Status.Phase != core1.PodRunning {
+	}, func(obj runtime.Object) error {
+		pod := obj.(*core1.Pod)
+		if pod.Status.Phase != core1.PodRunning {
 			// skip non-running pods, for some reason the list includes non-running pods
-			continue
+			return nil
 		}
-
-		pods.Items[i].APIVersion = "v1"
-		pods.Items[i].Kind = "Pod"
+		if wh.cfg.SkipNamespace(pod.Namespace) {
+			return nil
+		}
+		pod.APIVersion = "v1"
+		pod.Kind = "Pod"
 		wh.eventQueue.Enqueue(watch.Event{
 			Type:   watch.Added,
-			Object: &pods.Items[i],
+			Object: pod,
 		})
+		return nil
+	}); err != nil {
+		return err
 	}
 	return nil
-
 }
+
 func mapSlugsToImageIDs(pod *core1.Pod, instanceIDs []instanceidhandler.IInstanceID) map[string]string {
 	l := map[string]string{}
 	slugToImage(instanceIDs, l, pod.Status.ContainerStatuses, containerinstance.InstanceType)

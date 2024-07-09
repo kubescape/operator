@@ -94,6 +94,8 @@ func TestLoadConfig(t *testing.T) {
 				TriggerSecurityFramework:   false,
 				MatchingRulesFilename:      "/etc/config/matchingRules.json",
 				EventDeduplicationInterval: 2 * time.Minute,
+				ExcludeNamespaces:          []string{"kube-system", "kubescape"},
+				IncludeNamespaces:          []string{},
 			},
 		},
 	}
