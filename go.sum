@@ -643,8 +643,8 @@ github.com/kubescape/kubescape-network-scanner v0.0.15 h1:LsaVCQzj0PbA30BeFdzxch
 github.com/kubescape/kubescape-network-scanner v0.0.15/go.mod h1:fqTzRCWsuniGEEZHtOEdITxnqx+i5ICdOVuenSQJd3U=
 github.com/kubescape/kubescape/v3 v3.0.4 h1:gZ5d8QMxLYZQ6Yz9wRvGcDQlBUIV+v/Y/41g56/YDy8=
 github.com/kubescape/kubescape/v3 v3.0.4/go.mod h1:upPCVTCRT3+LuZ1bawGtjreRmr/Xa+LT0fHtPzlylRU=
-github.com/kubescape/node-agent v0.2.87 h1:BthCCfe6wme8CMHsgiLOt/eCGrW+E0O3cDGmupljvXo=
-github.com/kubescape/node-agent v0.2.87/go.mod h1:iFOSEIQhpvgcnoA+QFPXwXxAj1uxQ2KBtZH7WRgCn70=
+github.com/kubescape/node-agent v0.2.99 h1:ZODfLAIfmUjU3OQVR5P3sBnshH380VPwlwTtZTCVitY=
+github.com/kubescape/node-agent v0.2.99/go.mod h1:bjLZvChHzD4t9tLoDtjpitPvoygZ/VhaaPGLFhnTrpw=
 github.com/kubescape/opa-utils v0.0.278 h1:x0akigrjYjocD0HzlRZ4+ZgL+ZK33286d2L48z6m0PE=
 github.com/kubescape/opa-utils v0.0.278/go.mod h1:N/UnbZHpoiHQH7O50yadhIXZvVl0IVtTGBmePPrSQSg=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 h1:SqlwF8G+oFazeYmZQKoPczLEflBQpwpHCU8DoLLyfj8=
@@ -1485,8 +1485,8 @@ google.golang.org/grpc v1.39.1/go.mod h1:PImNr+rS9TWYb2O4/emRugxiyHZ5JyHW5F+RPnD
 google.golang.org/grpc v1.40.0/go.mod h1:ogyxbiOoUXAkP+4+xa6PZSE9DZgIHtSpzjDTB9KAK34=
 google.golang.org/grpc v1.40.1/go.mod h1:ogyxbiOoUXAkP+4+xa6PZSE9DZgIHtSpzjDTB9KAK34=
 google.golang.org/grpc v1.42.0/go.mod h1:k+4IHHFw41K8+bbowsex27ge2rCb65oeWqe4jJ590SU=
-google.golang.org/grpc v1.64.0 h1:KH3VH9y/MgNQg1dE7b3XfVK0GsPSIzJwdF617gUSbvY=
-google.golang.org/grpc v1.64.0/go.mod h1:oxjF8E3FBnjp+/gVFYdWacaLDx9na1aqy9oovLpxQYg=
+google.golang.org/grpc v1.64.1 h1:LKtvyfbX3UGVPFcGqJ9ItpVWW6oN/2XqTxfAnwRRXiA=
+google.golang.org/grpc v1.64.1/go.mod h1:hiQF4LFZelK2WKaP6W0L92zGHtiQdZxk8CrSdvyjeP0=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0/go.mod h1:6Kw0yEErY5E/yWrBtf03jp27GLLJujG4z/JK95pnjjw=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=

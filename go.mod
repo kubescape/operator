@@ -24,6 +24,7 @@ require (
 	github.com/kubescape/go-logger v0.0.22
 	github.com/kubescape/k8s-interface v0.0.166
 	github.com/kubescape/kubescape-network-scanner v0.0.15
+	github.com/kubescape/node-agent v0.2.99
 	github.com/kubescape/opa-utils v0.0.278
 	github.com/kubescape/storage v0.0.89
 	github.com/mitchellh/mapstructure v1.5.0
@@ -40,7 +41,6 @@ require (
 	k8s.io/apiserver v0.30.0
 	k8s.io/client-go v0.30.1
 	k8s.io/utils v0.0.0-20240310230437-4693a0247e57
-	node-agent v0.0.0-00010101000000-000000000000
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -261,7 +261,7 @@ require (
 	google.golang.org/genproto v0.0.0-20240515191416-fc5f0ca64291 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240515191416-fc5f0ca64291 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240515191416-fc5f0ca64291 // indirect
-	google.golang.org/grpc v1.64.0 // indirect
+	google.golang.org/grpc v1.64.1 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
@@ -278,5 +278,3 @@ require (
 )
 
 replace github.com/project-copacetic/copacetic => github.com/anubhav06/copacetic v0.0.0-20230821175613-0a7915a62e10
-
-replace node-agent => github.com/kubescape/node-agent v0.2.87

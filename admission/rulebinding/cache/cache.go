@@ -4,13 +4,13 @@ import (
 	"context"
 	"strings"
 
-	"node-agent/pkg/rulebindingmanager/types"
-	typesv1 "node-agent/pkg/rulebindingmanager/types/v1"
-	"node-agent/pkg/watcher"
+	"github.com/kubescape/node-agent/pkg/rulebindingmanager/types"
+	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
+	"github.com/kubescape/node-agent/pkg/watcher"
 
-	"node-agent/pkg/k8sclient"
+	"github.com/kubescape/node-agent/pkg/k8sclient"
 
-	"node-agent/pkg/rulebindingmanager"
+	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"node-agent/pkg/watcher"
 	"os"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/kubescape/node-agent/pkg/watcher"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"

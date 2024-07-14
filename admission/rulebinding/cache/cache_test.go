@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	typesv1 "node-agent/pkg/rulebindingmanager/types/v1"
+	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 
 	"github.com/goradd/maps"
 	"github.com/kubescape/k8s-interface/k8sinterface"

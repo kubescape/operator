@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"node-agent/pkg/rulebindingmanager"
-	"node-agent/pkg/watcher/dynamicwatcher"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
+	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
 
 	_ "net/http/pprof"
 
