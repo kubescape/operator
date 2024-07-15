@@ -2,7 +2,7 @@ name: build
 on:
   pull_request:
     types: [closed]
-    branches: 
+    branches:
     - 'main'
     paths-ignore:
       - '**.md' ### Ignore running when README.MD changed.
@@ -35,7 +35,7 @@ jobs:
       CGO_ENABLED: 0
       GO111MODULE: ""
       BUILD_PLATFORM: linux/amd64,linux/arm64
-      GO_VERSION: "1.21"
+      GO_VERSION: "1.22"
       REQUIRED_TESTS: '[
                         "vuln_scan", 
                         "vuln_scan_trigger_scan_public_registry", 
@@ -64,7 +64,7 @@ jobs:
                         "relevancy_java",
                         "relevancy_java_and_python",
                         "relevancy_golang_dynamic"
-                        ]'   
+                        ]'
       HELM_E2E_TEST: true
-      COSIGN: true   
+      COSIGN: true
     secrets: inherit
