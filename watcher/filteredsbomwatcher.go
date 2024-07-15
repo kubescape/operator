@@ -208,7 +208,8 @@ func skipSBOM(annotations map[string]string) bool {
 }
 
 func (wh *WatchHandler) getSBOMFilteredWatcher() (watch.Interface, error) {
-	return wh.storageClient.SpdxV1beta1().SBOMSyftFiltereds("").Watch(context.TODO(), v1.ListOptions{})
+	// no need to support ExcludeNamespaces and IncludeNamespaces since node-agent will respect them as well
+	return wh.storageClient.SpdxV1beta1().SBOMSyftFiltereds("").Watch(context.Background(), v1.ListOptions{})
 }
 
 func validateContainerDataFilteredSBOM(containerData *utils.ContainerData) error {

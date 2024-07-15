@@ -9,6 +9,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -42,6 +43,10 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts v1.ListOptions
 			}
 			if event.Type == watch.Error {
 				return fmt.Errorf("watch error: %s", event.Object)
+			}
+			pod := event.Object.(*corev1.Pod)
+			if wh.cfg.SkipNamespace(pod.Namespace) {
+				continue
 			}
 			wh.eventQueue.Enqueue(event)
 		}
