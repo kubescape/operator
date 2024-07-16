@@ -39,9 +39,6 @@ import (
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
-	// ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	// defer stop()
-
 	ctx := context.Background()
 
 	flag.Parse()
