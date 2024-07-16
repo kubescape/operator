@@ -13,6 +13,7 @@ import (
 	"github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/spf13/viper"
 )
 
@@ -30,6 +31,7 @@ type Capabilities struct {
 	RuntimeObservability string `json:"runtimeObservability"`
 	Seccomp              string `json:"seccomp"`
 	VulnerabilityScan    string `json:"vulnerabilityScan"`
+	AdmissionController  string `json:"admissionController"`
 }
 
 type Components struct {
@@ -96,9 +98,10 @@ type Config struct {
 	TriggerSecurityFramework bool          `mapstructure:"triggerSecurityFramework"`
 	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
 	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
-	EventDeduplicationInterval time.Duration `mapstructure:"eventDeduplicationInterval"`
-	ExcludeNamespaces          []string      `mapstructure:"excludeNamespaces"`
-	IncludeNamespaces          []string      `mapstructure:"includeNamespaces"`
+	EventDeduplicationInterval time.Duration                 `mapstructure:"eventDeduplicationInterval"`
+	HTTPExporterConfig         *exporters.HTTPExporterConfig `mapstructure:"httpExporterConfig"`
+	ExcludeNamespaces          []string                      `mapstructure:"excludeNamespaces"`
+	IncludeNamespaces          []string                      `mapstructure:"includeNamespaces"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -147,6 +150,10 @@ func (c *OperatorConfig) ContinuousScanEnabled() bool {
 	return c.components.Capabilities.ContinuousScan == "enable"
 }
 
+func (c *OperatorConfig) AdmissionControllerEnabled() bool {
+	return c.components.Capabilities.AdmissionController == "enable"
+}
+
 func (c *OperatorConfig) KubevulnURL() string {
 	return c.clusterConfig.KubevulnURL
 }
@@ -157,6 +164,10 @@ func (c *OperatorConfig) KubescapeURL() string {
 
 func (c *OperatorConfig) TriggerSecurityFramework() bool {
 	return c.serviceConfig.TriggerSecurityFramework
+}
+
+func (c *OperatorConfig) HttpExporterConfig() *exporters.HTTPExporterConfig {
+	return c.serviceConfig.HTTPExporterConfig
 }
 
 func (c *OperatorConfig) Namespace() string {
