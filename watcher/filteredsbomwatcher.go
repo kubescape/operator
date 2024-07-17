@@ -174,7 +174,7 @@ func annotationsToContainerData(annotations map[string]string) (*utils.Container
 		return containerData, err
 	}
 
-	slug, err := instanceID.GetSlug()
+	slug, err := instanceID.GetSlug(false)
 	if err != nil {
 		return containerData, err
 	}

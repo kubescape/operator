@@ -163,7 +163,7 @@ func main() {
 		}
 
 		// Create watchers
-		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi)
+		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi, operatorConfig.SkipNamespace)
 
 		// create ruleBinding cache
 		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi)

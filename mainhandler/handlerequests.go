@@ -413,7 +413,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 			}
 
 			for _, instanceID := range instanceIDs {
-				s, _ := instanceID.GetSlug()
+				s, _ := instanceID.GetSlug(false)
 				if ok := slugs[s]; ok {
 					// slug already scanned, there is no need to scan again in this request
 					continue
