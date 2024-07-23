@@ -268,28 +268,13 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		return
 	}
 
-	namespaces := make([]string, 0, 1)
-	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
 	labels := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
-	if len(sessionObj.Command.Designators) > 0 {
-		namespaces = make([]string, 0, 3)
-		for desiIdx := range sessionObj.Command.Designators {
-			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok {
-				namespaces = append(namespaces, ns)
-			}
-		}
-	}
-	if len(namespaces) == 0 {
-		namespacesList, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-		if err != nil {
-			logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-			return
-		}
-		for _, ns := range namespacesList.Items {
-			namespaces = append(namespaces, ns.GetName())
-		}
+	namespaces, err := mainHandler.getNamespaces(ctx, sessionObj)
+	if err != nil {
+		logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
+		sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+		return
 	}
 
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
@@ -357,20 +342,13 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 		return
 	}
 
-	namespaces := make([]string, 0, 1)
-	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
 	labels := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
-	if len(sessionObj.Command.Designators) > 0 {
-		namespaces = make([]string, 0, 3)
-		for desiIdx := range sessionObj.Command.Designators {
-			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok {
-				namespaces = append(namespaces, ns)
-			}
-		}
-	}
-	if len(namespaces) == 0 {
-		namespaces = append(namespaces, "")
+	namespaces, err := mainHandler.getNamespaces(ctx, sessionObj)
+	if err != nil {
+		logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
+		sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+		return
 	}
 
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
@@ -476,6 +454,29 @@ func (mainHandler *MainHandler) getIDs(namespace string, labels, fields map[stri
 	}
 
 	return ids, errs
+}
+
+func (mainHandler *MainHandler) getNamespaces(ctx context.Context, sessionObj *utils.SessionObj) ([]string, error) {
+	namespaces := make([]string, 0, 1)
+	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
+	if len(sessionObj.Command.Designators) > 0 {
+		namespaces = make([]string, 0, 3)
+		for desiIdx := range sessionObj.Command.Designators {
+			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok {
+				namespaces = append(namespaces, ns)
+			}
+		}
+	}
+	if len(namespaces) == 0 {
+		namespacesList, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		for _, ns := range namespacesList.Items {
+			namespaces = append(namespaces, ns.GetName())
+		}
+	}
+	return namespaces, nil
 }
 
 // HandlePostmanRequest Parse received commands and run the command
