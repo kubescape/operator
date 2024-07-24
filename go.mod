@@ -5,7 +5,7 @@ go 1.22.5
 require (
 	github.com/armosec/armoapi-go v0.0.430
 	github.com/armosec/cluster-notifier-api-go v0.0.5
-	github.com/armosec/registryx v0.0.15
+	github.com/armosec/registryx v0.0.16
 	github.com/armosec/utils-go v0.0.57
 	github.com/armosec/utils-k8s-go v0.0.26
 	github.com/aws/aws-sdk-go v1.50.8
