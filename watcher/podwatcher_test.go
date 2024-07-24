@@ -15,9 +15,6 @@ import (
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/containerinstance"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/initcontainerinstance"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
@@ -506,7 +503,6 @@ func Test_mapSlugToInstanceID(t *testing.T) {
 func Test_slugToImage(t *testing.T) {
 	type args struct {
 		slugToImageID   map[string]string
-		instanceType    helpers.InstanceType
 		instanceIDs     []instanceidhandler.IInstanceID
 		containerStatus []core1.ContainerStatus
 	}
@@ -521,7 +517,6 @@ func Test_slugToImage(t *testing.T) {
 				instanceIDs:     podToInstanceIDs(bytesToPod(readFileToBytes(podCollection))),
 				slugToImageID:   map[string]string{},
 				containerStatus: bytesToPod(readFileToBytes(podCollection)).Status.ContainerStatuses,
-				instanceType:    containerinstance.InstanceType,
 			},
 			expected: map[string]string{
 				"replicaset-collection-69c659f8cb-alpine-container-9858-6638": "docker.io/library/alpine@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
@@ -535,7 +530,6 @@ func Test_slugToImage(t *testing.T) {
 				instanceIDs:     podToInstanceIDs(bytesToPod(readFileToBytes(podCollection))),
 				slugToImageID:   map[string]string{},
 				containerStatus: bytesToPod(readFileToBytes(podCollection)).Status.InitContainerStatuses,
-				instanceType:    initcontainerinstance.InstanceType,
 			},
 			expected: map[string]string{
 				"replicaset-collection-69c659f8cb-busybox-b1d9-e8c6": "docker.io/library/busybox@sha256:e8e5cca392e3cf056fcdb3093e7ac2bf83fcf28b3bcf5818fe8ae71cf360c231",
@@ -548,7 +542,6 @@ func Test_slugToImage(t *testing.T) {
 				instanceIDs:     podToInstanceIDs(bytesToPod(readFileToBytes(podPartialStatus))),
 				slugToImageID:   map[string]string{},
 				containerStatus: bytesToPod(readFileToBytes(podPartialStatus)).Status.ContainerStatuses,
-				instanceType:    containerinstance.InstanceType,
 			},
 			expected: map[string]string{
 				"replicaset-collection-69c659f8cb-alpine-container-9858-6638": "docker.io/library/alpine@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
@@ -561,14 +554,17 @@ func Test_slugToImage(t *testing.T) {
 				instanceIDs:     podToInstanceIDs(bytesToPod(readFileToBytes(podPartialStatus))),
 				slugToImageID:   map[string]string{},
 				containerStatus: bytesToPod(readFileToBytes(podCollection)).Status.ContainerStatuses,
-				instanceType:    "",
 			},
-			expected: map[string]string{},
+			expected: map[string]string{
+				"replicaset-collection-69c659f8cb-alpine-container-9858-6638": "docker.io/library/alpine@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
+				"replicaset-collection-69c659f8cb-redis-beb0-de8a":            "docker.io/library/redis@sha256:92f3e116c1e719acf78004dd62992c3ad56f68f810c93a8db3fe2351bb9722c2",
+				"replicaset-collection-69c659f8cb-wordpress-05df-a39f":        "docker.io/library/wordpress@sha256:5f1873a461105cb1dc1a75731671125f1fb406b18e3fcf63210e8f7f84ce560b",
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			slugToImage(tt.args.instanceIDs, tt.args.slugToImageID, tt.args.containerStatus, tt.args.instanceType)
+			slugToImage(tt.args.instanceIDs, tt.args.slugToImageID, tt.args.containerStatus)
 
 			if len(tt.args.slugToImageID) != len(tt.expected) {
 				t.Errorf("Unexpected result length. Expected: %d, Got: %d", len(tt.expected), len(tt.args.slugToImageID))

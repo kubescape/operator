@@ -8,13 +8,12 @@ import (
 	"strings"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
+	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/google/uuid"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/containerinstance"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/initcontainerinstance"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
@@ -94,7 +93,7 @@ func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, inst
 	if err != nil {
 		return nil, err
 	}
-	slug, _ := instanceID.GetSlug()
+	slug, _ := instanceID.GetSlug(false)
 
 	imageTag, imageID, ok := getImage(pod, instanceID)
 	if !ok {
@@ -135,14 +134,15 @@ func getParentIDForPod(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, clust
 func getImage(pod *core1.Pod, instanceID instanceidhandler.IInstanceID) (string, string, bool) {
 	var imageTag, imageID string
 	switch instanceID.GetInstanceType() {
-	case containerinstance.InstanceType:
+	case instanceidhandlerv1.Container:
 		imageTag = getImageFromSpec(instanceID, pod.Spec.Containers)
 		// consider getting imageTag from status
 		_, imageID = getImageFromStatus(instanceID, pod.Status.ContainerStatuses)
-	case initcontainerinstance.InstanceType:
+	case instanceidhandlerv1.InitContainer:
 		imageTag = getImageFromSpec(instanceID, pod.Spec.InitContainers)
 		// consider getting imageTag from status
 		_, imageID = getImageFromStatus(instanceID, pod.Status.InitContainerStatuses)
+		// FIXME add ephemeralContainer
 	}
 
 	if imageTag == "" || imageID == "" {

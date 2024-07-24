@@ -14,9 +14,6 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/containerinstance"
-	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
-	"github.com/kubescape/k8s-interface/instanceidhandler/v1/initcontainerinstance"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
@@ -210,22 +207,20 @@ func (wh *WatchHandler) listPods(ctx context.Context) error {
 
 func mapSlugsToImageIDs(pod *core1.Pod, instanceIDs []instanceidhandler.IInstanceID) map[string]string {
 	l := map[string]string{}
-	slugToImage(instanceIDs, l, pod.Status.ContainerStatuses, containerinstance.InstanceType)
-	slugToImage(instanceIDs, l, pod.Status.InitContainerStatuses, initcontainerinstance.InstanceType)
+	slugToImage(instanceIDs, l, pod.Status.ContainerStatuses)
+	slugToImage(instanceIDs, l, pod.Status.InitContainerStatuses)
+	slugToImage(instanceIDs, l, pod.Status.EphemeralContainerStatuses)
 	return l
 }
-func slugToImage(instanceIDs []instanceidhandler.IInstanceID, l map[string]string, containerStatuses []core1.ContainerStatus, instanceType helpersv1.InstanceType) {
+func slugToImage(instanceIDs []instanceidhandler.IInstanceID, l map[string]string, containerStatuses []core1.ContainerStatus) {
 	for _, containerStatus := range containerStatuses {
 		imageID := utils.ExtractImageID(containerStatus.ImageID)
 		if imageID == "" {
 			continue
 		}
 		for _, instanceID := range instanceIDs {
-			if instanceID.GetInstanceType() != instanceType {
-				continue
-			}
 			if instanceID.GetContainerName() == containerStatus.Name {
-				s, _ := instanceID.GetSlug()
+				s, _ := instanceID.GetSlug(false)
 				l[s] = imageID
 			}
 		}
@@ -235,7 +230,7 @@ func slugToImage(instanceIDs []instanceidhandler.IInstanceID, l map[string]strin
 func mapSlugToInstanceID(instanceIDs []instanceidhandler.IInstanceID) map[string]instanceidhandler.IInstanceID {
 	l := map[string]instanceidhandler.IInstanceID{}
 	for _, instanceID := range instanceIDs {
-		s, _ := instanceID.GetSlug()
+		s, _ := instanceID.GetSlug(false)
 		l[s] = instanceID
 	}
 	return l
