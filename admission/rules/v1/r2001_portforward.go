@@ -69,7 +69,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access in
 
 	client := access.(objectcache.KubernetesCache).GetClientset()
 
-	workloadKind, workloadName, err := GetParentWorkloadAndKind(event, client)
+	workloadKind, workloadName, workloadNamespace, err := GetParentWorkloadDetails(event, client)
 	if err != nil {
 		zap.L().Error("Failed to get parent workload and kind", zap.Error(err))
 		return nil
@@ -113,6 +113,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access in
 			PodName:      event.GetName(),
 			Namespace:    event.GetNamespace(),
 			WorkloadName: workloadName,
+			WorkloadNamespace: workloadNamespace,
 			WorkloadKind: workloadKind,
 			NodeName:     nodeName,
 		},

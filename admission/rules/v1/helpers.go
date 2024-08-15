@@ -10,21 +10,21 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func GetParentWorkloadAndKind(event admission.Attributes, clientset kubernetes.Interface) (string, string, error) {
+func GetParentWorkloadDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, error) {
 	podName, namespace := event.GetName(), event.GetNamespace()
 
 	if podName == "" || namespace == "" {
-		return "", "", fmt.Errorf("invalid pod details from admission event")
+		return "", "", "", fmt.Errorf("invalid pod details from admission event")
 	}
 
 	pod, err := GetPodDetails(clientset, podName, namespace)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get pod details: %v", err)
+		return "", "", "", fmt.Errorf("failed to get pod details: %v", err)
 	}
 
-	workloadKind, parentWorkload := ExtractPodInformation(pod)
+	workloadKind, workloadName, workloadNamespace := ExtractPodInformation(pod)
 
-	return workloadKind, parentWorkload, nil
+	return workloadKind, workloadName, workloadNamespace, nil
 }
 
 func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*v1.Pod, error) {
@@ -50,17 +50,18 @@ func GetNodeName(event admission.Attributes, clientset kubernetes.Interface) (st
 	return pod.Spec.NodeName, nil
 }
 
-func ExtractPodInformation(pod *v1.Pod) (string, string) {
-	workloadKind := ""
-	parentWorkload := ""
+func ExtractPodInformation(pod *v1.Pod) (string, string, string) {
+	var workloadKind, workloadName, workloadNamespace string
 
 	for _, ownerRef := range pod.OwnerReferences {
+		// Consider common workload controllers
 		if ownerRef.Kind == "ReplicaSet" || ownerRef.Kind == "StatefulSet" || ownerRef.Kind == "DaemonSet" || ownerRef.Kind == "Job" {
 			workloadKind = ownerRef.Kind
-			parentWorkload = ownerRef.Name
+			workloadName = ownerRef.Name
+			workloadNamespace = pod.Namespace
 			break
 		}
 	}
 
-	return workloadKind, parentWorkload
+	return workloadKind, workloadName, workloadNamespace
 }

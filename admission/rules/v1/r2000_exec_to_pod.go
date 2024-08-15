@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/kubescape/operator/admission/rules"
+	"github.com/kubescape/operator/objectcache"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/authentication/user"
-	"github.com/kubescape/operator/objectcache"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 )
@@ -69,7 +69,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 
 	client := access.(objectcache.KubernetesCache).GetClientset()
 
-	workloadKind, workloadName, err := GetParentWorkloadAndKind(event, client)
+	workloadKind, workloadName, workloadNamespace, err := GetParentWorkloadDetails(event, client)
 	if err != nil {
 		zap.L().Error("Failed to get parent workload and kind", zap.Error(err))
 		return nil
@@ -113,6 +113,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			PodName:      event.GetName(),
 			Namespace:    event.GetNamespace(),
 			WorkloadName: workloadName,
+			WorkloadNamespace: workloadNamespace,
 			WorkloadKind: workloadKind,
 			NodeName:     nodeName,
 		},
