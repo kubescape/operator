@@ -69,16 +69,12 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 
 	client := access.(objectcache.KubernetesCache).GetClientset()
 
-	workloadKind, workloadName, workloadNamespace, err := GetParentWorkloadDetails(event, client)
+	workloadKind, workloadName, workloadNamespace, nodeName, err := GetParentWorkloadDetails(event, client)
 	if err != nil {
-		zap.L().Error("Failed to get parent workload and kind", zap.Error(err))
+		zap.L().Error("Failed to get parent workload details", zap.Error(err))
 		return nil
 	}
 
-	nodeName, err := GetNodeName(event, client)
-	if err != nil {
-		return nil
-	}
 
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{

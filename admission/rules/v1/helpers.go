@@ -10,21 +10,22 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func GetParentWorkloadDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, error) {
+func GetParentWorkloadDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, string, error) {
 	podName, namespace := event.GetName(), event.GetNamespace()
 
 	if podName == "" || namespace == "" {
-		return "", "", "", fmt.Errorf("invalid pod details from admission event")
+		return "", "", "", "", fmt.Errorf("invalid pod details from admission event")
 	}
 
 	pod, err := GetPodDetails(clientset, podName, namespace)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to get pod details: %v", err)
+		return "", "", "", "", fmt.Errorf("failed to get pod details: %v", err)
 	}
 
-	workloadKind, workloadName, workloadNamespace := ExtractPodInformation(pod)
+	workloadKind, workloadName, workloadNamespace := ExtractPodInformation(pod, clientset)
+	nodeName := pod.Spec.NodeName
 
-	return workloadKind, workloadName, workloadNamespace, nil
+	return workloadKind, workloadName, workloadNamespace, nodeName, nil
 }
 
 func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*v1.Pod, error) {
@@ -35,33 +36,32 @@ func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*
 	return pod, nil
 }
 
-func GetNodeName(event admission.Attributes, clientset kubernetes.Interface) (string, error) {
-	podName, namespace := event.GetName(), event.GetNamespace()
-
-	if podName == "" || namespace == "" {
-		return "", fmt.Errorf("invalid pod details from admission event")
-	}
-
-	pod, err := GetPodDetails(clientset, podName, namespace)
-	if err != nil {
-		return "", fmt.Errorf("failed to get pod details: %v", err)
-	}
-
-	return pod.Spec.NodeName, nil
-}
-
-func ExtractPodInformation(pod *v1.Pod) (string, string, string) {
-	var workloadKind, workloadName, workloadNamespace string
-
+func ExtractPodInformation(pod *v1.Pod, clientset kubernetes.Interface) (string, string, string) {
 	for _, ownerRef := range pod.OwnerReferences {
-		// Consider common workload controllers
-		if ownerRef.Kind == "ReplicaSet" || ownerRef.Kind == "StatefulSet" || ownerRef.Kind == "DaemonSet" || ownerRef.Kind == "Job" {
-			workloadKind = ownerRef.Kind
-			workloadName = ownerRef.Name
-			workloadNamespace = pod.Namespace
-			break
+		switch ownerRef.Kind {
+		case "ReplicaSet":
+			return resolveReplicaSet(ownerRef, pod.Namespace, clientset)
+		case "Job":
+			return resolveJob(ownerRef, pod.Namespace, clientset)
+		case "StatefulSet", "DaemonSet":
+			return ownerRef.Kind, ownerRef.Name, pod.Namespace
 		}
 	}
+	return "", "", ""
+}
 
-	return workloadKind, workloadName, workloadNamespace
+func resolveReplicaSet(ownerRef metav1.OwnerReference, namespace string, clientset kubernetes.Interface) (string, string, string) {
+	rs, err := clientset.AppsV1().ReplicaSets(namespace).Get(context.TODO(), ownerRef.Name, metav1.GetOptions{})
+	if err == nil && len(rs.OwnerReferences) > 0 && rs.OwnerReferences[0].Kind == "Deployment" {
+		return "Deployment", rs.OwnerReferences[0].Name, namespace
+	}
+	return "ReplicaSet", ownerRef.Name, namespace
+}
+
+func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kubernetes.Interface) (string, string, string) {
+	job, err := clientset.BatchV1().Jobs(namespace).Get(context.TODO(), ownerRef.Name, metav1.GetOptions{})
+	if err == nil && len(job.OwnerReferences) > 0 && job.OwnerReferences[0].Kind == "CronJob" {
+		return "CronJob", job.OwnerReferences[0].Name, namespace
+	}
+	return "Job", ownerRef.Name, namespace
 }

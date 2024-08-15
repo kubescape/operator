@@ -69,14 +69,9 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access in
 
 	client := access.(objectcache.KubernetesCache).GetClientset()
 
-	workloadKind, workloadName, workloadNamespace, err := GetParentWorkloadDetails(event, client)
+	workloadKind, workloadName, workloadNamespace, nodeName, err := GetParentWorkloadDetails(event, client)
 	if err != nil {
-		zap.L().Error("Failed to get parent workload and kind", zap.Error(err))
-		return nil
-	}
-
-	nodeName, err := GetNodeName(event, client)
-	if err != nil {
+		zap.L().Error("Failed to get parent workload details", zap.Error(err))
 		return nil
 	}
 
