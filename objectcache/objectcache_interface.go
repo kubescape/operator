@@ -32,6 +32,12 @@ type KubernetesCacheMockImpl struct{}
 
 func (om KubernetesCacheMockImpl) GetClientset() kubernetes.Interface {
 	client := k8sinterface.NewKubernetesApiMock().KubernetesClient
+	initializeClient(client)
+
+	return client
+}
+
+func initializeClient(client kubernetes.Interface) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -64,6 +70,4 @@ func (om KubernetesCacheMockImpl) GetClientset() kubernetes.Interface {
 	}
 
 	client.CoreV1().Pods("test-namespace").Create(context.TODO(), pod, metav1.CreateOptions{})
-
-	return client
 }
