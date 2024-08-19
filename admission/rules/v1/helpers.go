@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func GetParentWorkloadDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, string, error) {
+func GetControllerDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, string, error) {
 	podName, namespace := event.GetName(), event.GetNamespace()
 
 	if podName == "" || namespace == "" {
@@ -22,7 +22,7 @@ func GetParentWorkloadDetails(event admission.Attributes, clientset kubernetes.I
 		return "", "", "", "", fmt.Errorf("failed to get pod details: %v", err)
 	}
 
-	workloadKind, workloadName, workloadNamespace := ExtractPodInformation(pod, clientset)
+	workloadKind, workloadName, workloadNamespace := ExtractPodOwner(pod, clientset)
 	nodeName := pod.Spec.NodeName
 
 	return workloadKind, workloadName, workloadNamespace, nodeName, nil
@@ -36,7 +36,7 @@ func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*
 	return pod, nil
 }
 
-func ExtractPodInformation(pod *v1.Pod, clientset kubernetes.Interface) (string, string, string) {
+func ExtractPodOwner(pod *v1.Pod, clientset kubernetes.Interface) (string, string, string) {
 	for _, ownerRef := range pod.OwnerReferences {
 		switch ownerRef.Kind {
 		case "ReplicaSet":

@@ -19,22 +19,28 @@ import (
 
 type AdmissionValidator struct {
 	kubernetesClient *k8sinterface.KubernetesApi
+	objectCache      objectcache.ObjectCache
 	exporter         *exporters.HTTPExporter
 	ruleBindingCache rulebinding.RuleBindingCache
 }
 
 func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, exporter *exporters.HTTPExporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
+	kubernetesCache := objectcache.NewKubernetesCache(kubernetesClient)
+	
+	objectCache := objectcache.NewObjectCache(kubernetesCache)
+
 	return &AdmissionValidator{
 		kubernetesClient: kubernetesClient,
+		objectCache:      objectCache,
 		exporter:         exporter,
 		ruleBindingCache: ruleBindingCache,
 	}
 }
 
 func (av *AdmissionValidator) GetClientset() kubernetes.Interface {
-	objectCache := objectcache.NewKubernetesCache(av.kubernetesClient)
-	return objectCache.GetClientset()
+	return av.objectCache.GetKubernetesCache().GetClientset()
 }
+
 
 // We are implementing the Validate method from the ValidationInterface interface.
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, o admission.ObjectInterfaces) (err error) {
