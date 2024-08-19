@@ -25,6 +25,7 @@ import (
 	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/notificationhandler"
+	"github.com/kubescape/operator/objectcache"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/utils"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -105,6 +106,11 @@ func main() {
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
+	kubernetesCache := objectcache.NewKubernetesCache(k8sApi)
+	
+	// Creating the ObjectCache using KubernetesCache
+	objectCache := objectcache.NewObjectCache(kubernetesCache)
+
 	if components.ServiceScanConfig.Enabled {
 		logger.L().Ctx(ctx).Info("service discovery enabeld and started with interval: ", helpers.String("interval", components.ServiceScanConfig.Interval.String()))
 		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
@@ -172,7 +178,8 @@ func main() {
 		ruleBindingNotify := make(chan rulebindingmanager.RuleBindingNotify, 100)
 		ruleBindingCache.AddNotifier(&ruleBindingNotify)
 
-		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, exporter, ruleBindingCache), ruleBindingCache)
+
+		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, objectCache, exporter, ruleBindingCache), ruleBindingCache)
 		// Start HTTP REST server for webhook
 		go func() {
 			defer func() {
