@@ -24,7 +24,7 @@ type AdmissionValidator struct {
 	ruleBindingCache rulebinding.RuleBindingCache
 }
 
-// Updated constructor with dependency injection for ObjectCache
+
 func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, objectCache objectcache.ObjectCache, exporter *exporters.HTTPExporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
 	return &AdmissionValidator{
 		kubernetesClient: kubernetesClient,
