@@ -2,6 +2,7 @@ package rules
 
 import (
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/kubescape/operator/objectcache"
 	"k8s.io/apiserver/pkg/admission"
 )
 
@@ -27,7 +28,7 @@ type RuleEvaluator interface {
 	// Rule Name
 	Name() string
 	// Rule processing
-	ProcessEvent(event admission.Attributes, access interface{}) RuleFailure
+	ProcessEvent(event admission.Attributes, access objectcache.KubernetesCache) RuleFailure
 	// Set rule parameters
 	SetParameters(parameters map[string]interface{})
 	// Get rule parameters

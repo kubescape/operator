@@ -50,7 +50,7 @@ func (rule *R2000ExecToPod) ID() string {
 func (rule *R2000ExecToPod) DeleteRule() {
 }
 
-func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access interface{}) rules.RuleFailure {
+func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access objectcache.KubernetesCache) rules.RuleFailure {
 	if event == nil {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		options = event.GetOperationOptions().(*unstructured.Unstructured)
 	}
 
-	client := access.(objectcache.KubernetesCache).GetClientset()
+	client := access.GetClientset()
 
 	workloadKind, workloadName, workloadNamespace, nodeName, err := GetControllerDetails(event, client)
 	if err != nil {
