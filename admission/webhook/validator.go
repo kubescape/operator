@@ -24,7 +24,6 @@ type AdmissionValidator struct {
 	ruleBindingCache rulebinding.RuleBindingCache
 }
 
-
 func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, objectCache objectcache.ObjectCache, exporter *exporters.HTTPExporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
 	return &AdmissionValidator{
 		kubernetesClient: kubernetesClient,
@@ -37,8 +36,6 @@ func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, objectC
 func (av *AdmissionValidator) GetClientset() kubernetes.Interface {
 	return av.objectCache.GetKubernetesCache().GetClientset()
 }
-
-
 
 // We are implementing the Validate method from the ValidationInterface interface.
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, o admission.ObjectInterfaces) (err error) {
@@ -56,7 +53,7 @@ func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attr
 
 		rules := av.ruleBindingCache.ListRulesForObject(ctx, object)
 		for _, rule := range rules {
-			failure := rule.ProcessEvent(attrs, av.GetClientset())
+			failure := rule.ProcessEvent(attrs, av)
 			if failure != nil {
 				logger.L().Info("Rule failed", helpers.Interface("failure", failure))
 				av.exporter.SendAdmissionAlert(failure)
