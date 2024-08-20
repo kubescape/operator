@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/admission/rules"
+	"github.com/kubescape/operator/objectcache"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -65,6 +69,14 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		options = event.GetOperationOptions().(*unstructured.Unstructured)
 	}
 
+	client := access.(objectcache.KubernetesCache).GetClientset()
+
+	workloadKind, workloadName, workloadNamespace, nodeName, err := GetControllerDetails(event, client)
+	if err != nil {
+		logger.L().Error("Failed to get parent workload details", helpers.Error(err))
+		return nil
+	}
+
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
@@ -95,8 +107,12 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", event.GetName()),
 		},
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
-			PodName:   event.GetName(),
-			Namespace: event.GetNamespace(),
+			PodName:           event.GetName(),
+			Namespace:         event.GetNamespace(),
+			WorkloadName:      workloadName,
+			WorkloadNamespace: workloadNamespace,
+			WorkloadKind:      workloadKind,
+			NodeName:          nodeName,
 		},
 		RuleID: R2000ID,
 	}

@@ -9,25 +9,36 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/admission/rulebinding"
+	"github.com/kubescape/operator/objectcache"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/admission"
+	"k8s.io/client-go/kubernetes"
 )
 
 type AdmissionValidator struct {
 	kubernetesClient *k8sinterface.KubernetesApi
+	objectCache      objectcache.ObjectCache
 	exporter         *exporters.HTTPExporter
 	ruleBindingCache rulebinding.RuleBindingCache
 }
 
-func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, exporter *exporters.HTTPExporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
+
+func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, objectCache objectcache.ObjectCache, exporter *exporters.HTTPExporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
 	return &AdmissionValidator{
 		kubernetesClient: kubernetesClient,
+		objectCache:      objectCache,
 		exporter:         exporter,
 		ruleBindingCache: ruleBindingCache,
 	}
 }
+
+func (av *AdmissionValidator) GetClientset() kubernetes.Interface {
+	return av.objectCache.GetKubernetesCache().GetClientset()
+}
+
+
 
 // We are implementing the Validate method from the ValidationInterface interface.
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, o admission.ObjectInterfaces) (err error) {
@@ -45,7 +56,7 @@ func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attr
 
 		rules := av.ruleBindingCache.ListRulesForObject(ctx, object)
 		for _, rule := range rules {
-			failure := rule.ProcessEvent(attrs, nil)
+			failure := rule.ProcessEvent(attrs, av.GetClientset())
 			if failure != nil {
 				logger.L().Info("Rule failed", helpers.Interface("failure", failure))
 				av.exporter.SendAdmissionAlert(failure)
