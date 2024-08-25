@@ -76,7 +76,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access in
 		logger.L().Error("Failed to get parent workload details", helpers.Error(err))
 		return nil
 	}
-	containerName := getContainerNameFromPortForwardEvent(event)
+	containerName := GetContainerNameFromPortForwardEvent(event)
 
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
