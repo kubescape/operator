@@ -2,11 +2,11 @@ package rules
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/client-go/kubernetes"
 )
@@ -71,17 +71,27 @@ func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kube
 }
 
 // GetContainerNameFromExecToPodEvent returns the container name from the admission event for exec operations.
-func GetContainerNameFromExecToPodEvent(event admission.Attributes) string {
-	if event.GetSubresource() == "exec" {
-		if obj := event.GetObject(); obj != nil {
-			if unstructuredObj, ok := obj.(*unstructured.Unstructured); ok {
-				if object, ok := unstructuredObj.Object["object"].(map[string]interface{}); ok {
-					if containerName, ok := object["container"].(string); ok {
-						return containerName
-					}
-				}
-			}
-		}
+func GetContainerNameFromExecToPodEvent(event admission.Attributes) (string, error) {
+	if event.GetSubresource() != "exec" {
+		return "", fmt.Errorf("not an exec subresource")
 	}
-	return ""
+
+	obj := event.GetObject()
+	if obj == nil {
+		return "", fmt.Errorf("event object is nil")
+	}
+
+	// Marshal the unstructured object into JSON
+	rawData, err := json.Marshal(obj)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal event object: %v", err)
+	}
+
+	// Unmarshal the JSON into a PodExecOptions object
+	var podExecOptions v1.PodExecOptions
+	if err := json.Unmarshal(rawData, &podExecOptions); err != nil {
+		return "", fmt.Errorf("failed to unmarshal into PodExecOptions: %v", err)
+	}
+
+	return podExecOptions.Container, nil
 }

@@ -77,7 +77,11 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		return nil
 	}
 
-	containerName := GetContainerNameFromExecToPodEvent(event)
+	containerName, err := GetContainerNameFromExecToPodEvent(event)
+	if err != nil {
+		logger.L().Error("Failed to get container name from exec to pod event", helpers.Error(err))
+		containerName = ""
+	}
 
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
