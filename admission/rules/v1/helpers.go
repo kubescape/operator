@@ -85,19 +85,3 @@ func GetContainerNameFromExecToPodEvent(event admission.Attributes) string {
 	}
 	return ""
 }
-
-// GetContainerNameFromPortForwardEvent returns the container name from the admission event for port-forward operations.
-func GetContainerNameFromPortForwardEvent(event admission.Attributes) string {
-	if event.GetSubresource() == "portforward" {
-		if obj := event.GetObject(); obj != nil {
-			if unstructuredObj, ok := obj.(*unstructured.Unstructured); ok {
-				if object, ok := unstructuredObj.Object["object"].(map[string]interface{}); ok {
-					if containerName, ok := object["container"].(string); ok {
-						return containerName
-					}
-				}
-			}
-		}
-	}
-	return ""
-}
