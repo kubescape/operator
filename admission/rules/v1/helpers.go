@@ -70,7 +70,7 @@ func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kube
 	return "Job", ownerRef.Name, namespace
 }
 
-// GetContainerNameFromEvent returns the container name from the admission event.
+// getContainerNameFromExecToPodEvent returns the container name from the admission event for exec operations.
 func getContainerNameFromExecToPodEvent(event admission.Attributes) string {
 	if event.GetSubresource() == "exec" {
 		if obj := event.GetObject(); obj != nil {
@@ -86,7 +86,7 @@ func getContainerNameFromExecToPodEvent(event admission.Attributes) string {
 	return ""
 }
 
-// GetContainerNameFromPortForwardEvent returns the container name from the admission event.
+// getContainerNameFromPortForwardEvent returns the container name from the admission event for port-forward operations.
 func getContainerNameFromPortForwardEvent(event admission.Attributes) string {
 	if event.GetSubresource() == "portforward" {
 		if obj := event.GetObject(); obj != nil {
