@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// GetControllerDetails returns the kind, name, namespace, and node name of the controller that owns the pod.
 func GetControllerDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, string, error) {
 	podName, namespace := event.GetName(), event.GetNamespace()
 
@@ -28,6 +29,7 @@ func GetControllerDetails(event admission.Attributes, clientset kubernetes.Inter
 	return workloadKind, workloadName, workloadNamespace, nodeName, nil
 }
 
+// GetPodDetails returns the pod details from the Kubernetes API server.
 func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*v1.Pod, error) {
 	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	if err != nil {
@@ -36,6 +38,7 @@ func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*
 	return pod, nil
 }
 
+// ExtractPodOwner returns the kind, name, and namespace of the controller that owns the pod.
 func ExtractPodOwner(pod *v1.Pod, clientset kubernetes.Interface) (string, string, string) {
 	for _, ownerRef := range pod.OwnerReferences {
 		switch ownerRef.Kind {
@@ -49,7 +52,6 @@ func ExtractPodOwner(pod *v1.Pod, clientset kubernetes.Interface) (string, strin
 	}
 	return "", "", ""
 }
-
 func resolveReplicaSet(ownerRef metav1.OwnerReference, namespace string, clientset kubernetes.Interface) (string, string, string) {
 	rs, err := clientset.AppsV1().ReplicaSets(namespace).Get(context.TODO(), ownerRef.Name, metav1.GetOptions{})
 	if err == nil && len(rs.OwnerReferences) > 0 && rs.OwnerReferences[0].Kind == "Deployment" {
@@ -58,6 +60,7 @@ func resolveReplicaSet(ownerRef metav1.OwnerReference, namespace string, clients
 	return "ReplicaSet", ownerRef.Name, namespace
 }
 
+// resolveJob returns the kind, name, and namespace of the controller that owns the job.
 func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kubernetes.Interface) (string, string, string) {
 	job, err := clientset.BatchV1().Jobs(namespace).Get(context.TODO(), ownerRef.Name, metav1.GetOptions{})
 	if err == nil && len(job.OwnerReferences) > 0 && job.OwnerReferences[0].Kind == "CronJob" {
