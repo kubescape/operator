@@ -77,6 +77,13 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		return nil
 	}
 
+	object := event.GetObject().(*unstructured.Unstructured)
+	containerName, isOk, err := unstructured.NestedString(object.Object, "container")
+	if !isOk || err != nil {
+		logger.L().Error("Failed to get container name", helpers.Error(err))
+		containerName = ""
+	}
+
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
@@ -90,7 +97,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			RequestNamespace: event.GetNamespace(),
 			Resource:         event.GetResource(),
 			Operation:        event.GetOperation(),
-			Object:           event.GetObject().(*unstructured.Unstructured),
+			Object:           object,
 			Subresource:      event.GetSubresource(),
 			UserInfo: &user.DefaultInfo{
 				Name:   event.GetUserInfo().GetName(),
@@ -107,14 +114,13 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			RuleDescription: fmt.Sprintf("Exec to pod detected on pod %s", event.GetName()),
 		},
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
-			PodName:   event.GetName(),
-			Namespace: event.GetNamespace(),
-			PodNamespace: 	event.GetNamespace(),
+			PodName:           event.GetName(),
+			Namespace:         event.GetNamespace(),
 			WorkloadName:      workloadName,
 			WorkloadNamespace: workloadNamespace,
 			WorkloadKind:      workloadKind,
 			NodeName:          nodeName,
-			
+			ContainerName:     containerName,
 		},
 		RuleID: R2000ID,
 	}

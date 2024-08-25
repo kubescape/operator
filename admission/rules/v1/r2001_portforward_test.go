@@ -41,7 +41,6 @@ func TestR2001(t *testing.T) {
 	result := rule.ProcessEvent(event, objectcache.KubernetesCacheMockImpl{})
 
 	assert.NotNil(t, result)
-	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().PodNamespace)
 	assert.Equal(t, "test-workload", result.GetRuntimeAlertK8sDetails().WorkloadName)
 	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().WorkloadNamespace)
 	assert.Equal(t, "ReplicaSet", result.GetRuntimeAlertK8sDetails().WorkloadKind)
