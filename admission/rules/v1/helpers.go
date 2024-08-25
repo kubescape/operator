@@ -6,6 +6,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/client-go/kubernetes"
 )
@@ -68,3 +69,36 @@ func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kube
 	}
 	return "Job", ownerRef.Name, namespace
 }
+
+// GetContainerNameFromEvent returns the container name from the admission event.
+func getContainerNameFromExecToPodEvent(event admission.Attributes) string {
+	if event.GetSubresource() == "exec" {
+		if obj := event.GetObject(); obj != nil {
+			if unstructuredObj, ok := obj.(*unstructured.Unstructured); ok {
+				if object, ok := unstructuredObj.Object["object"].(map[string]interface{}); ok {
+					if containerName, ok := object["container"].(string); ok {
+						return containerName
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// GetContainerNameFromPortForwardEvent returns the container name from the admission event.
+func getContainerNameFromPortForwardEvent(event admission.Attributes) string {
+	if event.GetSubresource() == "portforward" {
+		if obj := event.GetObject(); obj != nil {
+			if unstructuredObj, ok := obj.(*unstructured.Unstructured); ok {
+				if object, ok := unstructuredObj.Object["object"].(map[string]interface{}); ok {
+					if containerName, ok := object["container"].(string); ok {
+						return containerName
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+

@@ -77,12 +77,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		return nil
 	}
 
-	object := event.GetObject().(*unstructured.Unstructured)
-	containerName, isOk, err := unstructured.NestedString(object.Object, "container")
-	if !isOk || err != nil {
-		logger.L().Error("Failed to get container name", helpers.Error(err))
-		containerName = ""
-	}
+	containerName := getContainerNameFromExecToPodEvent(event)
 
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
@@ -97,7 +92,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 			RequestNamespace: event.GetNamespace(),
 			Resource:         event.GetResource(),
 			Operation:        event.GetOperation(),
-			Object:           object,
+			Object:           event.GetObject().(*unstructured.Unstructured),
 			Subresource:      event.GetSubresource(),
 			UserInfo: &user.DefaultInfo{
 				Name:   event.GetUserInfo().GetName(),

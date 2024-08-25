@@ -76,12 +76,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access in
 		logger.L().Error("Failed to get parent workload details", helpers.Error(err))
 		return nil
 	}
-	object := event.GetObject().(*unstructured.Unstructured)
-	containerName, isOk, err := unstructured.NestedString(object.Object, "container")
-	if !isOk || err != nil {
-		logger.L().Error("Failed to get container name", helpers.Error(err))
-		containerName = ""
-	}
+	containerName := getContainerNameFromPortForwardEvent(event)
 
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
@@ -96,7 +91,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access in
 			RequestNamespace: event.GetNamespace(),
 			Resource:         event.GetResource(),
 			Operation:        event.GetOperation(),
-			Object:           object,
+			Object:           event.GetObject().(*unstructured.Unstructured),
 			Subresource:      event.GetSubresource(),
 			UserInfo: &user.DefaultInfo{
 				Name:   event.GetUserInfo().GetName(),
