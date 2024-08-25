@@ -116,9 +116,8 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 		return
 	}
 	// populate the RuntimeAlert struct with the data from the failedRule
-	k8sDetails := apitypes.RuntimeAlertK8sDetails{
-		ClusterName: exporter.ClusterName,
-	}
+	k8sDetails := ruleFailure.GetRuntimeAlertK8sDetails()
+	k8sDetails.ClusterName = exporter.ClusterName
 
 	httpAlert := apitypes.RuntimeAlert{
 		Message:   ruleFailure.GetRuleAlert().RuleDescription,
