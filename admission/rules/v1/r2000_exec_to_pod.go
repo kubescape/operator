@@ -109,10 +109,12 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access inte
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
 			PodName:   event.GetName(),
 			Namespace: event.GetNamespace(),
+			PodNamespace: 	event.GetNamespace(),
 			WorkloadName:      workloadName,
 			WorkloadNamespace: workloadNamespace,
 			WorkloadKind:      workloadKind,
 			NodeName:          nodeName,
+			
 		},
 		RuleID: R2000ID,
 	}
