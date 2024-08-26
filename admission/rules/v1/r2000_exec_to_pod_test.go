@@ -15,7 +15,14 @@ func TestR2000(t *testing.T) {
 	event := admission.NewAttributesRecord(
 		&unstructured.Unstructured{
 			Object: map[string]interface{}{
-				"kind": "PodExecOptions",
+				"kind":       "PodExecOptions",
+				"apiVersion": "v1",
+				"command":    []interface{}{"bash"},
+				"container":  "test-container",
+				"stdin":      true,
+				"stdout":     true,
+				"stderr":     true,
+				"tty":        true,
 			},
 		},
 		nil,
@@ -27,7 +34,7 @@ func TestR2000(t *testing.T) {
 		schema.GroupVersionResource{
 			Resource: "pods",
 		},
-		"",
+		"exec",
 		admission.Create,
 		nil,
 		false,
@@ -41,6 +48,7 @@ func TestR2000(t *testing.T) {
 	result := rule.ProcessEvent(event, objectcache.KubernetesCacheMockImpl{})
 
 	assert.NotNil(t, result)
+	assert.Equal(t, "test-container", result.GetRuntimeAlertK8sDetails().ContainerName)
 	assert.Equal(t, "test-workload", result.GetRuntimeAlertK8sDetails().WorkloadName)
 	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().WorkloadNamespace)
 	assert.Equal(t, "ReplicaSet", result.GetRuntimeAlertK8sDetails().WorkloadKind)
