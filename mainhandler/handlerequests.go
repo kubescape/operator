@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/kubescape/backend/pkg/versioncheck"
+	"github.com/kubescape/k8s-interface/workloadinterface"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	core1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -384,9 +386,21 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 			pod.Kind = "Pod"
 
 			// get pod instanceIDs
-			instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromPod(&pod)
+			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&pod)
+			if err != nil {
+				logger.L().Ctx(ctx).Error("failed to convert pod to unstructured", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+				continue
+			}
+			wl := workloadinterface.NewWorkloadObj(unstructuredObj)
+			instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+				continue
+			}
+
+			// for naked pods, only handle if pod is older than guard time
+			if !k8sinterface.WorkloadHasParent(wl) && time.Now().Before(pod.CreationTimestamp.Add(mainHandler.config.GuardTime())) {
+				logger.L().Debug("naked pod younger than guard time detected, skipping scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("creationTimestamp", pod.CreationTimestamp.String()))
 				continue
 			}
 
