@@ -102,6 +102,8 @@ type Config struct {
 	HTTPExporterConfig         *exporters.HTTPExporterConfig `mapstructure:"httpExporterConfig"`
 	ExcludeNamespaces          []string                      `mapstructure:"excludeNamespaces"`
 	IncludeNamespaces          []string                      `mapstructure:"includeNamespaces"`
+	// PodScanGuardTime specifies the minimum age a pod without a parent must have before it is scanned
+	PodScanGuardTime time.Duration `mapstructure:"podScanGuardTime"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -121,6 +123,7 @@ type IConfig interface {
 	KubescapeURL() string
 	KubevulnURL() string
 	SkipNamespace(ns string) bool
+	GuardTime() time.Duration
 }
 
 // OperatorConfig implements IConfig
@@ -185,6 +188,7 @@ func (c *OperatorConfig) MatchingRulesFilename() string {
 func (c *OperatorConfig) GatewayWebsocketURL() string {
 	return c.clusterConfig.GatewayWebsocketURL
 }
+
 func (c *OperatorConfig) ConcurrencyWorkers() int {
 	return c.serviceConfig.ConcurrencyWorkers
 }
@@ -224,6 +228,10 @@ func (c *OperatorConfig) EventReceiverURL() string {
 	return c.eventReceiverRestURL
 }
 
+func (c *OperatorConfig) GuardTime() time.Duration {
+	return c.serviceConfig.PodScanGuardTime
+}
+
 func LoadConfig(path string) (Config, error) {
 	viper.AddConfigPath(path)
 	viper.SetConfigName("config")
@@ -236,6 +244,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("triggerSecurityFramework", false)
 	viper.SetDefault("matchingRulesFilename", "/etc/config/matchingRules.json")
 	viper.SetDefault("eventDeduplicationInterval", 2*time.Minute)
+	viper.SetDefault("podScanGuardTime", time.Hour)
 
 	viper.AutomaticEnv()
 

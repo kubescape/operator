@@ -3,8 +3,10 @@ package watcher
 import (
 	"context"
 	"errors"
+	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
@@ -68,26 +70,45 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 		if !ok {
 			continue
 		}
+		// handle pod events
 		switch event.Type {
 		case watch.Modified, watch.Added:
-			wh.handlePodWatcher(ctx, pod, workerPool)
-		case watch.Deleted:
+			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+			if err != nil {
+				logger.L().Ctx(ctx).Error("failed to convert pod to unstructured", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
+				continue
+			}
+			wl := workloadinterface.NewWorkloadObj(unstructuredObj)
+			if !k8sinterface.WorkloadHasParent(wl) && time.Now().Before(pod.CreationTimestamp.Add(wh.cfg.GuardTime())) {
+				// for naked pods, only handle if pod still exists when older than guard time
+				untilPodMature := time.Until(pod.CreationTimestamp.Add(wh.cfg.GuardTime()))
+				logger.L().Debug("naked pod detected, delaying scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("time", untilPodMature.String()))
+				time.AfterFunc(untilPodMature, func() {
+					// use get to check if pod still exists, and refresh the pod object
+					pod, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, v1.GetOptions{})
+					if err == nil {
+						wh.handlePodWatcher(ctx, pod, wl, workerPool)
+					}
+				})
+			} else {
+				wh.handlePodWatcher(ctx, pod, wl, workerPool)
+			}
+		default:
 			continue
 		}
-
 	}
 	return nil
 }
 
 // handlePodWatcher handles the pod watch events
-func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, workerPool *ants.PoolWithFunc) {
+func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl *workloadinterface.Workload, workerPool *ants.PoolWithFunc) {
 
 	// check if we need to add
 	pod.APIVersion = "v1"
 	pod.Kind = "Pod"
 
 	// get pod instanceIDs
-	instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromPod(pod)
+	instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
 		return

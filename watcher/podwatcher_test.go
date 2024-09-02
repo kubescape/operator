@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -383,8 +384,11 @@ func Test_handlePodWatcher(t *testing.T) {
 				resourcesCreatedWg.Done()
 			})
 
-			for i := range tc.pods {
-				wh.handlePodWatcher(ctx, tc.pods[i], pool)
+			for _, pod := range tc.pods {
+				unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+				assert.NoError(t, err)
+				wl := workloadinterface.NewWorkloadObj(unstructuredObj)
+				wh.handlePodWatcher(ctx, pod, wl, pool)
 			}
 			resourcesCreatedWg.Wait()
 

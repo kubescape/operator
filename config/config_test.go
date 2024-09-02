@@ -97,6 +97,7 @@ func TestLoadConfig(t *testing.T) {
 				EventDeduplicationInterval: 2 * time.Minute,
 				ExcludeNamespaces:          []string{"kube-system", "kubescape"},
 				IncludeNamespaces:          []string{},
+				PodScanGuardTime:           time.Hour,
 			},
 		},
 	}
