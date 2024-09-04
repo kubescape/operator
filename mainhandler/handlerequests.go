@@ -382,6 +382,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				// skip non-running pods, for some reason the list includes non-running pods
 				continue
 			}
+			// need to set APIVersion and Kind before unstructured conversion, preparing for instanceID extraction
 			pod.APIVersion = "v1"
 			pod.Kind = "Pod"
 

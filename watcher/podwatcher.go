@@ -73,6 +73,9 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 		// handle pod events
 		switch event.Type {
 		case watch.Modified, watch.Added:
+			// need to set APIVersion and Kind before unstructured conversion, preparing for instanceID extraction
+			pod.APIVersion = "v1"
+			pod.Kind = "Pod"
 			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to convert pod to unstructured", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
@@ -84,9 +87,10 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 				untilPodMature := time.Until(pod.CreationTimestamp.Add(wh.cfg.GuardTime()))
 				logger.L().Debug("naked pod detected, delaying scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("time", untilPodMature.String()))
 				time.AfterFunc(untilPodMature, func() {
-					// use get to check if pod still exists, and refresh the pod object
-					pod, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, v1.GetOptions{})
+					// use get to check if pod still exists
+					_, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, v1.GetOptions{})
 					if err == nil {
+						logger.L().Debug("performing delayed scan for naked pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()))
 						wh.handlePodWatcher(ctx, pod, wl, workerPool)
 					}
 				})
@@ -102,10 +106,6 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 
 // handlePodWatcher handles the pod watch events
 func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl *workloadinterface.Workload, workerPool *ants.PoolWithFunc) {
-
-	// check if we need to add
-	pod.APIVersion = "v1"
-	pod.Kind = "Pod"
 
 	// get pod instanceIDs
 	instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
