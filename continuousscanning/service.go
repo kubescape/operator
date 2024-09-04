@@ -5,7 +5,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	watch "k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -29,10 +29,10 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	resourceEventsCh := make(chan watch.Event, 100)
 
 	gvrs := s.tl.LoadGVRs(ctx)
-	logger.L().Ctx(ctx).Info("fetched gvrs", helpers.Interface("gvrs", gvrs))
+	logger.L().Info("fetched gvrs", helpers.Interface("gvrs", gvrs))
 	wp, _ := NewWatchPool(ctx, s.k8sdynamic, gvrs, listOpts)
 	wp.Run(ctx, resourceEventsCh)
-	logger.L().Ctx(ctx).Info("ran watch pool")
+	logger.L().Info("ran watch pool")
 
 	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *cooldownQueue) {
 		defer out.Stop(ctx)
@@ -40,7 +40,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 		for {
 			select {
 			case e := <-resourceEventsCh:
-				logger.L().Ctx(ctx).Debug(
+				logger.L().Debug(
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
@@ -57,7 +57,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
 	for e := range s.eventQueue.ResultChan {
-		logger.L().Ctx(ctx).Debug(
+		logger.L().Debug(
 			"got an event to process",
 			helpers.Interface("event", e),
 		)

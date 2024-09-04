@@ -67,7 +67,7 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 			w.WriteHeader(http.StatusInternalServerError)
 			bErr, _ := json.Marshal(err)
 			w.Write(bErr)
-			logger.L().Ctx(context.Background()).Fatal("recover in ActionRequest", helpers.Interface("error", err))
+			logger.L().Fatal("recover in ActionRequest", helpers.Interface("error", err))
 		}
 	}()
 

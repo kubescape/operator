@@ -23,7 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/strings/slices"
 
-	uuid "github.com/google/uuid"
+	"github.com/google/uuid"
 
 	"github.com/armosec/armoapi-go/apis"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
@@ -481,7 +481,7 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	imageScanCommand, ok := command.(*apis.WebsocketScanCommand)
 	instanceID := "NOT_A_WEBSOCKET_SCAN_COMMAND"
 	if !ok {
-		logger.L().Ctx(ctx).Debug("Not an image scan command")
+		logger.L().Debug("Not an image scan command")
 	} else {
 		instanceID = *imageScanCommand.InstanceID
 	}
@@ -490,7 +490,7 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
 	}
 	if command.GetWlid() == "" {
-		logger.L().Ctx(ctx).Debug(fmt.Sprintf("sending scan command to kubevuln: %s", string(jsonScannerC)))
+		logger.L().Debug(fmt.Sprintf("sending scan command to kubevuln: %s", string(jsonScannerC)))
 	}
 
 	creds := command.GetCreds()
