@@ -14,6 +14,7 @@ import (
 	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
@@ -406,7 +407,7 @@ type ImageScanConfig struct {
 	authConfigs   []dockerregistry.AuthConfig
 }
 
-func getImageScanConfig(k8sAPI IWorkloadsGetter, namespace string, pod *corev1.Pod, imageTag string) (*ImageScanConfig, error) {
+func getImageScanConfig(k8sAPI *k8sinterface.KubernetesApi, namespace string, pod *corev1.Pod, imageTag string) (*ImageScanConfig, error) {
 	imageScanConfig := ImageScanConfig{}
 	registryName := getRegistryNameFromImageTag(imageTag)
 	logger.L().Debug("parsed registry name from image tag", helpers.String("registryName", registryName), helpers.String("imageTag", imageTag))

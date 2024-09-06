@@ -1,32 +1,22 @@
 package mainhandler
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	_ "embed"
 
 	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 //go:embed testdata/vulnscan/registry-secret.json
 var registrySecret []byte
-
-type WorkloadsGetterMock struct{}
-
-func (mock *WorkloadsGetterMock) GetWorkload(namespace, kind, name string) (k8sinterface.IWorkload, error) {
-	wl, err := workloadinterface.NewWorkload(registrySecret)
-	if err != nil {
-		panic(err)
-	}
-	return wl, nil
-}
-func (mock *WorkloadsGetterMock) ListWorkloads2(namespace, kind string) ([]k8sinterface.IWorkload, error) {
-	wl, _ := mock.GetWorkload(namespace, kind, "")
-	return []k8sinterface.IWorkload{wl}, nil
-}
 
 func Test_ActionHandler_getImageScanConfig(t *testing.T) {
 	expectedAuthConfigs := []dockerregistry.AuthConfig{
@@ -42,7 +32,13 @@ func Test_ActionHandler_getImageScanConfig(t *testing.T) {
 		},
 	}
 
-	k8sApiMock := &WorkloadsGetterMock{}
+	var secret *corev1.Secret
+	require.NoError(t, json.Unmarshal(registrySecret, &secret))
+
+	k8sApiMock := &k8sinterface.KubernetesApi{
+		Context:          context.TODO(),
+		KubernetesClient: k8sfake.NewSimpleClientset(secret),
+	}
 
 	res, err := getImageScanConfig(k8sApiMock, "", nil, "nginx:latest") // no registry treated as docker.io
 	assert.NoError(t, err)
