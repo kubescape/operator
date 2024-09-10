@@ -6,7 +6,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	watch "k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/utils/ptr"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -27,7 +27,7 @@ import (
 	sets "github.com/deckarep/golang-set/v2"
 )
 
-var orphanableWorkloadTypes sets.Set[string] = sets.NewSet[string]("Pod", "ReplicaSet", "Job")
+var orphanableWorkloadTypes = sets.NewSet[string]("Pod", "ReplicaSet", "Job")
 
 type EventHandler interface {
 	Handle(ctx context.Context, e watch.Event) error
@@ -97,7 +97,7 @@ func unstructuredToScanObject(uObject *unstructured.Unstructured) (*objectsenvel
 }
 
 func triggerScanFor(ctx context.Context, uObject *unstructured.Unstructured, isDelete bool, wp *ants.PoolWithFunc, clusterConfig config.IConfig) error {
-	logger.L().Ctx(ctx).Info(
+	logger.L().Info(
 		"triggering scan",
 		helpers.String("kind", uObject.GetKind()),
 		helpers.String("name", uObject.GetName()),
@@ -122,7 +122,6 @@ func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
 	if e.Type != watch.Added && e.Type != watch.Modified {
 		return nil
 	}
-	isDelete := false
 
 	uObject, err := eventToUnstructured(e)
 	if err != nil {
@@ -134,7 +133,7 @@ func (h *poolInvokerHandler) Handle(ctx context.Context, e watch.Event) error {
 		return nil
 	}
 
-	return triggerScanFor(ctx, uObject, isDelete, h.wp, h.clusterConfig)
+	return triggerScanFor(ctx, uObject, false, h.wp, h.clusterConfig)
 }
 
 func NewTriggeringHandler(wp *ants.PoolWithFunc, clusterConfig config.IConfig) EventHandler {
@@ -220,7 +219,6 @@ func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error
 	if e.Type != watch.Deleted {
 		return nil
 	}
-	isDelete := true
 
 	uObject, err := eventToUnstructured(e)
 	if err != nil {
@@ -237,6 +235,6 @@ func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error
 		logger.L().Ctx(ctx).Error("failed to delete CRDs", helpers.Error(err))
 	}
 
-	err = triggerScanFor(ctx, uObject, isDelete, h.wp, h.clusterConfig)
+	err = triggerScanFor(ctx, uObject, true, h.wp, h.clusterConfig)
 	return err
 }

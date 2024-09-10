@@ -4,56 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kubescape/go-logger"
-	"github.com/kubescape/operator/config"
-	"github.com/kubescape/operator/utils"
-
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/armosec/utils-k8s-go/probes"
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-
-	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/operator/config"
 )
-
-func (mainHandler *MainHandler) listWorkloads(namespace string, resource string, labels, fields map[string]string) ([]k8sinterface.IWorkload, error) {
-	groupVersionResource, err := k8sinterface.GetGroupVersionResource(resource)
-	if err != nil {
-		return nil, err
-	}
-	res, err := mainHandler.k8sAPI.ListWorkloads(&groupVersionResource, namespace, labels, fields)
-	if err != nil {
-		return res, err
-	}
-	return res, nil
-}
-func (mainHandler *MainHandler) getResourcesIDs(workloads []k8sinterface.IWorkload) ([]string, []error) {
-	errs := []error{}
-	idMap := make(map[string]interface{})
-	for i := range workloads {
-		switch workloads[i].GetKind() {
-		case "Namespace":
-			idMap[pkgwlid.GetWLID(mainHandler.config.ClusterName(), workloads[i].GetName(), "namespace", workloads[i].GetName())] = true
-		default:
-			// find wlid
-			kind, name, err := mainHandler.k8sAPI.CalculateWorkloadParentRecursive(workloads[i])
-			if err != nil {
-				errs = append(errs, fmt.Errorf("CalculateWorkloadParentRecursive: namespace: %s, pod name: %s, error: %s", workloads[i].GetNamespace(), workloads[i].GetName(), err.Error()))
-			}
-
-			// skip cronjobs
-			if kind == "CronJob" {
-				continue
-			}
-
-			wlid := pkgwlid.GetWLID(mainHandler.config.ClusterName(), workloads[i].GetNamespace(), kind, name)
-			if wlid != "" {
-				idMap[wlid] = true
-			}
-		}
-	}
-	return utils.MapToString(idMap), errs
-}
 
 func notWaitAtAll(_ config.IConfig) {
 }

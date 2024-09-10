@@ -2,8 +2,10 @@ package servicehandler
 
 import (
 	"context"
+	"slices"
 	"testing"
 
+	"github.com/kubescape/go-logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -13,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicFake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes"
 	kubernetesFake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
@@ -113,7 +116,7 @@ func Test_translate(t *testing.T) {
 func TestDiscoveryServiceHandler(t *testing.T) {
 	//write a component test that creates fake client and test the service discovery and see if it creates a crd
 	//and if it deletes the crd
-	//IMPORTANT: fake cilent doesnt have an Apply option like the real client so we need to create the crd and check if it exists -it will blog errors but will pass
+	//IMPORTANT: fake client doesn't have an Apply option like the real client so we need to create the crd and check if it exists -it will blog errors but will pass
 	testCases := []struct {
 		name     string
 		services []runtime.Object
@@ -297,7 +300,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 				ServiceScanSchema: "ServiceScanList",
 			},
 			)
-			inObjects := append(tc.services, tc.delete...)
+			inObjects := slices.Concat(tc.services, tc.delete)
 			regClient := kubernetesFake.NewSimpleClientset(inObjects...)
 
 			var crds *unstructured.UnstructuredList
@@ -329,5 +332,39 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 		})
 
 	}
+
+}
+
+func getClusterServices(ctx context.Context, regularClient kubernetes.Interface) (*v1.ServiceList, error) {
+	services, err := regularClient.CoreV1().Services("").List(ctx, serviceListOptions)
+	if err != nil {
+		logger.L().Ctx(ctx).Error(err.Error())
+		return nil, err
+	}
+	return services, nil
+}
+
+func serviceExtractor(ctx context.Context, regularClient kubernetes.Interface) ([]serviceAuthentication, []metadata) {
+	// get a list of all  services in the cluster
+	services, err := getClusterServices(ctx, regularClient)
+	if err != nil {
+		return []serviceAuthentication{}, []metadata{}
+	}
+
+	currentServiceList := make([]serviceAuthentication, 0, len(services.Items))
+	metadataList := make([]metadata, 0, len(services.Items))
+	for _, service := range services.Items {
+		sra := serviceAuthentication{}
+		sra.kind = kind
+		sra.apiVersion = apiVersion
+		sra.metadata.name = service.Name
+		sra.metadata.namespace = service.Namespace
+		sra.spec.clusterIP = service.Spec.ClusterIP
+		sra.spec.ports = K8sPortsTranslator(service.Spec.Ports)
+
+		currentServiceList = append(currentServiceList, sra)
+		metadataList = append(metadataList, sra.metadata)
+	}
+	return currentServiceList, metadataList
 
 }

@@ -117,7 +117,7 @@ func (wh *WatchHandler) HandleSBOMFilteredEvents(sfEvents <-chan watch.Event, pr
 
 		containerData, err := wh.getContainerDataFilteredSBOM(obj)
 		if err != nil {
-			logger.L().Ctx(context.TODO()).Error("failed to get container data from filtered SBOM",
+			logger.L().Error("failed to get container data from filtered SBOM",
 				helpers.String("name", obj.ObjectMeta.Name),
 				helpers.String("namespace", obj.ObjectMeta.Namespace),
 				helpers.Interface("annotations", obj.ObjectMeta.Annotations),

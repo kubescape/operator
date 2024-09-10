@@ -33,7 +33,7 @@ import (
 
 	"github.com/armosec/utils-k8s-go/probes"
 	beUtils "github.com/kubescape/backend/pkg/utils"
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 
 	"github.com/kubescape/operator/servicehandler"
 )
@@ -107,12 +107,12 @@ func main() {
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
 	kubernetesCache := objectcache.NewKubernetesCache(k8sApi)
-	
+
 	// Creating the ObjectCache using KubernetesCache
 	objectCache := objectcache.NewObjectCache(kubernetesCache)
 
 	if components.ServiceScanConfig.Enabled {
-		logger.L().Ctx(ctx).Info("service discovery enabeld and started with interval: ", helpers.String("interval", components.ServiceScanConfig.Interval.String()))
+		logger.L().Info("service discovery enabled and started with interval: ", helpers.String("interval", components.ServiceScanConfig.Interval.String()))
 		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
 	}
 
@@ -151,7 +151,7 @@ func main() {
 	if operatorConfig.ContinuousScanEnabled() {
 		go func(mh *mainhandler.MainHandler) {
 			err := mh.SetupContinuousScanning(ctx, cs.DefaultQueueSize, cfg.EventDeduplicationInterval)
-			logger.L().Ctx(ctx).Info("set up cont scanning service")
+			logger.L().Info("set up cont scanning service")
 			if err != nil {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 			}
@@ -177,7 +177,6 @@ func main() {
 
 		ruleBindingNotify := make(chan rulebindingmanager.RuleBindingNotify, 100)
 		ruleBindingCache.AddNotifier(&ruleBindingNotify)
-
 
 		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), webhook.NewAdmissionValidator(k8sApi, objectCache, exporter, ruleBindingCache), ruleBindingCache)
 		// Start HTTP REST server for webhook

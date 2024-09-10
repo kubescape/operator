@@ -9,10 +9,11 @@ import (
 
 	"github.com/kubescape/backend/pkg/versioncheck"
 	"github.com/kubescape/k8s-interface/workloadinterface"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	core1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/pager"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -153,7 +154,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
 	// wait for the kubevuln component to be ready
-	logger.L().Ctx(ctx).Info("Waiting for vuln scan to be ready")
+	logger.L().Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
 	waitFunc(mainHandler.config)
 
@@ -162,7 +163,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
 }
 
-func (h *MainHandler) StartContinuousScanning(ctx context.Context) error {
+func (h *MainHandler) StartContinuousScanning(_ context.Context) error {
 	return nil
 }
 
@@ -201,7 +202,7 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 		} else {
 			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
-			logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+			logger.L().Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 		}
 	}
 	span.End()
@@ -270,8 +271,8 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		return
 	}
 
-	labels := sessionObj.Command.GetLabels()
-	fields := sessionObj.Command.GetFieldSelector()
+	podLabels := sessionObj.Command.GetLabels()
+	fieldSelector := sessionObj.Command.GetFieldSelector()
 	namespaces, err := mainHandler.getNamespaces(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
@@ -279,30 +280,37 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		return
 	}
 
-	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
+	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, podLabels, fieldSelector)
 	logger.L().Info(info)
 	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
+
+	listOptions := metav1.ListOptions{}
+	if len(podLabels) > 0 {
+		set := labels.Set(podLabels)
+		listOptions.LabelSelector = k8sinterface.SelectorToString(set)
+	}
+	if len(fieldSelector) > 0 {
+		set := labels.Set(fieldSelector)
+		listOptions.FieldSelector = k8sinterface.SelectorToString(set)
+	}
 
 	for _, ns := range namespaces {
 		if mainHandler.config.SkipNamespace(ns) {
 			continue
 		}
-		ids, errs := mainHandler.getIDs(ns, labels, fields, []string{"pods"})
-		for i := range errs {
-			logger.L().Ctx(ctx).Warning(errs[i].Error())
-			sessionObj.Reporter.SendError(errs[i], mainHandler.sendReport, true)
-		}
 
 		sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
 
-		logger.L().Info(fmt.Sprintf("ids found: '%v'", ids))
-
-		for i := range ids {
+		if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, opts)
+		}).EachListItem(ctx, listOptions, func(obj runtime.Object) error {
+			pod := obj.(*core1.Pod)
+			podId := pkgwlid.GetWLID(mainHandler.config.ClusterName(), pod.GetNamespace(), "pod", pod.GetName())
 			cmd := sessionObj.Command.DeepCopy()
 
 			var err error
-			if pkgwlid.IsWlid(ids[i]) {
-				cmd.Wlid = ids[i]
+			if pkgwlid.IsWlid(podId) {
+				cmd.Wlid = podId
 				err = pkgwlid.IsWlidValid(cmd.Wlid)
 			} else {
 				err = fmt.Errorf("unknown id")
@@ -319,17 +327,21 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
 				logger.L().Ctx(ctx).Error(err.Error())
 				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-				continue
+				return nil
 			}
 
 			logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
 			if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
 				logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
 				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-				continue
+				return nil
 			}
 			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
-			logger.L().Ctx(ctx).Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+			logger.L().Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+			return nil
+		}); err != nil {
+			logger.L().Ctx(ctx).Warning(err.Error())
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 		}
 	}
 }
@@ -370,17 +382,13 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 		if mainHandler.config.SkipNamespace(ns) {
 			continue
 		}
-		pods, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, listOptions)
-		if err != nil {
-			logger.L().Ctx(ctx).Error("failed to list pods", helpers.String("namespace", ns), helpers.Error(err))
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-			continue
-		}
-		for i := range pods.Items {
-			pod := pods.Items[i]
+		if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, opts)
+		}).EachListItem(ctx, listOptions, func(obj runtime.Object) error {
+			pod := obj.(*core1.Pod)
 			if pod.Status.Phase != core1.PodRunning {
 				// skip non-running pods, for some reason the list includes non-running pods
-				continue
+				return nil
 			}
 			// need to set APIVersion and Kind before unstructured conversion, preparing for instanceID extraction
 			pod.APIVersion = "v1"
@@ -390,19 +398,19 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&pod)
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to convert pod to unstructured", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
-				continue
+				return nil
 			}
 			wl := workloadinterface.NewWorkloadObj(unstructuredObj)
 			instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
-				continue
+				return nil
 			}
 
 			// for naked pods, only handle if pod is older than guard time
 			if !k8sinterface.WorkloadHasParent(wl) && time.Now().Before(pod.CreationTimestamp.Add(mainHandler.config.GuardTime())) {
 				logger.L().Debug("naked pod younger than guard time detected, skipping scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("creationTimestamp", pod.CreationTimestamp.String()))
-				continue
+				return nil
 			}
 
 			for _, instanceID := range instanceIDs {
@@ -413,7 +421,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				}
 
 				// get container data
-				containerData, err := utils.PodToContainerData(mainHandler.k8sAPI, &pod, instanceID, mainHandler.config.ClusterName())
+				containerData, err := utils.PodToContainerData(mainHandler.k8sAPI, pod, instanceID, mainHandler.config.ClusterName())
 				if err != nil {
 					// if pod is not running, we can't get the image id
 					continue
@@ -442,33 +450,13 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				logger.L().Info("action completed successfully", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 				slugs[s] = true
 			}
-		}
-	}
-}
-
-func (mainHandler *MainHandler) getIDs(namespace string, labels, fields map[string]string, resources []string) ([]string, []error) {
-	var ids []string
-	var errs []error
-	for _, resource := range resources {
-		workloads, err := mainHandler.listWorkloads(namespace, resource, labels, fields)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if len(workloads) == 0 {
+			return nil
+		}); err != nil {
+			logger.L().Ctx(ctx).Error("failed to list pods", helpers.String("namespace", ns), helpers.Error(err))
+			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 			continue
 		}
-		w, e := mainHandler.getResourcesIDs(workloads)
-		if len(e) != 0 {
-			errs = append(errs, e...)
-		}
-		if len(w) == 0 {
-			err := fmt.Errorf("resource: '%s', failed to calculate workloadIDs. namespace: '%s', labels: '%v'", resource, namespace, labels)
-			errs = append(errs, err)
-		}
-		ids = append(ids, w...)
 	}
-
-	return ids, errs
 }
 
 func (mainHandler *MainHandler) getNamespaces(ctx context.Context, sessionObj *utils.SessionObj) ([]string, error) {

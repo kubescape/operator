@@ -12,9 +12,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"github.com/mitchellh/mapstructure"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/pager"
 
 	regCommon "github.com/armosec/registryx/common"
 	regInterfaces "github.com/armosec/registryx/interfaces"
@@ -806,13 +809,7 @@ func (registryScan *registryScan) setRegistryInfoFromConfigMap(registryInfo *arm
 	registryInfo.Exclude = registryConfig.Exclude
 }
 
-// KubernetesApiSecrets is an interface for getting workloads from k8s api
-type IWorkloadsGetter interface {
-	GetWorkload(namespace, kind, name string) (k8sinterface.IWorkload, error)
-	ListWorkloads2(namespace, kind string) ([]k8sinterface.IWorkload, error)
-}
-
-func getRegistryScanSecrets(k8sAPI IWorkloadsGetter, namespace, secretName string) ([]k8sinterface.IWorkload, error) {
+func getRegistryScanSecrets(k8sAPI *k8sinterface.KubernetesApi, namespace, secretName string) ([]k8sinterface.IWorkload, error) {
 	if secretName != "" {
 		secret, err := k8sAPI.GetWorkload(namespace, "Secret", secretName)
 		if err == nil && secret != nil {
@@ -822,15 +819,19 @@ func getRegistryScanSecrets(k8sAPI IWorkloadsGetter, namespace, secretName strin
 
 	// when secret name is not provided, we will try to find all secrets starting with kubescape-registry-scan
 	var registryScanSecrets []k8sinterface.IWorkload
-	all, err := k8sAPI.ListWorkloads2(namespace, "Secret")
-	if err == nil {
-		for _, secret := range all {
-			if strings.HasPrefix(secret.GetName(), armotypes.RegistryScanSecretName) {
-				registryScanSecrets = append(registryScanSecrets, secret)
+	err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return k8sAPI.KubernetesClient.CoreV1().Secrets(namespace).List(ctx, opts)
+	}).EachListItem(k8sAPI.Context, metav1.ListOptions{}, func(obj runtime.Object) error {
+		secret := obj.(*corev1.Secret)
+		if strings.HasPrefix(secret.GetName(), registryScanConfigmap) {
+			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(secret)
+			if err == nil {
+				wl := workloadinterface.NewWorkloadObj(unstructuredObj)
+				registryScanSecrets = append(registryScanSecrets, wl)
 			}
 		}
-	}
-
+		return nil
+	})
 	return registryScanSecrets, err
 }
 

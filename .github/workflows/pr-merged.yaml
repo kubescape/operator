@@ -37,7 +37,7 @@ jobs:
       BUILD_PLATFORM: linux/amd64,linux/arm64
       GO_VERSION: "1.23"
       REQUIRED_TESTS: '[
-                        "vuln_scan", 
+                        "vuln_v2_views", 
                         "vuln_scan_trigger_scan_public_registry", 
                         "vuln_scan_trigger_scan_public_registry_excluded", 
                         "vuln_scan_trigger_scan_private_quay_registry", 

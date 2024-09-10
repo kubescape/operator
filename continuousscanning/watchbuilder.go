@@ -66,8 +66,8 @@ func (w *SelfHealingWatch) Run(ctx context.Context, readyWg *sync.WaitGroup, out
 			return ctx.Err()
 		default:
 			gvr := helpers.String("gvr", w.gvr.String())
-			logger.L().Ctx(ctx).Debug("creating watch for GVR", gvr)
-			watch, err := w.makeWatchFunc(ctx, w.client, w.gvr, w.opts)
+			logger.L().Debug("creating watch for GVR", gvr)
+			watchFunc, err := w.makeWatchFunc(ctx, w.client, w.gvr, w.opts)
 			if err != nil {
 				logger.L().Ctx(ctx).Warning(
 					"got error when creating a watch for gvr",
@@ -76,8 +76,8 @@ func (w *SelfHealingWatch) Run(ctx context.Context, readyWg *sync.WaitGroup, out
 				)
 				continue
 			}
-			logger.L().Ctx(ctx).Debug("watch created\n")
-			w.currWatch = watch
+			logger.L().Debug("watch created\n")
+			w.currWatch = watchFunc
 
 			// Watch is considered ready once it is successfully acquired
 			// Signal we are done only the first time because
@@ -97,7 +97,7 @@ type WatchPool struct {
 }
 
 func (wp *WatchPool) Run(ctx context.Context, out chan<- watch.Event) {
-	logger.L().Ctx(ctx).Info("Watch pool: starting")
+	logger.L().Info("Watch pool: starting")
 
 	wg := &sync.WaitGroup{}
 	for idx := range wp.pool {
@@ -106,17 +106,17 @@ func (wp *WatchPool) Run(ctx context.Context, out chan<- watch.Event) {
 	}
 	wg.Wait()
 
-	logger.L().Ctx(ctx).Info("Watch pool: started ok")
+	logger.L().Info("Watch pool: started ok")
 }
 
-func NewWatchPool(ctx context.Context, client dynamic.Interface, gvrs []schema.GroupVersionResource, opts metav1.ListOptions) (*WatchPool, error) {
+func NewWatchPool(_ context.Context, client dynamic.Interface, gvrs []schema.GroupVersionResource, opts metav1.ListOptions) (*WatchPool, error) {
 	watches := make([]*SelfHealingWatch, len(gvrs))
 
 	for idx := range gvrs {
 		gvr := gvrs[idx]
-		watch := NewSelfHealingWatch(client, gvr, opts)
+		selfHealingWatch := NewSelfHealingWatch(client, gvr, opts)
 
-		watches[idx] = watch
+		watches[idx] = selfHealingWatch
 	}
 
 	pool := &WatchPool{pool: watches}
