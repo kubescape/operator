@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"istio.io/pkg/cache"
@@ -17,25 +18,29 @@ const (
 // CooldownQueue is a queue that lets clients put events into it with a cooldown
 //
 // When a client puts an event into a queue, it waits for a cooldown period before
-// the event is forwarded to the consumer. If and event for the same key is put into the queue
+// the event is forwarded to the consumer. If an event for the same key is put into the queue
 // again before the cooldown period is over, the event is overridden and the cooldown period is reset.
 type CooldownQueue struct {
 	closed     bool
+	mu         sync.Mutex  // mutex for closed
+	chanMu     *sync.Mutex // mutex for innerChan
 	seenEvents cache.ExpiringCache
-	// inner channel for producing events
-	innerChan chan watch.Event
-	// public channel for reading events
+	innerChan  chan watch.Event
 	ResultChan <-chan watch.Event
 }
 
 // NewCooldownQueue returns a new Cooldown Queue
 func NewCooldownQueue() *CooldownQueue {
 	events := make(chan watch.Event)
+	chanMu := sync.Mutex{}
 	callback := func(key, value any) {
+		chanMu.Lock()
+		defer chanMu.Unlock()
 		events <- value.(watch.Event)
 	}
 	c := cache.NewTTLWithCallback(defaultExpiration, evictionInterval, callback)
 	return &CooldownQueue{
+		chanMu:     &chanMu,
 		seenEvents: c,
 		innerChan:  events,
 		ResultChan: events,
@@ -50,11 +55,15 @@ func makeEventKey(e watch.Event) string {
 }
 
 func (q *CooldownQueue) Closed() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	return q.closed
 }
 
 // Enqueue enqueues an event in the Cooldown Queue
 func (q *CooldownQueue) Enqueue(e watch.Event) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.closed {
 		return
 	}
@@ -63,6 +72,10 @@ func (q *CooldownQueue) Enqueue(e watch.Event) {
 }
 
 func (q *CooldownQueue) Stop() {
+	q.chanMu.Lock()
+	defer q.chanMu.Unlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.closed = true
 	close(q.innerChan)
 }
