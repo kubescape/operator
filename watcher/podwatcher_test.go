@@ -112,7 +112,7 @@ func TestPodWatch(t *testing.T) {
 			storageClient := kssfake.NewSimpleClientset()
 			k8sAPI.DynamicClient = dynClient
 
-			eventQueue := NewCooldownQueue(DefaultQueueSize, DefaultTTL)
+			eventQueue := NewCooldownQueue()
 			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, eventQueue)
 
 			resourcesCreatedWg := &sync.WaitGroup{}
@@ -370,7 +370,7 @@ func Test_handlePodWatcher(t *testing.T) {
 			storageClient := kssfake.NewSimpleClientset()
 			k8sAPI.DynamicClient = dynClient
 
-			eventQueue := NewCooldownQueue(DefaultQueueSize, DefaultTTL)
+			eventQueue := NewCooldownQueue()
 			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, eventQueue)
 
 			resourcesCreatedWg := &sync.WaitGroup{}
@@ -451,7 +451,7 @@ func Test_listPods(t *testing.T) {
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset()
-			eventQueue := NewCooldownQueue(DefaultQueueSize, DefaultTTL)
+			eventQueue := NewCooldownQueue()
 
 			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, eventQueue)
 			resourcesCreatedWg := &sync.WaitGroup{}

@@ -114,7 +114,7 @@ func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi,
 }
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
-func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, queueSize int, eventCooldown time.Duration) error {
+func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
 	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
@@ -133,7 +133,7 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, que
 	loader := cs.NewTargetLoader(fetcher)
 
 	dynClient := mainHandler.k8sAPI.DynamicClient
-	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler, deletingHandler)
+	svc := cs.NewContinuousScanningService(dynClient, loader, triggeringHandler, deletingHandler)
 	svc.Launch(ctx)
 
 	return nil
@@ -150,7 +150,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	eventQueue := watcher.NewCooldownQueue(watcher.DefaultQueueSize, watcher.DefaultTTL)
+	eventQueue := watcher.NewCooldownQueue()
 	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
 	// wait for the kubevuln component to be ready
