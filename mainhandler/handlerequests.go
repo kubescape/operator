@@ -45,6 +45,7 @@ import (
 type MainHandler struct {
 	eventWorkerPool        *ants.PoolWithFunc
 	k8sAPI                 *k8sinterface.KubernetesApi
+	ksStorageClient        kssc.Interface
 	commandResponseChannel *commandResponseChannelData
 	config                 config.IConfig
 	sendReport             bool
@@ -79,12 +80,13 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, ksStorageClient kssc.Interface) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	mainHandler := &MainHandler{
 		k8sAPI:                 k8sAPI,
+		ksStorageClient:        ksStorageClient,
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 		config:                 config,
 		sendReport:             config.EventReceiverURL() != "",
@@ -146,12 +148,8 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}()
 
-	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
-	if err != nil {
-		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
-	}
 	eventQueue := watcher.NewCooldownQueue()
-	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
+	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, mainHandler.ksStorageClient, eventQueue)
 
 	// wait for the kubevuln component to be ready
 	logger.L().Info("Waiting for vuln scan to be ready")
@@ -160,7 +158,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
-	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
+	go watchHandler.ApplicationProfileWatch(ctx, mainHandler.eventWorkerPool)
 }
 
 func (h *MainHandler) StartContinuousScanning(_ context.Context) error {
@@ -229,8 +227,8 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	switch c.CommandName {
 	case apis.TypeScanImages:
 		return actionHandler.scanImage(ctx, sessionObj)
-	case utils.CommandScanFilteredSBOM:
-		actionHandler.scanFilteredSBOM(ctx, sessionObj)
+	case utils.CommandScanApplicationProfile:
+		return actionHandler.scanApplicationProfile(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan(ctx)
 	case apis.TypeSetKubescapeCronJob:

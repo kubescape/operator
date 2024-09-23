@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -66,7 +67,7 @@ func TestNewWatchHandlerProducesValidResult(t *testing.T) {
 	}
 }
 
-func TestHandleSBOMFilteredEvents(t *testing.T) {
+func TestHandleApplicationProfileEvents(t *testing.T) {
 	tt := []struct {
 		name                      string
 		inputEvents               []watch.Event
@@ -77,48 +78,61 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 		expectedWlidAndImageIDMap []string
 	}{
 		{
-			name: "Adding a new Filtered SBOM should produce a matching scan command",
+			name: "Adding a new application profile should produce a matching scan command",
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSyftFiltered{
+					Object: &spdxv1beta1.ApplicationProfile{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+							Name: "replicaset-nginx-6ccd565b7d",
 							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
-								helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-								helpersv1.ImageTagMetadataKey:      "nginx:1.14.0",
-								helpersv1.ContainerNameMetadataKey: "nginx",
+								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d",
+								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+								helpersv1.CompletionMetadataKey: helpersv1.Complete,
+								helpersv1.StatusMetadataKey:     helpersv1.Ready,
 							},
+						},
+						Spec: spdxv1beta1.ApplicationProfileSpec{
+							Containers: []spdxv1beta1.ApplicationProfileContainer{{
+								Name:     "nginx",
+								ImageID:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+								ImageTag: "nginx:1.14.0",
+							}},
 						},
 					},
 				},
 				{
 					Type: watch.Modified,
-					Object: &spdxv1beta1.SBOMSyftFiltered{
+					Object: &spdxv1beta1.ApplicationProfile{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
+							Name: "replicaset-nginx-7584b6f84c",
 							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/initContainerName-nginx",
-								helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-								helpersv1.ImageTagMetadataKey:      "nginx:1.14.0",
-								helpersv1.ContainerNameMetadataKey: "nginx",
+								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-7584b6f84c",
+								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+								helpersv1.CompletionMetadataKey: helpersv1.Complete,
+								helpersv1.StatusMetadataKey:     helpersv1.Ready,
 							},
+						},
+						Spec: spdxv1beta1.ApplicationProfileSpec{
+							InitContainers: []spdxv1beta1.ApplicationProfileContainer{{
+								Name:     "nginx",
+								ImageID:  "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
+								ImageTag: "nginx:latest",
+							}},
 						},
 					},
 				},
 			},
 			expectedCommands: []*apis.Command{
 				{
-					CommandName: utils.CommandScanFilteredSBOM,
+					CommandName: utils.CommandScanApplicationProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
 					Args: map[string]interface{}{
 						utils.ArgsContainerData: &utils.ContainerData{
 							Slug:          "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
 							ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
 							ImageTag:      "nginx:1.14.0",
+							InstanceID:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
 							ContainerName: "nginx",
 							ContainerType: "container",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
@@ -126,13 +140,14 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 					},
 				},
 				{
-					CommandName: utils.CommandScanFilteredSBOM,
+					CommandName: utils.CommandScanApplicationProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
 					Args: map[string]interface{}{
 						utils.ArgsContainerData: &utils.ContainerData{
-							Slug:          "replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
-							ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-							ImageTag:      "nginx:1.14.0",
+							Slug:          "replicaset-nginx-7584b6f84c-nginx-d01e-79cc",
+							ImageID:       "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
+							ImageTag:      "nginx:latest",
+							InstanceID:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-7584b6f84c/initContainerName-nginx",
 							ContainerName: "nginx",
 							ContainerType: "initContainer",
 							Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
@@ -141,15 +156,16 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				},
 			},
 			expectedObjectNames: []string{
-				"replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
-				"replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
+				"replicaset-nginx-6ccd565b7d",
+				"replicaset-nginx-7584b6f84c",
 			},
 			expectedSlugToImageIDMap: map[string]string{
 				"replicaset-nginx-6ccd565b7d-nginx-49d3-1861": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				"replicaset-nginx-6ccd565b7d-nginx-e4ff-657a": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				"replicaset-nginx-7584b6f84c-nginx-d01e-79cc": "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
 			},
 			expectedWlidAndImageIDMap: []string{
-				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx" + "nginx" + "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
 			},
 			expectedErrors: []error{},
 		},
@@ -158,22 +174,28 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.SBOMSyftFiltered{
+					Object: &spdxv1beta1.ApplicationProfile{
 						ObjectMeta: v1.ObjectMeta{
-							Name: "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
+							Name: "replicaset-nginx-6ccd565b7d",
 							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
-								helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-								helpersv1.ImageTagMetadataKey:      "", // missing image tag
-								helpersv1.ContainerNameMetadataKey: "nginx",
+								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d",
+								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+								helpersv1.CompletionMetadataKey: helpersv1.Complete,
+								helpersv1.StatusMetadataKey:     helpersv1.Ready,
 							},
+						},
+						Spec: spdxv1beta1.ApplicationProfileSpec{
+							Containers: []spdxv1beta1.ApplicationProfileContainer{{
+								Name:     "nginx",
+								ImageID:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+								ImageTag: "", // missing image tag
+							}},
 						},
 					},
 				},
 			},
 			expectedCommands:          []*apis.Command{},
-			expectedObjectNames:       []string{"replicaset-nginx-6ccd565b7d-nginx-49d3-1861"},
+			expectedObjectNames:       []string{"replicaset-nginx-6ccd565b7d"},
 			expectedSlugToImageIDMap:  map[string]string{},
 			expectedWlidAndImageIDMap: []string{},
 			expectedErrors: []error{
@@ -185,7 +207,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type:   watch.Deleted,
-					Object: &spdxv1beta1.SBOMSyftFiltered{},
+					Object: &spdxv1beta1.ApplicationProfile{},
 				},
 			},
 			expectedCommands:          []*apis.Command{},
@@ -210,7 +232,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			assert.NoError(t, err)
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 
-			k8sClient := k8sfake.NewSimpleClientset()
+			k8sClient := k8sfake.NewClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
 
@@ -220,7 +242,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 
 			wh := NewWatchHandler(ctx, operatorConfig, k8sAPI, storageClient, nil)
 
-			go wh.HandleSBOMFilteredEvents(inputEvents, cmdCh, errorCh)
+			go wh.HandleApplicationProfileEvents(inputEvents, cmdCh, errorCh)
 
 			go func() {
 				for _, e := range tc.inputEvents {
@@ -250,7 +272,7 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 				}
 			}
 
-			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSyftFiltereds("").List(ctx, v1.ListOptions{})
+			actualObjects, _ := storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, v1.ListOptions{})
 
 			actualObjectNames := []string{}
 			for _, obj := range actualObjects.Items {
@@ -270,143 +292,17 @@ func TestHandleSBOMFilteredEvents(t *testing.T) {
 			}
 
 			assert.Equal(t, tc.expectedObjectNames, actualObjectNames, "Objects in the storage don’t match")
-			assert.Equal(t, tc.expectedErrors, actualErrors, "Errors don’t match")
+			assert.Equal(t, len(tc.expectedErrors), len(actualErrors), "Errors don’t match")
+			for i := range actualErrors {
+				assert.True(t, errors.Is(actualErrors[i], tc.expectedErrors[i]), "Errors don’t match")
+			}
 			assert.Equal(t, tc.expectedCommands, actualCommands, "Commands don’t match")
 		})
 
 	}
 }
-func TestGetContainerDataFilteredSBOM(t *testing.T) {
-	tests := []struct {
-		obj     *spdxv1beta1.SBOMSyftFiltered
-		want    *utils.ContainerData
-		name    string
-		wantErr bool
-	}{
-		{
-			name: "valid SBOMSyftFiltered object",
-			obj: &spdxv1beta1.SBOMSyftFiltered{
-				ObjectMeta: v1.ObjectMeta{
-					Annotations: map[string]string{
-						helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
-						helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-						helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-						helpersv1.ImageTagMetadataKey:      "nginx:1.14.1",
-						helpersv1.ContainerNameMetadataKey: "nginx",
-					},
-				},
-			},
-			want: &utils.ContainerData{
-				Slug:          "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
-				Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-				ContainerName: "nginx",
-				ContainerType: "container",
-				ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				ImageTag:      "nginx:1.14.1",
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid SBOMSyftFiltered object - missing instanceID",
-			obj: &spdxv1beta1.SBOMSyftFiltered{
-				ObjectMeta: v1.ObjectMeta{
-					Annotations: map[string]string{
-						helpersv1.InstanceIDMetadataKey:    "",
-						helpersv1.WlidMetadataKey:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-						helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-						helpersv1.ImageTagMetadataKey:      "nginx:1.14.1",
-						helpersv1.ContainerNameMetadataKey: "nginx",
-					},
-				},
-			},
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name: "invalid SBOMSyftFiltered object - missing other fields",
-			obj: &spdxv1beta1.SBOMSyftFiltered{
-				ObjectMeta: v1.ObjectMeta{
-					Annotations: map[string]string{
-						helpersv1.InstanceIDMetadataKey:    "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
-						helpersv1.WlidMetadataKey:          "",
-						helpersv1.ImageIDMetadataKey:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-						helpersv1.ImageTagMetadataKey:      "nginx:1.14.1",
-						helpersv1.ContainerNameMetadataKey: "nginx",
-					},
-				},
-			},
-			want:    nil,
-			wantErr: true,
-		},
-	}
 
-	wh := &WatchHandler{}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := wh.getContainerDataFilteredSBOM(tt.obj)
-			assert.Equal(t, tt.want, got)
-			assert.Equal(t, tt.wantErr, err != nil)
-		})
-	}
-}
-func TestAnnotationsToContainerData(t *testing.T) {
-	tests := []struct {
-		annotations map[string]string
-		wantData    *utils.ContainerData
-		name        string
-		wantErr     bool
-	}{
-		{
-			name: "valid annotations",
-			annotations: map[string]string{
-				helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d/containerName-nginx",
-				helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-				helpersv1.ImageIDMetadataKey:    "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				helpersv1.ImageTagMetadataKey:   "nginx:1.14.1",
-			},
-			wantData: &utils.ContainerData{
-				Slug:          "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
-				Wlid:          "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-				ContainerName: "nginx",
-				ContainerType: "container",
-				ImageID:       "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				ImageTag:      "nginx:1.14.1",
-			},
-			wantErr: false,
-		},
-		{
-			name: "missing instance ID annotation",
-			annotations: map[string]string{
-				helpersv1.WlidMetadataKey:     "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-				helpersv1.ImageIDMetadataKey:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				helpersv1.ImageTagMetadataKey: "nginx:1.14.1",
-			},
-			wantData: &utils.ContainerData{},
-			wantErr:  true,
-		},
-		{
-			name: "invalid instance ID annotation",
-			annotations: map[string]string{
-				helpersv1.InstanceIDMetadataKey: "invalidInstanceID",
-				helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-				helpersv1.ImageIDMetadataKey:    "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				helpersv1.ImageTagMetadataKey:   "nginx:1.14.1",
-			},
-			wantData: &utils.ContainerData{},
-			wantErr:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotData, gotErr := annotationsToContainerData(tt.annotations)
-			assert.Equal(t, tt.wantData, gotData)
-			assert.Equal(t, tt.wantErr, gotErr != nil)
-		})
-	}
-}
-func TestSkipSBOM(t *testing.T) {
+func TestSkipAP(t *testing.T) {
 	tests := []struct {
 		annotations map[string]string
 		name        string
@@ -449,12 +345,13 @@ func TestSkipSBOM(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotSkip := skipSBOM(tt.annotations)
+			gotSkip := skipAP(tt.annotations)
 			assert.Equal(t, tt.wantSkip, gotSkip)
 		})
 	}
 }
-func TestValidateContainerDataFilteredSBOM(t *testing.T) {
+
+func TestValidateContainerDataApplicationProfile(t *testing.T) {
 	tests := []struct {
 		wantErr       error
 		containerData *utils.ContainerData
@@ -463,10 +360,11 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 		{
 			name: "missing ContainerName",
 			containerData: &utils.ContainerData{
-				ImageID:  "imageID",
-				Slug:     "slug",
-				Wlid:     "wlid",
-				ImageTag: "imageTag",
+				ImageID:    "imageID",
+				Slug:       "slug",
+				InstanceID: "TODO",
+				Wlid:       "wlid",
+				ImageTag:   "imageTag",
 			},
 			wantErr: ErrMissingContainerName,
 		},
@@ -475,6 +373,7 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 			containerData: &utils.ContainerData{
 				ContainerName: "containerName",
 				Slug:          "slug",
+				InstanceID:    "TODO",
 				Wlid:          "wlid",
 				ImageTag:      "imageTag",
 			},
@@ -484,6 +383,7 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 			name: "missing Slug",
 			containerData: &utils.ContainerData{
 				ContainerName: "containerName",
+				InstanceID:    "TODO",
 				ImageID:       "imageID",
 				Wlid:          "wlid",
 				ImageTag:      "imageTag",
@@ -491,11 +391,23 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 			wantErr: ErrMissingSlug,
 		},
 		{
+			name: "missing InstanceID",
+			containerData: &utils.ContainerData{
+				ContainerName: "containerName",
+				Slug:          "slug",
+				ImageID:       "imageID",
+				Wlid:          "wlid",
+				ImageTag:      "imageTag",
+			},
+			wantErr: ErrMissingInstanceID,
+		},
+		{
 			name: "missing WLID",
 			containerData: &utils.ContainerData{
 				ContainerName: "containerName",
 				ImageID:       "imageID",
 				Slug:          "slug",
+				InstanceID:    "TODO",
 				ImageTag:      "imageTag",
 			},
 			wantErr: ErrMissingWLID,
@@ -506,6 +418,7 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 				ContainerName: "containerName",
 				ImageID:       "imageID",
 				Slug:          "slug",
+				InstanceID:    "TODO",
 				Wlid:          "wlid",
 			},
 			wantErr: ErrMissingImageTag,
@@ -516,6 +429,7 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 				ContainerName: "containerName",
 				ImageID:       "imageID",
 				Slug:          "slug",
+				InstanceID:    "TODO",
 				Wlid:          "wlid",
 				ImageTag:      "imageTag",
 			},
@@ -525,7 +439,7 @@ func TestValidateContainerDataFilteredSBOM(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateContainerDataFilteredSBOM(tt.containerData)
+			err := validateContainerDataApplicationProfiles(tt.containerData)
 			assert.Equal(t, tt.wantErr, err)
 		})
 	}
