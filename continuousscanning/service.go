@@ -2,8 +2,8 @@ package continuousscanning
 
 import (
 	"context"
-	"time"
 
+	"github.com/kubescape/operator/watcher"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
@@ -19,7 +19,7 @@ type ContinuousScanningService struct {
 	workDone          chan struct{}
 	k8sdynamic        dynamic.Interface
 	eventHandlers     []EventHandler
-	eventQueue        *cooldownQueue
+	eventQueue        *watcher.CooldownQueue
 }
 
 func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.Command {
@@ -34,8 +34,8 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	wp.Run(ctx, resourceEventsCh)
 	logger.L().Info("ran watch pool")
 
-	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *cooldownQueue) {
-		defer out.Stop(ctx)
+	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *watcher.CooldownQueue) {
+		defer out.Stop()
 
 		for {
 			select {
@@ -44,7 +44,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
-				out.Enqueue(ctx, e)
+				out.Enqueue(e)
 			case <-shutdownCh:
 				return
 			}
@@ -100,9 +100,9 @@ func (s *ContinuousScanningService) Stop() {
 	<-s.workDone
 }
 
-func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, queueSize int, sameEventCooldown time.Duration, h ...EventHandler) *ContinuousScanningService {
+func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h ...EventHandler) *ContinuousScanningService {
 	doneCh := make(chan struct{})
-	eventQueue := NewCooldownQueue(queueSize, sameEventCooldown)
+	eventQueue := watcher.NewCooldownQueue()
 	workDone := make(chan struct{})
 
 	return &ContinuousScanningService{

@@ -114,7 +114,7 @@ func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi,
 }
 
 // SetupContinuousScanning sets up the continuous cluster scanning function
-func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, queueSize int, eventCooldown time.Duration) error {
+func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
 	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
@@ -133,7 +133,7 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context, que
 	loader := cs.NewTargetLoader(fetcher)
 
 	dynClient := mainHandler.k8sAPI.DynamicClient
-	svc := cs.NewContinuousScanningService(dynClient, loader, queueSize, eventCooldown, triggeringHandler, deletingHandler)
+	svc := cs.NewContinuousScanningService(dynClient, loader, triggeringHandler, deletingHandler)
 	svc.Launch(ctx)
 
 	return nil
@@ -150,7 +150,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
-	eventQueue := watcher.NewCooldownQueue(watcher.DefaultQueueSize, watcher.DefaultTTL)
+	eventQueue := watcher.NewCooldownQueue()
 	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
 	// wait for the kubevuln component to be ready
@@ -433,16 +433,16 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					CommandName: apis.TypeScanImages,
 					Args: map[string]interface{}{
 						utils.ArgsContainerData: containerData,
-						utils.ArgsPod:           &pod,
+						utils.ArgsPod:           pod,
 					},
 				}
 
 				// send specific command to the channel
 				newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
 
-				logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+				logger.L().Info("triggering scan image", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 				if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
-					logger.L().Info("failed to complete action", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+					logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 					newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 					continue
 				}

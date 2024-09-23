@@ -22,7 +22,6 @@ import (
 	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
 	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
-	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/objectcache"
@@ -150,7 +149,7 @@ func main() {
 
 	if operatorConfig.ContinuousScanEnabled() {
 		go func(mh *mainhandler.MainHandler) {
-			err := mh.SetupContinuousScanning(ctx, cs.DefaultQueueSize, cfg.EventDeduplicationInterval)
+			err := mh.SetupContinuousScanning(ctx)
 			logger.L().Info("set up cont scanning service")
 			if err != nil {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))

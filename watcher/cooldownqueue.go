@@ -1,40 +1,47 @@
 package watcher
 
 import (
+	"strings"
+	"sync"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
-	v1 "k8s.io/api/core/v1"
+	"istio.io/pkg/cache"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
 const (
-	// Default size for the cooldown queue
-	DefaultQueueSize = 512
-	// Default TTL for events put in the queue
-	DefaultTTL = 1 * time.Second
+	defaultExpiration = 5 * time.Second
+	evictionInterval  = 1 * time.Second
 )
 
 // CooldownQueue is a queue that lets clients put events into it with a cooldown
 //
-// When a client puts an event into a queue, it forwards the event to its
-// output channel and starts a cooldown for this event. If a client attempts to
-// put the same event into the queue while the cooldown is running, the queue
-// will silently drop the event. When the cooldown resets and a client puts the
-// same event into the queue, it will be forwarded to the output channel
+// When a client puts an event into a queue, it waits for a cooldown period before
+// the event is forwarded to the consumer. If an event for the same key is put into the queue
+// again before the cooldown period is over, the event is overridden and the cooldown period is reset.
 type CooldownQueue struct {
-	seenEvents *lru.LRU[string, bool]
+	closed     bool
+	mu         sync.Mutex  // mutex for closed
+	chanMu     *sync.Mutex // mutex for innerChan
+	seenEvents cache.ExpiringCache
 	innerChan  chan watch.Event
 	ResultChan <-chan watch.Event
-	closed     bool
 }
 
 // NewCooldownQueue returns a new Cooldown Queue
-func NewCooldownQueue(size int, cooldown time.Duration) *CooldownQueue {
-	cache := lru.NewLRU[string, bool](size, nil, cooldown)
+func NewCooldownQueue() *CooldownQueue {
 	events := make(chan watch.Event)
+	chanMu := sync.Mutex{}
+	callback := func(key, value any) {
+		chanMu.Lock()
+		defer chanMu.Unlock()
+		events <- value.(watch.Event)
+	}
+	c := cache.NewTTLWithCallback(defaultExpiration, evictionInterval, callback)
 	return &CooldownQueue{
-		seenEvents: cache,
+		chanMu:     &chanMu,
+		seenEvents: c,
 		innerChan:  events,
 		ResultChan: events,
 	}
@@ -42,35 +49,33 @@ func NewCooldownQueue(size int, cooldown time.Duration) *CooldownQueue {
 
 // makeEventKey creates a unique key for an event from a watcher
 func makeEventKey(e watch.Event) string {
-	object, ok := e.Object.(*v1.Pod)
-	if !ok {
-		return ""
-	}
-	eventKey := string(e.Type) + "-" + string(object.GetUID())
-	return eventKey
+	gvk := e.Object.GetObjectKind().GroupVersionKind()
+	meta := e.Object.(metav1.Object)
+	return strings.Join([]string{gvk.Group, gvk.Version, gvk.Kind, meta.GetNamespace(), meta.GetName()}, "/")
 }
 
 func (q *CooldownQueue) Closed() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	return q.closed
 }
 
 // Enqueue enqueues an event in the Cooldown Queue
 func (q *CooldownQueue) Enqueue(e watch.Event) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.closed {
 		return
 	}
 	eventKey := makeEventKey(e)
-	_, exists := q.seenEvents.Get(eventKey)
-	if exists {
-		return
-	}
-	go func() {
-		q.innerChan <- e
-	}()
-	q.seenEvents.Add(eventKey, true)
+	q.seenEvents.Set(eventKey, e)
 }
 
 func (q *CooldownQueue) Stop() {
+	q.chanMu.Lock()
+	defer q.chanMu.Unlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.closed = true
 	close(q.innerChan)
 }
