@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
@@ -134,6 +135,23 @@ func (wh *WatchHandler) HandleSBOMEvents(sfEvents <-chan watch.Event, producedCo
 func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
 	// no need to support ExcludeNamespaces and IncludeNamespaces since node-agent will respect them as well
 	return wh.storageClient.SpdxV1beta1().SBOMSyfts("").Watch(context.Background(), v1.ListOptions{})
+}
+
+func skipSBOM(annotations map[string]string) bool {
+	ann := []string{
+		"", // empty string for backward compatibility
+		helpersv1.Ready,
+		helpersv1.Completed,
+	}
+
+	if len(annotations) == 0 {
+		return true // skip
+	}
+
+	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok {
+		return !slices.Contains(ann, status)
+	}
+	return false // do not skip
 }
 
 func validateContainerData(containerData *utils.ContainerData) error {

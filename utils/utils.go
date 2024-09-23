@@ -27,9 +27,11 @@ const KubescapeRequestStatusV1 = "v1/status"
 const ArgdContainerToImageIds = "containerToImageIDs"
 const ArgsPod = "pod"
 const ArgsContainerData = "containerData"
+const ArgsName = "name"
+const ArgsNamespace = "namespace"
 const dockerPullableURN = "docker-pullable://"
 
-const CommandScanFilteredSBOM = "scanFilteredSBOM"
+const CommandScanApplicationProfile = "scanApplicationProfile"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}
@@ -108,6 +110,7 @@ func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, inst
 		Wlid:          wlid,
 		ContainerType: string(instanceID.GetInstanceType()),
 		ImageTag:      imageTag,
+		InstanceID:    instanceID.GetStringFormatted(),
 	}, nil
 }
 

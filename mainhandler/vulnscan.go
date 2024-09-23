@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/armosec/registryx/interfaces"
-	"github.com/armosec/registryx/registryclients"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/armosec/registryx/interfaces"
+	"github.com/armosec/registryx/registryclients"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/distribution/reference"
 	dockerregistry "github.com/docker/docker/api/types/registry"
@@ -53,6 +54,14 @@ const (
 	testRegistryRetrieveReposStatus  testRegistryConnectivityStatus = "retrieveRepositories"
 	testRegistryRetrieveTagsStatus   testRegistryConnectivityStatus = "retrieveTags"
 )
+
+func getAPScanURL(config config.IConfig) *url.URL {
+	return &url.URL{
+		Scheme: "http",
+		Host:   config.KubevulnURL(),
+		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.ApplicationProfileScanCommandPath),
+	}
+}
 
 func getVulnScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
@@ -459,30 +468,32 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *u
 	return nil
 }
 
-func (actionHandler *ActionHandler) scanFilteredSBOM(ctx context.Context, sessionObj *utils.SessionObj) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanFilteredSBOM")
+func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanApplicationProfile")
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("kubevuln is not enabled")
 	}
 
-	containerData, ok := actionHandler.command.Args[utils.ArgsContainerData].(*utils.ContainerData)
-	if !ok {
-		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
+	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
+	cmd := &apis.WebsocketScanCommand{
+		Wlid: actionHandler.wlid,
+		ImageScanParams: apis.ImageScanParams{
+			Args: map[string]interface{}{
+				"name":      actionHandler.command.Args[utils.ArgsName],
+				"namespace": actionHandler.command.Args[utils.ArgsNamespace],
+			},
+		},
 	}
 
-	// scanning a filtered SBOM (SBOM already downloaded) so AuthConfig can be empty
-	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
-	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, &ImageScanConfig{})
-
-	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanImages); err != nil {
+	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanApplicationProfile); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
 	}
 	return nil
 }
-func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, sessionObj *utils.SessionObj, imageScanConfig *ImageScanConfig) *apis.WebsocketScanCommand {
 
+func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, sessionObj *utils.SessionObj, imageScanConfig *ImageScanConfig) *apis.WebsocketScanCommand {
 	cmd := &apis.WebsocketScanCommand{
 		ImageScanParams: apis.ImageScanParams{
 			Session: apis.SessionChain{
@@ -510,9 +521,9 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 		cmd.Args[identifiers.AttributeUseHTTP] = true
 	}
 
-	// Add instanceID only if container is not empty
-	if containerData.Slug != "" {
-		cmd.InstanceID = &containerData.Slug
+	// Add instanceID only if not empty
+	if containerData.InstanceID != "" {
+		cmd.InstanceID = &containerData.InstanceID
 	}
 	if actionHandler.reporter != nil {
 		prepareSessionChain(sessionObj, cmd, actionHandler)
@@ -649,6 +660,10 @@ func sendWorkloadToRegistryScan(ctx context.Context, config config.IConfig, regi
 	return sendWorkloadWithCredentials(ctx, getRegistryScanURL(config), registryScanCommand)
 }
 
+func sendWorkloadToAPScan(ctx context.Context, config config.IConfig, websocketScanCommand *apis.WebsocketScanCommand) error {
+	return sendWorkloadWithCredentials(ctx, getAPScanURL(config), websocketScanCommand)
+}
+
 func sendWorkloadToCVEScan(ctx context.Context, config config.IConfig, websocketScanCommand *apis.WebsocketScanCommand) error {
 	return sendWorkloadWithCredentials(ctx, getVulnScanURL(config), websocketScanCommand)
 }
@@ -656,6 +671,8 @@ func sendWorkloadToCVEScan(ctx context.Context, config config.IConfig, websocket
 func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
 	var err error
 	switch command {
+	case apis.TypeScanApplicationProfile:
+		err = sendWorkloadToAPScan(ctx, config, webSocketScanCommand)
 	case apis.TypeScanImages:
 		err = sendWorkloadToCVEScan(ctx, config, webSocketScanCommand)
 	default:
