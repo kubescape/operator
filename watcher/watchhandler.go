@@ -19,6 +19,7 @@ var (
 	ErrMissingSlug          = fmt.Errorf("missing slug")
 	ErrMissingImageTag      = fmt.Errorf("missing image ID")
 	ErrMissingImageID       = fmt.Errorf("missing image tag")
+	ErrMissingInstanceID    = fmt.Errorf("missing instanceID")
 	ErrMissingContainerName = fmt.Errorf("missing container name")
 	ErrUnsupportedObject    = errors.New("unsupported object type")
 )

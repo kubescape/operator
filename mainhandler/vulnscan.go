@@ -459,8 +459,8 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *u
 	return nil
 }
 
-func (actionHandler *ActionHandler) scanFilteredSBOM(ctx context.Context, sessionObj *utils.SessionObj) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanFilteredSBOM")
+func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanApplicationProfile")
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
@@ -472,7 +472,7 @@ func (actionHandler *ActionHandler) scanFilteredSBOM(ctx context.Context, sessio
 		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
 	}
 
-	// scanning a filtered SBOM (SBOM already downloaded) so AuthConfig can be empty
+	// scanning an application profile so AuthConfig can be empty
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
 	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, &ImageScanConfig{})
 
@@ -510,9 +510,9 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 		cmd.Args[identifiers.AttributeUseHTTP] = true
 	}
 
-	// Add instanceID only if container is not empty
-	if containerData.Slug != "" {
-		cmd.InstanceID = &containerData.Slug
+	// Add instanceID only if not empty
+	if containerData.InstanceID != "" {
+		cmd.InstanceID = &containerData.InstanceID
 	}
 	if actionHandler.reporter != nil {
 		prepareSessionChain(sessionObj, cmd, actionHandler)
