@@ -6,7 +6,7 @@ require (
 	github.com/armosec/armoapi-go v0.0.453
 	github.com/armosec/cluster-notifier-api-go v0.0.5
 	github.com/armosec/registryx v0.0.16
-	github.com/armosec/utils-go v0.0.57
+	github.com/armosec/utils-go v0.0.58-0.20241009091159-a6b056c6880a
 	github.com/armosec/utils-k8s-go v0.0.26
 	github.com/aws/aws-sdk-go v1.50.8
 	github.com/cenkalti/backoff v2.2.1+incompatible

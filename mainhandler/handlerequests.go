@@ -198,6 +198,7 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 	} else {
 		// handle requests
 		if err := mainHandler.HandleSingleRequest(ctx, &sessionObj); err != nil {
+			logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
 			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 		} else {
 			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
@@ -331,6 +332,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 
 			logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
 			if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
+				logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
 				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 				return nil
 			}
