@@ -153,6 +153,10 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	eventQueue := watcher.NewCooldownQueue()
 	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
+	commandWatchHandler := watcher.NewCommandWatchHandler(mainHandler.k8sAPI)
+	registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler)
+	go registryCommandsHandler.Start()
+
 	// wait for the kubevuln component to be ready
 	logger.L().Info("Waiting for vuln scan to be ready")
 	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
@@ -161,6 +165,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	// start watching
 	go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
+	go commandWatchHandler.CommandWatch(ctx)
 }
 
 func (h *MainHandler) StartContinuousScanning(_ context.Context) error {

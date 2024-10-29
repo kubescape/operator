@@ -1,0 +1,19 @@
+{
+    "apiVersion": "kubescape.io/v1alpha1",
+    "kind": "OperatorCommand",
+    "metadata": {
+        "creationTimestamp": "2024-10-22T07:22:27Z",
+        "generation": 1,
+        "labels": {
+            "kubescape.io/app-name": "operator"
+        },
+        "name": "52601522-359f-4417-a140-cf60e57302f6",
+        "namespace": "kubescape",
+        "uid": "e67cc9d0-d486-4a77-8f32-572bf952e3de"
+    },
+    "spec": {
+        "body": "eyJndWlkIjoiYTY3YWNmMWQtOGYwNC00MTc5LTg1NjUtYTZmY2FlZWQ4YzdjIiwibmFtZSI6IiIsInVwZGF0ZWRUaW1lIjoiMjAyNC0xMC0yMlQwNzoyMjoyN1oiLCJwcm92aWRlciI6InF1YXkiLCJjbHVzdGVyTmFtZSI6ImNsdXN0ZXItMjE4MzQiLCJyZXBvc2l0b3JpZXMiOlsidGVzdDEiXSwic2NhbkZyZXF1ZW5jeSI6IjMgNSAqICogKiIsInJlc291cmNlTmFtZSI6Imt1YmVzY2FwZS1yZWdpc3RyeS1zY2FuLTIxMjI3OTczMTAiLCJhdXRoSUQiOiI4YmE4N2JkNS1hNjc1LTQ4YTYtOTEzMC1kN2ZlNjBlYzVhZjEiLCJjb250YWluZXJSZWdpc3RyeU5hbWUiOiJ0ZXN0Iiwicm9ib3RBY2NvdW50TmFtZSI6InRlc3QiLCJyb2JvdEFjY291bnRUb2tlbiI6InRlc3QifQo=",
+        "commandType": "CreateRegistry",
+        "guid": "a67acf1d-8f04-4179-8565-a6fcaeed8c7c"
+    }
+}
