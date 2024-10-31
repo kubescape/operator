@@ -19,16 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-const retryInterval = 1 * time.Second
-
-var (
-	ErrMissingWLID          = fmt.Errorf("missing WLID")
-	ErrMissingSlug          = fmt.Errorf("missing slug")
-	ErrMissingImageTag      = fmt.Errorf("missing image ID")
-	ErrMissingImageID       = fmt.Errorf("missing image tag")
-	ErrMissingContainerName = fmt.Errorf("missing container name")
-)
-
 // SBOMFilteredWatch watches and processes changes on Filtered SBOMs
 func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	inputEvents := make(chan watch.Event)
@@ -64,7 +54,7 @@ func (wh *WatchHandler) SBOMFilteredWatch(ctx context.Context, workerPool *ants.
 			}
 		case cmd, ok := <-cmdCh:
 			if ok {
-				utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
+				_ = utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
