@@ -29,6 +29,7 @@ type Capabilities struct {
 	Otel                 string `json:"otel"`
 	Relevancy            string `json:"relevancy"`
 	RuntimeObservability string `json:"runtimeObservability"`
+	NodeSbomGeneration   string `json:"nodeSbomGeneration"`
 	Seccomp              string `json:"seccomp"`
 	VulnerabilityScan    string `json:"vulnerabilityScan"`
 	AdmissionController  string `json:"admissionController"`
@@ -116,7 +117,9 @@ type IConfig interface {
 	GatewayWebsocketURL() string
 	ConcurrencyWorkers() int
 	Components() Components
+	AdmissionControllerEnabled() bool
 	ContinuousScanEnabled() bool
+	NodeSbomGenerationEnabled() bool
 	CleanUpRoutineInterval() time.Duration
 	MatchingRulesFilename() string
 	TriggerSecurityFramework() bool
@@ -155,6 +158,10 @@ func (c *OperatorConfig) ContinuousScanEnabled() bool {
 
 func (c *OperatorConfig) AdmissionControllerEnabled() bool {
 	return c.components.Capabilities.AdmissionController == "enable"
+}
+
+func (c *OperatorConfig) NodeSbomGenerationEnabled() bool {
+	return c.components.Capabilities.NodeSbomGeneration == "enable"
 }
 
 func (c *OperatorConfig) KubevulnURL() string {

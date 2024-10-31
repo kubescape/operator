@@ -2,24 +2,19 @@ package watcher
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/goradd/maps"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
-	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
 
 	core1 "k8s.io/api/core/v1"
@@ -27,30 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-var (
-	ErrUnsupportedObject = errors.New("unsupported object type")
-	ErrUnknownImageHash  = errors.New("unknown image hash")
-)
-
-type WatchHandler struct {
-	SlugToImageID  maps.SafeMap[string, string] // map of <Slug> : string <image ID>
-	WlidAndImageID mapset.Set[string]           // set of <wlid+imageID>
-	storageClient  kssc.Interface
-	cfg            config.IConfig
-	k8sAPI         *k8sinterface.KubernetesApi
-	eventQueue     *CooldownQueue
-}
-
-// NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
-func NewWatchHandler(ctx context.Context, cfg config.IConfig, k8sAPI *k8sinterface.KubernetesApi, storageClient kssc.Interface, eventQueue *CooldownQueue) *WatchHandler {
-	return &WatchHandler{
-		storageClient:  storageClient,
-		k8sAPI:         k8sAPI,
-		cfg:            cfg,
-		WlidAndImageID: mapset.NewSet[string](),
-		eventQueue:     eventQueue,
-	}
-}
 func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) error {
 	watchOpts := v1.ListOptions{
 		Watch:         true,
