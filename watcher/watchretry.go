@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	corev1 "k8s.io/api/core/v1"
