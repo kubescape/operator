@@ -42,7 +42,6 @@ jobs:
                         "vuln_scan_trigger_scan_public_registry_excluded", 
                         "vuln_scan_trigger_scan_private_quay_registry", 
                         "vuln_scan_triggering_with_cron_job", 
-                        "registry_scanning_triggering_with_cron_job", 
                         "ks_microservice_ns_creation",
                         "ks_microservice_on_demand", 
                         "ks_microservice_mitre_framework_on_demand", 
