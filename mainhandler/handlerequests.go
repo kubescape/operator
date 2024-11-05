@@ -151,7 +151,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
 	}
 	eventQueue := watcher.NewCooldownQueue()
-	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
+	watchHandler := watcher.NewWatchHandler(mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
 	// wait for the kubevuln component to be ready
 	logger.L().Info("Waiting for vuln scan to be ready")
@@ -159,7 +159,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	waitFunc(mainHandler.config)
 
 	// start watching
-	go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
+	go watchHandler.SBOMWatch(ctx, mainHandler.eventWorkerPool)
 	go watchHandler.SBOMFilteredWatch(ctx, mainHandler.eventWorkerPool)
 }
 
@@ -230,7 +230,7 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	case apis.TypeScanImages:
 		return actionHandler.scanImage(ctx, sessionObj)
 	case utils.CommandScanFilteredSBOM:
-		actionHandler.scanFilteredSBOM(ctx, sessionObj)
+		return actionHandler.scanFilteredSBOM(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan(ctx)
 	case apis.TypeSetKubescapeCronJob:
@@ -356,7 +356,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 		return
 	}
 
-	labels := sessionObj.Command.GetLabels()
+	lbls := sessionObj.Command.GetLabels()
 	fields := sessionObj.Command.GetFieldSelector()
 	namespaces, err := mainHandler.getNamespaces(ctx, sessionObj)
 	if err != nil {
@@ -365,12 +365,12 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 		return
 	}
 
-	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, labels, fields)
+	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, lbls, fields)
 	logger.L().Info(info)
 	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 
 	listOptions := metav1.ListOptions{
-		LabelSelector: k8sinterface.SelectorToString(labels),
+		LabelSelector: k8sinterface.SelectorToString(lbls),
 		FieldSelector: k8sinterface.SelectorToString(fields),
 	}
 
