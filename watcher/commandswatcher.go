@@ -48,14 +48,9 @@ func (cwh *CommandWatchHandler) CommandWatch(ctx context.Context) {
 
 	// process events
 	for event := range cwh.eventQueue.ResultChan {
-		// skip non-objects
-		obj, ok := event.Object.(runtime.Object)
-		if !ok || obj == nil {
-			continue
-		}
 		switch event.Type {
 		case watch.Added:
-			cwh.AddHandler(obj)
+			cwh.AddHandler(event.Object)
 		}
 	}
 }

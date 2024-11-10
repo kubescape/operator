@@ -102,6 +102,7 @@ func setupEnvAndWatchers(t *testing.T, ctx context.Context, k8sAPI *k8sinterface
 		},
 	}
 	_, err = k8sAPI.KubernetesClient.CoreV1().Namespaces().Create(ctx, namespace, v1.CreateOptions{})
+	require.NoError(t, err)
 
 	// add registry cronjob template
 	var cjTemplate corev1.ConfigMap
