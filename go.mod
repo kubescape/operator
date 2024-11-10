@@ -8,7 +8,7 @@ require (
 	github.com/armosec/armoapi-go v0.0.467
 	github.com/armosec/cluster-notifier-api-go v0.0.5
 	github.com/armosec/registryx v0.0.16
-	github.com/armosec/utils-go v0.0.57
+	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.30
 	github.com/aws/aws-sdk-go v1.50.8
 	github.com/cenkalti/backoff v2.2.1+incompatible
@@ -32,6 +32,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.9.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
+	github.com/testcontainers/testcontainers-go/modules/k3s v0.34.0
 	github.com/zeebo/assert v1.3.1
 	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux v0.44.0
 	go.opentelemetry.io/otel v1.28.0
@@ -249,7 +250,6 @@ require (
 	github.com/sylabs/squashfs v1.0.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/testcontainers/testcontainers-go v0.34.0 // indirect
-	github.com/testcontainers/testcontainers-go/modules/k3s v0.34.0 // indirect
 	github.com/therootcompany/xz v1.0.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
