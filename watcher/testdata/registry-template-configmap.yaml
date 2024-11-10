@@ -1,0 +1,81 @@
+apiVersion: v1
+data:
+  cronjobTemplate: |-
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: registry-scheduler
+      namespace: kubescape
+      labels:
+        app: registry-scheduler
+        kubescape.io/tier: "core"
+        tier: ks-control-plane
+        armo.tier: "registry-scan"
+    spec:
+      schedule: "0 0 * * *"
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 1
+      jobTemplate:
+        spec:
+          template:
+            metadata:
+              labels:
+                armo.tier: "registry-scan"
+                kubescape.io/tier: "core"
+            spec:
+              containers:
+              - name: registry-scheduler
+                image: "quay.io/kubescape/http-request:v0.2.9"
+                imagePullPolicy: IfNotPresent
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
+                  runAsUser: 100
+                resources:
+                  limits:
+                    cpu: 10m
+                    memory: 20Mi
+                  requests:
+                    cpu: 1m
+                    memory: 10Mi
+                args:
+                  - -method=post
+                  - -scheme=http
+                  - -host=operator:4002
+                  - -path=v1/triggerAction
+                  - -headers=Content-Type:application/json
+                  - -path-body=/home/ks/request-body.json
+                volumeMounts:
+                  - name: "request-body-volume"
+                    mountPath: /home/ks/request-body.json
+                    subPath: request-body.json
+                    readOnly: true
+              restartPolicy: Never
+              serviceAccountName: kubevuln
+              automountServiceAccountToken: false
+              nodeSelector:
+              affinity:
+              tolerations:
+              volumes:
+                - name: "request-body-volume" # placeholder
+                  configMap:
+                    name: registry-scheduler
+kind: ConfigMap
+metadata:
+  annotations:
+    meta.helm.sh/release-name: kubescape
+    meta.helm.sh/release-namespace: kubescape
+  labels:
+    app: ks-cloud-config
+    app.kubernetes.io/component: ks-cloud-config
+    app.kubernetes.io/instance: kubescape
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: kubescape-operator
+    app.kubernetes.io/version: 1.22.4
+    helm.sh/chart: kubescape-operator-1.22.4
+    kubescape.io/ignore: "true"
+    kubescape.io/tier: core
+    tier: ks-control-plane
+  name: registry-scan-cronjob-template
+  namespace: kubescape
