@@ -218,6 +218,7 @@ func createCronJobObject(k8sAPI *k8sinterface.KubernetesApi, registry armotypes.
 	}
 	cronjob.Name = registry.GetBase().ResourceName
 	cronjob.Spec.Schedule = registry.GetBase().ScanFrequency
+
 	for i, v := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes {
 		if v.Name == armotypes.RegistryRequestVolumeName {
 			if cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].ConfigMap != nil {
