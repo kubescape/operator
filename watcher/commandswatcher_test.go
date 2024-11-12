@@ -7,9 +7,11 @@ import (
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/k3s"
+	"io"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -17,6 +19,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"net/http"
 	"sigs.k8s.io/yaml"
 	"strings"
 	"testing"
@@ -26,14 +29,12 @@ import (
 //go:embed testdata/create-registry-command.json
 var createRegistryCommand []byte
 
-//go:embed testdata/operator-command-crd.yaml
-var operatorCommandCRD []byte
-
 //go:embed testdata/registry-template-configmap.yaml
 var registryTemplateConfiMap []byte
 
 func TestRegistryCommandWatch(t *testing.T) {
 	ctx := context.Background()
+	logger.InitDefaultLogger()
 	terminateFunc, k8sAPI := initK8sClient(t, ctx)
 	defer terminateFunc()
 	setupEnvAndWatchers(t, ctx, k8sAPI)
@@ -86,9 +87,15 @@ func TestRegistryCommandWatch(t *testing.T) {
 
 func setupEnvAndWatchers(t *testing.T, ctx context.Context, k8sAPI *k8sinterface.KubernetesApi) {
 	// install operator command crd
+	url := "https://raw.githubusercontent.com/kubescape/helm-charts/main/charts/dependency_chart/operatorcommand-crds/crds/operator-command.crd.yaml"
+	resp, err := http.Get(url)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	content, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	var crd unstructured.Unstructured
-	require.NoError(t, yaml.Unmarshal(operatorCommandCRD, &crd))
-	_, err := k8sAPI.DynamicClient.Resource(schema.GroupVersionResource{
+	require.NoError(t, yaml.Unmarshal(content, &crd))
+	_, err = k8sAPI.DynamicClient.Resource(schema.GroupVersionResource{
 		Group:    "apiextensions.k8s.io",
 		Version:  "v1",
 		Resource: "customresourcedefinitions",
