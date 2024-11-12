@@ -12,6 +12,7 @@ require (
 	github.com/armosec/utils-k8s-go v0.0.30
 	github.com/aws/aws-sdk-go v1.50.8
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v27.3.1+incompatible
@@ -125,9 +126,8 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.6.1 // indirect
 	github.com/briandowns/spinner v1.23.0 // indirect
-	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cilium/cilium v1.16.0 // indirect
+	github.com/cilium/cilium v1.16.1 // indirect
 	github.com/containerd/containerd v1.7.21 // indirect
 	github.com/containerd/errdefs v0.1.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
