@@ -65,12 +65,14 @@ func NewRegistryCommandsHandler(ctx context.Context, k8sAPI *k8sinterface.Kubern
 }
 
 func (ch *RegistryCommandsHandler) Start() {
+	logger.L().Info("starting RegistryCommandsHandler")
 	ch.commandsWatcher.RegisterForCommands(ch.commands)
 
 	for {
 		select {
 		case cmd := <-ch.commands:
 			if !isRegistryCommand(cmd.Spec.CommandType) {
+				logger.L().Info("not registry command" + cmd.Spec.CommandType)
 				continue
 			}
 			status := v1alpha1.OperatorCommandStatus{
@@ -79,18 +81,24 @@ func (ch *RegistryCommandsHandler) Start() {
 				StartedAt: &metav1.Time{Time: time.Now()},
 			}
 			var err error
+			var payload []byte
 
 			switch cmd.Spec.CommandType {
 			case string(command.OperatorCommandTypeCreateRegistry), string(command.OperatorCommandTypeUpdateRegistry):
 				err = ch.upsertRegistry(cmd)
 			case string(command.OperatorCommandTypeDeleteRegistry):
 				err = ch.deleteRegistry(cmd)
+			case string(command.OperatorCommandTypeCheckRegistry):
+				payload, err = ch.checkRegistry(cmd)
 			}
 
 			status.Completed = true
 			status.CompletedAt = &metav1.Time{Time: time.Now()}
+
 			if err != nil {
 				status.Error = &v1alpha1.OperatorCommandStatusError{Message: err.Error()}
+			} else if len(payload) > 0 {
+				status.Payload = payload
 			}
 			ch.patchCommandStatus(&cmd, status)
 
@@ -120,6 +128,16 @@ func (ch *RegistryCommandsHandler) patchCommandStatus(command *v1alpha1.Operator
 		logger.L().Error("patchCommandStatus - failed to patch command status", helpers.Error(err))
 	}
 	logger.L().Info("patchCommandStatus: command status patched successfully")
+}
+
+func (ch *RegistryCommandsHandler) checkRegistry(_ v1alpha1.OperatorCommand) ([]byte, error) {
+	mockResponse := []string{"mockRepo1", "mockRepo2", "mockRepo3"}
+	payload, err := json.Marshal(mockResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return payload, nil
 }
 
 func (ch *RegistryCommandsHandler) deleteRegistry(cmd v1alpha1.OperatorCommand) error {
@@ -285,6 +303,7 @@ var registryCommands = []string{
 	string(command.OperatorCommandTypeCreateRegistry),
 	string(command.OperatorCommandTypeUpdateRegistry),
 	string(command.OperatorCommandTypeDeleteRegistry),
+	string(command.OperatorCommandTypeCheckRegistry),
 }
 
 func isRegistryCommand(commandType string) bool {

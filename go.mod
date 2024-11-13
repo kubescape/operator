@@ -22,7 +22,7 @@ require (
 	github.com/goradd/maps v0.1.5
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.1
-	github.com/kubescape/backend v0.0.24
+	github.com/kubescape/backend v0.0.25
 	github.com/kubescape/go-logger v0.0.22
 	github.com/kubescape/k8s-interface v0.0.170
 	github.com/kubescape/kubescape-network-scanner v0.0.15

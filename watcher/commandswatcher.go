@@ -41,6 +41,7 @@ func (cwh *CommandWatchHandler) RegisterForCommands(receiver chan v1alpha1.Opera
 }
 
 func (cwh *CommandWatchHandler) CommandWatch(ctx context.Context) {
+	logger.L().Info("start watching CommandWatchHandler")
 	// list commands and add them to the queue, this is for the commands that were created before the watch started
 	cwh.listCommands(ctx)
 	// start watching
