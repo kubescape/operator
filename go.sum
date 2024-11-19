@@ -97,6 +97,8 @@ github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym
 github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/IBM/sarama v1.42.1 h1:wugyWa15TDEHh2kvq2gAy1IHLjEjuYOYgXz/ruC/OSQ=
 github.com/IBM/sarama v1.42.1/go.mod h1:Xxho9HkHd4K/MDUo/T/sOqwtX/17D33++E9Wib6hUdQ=
+github.com/Masterminds/semver/v3 v3.3.0 h1:B8LGeaivUe71a5qox1ICM/JLl0NqZSW5CHyL+hmvYS0=
+github.com/Masterminds/semver/v3 v3.3.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/Microsoft/hcsshim v0.12.5 h1:bpTInLlDy/nDRWFVcefDZZ1+U8tS+rz3MxjKgu9boo0=
@@ -137,14 +139,14 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-metrics v0.3.10/go.mod h1:4O98XIr/9W0sxpJ8UaYkvjk10Iff7SnFrb4QAOwNTFc=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/armosec/armoapi-go v0.0.467 h1:HkPC4ZWMIoQo0rh0M0yFumOlo/Orrf1TvaRciVv48JI=
-github.com/armosec/armoapi-go v0.0.467/go.mod h1:TruqDSAPgfRBXCeM+Cgp6nN4UhJSbe7la+XDKV2pTsY=
+github.com/armosec/armoapi-go v0.0.473 h1:YPCz2Tj5GmdegItI9PPwY1e4AXGCp2RxS9S17mOF8Zc=
+github.com/armosec/armoapi-go v0.0.473/go.mod h1:TruqDSAPgfRBXCeM+Cgp6nN4UhJSbe7la+XDKV2pTsY=
 github.com/armosec/cluster-notifier-api-go v0.0.5 h1:UKY58ehKocKgtqzrawyaIHJa5paG9A4srv+4/6n+Ez4=
 github.com/armosec/cluster-notifier-api-go v0.0.5/go.mod h1:p5w9/zWIWwpi8W8mHGQdE6HuBb3AxXmZM9Rp//JWvx0=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
 github.com/armosec/gojay v1.2.17/go.mod h1:vuvX3DlY0nbVrJ0qCklSS733AWMoQboq3cFyuQW9ybc=
-github.com/armosec/registryx v0.0.16 h1:L+oA9h4cJO42YfqYGO+NkmeloY0+z/VQCPjqVU6i9kU=
-github.com/armosec/registryx v0.0.16/go.mod h1:tWzKL9LcYySAfcujIPgYSvKG+HiJqqiMxF5juUaBKxU=
+github.com/armosec/registryx v0.0.18 h1:DkZ0DEjXSFJshsZQgVSWijTv5VAQ+kyVIdNB8a8E39A=
+github.com/armosec/registryx v0.0.18/go.mod h1:48rlQqJa+WGTKzPsusO8f0BPN6ZeuiiMXoVJYd3h7VU=
 github.com/armosec/utils-go v0.0.58 h1:g9RnRkxZAmzTfPe2ruMo2OXSYLwVSegQSkSavOfmaIE=
 github.com/armosec/utils-go v0.0.58/go.mod h1:CdqKHKruVJMCxGcZXYW9J+5P9FZou8dMzVpcB0Xt8pk=
 github.com/armosec/utils-k8s-go v0.0.30 h1:Gj8MJck0jZPSLSq8ZMiRPT3F/laOYQdaLxXKKcjijt4=
