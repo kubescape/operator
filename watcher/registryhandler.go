@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/registryx/registryclients"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"golang.org/x/sync/errgroup"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -130,9 +132,25 @@ func (ch *RegistryCommandsHandler) patchCommandStatus(command *v1alpha1.Operator
 	logger.L().Info("patchCommandStatus: command status patched successfully")
 }
 
-func (ch *RegistryCommandsHandler) checkRegistry(_ v1alpha1.OperatorCommand) ([]byte, error) {
-	mockResponse := []string{"mockRepo1", "mockRepo2", "mockRepo3"}
-	payload, err := json.Marshal(mockResponse)
+func (ch *RegistryCommandsHandler) checkRegistry(cmd v1alpha1.OperatorCommand) ([]byte, error) {
+	registry, err := armotypes.UnmarshalRegistry(cmd.Spec.Body)
+	if err != nil {
+		logger.L().Error("checkRegistry - failed to unmarshal command payload", helpers.Error(err))
+		return nil, err
+	}
+	client, err := registryclients.GetRegistryClient(registry)
+	if err != nil {
+		logger.L().Error("checkRegistry - failed to get registry client", helpers.Error(err))
+		return nil, err
+	}
+
+	repositories, err := client.GetAllRepositories(context.Background())
+	if err != nil {
+		logger.L().Error("checkRegistry - failed to get registry repositories", helpers.Error(err))
+		return nil, err
+	}
+
+	payload, err := json.Marshal(repositories)
 	if err != nil {
 		return nil, err
 	}
@@ -173,34 +191,48 @@ func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) 
 		logger.L().Error("upsertRegistry - failed to unmarshal command payload", helpers.Error(err))
 		return err
 	}
+	errGroup := errgroup.Group{}
+	errGroup.Go(func() error {
+		secret, err := createSecretObject(registry)
+		if err != nil {
+			logger.L().Error("upsertRegistry - failed to create secret resource", helpers.Error(err))
+			return err
+		}
+		if err = ch.upsertResource(secret, secretGVR, secret.Name); err != nil {
+			logger.L().Error("upsertRegistry - failed to upsert secret resource", helpers.Error(err))
+			return err
+		}
+		return nil
+	})
 
-	secret, err := createSecretObject(registry)
-	if err != nil {
-		logger.L().Error("upsertRegistry - failed to create secret resource", helpers.Error(err))
-		return err
-	}
-	if err = ch.upsertResource(secret, secretGVR, secret.Name); err != nil {
-		logger.L().Error("upsertRegistry - failed to upsert secret resource", helpers.Error(err))
-		return err
-	}
+	errGroup.Go(func() error {
+		configMap, err := createConfigMapObject(registry)
+		if err != nil {
+			logger.L().Error("upsertRegistry - failed to create config map resource", helpers.Error(err))
+			return err
+		}
+		if err = ch.upsertResource(configMap, configMapGVR, configMap.Name); err != nil {
+			logger.L().Error("upsertRegistry - failed to upsert config map resource", helpers.Error(err))
+			return err
+		}
+		return nil
+	})
 
-	configMap, err := createConfigMapObject(registry)
-	if err != nil {
-		logger.L().Error("upsertRegistry - failed to create config map resource", helpers.Error(err))
-		return err
-	}
-	if err = ch.upsertResource(configMap, configMapGVR, configMap.Name); err != nil {
-		logger.L().Error("upsertRegistry - failed to upsert config map resource", helpers.Error(err))
-		return err
-	}
+	errGroup.Go(func() error {
+		cronJob, err := createCronJobObject(ch.k8sAPI, registry)
+		if err != nil {
+			logger.L().Error("upsertRegistry - failed to create cron job resource", helpers.Error(err))
+			return err
+		}
+		if err = ch.upsertResource(cronJob, cronJobGVR, cronJob.Name); err != nil {
+			logger.L().Error("upsertRegistry - failed to upsert cron job resource", helpers.Error(err))
+			return err
+		}
+		return nil
+	})
 
-	cronJob, err := createCronJobObject(ch.k8sAPI, registry)
-	if err != nil {
-		logger.L().Error("upsertRegistry - failed to create cron job resource", helpers.Error(err))
-		return err
-	}
-	if err = ch.upsertResource(cronJob, cronJobGVR, cronJob.Name); err != nil {
-		logger.L().Error("upsertRegistry - failed to upsert cron job resource", helpers.Error(err))
+	if err := errGroup.Wait(); err != nil {
+		logger.L().Error("upsertRegistry - failed to upsert registry", helpers.Error(err))
 		return err
 	}
 
