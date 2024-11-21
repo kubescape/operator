@@ -229,7 +229,7 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, len(images))
 	for image, tag := range images {
 		repository := image
-		parts := strings.Split(image, "/")
+		parts := strings.SplitN(image, "/", 2)
 		if len(parts) > 1 {
 			repository = parts[1]
 		}
