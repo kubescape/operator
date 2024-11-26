@@ -129,7 +129,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.6.1 // indirect
 	github.com/briandowns/spinner v1.23.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cilium/cilium v1.16.1 // indirect
+	github.com/cilium/cilium v1.16.4 // indirect
 	github.com/containerd/containerd v1.7.21 // indirect
 	github.com/containerd/errdefs v0.1.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -260,7 +260,7 @@ require (
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.2.4 // indirect
 	github.com/uptrace/uptrace-go v1.26.2 // indirect
 	github.com/vbatts/tar-split v0.11.5 // indirect
-	github.com/vishvananda/netlink v1.2.1-beta.2.0.20240524165444-4d4ba1473f21 // indirect
+	github.com/vishvananda/netlink v1.3.1-0.20241022031324-976bd8de7d81 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/wagoodman/go-partybus v0.0.0-20230516145632-8ccac152c651 // indirect
 	github.com/wagoodman/go-progress v0.0.0-20230925121702-07e42b3cdba0 // indirect
