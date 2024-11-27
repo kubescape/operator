@@ -48,6 +48,12 @@ var (
 		Version:  "v1",
 		Resource: "cronjobs",
 	}
+
+	jobGVR = schema.GroupVersionResource{
+		Group:    "batch",
+		Version:  "v1",
+		Resource: "jobs",
+	}
 )
 
 type RegistryCommandsHandler struct {
@@ -86,8 +92,10 @@ func (ch *RegistryCommandsHandler) Start() {
 			var payload []byte
 
 			switch cmd.Spec.CommandType {
-			case string(command.OperatorCommandTypeCreateRegistry), string(command.OperatorCommandTypeUpdateRegistry):
-				err = ch.upsertRegistry(cmd)
+			case string(command.OperatorCommandTypeCreateRegistry):
+				err = ch.upsertRegistry(cmd, true)
+			case string(command.OperatorCommandTypeUpdateRegistry):
+				err = ch.upsertRegistry(cmd, false)
 			case string(command.OperatorCommandTypeDeleteRegistry):
 				err = ch.deleteRegistry(cmd)
 			case string(command.OperatorCommandTypeCheckRegistry):
@@ -185,7 +193,7 @@ func (ch *RegistryCommandsHandler) deleteRegistry(cmd v1alpha1.OperatorCommand) 
 	return nil
 }
 
-func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) error {
+func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand, triggerNow bool) error {
 	registry, err := armotypes.UnmarshalRegistry(cmd.Spec.Body)
 	if err != nil {
 		logger.L().Error("upsertRegistry - failed to unmarshal command payload", helpers.Error(err))
@@ -219,14 +227,28 @@ func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) 
 	})
 
 	errGroup.Go(func() error {
-		cronJob, err := createCronJobObject(ch.k8sAPI, registry)
-		if err != nil {
-			logger.L().Error("upsertRegistry - failed to create cron job resource", helpers.Error(err))
-			return err
+		if triggerNow {
+			job, err := createJobObject(ch.k8sAPI, registry)
+			if err != nil {
+				logger.L().Error("upsertRegistry - failed to create job resource", helpers.Error(err))
+				return err
+			}
+			if err = ch.upsertResource(job, jobGVR, registry.GetBase().ResourceName); err != nil {
+				logger.L().Error("upsertRegistry - failed to upsert job resource", helpers.Error(err))
+				return err
+			}
 		}
-		if err = ch.upsertResource(cronJob, cronJobGVR, cronJob.Name); err != nil {
-			logger.L().Error("upsertRegistry - failed to upsert cron job resource", helpers.Error(err))
-			return err
+		if registry.GetBase().ScanFrequency != "" {
+			cronjob, err := createCronJobObject(ch.k8sAPI, registry)
+			if err != nil {
+				logger.L().Error("upsertRegistry - failed to create cron job resource", helpers.Error(err))
+				return err
+
+			}
+			if err = ch.upsertResource(cronjob, cronJobGVR, registry.GetBase().ResourceName); err != nil {
+				logger.L().Error("upsertRegistry - failed to upsert job resource", helpers.Error(err))
+				return err
+			}
 		}
 		return nil
 	})
@@ -278,6 +300,42 @@ func createCronJobObject(k8sAPI *k8sinterface.KubernetesApi, registry armotypes.
 	cronjob.ObjectMeta.Labels = map[string]string{"app": registry.GetBase().ResourceName}
 
 	return cronjob, nil
+}
+
+func createJobObject(k8sAPI *k8sinterface.KubernetesApi, registry armotypes.ContainerImageRegistry) (*batchv1.Job, error) {
+	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Get(context.Background(), registryCronjobTemplate, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	jobTemplateStr, ok := template.Data[cronjobTemplateName]
+	if !ok {
+		return nil, fmt.Errorf("getJobTemplate: jobTemplate not found")
+	}
+	cronjob := &batchv1.CronJob{}
+	if err := yaml.Unmarshal([]byte(jobTemplateStr), cronjob); err != nil {
+		return nil, err
+	}
+	job := &batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1",
+			Kind:       "Job",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      registry.GetBase().ResourceName,
+			Namespace: cronjob.Namespace,
+			Labels:    map[string]string{"app": registry.GetBase().ResourceName},
+		},
+		Spec: cronjob.Spec.JobTemplate.Spec,
+	}
+	for i, v := range job.Spec.Template.Spec.Volumes {
+		if v.Name == armotypes.RegistryRequestVolumeName {
+			if job.Spec.Template.Spec.Volumes[i].ConfigMap != nil {
+				job.Spec.Template.Spec.Volumes[i].ConfigMap.Name = registry.GetBase().ResourceName
+			}
+		}
+	}
+
+	return job, nil
 }
 
 func createSecretObject(registry armotypes.ContainerImageRegistry) (*v1.Secret, error) {

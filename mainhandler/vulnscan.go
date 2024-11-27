@@ -187,7 +187,10 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 		return fmt.Errorf("scanRegistriesV2 failed to get registry images to scan with err %v", err)
 	}
 
-	registryScanCMDList := actionHandler.getRegistryImageScanCommands(sessionObj, client, imageRegistry, images)
+	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(sessionObj, client, imageRegistry, images)
+	if err != nil {
+		return fmt.Errorf("scanRegistriesV2 failed to get registry images scan commands with err %v", err)
+	}
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), imageRegistry), actionHandler.sendReport)
 
 	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
@@ -200,7 +203,7 @@ func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, sess
 		return fmt.Errorf("loadRegistrySecret failed to get secret with err %v", err)
 	}
 
-	var secretMap map[string]string
+	var secretMap map[string]interface{}
 	err = json.Unmarshal(secret.Data[apitypes.RegistryAuthFieldInSecret], &secretMap)
 	if err != nil {
 		return fmt.Errorf("loadRegistrySecret failed to unmarshal registry secret with err %v", err)
@@ -225,7 +228,7 @@ func (actionHandler *ActionHandler) loadRegistryFromSessionObj(sessionObj *utils
 	return imageRegistry, nil
 }
 
-func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *utils.SessionObj, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) []*apis.RegistryScanCommand {
+func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *utils.SessionObj, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) ([]*apis.RegistryScanCommand, error) {
 	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, len(images))
 	for image, tag := range images {
 		repository := image
@@ -247,12 +250,16 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 				identifiers.AttributeSensor:        imageRegistry.GetBase().ClusterName,
 			},
 		}
-		registryScanCommand.Credentialslist = append(registryScanCommand.Credentialslist, *client.GetDockerAuth())
+		auth, err := client.GetDockerAuth()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get docker auth with err %v", err)
+		}
+		registryScanCommand.Credentialslist = append(registryScanCommand.Credentialslist, *auth)
 		registryScanCMDList = append(registryScanCMDList, &apis.RegistryScanCommand{
 			ImageScanParams: *registryScanCommand,
 		})
 	}
-	return registryScanCMDList
+	return registryScanCMDList, nil
 }
 
 func (actionHandler *ActionHandler) loadRegistryScan(ctx context.Context, sessionObj *utils.SessionObj) (*registryScan, error) {
