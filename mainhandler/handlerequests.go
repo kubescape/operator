@@ -153,8 +153,8 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	eventQueue := watcher.NewCooldownQueue()
 	watchHandler := watcher.NewWatchHandler(ctx, mainHandler.config, mainHandler.k8sAPI, ksStorageClient, eventQueue)
 
-	commandWatchHandler := watcher.NewCommandWatchHandler(mainHandler.k8sAPI)
-	registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler)
+	commandWatchHandler := watcher.NewCommandWatchHandler(mainHandler.k8sAPI, mainHandler.config)
+	registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
 	go registryCommandsHandler.Start()
 
 	// wait for the kubevuln component to be ready

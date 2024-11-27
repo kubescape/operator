@@ -12,6 +12,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/operator/config"
 	"golang.org/x/sync/errgroup"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -48,6 +49,12 @@ var (
 		Version:  "v1",
 		Resource: "cronjobs",
 	}
+
+	jobGVR = schema.GroupVersionResource{
+		Group:    "batch",
+		Version:  "v1",
+		Resource: "jobs",
+	}
 )
 
 type RegistryCommandsHandler struct {
@@ -55,14 +62,16 @@ type RegistryCommandsHandler struct {
 	k8sAPI          *k8sinterface.KubernetesApi
 	commands        chan v1alpha1.OperatorCommand
 	commandsWatcher *CommandWatchHandler
+	config          config.IConfig
 }
 
-func NewRegistryCommandsHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, commandsWatcher *CommandWatchHandler) *RegistryCommandsHandler {
+func NewRegistryCommandsHandler(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, commandsWatcher *CommandWatchHandler, config config.IConfig) *RegistryCommandsHandler {
 	return &RegistryCommandsHandler{
 		ctx:             ctx,
 		k8sAPI:          k8sAPI,
 		commands:        make(chan v1alpha1.OperatorCommand, 100),
 		commandsWatcher: commandsWatcher,
+		config:          config,
 	}
 }
 
@@ -86,8 +95,10 @@ func (ch *RegistryCommandsHandler) Start() {
 			var payload []byte
 
 			switch cmd.Spec.CommandType {
-			case string(command.OperatorCommandTypeCreateRegistry), string(command.OperatorCommandTypeUpdateRegistry):
-				err = ch.upsertRegistry(cmd)
+			case string(command.OperatorCommandTypeCreateRegistry):
+				err = ch.upsertRegistry(cmd, true)
+			case string(command.OperatorCommandTypeUpdateRegistry):
+				err = ch.upsertRegistry(cmd, false)
 			case string(command.OperatorCommandTypeDeleteRegistry):
 				err = ch.deleteRegistry(cmd)
 			case string(command.OperatorCommandTypeCheckRegistry):
@@ -165,17 +176,17 @@ func (ch *RegistryCommandsHandler) deleteRegistry(cmd v1alpha1.OperatorCommand) 
 		return err
 	}
 	resourceName := registry.GetBase().ResourceName
-	err = ch.k8sAPI.KubernetesClient.BatchV1().CronJobs(armotypes.KubescapeNamespace).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
+	err = ch.k8sAPI.KubernetesClient.BatchV1().CronJobs(ch.config.Namespace()).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
 	if err != nil {
 		logger.L().Error("deleteRegistry - failed to delete cronjob resource", helpers.Error(err))
 		return err
 	}
-	err = ch.k8sAPI.KubernetesClient.CoreV1().Secrets(armotypes.KubescapeNamespace).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
+	err = ch.k8sAPI.KubernetesClient.CoreV1().Secrets(ch.config.Namespace()).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
 	if err != nil {
 		logger.L().Error("deleteRegistry - failed to delete secret resource", helpers.Error(err))
 		return err
 	}
-	err = ch.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
+	err = ch.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(ch.config.Namespace()).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
 	if err != nil {
 		logger.L().Error("deleteRegistry - failed to delete configmap resource", helpers.Error(err))
 		return err
@@ -185,7 +196,7 @@ func (ch *RegistryCommandsHandler) deleteRegistry(cmd v1alpha1.OperatorCommand) 
 	return nil
 }
 
-func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) error {
+func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand, triggerNow bool) error {
 	registry, err := armotypes.UnmarshalRegistry(cmd.Spec.Body)
 	if err != nil {
 		logger.L().Error("upsertRegistry - failed to unmarshal command payload", helpers.Error(err))
@@ -193,7 +204,7 @@ func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) 
 	}
 	errGroup := errgroup.Group{}
 	errGroup.Go(func() error {
-		secret, err := createSecretObject(registry)
+		secret, err := ch.generateSecretObject(registry)
 		if err != nil {
 			logger.L().Error("upsertRegistry - failed to create secret resource", helpers.Error(err))
 			return err
@@ -206,7 +217,7 @@ func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) 
 	})
 
 	errGroup.Go(func() error {
-		configMap, err := createConfigMapObject(registry)
+		configMap, err := ch.generateConfigMapObject(registry)
 		if err != nil {
 			logger.L().Error("upsertRegistry - failed to create config map resource", helpers.Error(err))
 			return err
@@ -219,14 +230,28 @@ func (ch *RegistryCommandsHandler) upsertRegistry(cmd v1alpha1.OperatorCommand) 
 	})
 
 	errGroup.Go(func() error {
-		cronJob, err := createCronJobObject(ch.k8sAPI, registry)
-		if err != nil {
-			logger.L().Error("upsertRegistry - failed to create cron job resource", helpers.Error(err))
-			return err
+		if triggerNow {
+			job, err := ch.generateJobObject(registry)
+			if err != nil {
+				logger.L().Error("upsertRegistry - failed to create job resource", helpers.Error(err))
+				return err
+			}
+			if err = ch.upsertResource(job, jobGVR, registry.GetBase().ResourceName); err != nil {
+				logger.L().Error("upsertRegistry - failed to upsert job resource", helpers.Error(err))
+				return err
+			}
 		}
-		if err = ch.upsertResource(cronJob, cronJobGVR, cronJob.Name); err != nil {
-			logger.L().Error("upsertRegistry - failed to upsert cron job resource", helpers.Error(err))
-			return err
+		if registry.GetBase().ScanFrequency != "" {
+			cronjob, err := ch.generateCronJobObject(registry)
+			if err != nil {
+				logger.L().Error("upsertRegistry - failed to create cron job resource", helpers.Error(err))
+				return err
+
+			}
+			if err = ch.upsertResource(cronjob, cronJobGVR, registry.GetBase().ResourceName); err != nil {
+				logger.L().Error("upsertRegistry - failed to upsert job resource", helpers.Error(err))
+				return err
+			}
 		}
 		return nil
 	})
@@ -249,12 +274,12 @@ func (ch *RegistryCommandsHandler) upsertResource(resource interface{}, gvr sche
 	if err != nil {
 		return err
 	}
-	_, err = ch.k8sAPI.DynamicClient.Resource(gvr).Namespace(armotypes.KubescapeNamespace).Apply(ch.ctx, name, &unstructured.Unstructured{Object: unstructuredResource}, applyOpts)
+	_, err = ch.k8sAPI.DynamicClient.Resource(gvr).Namespace(ch.config.Namespace()).Apply(ch.ctx, name, &unstructured.Unstructured{Object: unstructuredResource}, applyOpts)
 	return err
 }
 
-func createCronJobObject(k8sAPI *k8sinterface.KubernetesApi, registry armotypes.ContainerImageRegistry) (*batchv1.CronJob, error) {
-	template, err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(armotypes.KubescapeNamespace).Get(context.Background(), registryCronjobTemplate, metav1.GetOptions{})
+func (ch *RegistryCommandsHandler) generateCronJobObject(registry armotypes.ContainerImageRegistry) (*batchv1.CronJob, error) {
+	template, err := ch.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(ch.config.Namespace()).Get(context.Background(), registryCronjobTemplate, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -280,13 +305,49 @@ func createCronJobObject(k8sAPI *k8sinterface.KubernetesApi, registry armotypes.
 	return cronjob, nil
 }
 
-func createSecretObject(registry armotypes.ContainerImageRegistry) (*v1.Secret, error) {
+func (ch *RegistryCommandsHandler) generateJobObject(registry armotypes.ContainerImageRegistry) (*batchv1.Job, error) {
+	template, err := ch.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(ch.config.Namespace()).Get(context.Background(), registryCronjobTemplate, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	jobTemplateStr, ok := template.Data[cronjobTemplateName]
+	if !ok {
+		return nil, fmt.Errorf("getJobTemplate: jobTemplate not found")
+	}
+	cronjob := &batchv1.CronJob{}
+	if err := yaml.Unmarshal([]byte(jobTemplateStr), cronjob); err != nil {
+		return nil, err
+	}
+	job := &batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1",
+			Kind:       "Job",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      registry.GetBase().ResourceName,
+			Namespace: cronjob.Namespace,
+			Labels:    map[string]string{"app": registry.GetBase().ResourceName},
+		},
+		Spec: cronjob.Spec.JobTemplate.Spec,
+	}
+	for i, v := range job.Spec.Template.Spec.Volumes {
+		if v.Name == armotypes.RegistryRequestVolumeName {
+			if job.Spec.Template.Spec.Volumes[i].ConfigMap != nil {
+				job.Spec.Template.Spec.Volumes[i].ConfigMap.Name = registry.GetBase().ResourceName
+			}
+		}
+	}
+
+	return job, nil
+}
+
+func (ch *RegistryCommandsHandler) generateSecretObject(registry armotypes.ContainerImageRegistry) (*v1.Secret, error) {
 	secret := v1.Secret{}
 	secret.Name = registry.GetBase().ResourceName
 	secret.Kind = armotypes.K8sKindSecret
 	secret.APIVersion = armotypes.K8sApiVersionV1
 	secret.Type = v1.SecretTypeOpaque
-	secret.Namespace = armotypes.KubescapeNamespace
+	secret.Namespace = ch.config.Namespace()
 	secret.StringData = make(map[string]string)
 	registryAuthBytes, err := json.Marshal(registry.ExtractSecret())
 	if err != nil {
@@ -297,12 +358,12 @@ func createSecretObject(registry armotypes.ContainerImageRegistry) (*v1.Secret, 
 	return &secret, err
 }
 
-func createConfigMapObject(registry armotypes.ContainerImageRegistry) (*v1.ConfigMap, error) {
+func (ch *RegistryCommandsHandler) generateConfigMapObject(registry armotypes.ContainerImageRegistry) (*v1.ConfigMap, error) {
 	configMap := v1.ConfigMap{}
 	configMap.Name = registry.GetBase().ResourceName
 	configMap.Kind = armotypes.K8sKindConfigMap
 	configMap.APIVersion = armotypes.K8sApiVersionV1
-	configMap.Namespace = armotypes.KubescapeNamespace
+	configMap.Namespace = ch.config.Namespace()
 	configMap.Labels = map[string]string{"app": registry.GetBase().ResourceName}
 	cmd, err := getCommandForConfigMap(registry, registry.GetBase().ResourceName)
 	if err != nil {

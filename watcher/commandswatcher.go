@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/cenkalti/backoff"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
+	"github.com/kubescape/operator/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"time"
 
@@ -26,13 +26,15 @@ type CommandWatchHandler struct {
 	k8sAPI           *k8sinterface.KubernetesApi
 	eventQueue       *CooldownQueue
 	commandReceivers mapset.Set[chan v1alpha1.OperatorCommand]
+	config           config.IConfig
 }
 
-func NewCommandWatchHandler(k8sAPI *k8sinterface.KubernetesApi) *CommandWatchHandler {
+func NewCommandWatchHandler(k8sAPI *k8sinterface.KubernetesApi, config config.IConfig) *CommandWatchHandler {
 	return &CommandWatchHandler{
 		k8sAPI:           k8sAPI,
 		eventQueue:       NewCooldownQueue(),
 		commandReceivers: mapset.NewSet[chan v1alpha1.OperatorCommand](),
+		config:           config,
 	}
 }
 
@@ -58,7 +60,7 @@ func (cwh *CommandWatchHandler) CommandWatch(ctx context.Context) {
 
 func (cwh *CommandWatchHandler) listCommands(ctx context.Context) {
 	if err := pager.New(func(ctx context.Context, opts v1.ListOptions) (runtime.Object, error) {
-		return cwh.k8sAPI.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(armotypes.KubescapeNamespace).List(context.Background(), opts)
+		return cwh.k8sAPI.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(cwh.config.Namespace()).List(context.Background(), opts)
 	}).EachListItem(ctx, v1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", command.OperatorCommandAppNameLabelKey, "operator"),
 	}, func(obj runtime.Object) error {
@@ -78,7 +80,7 @@ func (cwh *CommandWatchHandler) watchRetry(ctx context.Context) {
 		LabelSelector: fmt.Sprintf("%s=%s", command.OperatorCommandAppNameLabelKey, "operator"),
 	}
 	if err := backoff.RetryNotify(func() error {
-		watcher, err := cwh.k8sAPI.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(armotypes.KubescapeNamespace).Watch(context.Background(), watchOpts)
+		watcher, err := cwh.k8sAPI.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(cwh.config.Namespace()).Watch(context.Background(), watchOpts)
 		if err != nil {
 			return fmt.Errorf("failed to get commands watcher: %w", err)
 		}

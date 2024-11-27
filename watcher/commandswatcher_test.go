@@ -5,10 +5,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"github.com/armosec/armoapi-go/armotypes"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
+	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/operator/config"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/k3s"
 	"io"
@@ -118,8 +121,9 @@ func setupEnvAndWatchers(t *testing.T, ctx context.Context, k8sAPI *k8sinterface
 	require.NoError(t, err)
 
 	// start watcher
-	commandWatchHandler := NewCommandWatchHandler(k8sAPI)
-	registryCommandsHandler := NewRegistryCommandsHandler(ctx, k8sAPI, commandWatchHandler)
+	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, "", config.Config{Namespace: armotypes.KubescapeNamespace})
+	commandWatchHandler := NewCommandWatchHandler(k8sAPI, operatorConfig)
+	registryCommandsHandler := NewRegistryCommandsHandler(ctx, k8sAPI, commandWatchHandler, operatorConfig)
 	go registryCommandsHandler.Start()
 	go commandWatchHandler.CommandWatch(ctx)
 }
