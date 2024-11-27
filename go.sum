@@ -141,6 +141,8 @@ github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armosec/armoapi-go v0.0.475 h1:VM8OcG+etjyHru4fvK8CSqgLWhlzry8ae46LRjSzdys=
 github.com/armosec/armoapi-go v0.0.475/go.mod h1:TruqDSAPgfRBXCeM+Cgp6nN4UhJSbe7la+XDKV2pTsY=
+github.com/armosec/armoapi-go v0.0.480-0.20241127140602-bfa2a7b674a5 h1:FjAr6PGIPd3drEmGl1UzLz/CjTL0pyDNP8yLKNqbZjU=
+github.com/armosec/armoapi-go v0.0.480-0.20241127140602-bfa2a7b674a5/go.mod h1:TruqDSAPgfRBXCeM+Cgp6nN4UhJSbe7la+XDKV2pTsY=
 github.com/armosec/cluster-notifier-api-go v0.0.5 h1:UKY58ehKocKgtqzrawyaIHJa5paG9A4srv+4/6n+Ez4=
 github.com/armosec/cluster-notifier-api-go v0.0.5/go.mod h1:p5w9/zWIWwpi8W8mHGQdE6HuBb3AxXmZM9Rp//JWvx0=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=

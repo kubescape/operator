@@ -167,11 +167,12 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 		return errors.New("kubevuln is not enabled")
 	}
 
-	// send change status of registry to scanning
 	imageRegistry, err := actionHandler.loadRegistryFromSessionObj(sessionObj)
 	if err != nil {
 		return fmt.Errorf("scanRegistriesV2 failed to load registry from sessionObj with err %v", err)
 	}
+
+	// set status in progress
 
 	if err = actionHandler.loadRegistrySecret(ctx, sessionObj, imageRegistry); err != nil {
 		return fmt.Errorf("scanRegistriesV2 failed to load secret with err %v", err)
@@ -229,6 +230,7 @@ func (actionHandler *ActionHandler) loadRegistryFromSessionObj(sessionObj *utils
 }
 
 func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *utils.SessionObj, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) ([]*apis.RegistryScanCommand, error) {
+	scanID := uuid.NewString()
 	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, len(images))
 	for image, tag := range images {
 		repository := image
@@ -242,12 +244,14 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 			ImageTag:    image + ":" + tag,
 			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 			Args: map[string]interface{}{
-				identifiers.AttributeRegistryName:  imageRegistry.GetDisplayName(),
-				identifiers.AttributeRepository:    repository,
-				identifiers.AttributeTag:           tag,
-				identifiers.AttributeUseHTTP:       false,
-				identifiers.AttributeSkipTLSVerify: false,
-				identifiers.AttributeSensor:        imageRegistry.GetBase().ClusterName,
+				identifiers.AttributeRegistryName:   imageRegistry.GetDisplayName(),
+				identifiers.AttributeRepository:     repository,
+				identifiers.AttributeTag:            tag,
+				identifiers.AttributeUseHTTP:        false,
+				identifiers.AttributeSkipTLSVerify:  false,
+				identifiers.AttributeSensor:         imageRegistry.GetBase().ClusterName,
+				identifiers.AttributeRegistryID:     imageRegistry.GetBase().GUID,
+				identifiers.AttributeRegistryScanID: scanID,
 			},
 		}
 		auth, err := client.GetDockerAuth()
