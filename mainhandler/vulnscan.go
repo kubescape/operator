@@ -198,7 +198,7 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 
 func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
 	secretName := sessionObj.Command.Args[apitypes.RegistrySecretNameArgKey].(string)
-	secret, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(apitypes.KubescapeNamespace).Get(ctx, secretName, metav1.GetOptions{})
+	secret, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("loadRegistrySecret failed to get secret with err %v", err)
 	}
