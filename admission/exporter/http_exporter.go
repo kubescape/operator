@@ -156,11 +156,53 @@ func (exporter *HTTPExporter) sendInAlertList(httpAlert apitypes.RuntimeAlert, p
 		logger.L().Error("failed to marshal HTTPAlertsList", helpers.Error(err))
 		return
 	}
-	bodyReader := bytes.NewReader(bodyBytes)
 
-	// send the HTTP request
-	req, err := http.NewRequest(exporter.config.Method,
-		exporter.config.URL+"/v1/runtimealerts", bodyReader)
+	exporter.exportMessage("runtimealerts", bodyBytes)
+}
+
+func (exporter *HTTPExporter) checkAlertLimit() bool {
+	exporter.alertCountLock.Lock()
+	defer exporter.alertCountLock.Unlock()
+
+	if exporter.alertCountStart.IsZero() {
+		exporter.alertCountStart = time.Now()
+	}
+
+	if time.Since(exporter.alertCountStart) > time.Minute {
+		exporter.alertCountStart = time.Now()
+		exporter.alertCount = 0
+		exporter.alertLimitNotified = false
+	}
+
+	exporter.alertCount++
+	return exporter.alertCount > exporter.config.MaxAlertsPerMinute
+}
+
+func (exporter *HTTPExporter) SendRegistryStatus(guid string, status apitypes.RegistryScanStatus, statusMessage string, time time.Time) {
+	updateRegistryStatusCRD := apitypes.GenericCRD[apitypes.ContainerImageRegistryScanStatusUpdate]{
+		Kind:       apitypes.RegistryScanStatusKind,
+		ApiVersion: "kubescape.io/v1",
+		Metadata:   apitypes.Metadata{},
+		Spec: apitypes.ContainerImageRegistryScanStatusUpdate{
+			GUID:              guid,
+			ScanStatus:        status,
+			ScanStatusMessage: statusMessage,
+			ScanTime:          time,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(updateRegistryStatusCRD)
+	if err != nil {
+		logger.L().Error("failed to marshal updateRegistryStatusCRD", helpers.Error(err))
+		return
+	}
+
+	exporter.exportMessage(apitypes.RegistryScanStatusPath, bodyBytes)
+}
+
+func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
+	bodyReader := bytes.NewReader(bodyBytes)
+	req, err := http.NewRequest(exporter.config.Method, fmt.Sprintf("%s/v1/%s", exporter.config.URL, path), bodyReader)
 	if err != nil {
 		logger.L().Error("failed to create HTTP request", helpers.Error(err))
 		return
@@ -185,22 +227,4 @@ func (exporter *HTTPExporter) sendInAlertList(httpAlert apitypes.RuntimeAlert, p
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		logger.L().Error("failed to clear response body", helpers.Error(err))
 	}
-}
-
-func (exporter *HTTPExporter) checkAlertLimit() bool {
-	exporter.alertCountLock.Lock()
-	defer exporter.alertCountLock.Unlock()
-
-	if exporter.alertCountStart.IsZero() {
-		exporter.alertCountStart = time.Now()
-	}
-
-	if time.Since(exporter.alertCountStart) > time.Minute {
-		exporter.alertCountStart = time.Now()
-		exporter.alertCount = 0
-		exporter.alertLimitNotified = false
-	}
-
-	exporter.alertCount++
-	return exporter.alertCount > exporter.config.MaxAlertsPerMinute
 }

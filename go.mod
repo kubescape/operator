@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.23.2
 
 require (
-	github.com/armosec/armoapi-go v0.0.480-0.20241127140602-bfa2a7b674a5
+	github.com/armosec/armoapi-go v0.0.481
 	github.com/armosec/cluster-notifier-api-go v0.0.5
 	github.com/armosec/registryx v0.0.22
 	github.com/armosec/utils-go v0.0.58

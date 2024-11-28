@@ -115,8 +115,13 @@ func main() {
 		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
 	}
 
+	exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName())
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
+	}
+
 	// setup main handler
-	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi)
+	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi, exporter)
 
 	if components.Components.Gateway.Enabled {
 		go func() { // open websocket connection to notification server
@@ -161,11 +166,6 @@ func main() {
 		serverContext, serverCancel := context.WithCancel(ctx)
 
 		addr := ":8443"
-
-		exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName())
-		if err != nil {
-			logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
-		}
 
 		// Create watchers
 		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi, operatorConfig.SkipNamespace)

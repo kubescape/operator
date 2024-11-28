@@ -159,42 +159,55 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	return actionHandler.scanRegistry(ctx, registryScan, sessionObj)
 }
 
-func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessionObj *utils.SessionObj) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistries")
+func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistriesV2")
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("kubevuln is not enabled")
 	}
 
+	scanTime := time.Now()
 	imageRegistry, err := actionHandler.loadRegistryFromSessionObj(sessionObj)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to load registry from sessionObj with err %v", err)
+		return fmt.Errorf("failed to load registry from sessionObj with err %v", err)
 	}
 
-	// set status in progress
+	err = actionHandler.scanRegistriesV2(ctx, sessionObj, imageRegistry)
+	if err != nil {
+		actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.Failed, err.Error(), scanTime)
+		return err
+	}
 
-	if err = actionHandler.loadRegistrySecret(ctx, sessionObj, imageRegistry); err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to load secret with err %v", err)
+	actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.InProgress, "", scanTime)
+	return nil
+}
+
+func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
+	if err := actionHandler.loadRegistrySecret(ctx, sessionObj, imageRegistry); err != nil {
+		return fmt.Errorf("failed to load secret with err %v", err)
 	}
 
 	client, err := registryclients.GetRegistryClient(imageRegistry)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to get registry client with err %v", err)
+		return fmt.Errorf("failed to get registry client with err %v", err)
 	}
 
 	images, err := client.GetImagesToScan(ctx)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to get registry images to scan with err %v", err)
+		return fmt.Errorf("failed to get registry images to scan with err %v", err)
 	}
 
 	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(sessionObj, client, imageRegistry, images)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to get registry images scan commands with err %v", err)
+		return fmt.Errorf("failed to get registry images scan commands with err %v", err)
 	}
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), imageRegistry), actionHandler.sendReport)
+	if err = sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList); err != nil {
+		return fmt.Errorf("failed to send scan commands with err %v", err)
+	}
 
-	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
+	return nil
 }
 
 func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
