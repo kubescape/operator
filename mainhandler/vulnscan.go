@@ -159,41 +159,55 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	return actionHandler.scanRegistry(ctx, registryScan, sessionObj)
 }
 
-func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessionObj *utils.SessionObj) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistries")
+func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.Context, sessionObj *utils.SessionObj) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistriesV2")
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {
 		return errors.New("kubevuln is not enabled")
 	}
 
-	// send change status of registry to scanning
+	scanTime := time.Now()
 	imageRegistry, err := actionHandler.loadRegistryFromSessionObj(sessionObj)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to load registry from sessionObj with err %v", err)
+		return fmt.Errorf("failed to load registry from sessionObj with err %v", err)
 	}
 
-	if err = actionHandler.loadRegistrySecret(ctx, sessionObj, imageRegistry); err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to load secret with err %v", err)
+	err = actionHandler.scanRegistriesV2(ctx, sessionObj, imageRegistry)
+	if err != nil {
+		actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.Failed, err.Error(), scanTime)
+		return err
+	}
+
+	actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.InProgress, "", scanTime)
+	return nil
+}
+
+func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
+	if err := actionHandler.loadRegistrySecret(ctx, sessionObj, imageRegistry); err != nil {
+		return fmt.Errorf("failed to load secret with err %v", err)
 	}
 
 	client, err := registryclients.GetRegistryClient(imageRegistry)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to get registry client with err %v", err)
+		return fmt.Errorf("failed to get registry client with err %v", err)
 	}
 
 	images, err := client.GetImagesToScan(ctx)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to get registry images to scan with err %v", err)
+		return fmt.Errorf("failed to get registry images to scan with err %v", err)
 	}
 
 	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(sessionObj, client, imageRegistry, images)
 	if err != nil {
-		return fmt.Errorf("scanRegistriesV2 failed to get registry images scan commands with err %v", err)
+		return fmt.Errorf("failed to get registry images scan commands with err %v", err)
 	}
 	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), imageRegistry), actionHandler.sendReport)
+	if err = sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList); err != nil {
+		return fmt.Errorf("failed to send scan commands with err %v", err)
+	}
 
-	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
+	return nil
 }
 
 func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
@@ -229,6 +243,7 @@ func (actionHandler *ActionHandler) loadRegistryFromSessionObj(sessionObj *utils
 }
 
 func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *utils.SessionObj, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) ([]*apis.RegistryScanCommand, error) {
+	scanID := uuid.NewString()
 	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, len(images))
 	for image, tag := range images {
 		repository := image
@@ -242,12 +257,14 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 			ImageTag:    image + ":" + tag,
 			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 			Args: map[string]interface{}{
-				identifiers.AttributeRegistryName:  imageRegistry.GetDisplayName(),
-				identifiers.AttributeRepository:    repository,
-				identifiers.AttributeTag:           tag,
-				identifiers.AttributeUseHTTP:       false,
-				identifiers.AttributeSkipTLSVerify: false,
-				identifiers.AttributeSensor:        imageRegistry.GetBase().ClusterName,
+				identifiers.AttributeRegistryName:   imageRegistry.GetDisplayName(),
+				identifiers.AttributeRepository:     repository,
+				identifiers.AttributeTag:            tag,
+				identifiers.AttributeUseHTTP:        false,
+				identifiers.AttributeSkipTLSVerify:  false,
+				identifiers.AttributeSensor:         imageRegistry.GetBase().ClusterName,
+				identifiers.AttributeRegistryID:     imageRegistry.GetBase().GUID,
+				identifiers.AttributeRegistryScanID: scanID,
 			},
 		}
 		auth, err := client.GetDockerAuth()

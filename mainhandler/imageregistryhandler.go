@@ -763,11 +763,6 @@ func (registryScan *registryScan) setRegistryInfoFromAuth(auth registryAuth, reg
 
 func (registryScan *registryScan) getRegistryConfig(registryInfo *armotypes.RegistryInfo) (string, error) {
 	configMap, err := registryScan.k8sAPI.GetWorkload(registryScan.config.Namespace(), "ConfigMap", registryScanConfigmap)
-	// in case of an error or missing configmap, fallback to the deprecated namespace
-	if err != nil || configMap == nil {
-		configMap, err = registryScan.k8sAPI.GetWorkload(armotypes.ArmoSystemNamespace, "ConfigMap", registryScanConfigmap)
-	}
-
 	if err != nil {
 		// if configmap not found, it means we will use all images and default depth
 		if strings.Contains(err.Error(), fmt.Sprintf("reason: configmaps \"%v\" not found", registryScanConfigmap)) {

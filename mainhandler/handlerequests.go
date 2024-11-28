@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"fmt"
+	exporters "github.com/kubescape/operator/admission/exporter"
 	"os"
 	"regexp"
 	"time"
@@ -48,6 +49,7 @@ type MainHandler struct {
 	commandResponseChannel *commandResponseChannelData
 	config                 config.IConfig
 	sendReport             bool
+	exporter               *exporters.HTTPExporter
 }
 
 type ActionHandler struct {
@@ -58,6 +60,7 @@ type ActionHandler struct {
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
 	sendReport             bool
+	exporter               *exporters.HTTPExporter
 }
 
 type waitFunc func(clusterConfig config.IConfig)
@@ -79,7 +82,7 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *MainHandler {
+func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, exporter *exporters.HTTPExporter) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -88,6 +91,7 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 		config:                 config,
 		sendReport:             config.EventReceiverURL() != "",
+		exporter:               exporter,
 	}
 	pool, _ := ants.NewPoolWithFunc(config.ConcurrencyWorkers(), func(i interface{}) {
 		j, ok := i.(utils.Job)
@@ -102,7 +106,7 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) *
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData) *ActionHandler {
+func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, exporter *exporters.HTTPExporter) *ActionHandler {
 	return &ActionHandler{
 		reporter:               sessionObj.Reporter,
 		command:                sessionObj.Command,
@@ -110,6 +114,7 @@ func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi,
 		commandResponseChannel: commandResponseChannel,
 		config:                 config,
 		sendReport:             config.EventReceiverURL() != "",
+		exporter:               exporter,
 	}
 }
 
@@ -217,7 +222,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel)
+	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.exporter)
 	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
 	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport)
 
@@ -261,7 +266,7 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	case apis.TypeDeleteRegistryScanCronJob:
 		return actionHandler.deleteRegistryScanCronJob(ctx)
 	case apis.TypeScanRegistryV2:
-		return actionHandler.scanRegistriesV2(ctx, sessionObj)
+		return actionHandler.scanRegistriesV2AndUpdateStatus(ctx, sessionObj)
 	default:
 		logger.L().Ctx(ctx).Error(fmt.Sprintf("Command %s not found", c.CommandName))
 	}
