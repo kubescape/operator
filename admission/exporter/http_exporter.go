@@ -180,7 +180,7 @@ func (exporter *HTTPExporter) checkAlertLimit() bool {
 
 func (exporter *HTTPExporter) SendRegistryStatus(guid string, status apitypes.RegistryScanStatus, statusMessage string, time time.Time) {
 	updateRegistryStatusCRD := apitypes.GenericCRD[apitypes.ContainerImageRegistryScanStatusUpdate]{
-		Kind:       apitypes.RegistryScanStatusKind,
+		Kind:       apitypes.RegistryScanStatusesKind,
 		ApiVersion: "kubescape.io/v1",
 		Metadata:   apitypes.Metadata{},
 		Spec: apitypes.ContainerImageRegistryScanStatusUpdate{
@@ -197,7 +197,7 @@ func (exporter *HTTPExporter) SendRegistryStatus(guid string, status apitypes.Re
 		return
 	}
 
-	exporter.exportMessage(apitypes.RegistryScanStatusPath, bodyBytes)
+	exporter.exportMessage(apitypes.RegistryScanStatusesKindPath, bodyBytes)
 }
 
 func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
