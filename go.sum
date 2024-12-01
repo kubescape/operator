@@ -145,8 +145,8 @@ github.com/armosec/cluster-notifier-api-go v0.0.5 h1:UKY58ehKocKgtqzrawyaIHJa5pa
 github.com/armosec/cluster-notifier-api-go v0.0.5/go.mod h1:p5w9/zWIWwpi8W8mHGQdE6HuBb3AxXmZM9Rp//JWvx0=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
 github.com/armosec/gojay v1.2.17/go.mod h1:vuvX3DlY0nbVrJ0qCklSS733AWMoQboq3cFyuQW9ybc=
-github.com/armosec/registryx v0.0.22 h1:RJPtjXe8HM7XrALqTmjR+oAhJ8cJjqQeP9peJYKXUA0=
-github.com/armosec/registryx v0.0.22/go.mod h1:Wv/IjsruMf07rGhqTLxb4WDOzirVcoRdcCr+J/8n2pM=
+github.com/armosec/registryx v0.0.23 h1:yuWyfQGLrxgaexnG8d72gPgcjAkTXkSwiHWoC6w/xcE=
+github.com/armosec/registryx v0.0.23/go.mod h1:Wv/IjsruMf07rGhqTLxb4WDOzirVcoRdcCr+J/8n2pM=
 github.com/armosec/utils-go v0.0.58 h1:g9RnRkxZAmzTfPe2ruMo2OXSYLwVSegQSkSavOfmaIE=
 github.com/armosec/utils-go v0.0.58/go.mod h1:CdqKHKruVJMCxGcZXYW9J+5P9FZou8dMzVpcB0Xt8pk=
 github.com/armosec/utils-k8s-go v0.0.30 h1:Gj8MJck0jZPSLSq8ZMiRPT3F/laOYQdaLxXKKcjijt4=
