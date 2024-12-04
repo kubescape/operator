@@ -438,10 +438,7 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *u
 		return errors.New("kubevuln is not enabled")
 	}
 
-	pod, ok := actionHandler.command.Args[utils.ArgsPod].(*corev1.Pod)
-	if !ok || pod == nil {
-		return fmt.Errorf("failed to get pod for image %s", actionHandler.command.Args[utils.ArgsPod])
-	}
+	pod, _ := actionHandler.command.Args[utils.ArgsPod].(*corev1.Pod)
 
 	containerData, ok := actionHandler.command.Args[utils.ArgsContainerData].(*utils.ContainerData)
 	if !ok {
@@ -607,7 +604,9 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	if !ok {
 		logger.L().Debug("Not an image scan command")
 	} else {
-		instanceID = *imageScanCommand.InstanceID
+		if imageScanCommand.InstanceID != nil {
+			instanceID = *imageScanCommand.InstanceID
+		}
 	}
 
 	if err != nil {
