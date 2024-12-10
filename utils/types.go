@@ -16,6 +16,7 @@ type SessionObj struct {
 type ContainerData struct {
 	ImageTag      string // imageTag (from container.Image)
 	ImageID       string // imageID (from containerStatus.ImageID)
+	InstanceID    string // instanceID.GetStringFormatted()
 	ContainerName string // containerName
 	ContainerType string // containerType (init or regular)
 	Slug          string // represent the unique identifier of the container
