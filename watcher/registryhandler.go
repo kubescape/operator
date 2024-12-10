@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/yaml"
 	"time"
@@ -293,6 +294,7 @@ func (ch *RegistryCommandsHandler) generateCronJobObject(registry armotypes.Cont
 	}
 	cronjob.Name = registry.GetBase().ResourceName
 	cronjob.Spec.Schedule = registry.GetBase().ScanFrequency
+	cronjob.Spec.TimeZone = ptr.To("Etc/UTC")
 	for i, v := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes {
 		if v.Name == armotypes.RegistryRequestVolumeName {
 			if cronjob.Spec.JobTemplate.Spec.Template.Spec.Volumes[i].ConfigMap != nil {
@@ -301,7 +303,6 @@ func (ch *RegistryCommandsHandler) generateCronJobObject(registry armotypes.Cont
 		}
 	}
 	cronjob.ObjectMeta.Labels = map[string]string{"app": registry.GetBase().ResourceName}
-
 	return cronjob, nil
 }
 
