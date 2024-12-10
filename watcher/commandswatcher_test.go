@@ -48,7 +48,7 @@ func TestRegistryCommandWatch(t *testing.T) {
 	_, err = k8sAPI.DynamicClient.Resource(v1alpha1.SchemaGroupVersionResource).Namespace("kubescape").Create(ctx, &cmd, v1.CreateOptions{})
 	require.NoError(t, err)
 
-	// let registry command handler consume the command
+	// let registry command handler consume the create command
 	time.Sleep(time.Second * 10)
 
 	// verify resources are created
