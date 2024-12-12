@@ -34,9 +34,7 @@ func TestLoadCapabilities(t *testing.T) {
 					AdmissionController: "enable",
 				},
 				Components: Components{
-					Gateway:            Component{Enabled: true},
 					HostScanner:        Component{Enabled: true},
-					Kollector:          Component{Enabled: true},
 					Kubescape:          Component{Enabled: true},
 					KubescapeScheduler: Component{Enabled: true},
 					Kubevuln:           Component{Enabled: true},

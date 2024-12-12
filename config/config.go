@@ -36,9 +36,7 @@ type Capabilities struct {
 }
 
 type Components struct {
-	Gateway            Component `mapstructure:"gateway"`
 	HostScanner        Component `mapstructure:"hostScanner"`
-	Kollector          Component `mapstructure:"kollector"`
 	Kubescape          Component `mapstructure:"kubescape"`
 	KubescapeScheduler Component `mapstructure:"kubescapeScheduler"`
 	Kubevuln           Component `mapstructure:"kubevuln"`
@@ -114,7 +112,6 @@ type IConfig interface {
 	AccessKey() string
 	ClusterName() string
 	EventReceiverURL() string
-	GatewayWebsocketURL() string
 	ConcurrencyWorkers() int
 	Components() Components
 	AdmissionControllerEnabled() bool
@@ -190,10 +187,6 @@ func (c *OperatorConfig) CleanUpRoutineInterval() time.Duration {
 
 func (c *OperatorConfig) MatchingRulesFilename() string {
 	return c.serviceConfig.MatchingRulesFilename
-}
-
-func (c *OperatorConfig) GatewayWebsocketURL() string {
-	return c.clusterConfig.GatewayWebsocketURL
 }
 
 func (c *OperatorConfig) ConcurrencyWorkers() int {
