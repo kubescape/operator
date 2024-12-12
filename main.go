@@ -23,7 +23,6 @@ import (
 	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/mainhandler"
-	"github.com/kubescape/operator/notificationhandler"
 	"github.com/kubescape/operator/objectcache"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/utils"
@@ -123,15 +122,6 @@ func main() {
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi, exporter)
 
-	if components.Components.Gateway.Enabled {
-		go func() { // open websocket connection to notification server
-			notificationHandler := notificationhandler.NewNotificationHandler(mainHandler.EventWorkerPool(), operatorConfig)
-			if err := notificationHandler.WebsocketConnection(ctx); err != nil {
-				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
-			}
-		}()
-	}
-
 	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), operatorConfig)
 		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIPort); err != nil {
@@ -139,7 +129,7 @@ func main() {
 		}
 	}()
 
-	if operatorConfig.Components().Gateway.Enabled {
+	if components.Components.ServiceDiscovery.Enabled {
 		logger.L().Debug("triggering a full kubescapeScan on startup")
 		go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions(operatorConfig))
 	}
