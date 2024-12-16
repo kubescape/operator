@@ -294,6 +294,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			logger.InitDefaultLogger()
 			ctx := context.Background()
 			testSchema := runtime.NewScheme()
 			dynamicClient := dynamicFake.NewSimpleDynamicClientWithCustomListKinds(testSchema, map[schema.GroupVersionResource]string{

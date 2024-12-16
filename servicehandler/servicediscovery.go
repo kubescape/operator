@@ -133,7 +133,7 @@ func discoveryService(ctx context.Context, regularClient kubernetes.Interface, d
 		}
 		scanErr := sra.serviceScan(ctx, dynamicClient.Resource(ServiceScanSchema))
 		if scanErr != nil {
-			logger.L().Ctx(ctx).Error(scanErr.Error())
+			logger.L().Ctx(ctx).Error("failed to scan service", helpers.Error(scanErr), helpers.String("namespace", sra.metadata.namespace), helpers.String("name", sra.metadata.name))
 		}
 	})
 	if err != nil {

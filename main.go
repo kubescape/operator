@@ -13,6 +13,7 @@ import (
 
 	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
 	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 
 	_ "net/http/pprof"
 
@@ -104,6 +105,14 @@ func main() {
 	initHttpHandlers(operatorConfig)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
+	k8sConfig := k8sApi.K8SConfig
+	// force GRPC
+	k8sConfig.AcceptContentTypes = "application/vnd.kubernetes.protobuf"
+	k8sConfig.ContentType = "application/vnd.kubernetes.protobuf"
+	ksStorageClient, err := kssc.NewForConfig(k8sConfig)
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
+	}
 
 	kubernetesCache := objectcache.NewKubernetesCache(k8sApi)
 
@@ -121,7 +130,7 @@ func main() {
 	}
 
 	// setup main handler
-	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi, exporter)
+	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi, exporter, ksStorageClient)
 
 	if components.Components.Gateway.Enabled {
 		go func() { // open websocket connection to notification server
@@ -168,7 +177,7 @@ func main() {
 		addr := ":8443"
 
 		// Create watchers
-		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi, operatorConfig.SkipNamespace)
+		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi, ksStorageClient.SpdxV1beta1(), operatorConfig.SkipNamespace)
 
 		// create ruleBinding cache
 		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi)

@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/kubescape/node-agent/pkg/rulebindingmanager/types"
 	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 	"github.com/kubescape/node-agent/pkg/watcher"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kubescape/node-agent/pkg/k8sclient"
 
@@ -119,12 +119,10 @@ func (c *RBCache) AddNotifier(n *chan rulebindingmanager.RuleBindingNotify) {
 
 // ------------------ watcher.Watcher methods -----------------------
 
-func (c *RBCache) AddHandler(ctx context.Context, obj *unstructured.Unstructured) {
+func (c *RBCache) AddHandler(_ context.Context, obj runtime.Object) {
 	var rbs []rulebindingmanager.RuleBindingNotify
-
-	switch obj.GetKind() {
-	case types.RuntimeRuleBindingAlertKind:
-		ruleBinding, err := unstructuredToRuleBinding(obj)
+	if un, ok := obj.(*unstructured.Unstructured); ok {
+		ruleBinding, err := unstructuredToRuleBinding(un)
 		if err != nil {
 			logger.L().Error("failed to convert unstructured to rule binding", helpers.Error(err))
 			return
@@ -138,12 +136,11 @@ func (c *RBCache) AddHandler(ctx context.Context, obj *unstructured.Unstructured
 		}
 	}
 }
-func (c *RBCache) ModifyHandler(ctx context.Context, obj *unstructured.Unstructured) {
-	var rbs []rulebindingmanager.RuleBindingNotify
 
-	switch obj.GetKind() {
-	case types.RuntimeRuleBindingAlertKind:
-		ruleBinding, err := unstructuredToRuleBinding(obj)
+func (c *RBCache) ModifyHandler(_ context.Context, obj runtime.Object) {
+	var rbs []rulebindingmanager.RuleBindingNotify
+	if un, ok := obj.(*unstructured.Unstructured); ok {
+		ruleBinding, err := unstructuredToRuleBinding(un)
 		if err != nil {
 			logger.L().Error("failed to convert unstructured to rule binding", helpers.Error(err))
 			return
@@ -157,13 +154,12 @@ func (c *RBCache) ModifyHandler(ctx context.Context, obj *unstructured.Unstructu
 		}
 	}
 }
-func (c *RBCache) DeleteHandler(_ context.Context, obj *unstructured.Unstructured) {
-	var rbs []rulebindingmanager.RuleBindingNotify
-	switch obj.GetKind() {
-	case types.RuntimeRuleBindingAlertKind:
-		rbs = c.deleteRuleBinding(uniqueName(obj))
-	}
 
+func (c *RBCache) DeleteHandler(_ context.Context, obj runtime.Object) {
+	var rbs []rulebindingmanager.RuleBindingNotify
+	if un, ok := obj.(*unstructured.Unstructured); ok {
+		rbs = c.deleteRuleBinding(uniqueName(un))
+	}
 	// notify
 	for n := range c.notifiers {
 		for i := range rbs {
