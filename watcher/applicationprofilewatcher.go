@@ -83,7 +83,6 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(sfEvents <-chan watch.Eve
 	defer close(errorCh)
 
 	for e := range sfEvents {
-		logger.L().Info("Matthias received application profile event", helpers.Interface("event", e))
 		obj, ok := e.Object.(*spdxv1beta1.ApplicationProfile)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
@@ -117,7 +116,7 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(sfEvents <-chan watch.Eve
 			},
 		}
 		// send command
-		logger.L().Info("Matthias scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
+		logger.L().Info("scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
 		producedCommands <- cmd
 	}
 }
