@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,8 @@ func getAPScanURL(config config.IConfig) *url.URL {
 		Path:   fmt.Sprintf("%s/%s", apis.VulnerabilityScanCommandVersion, apis.ApplicationProfileScanCommandPath),
 	}
 }
+
+const noImagesToScanError = "no images to scan"
 
 func getVulnScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
@@ -184,6 +187,10 @@ func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.
 
 	err = actionHandler.scanRegistriesV2(ctx, sessionObj, imageRegistry)
 	if err != nil {
+		if err.Error() == noImagesToScanError { // nothing to scan
+			actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.Completed, "", scanTime)
+			return nil
+		}
 		actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.Failed, err.Error(), scanTime)
 		return err
 	}
@@ -205,6 +212,8 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 	images, err := client.GetImagesToScan(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get registry images to scan with err %v", err)
+	} else if len(images) == 0 {
+		return errors.New(noImagesToScanError)
 	}
 
 	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(sessionObj, client, imageRegistry, images)
@@ -253,7 +262,8 @@ func (actionHandler *ActionHandler) loadRegistryFromSessionObj(sessionObj *utils
 
 func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *utils.SessionObj, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) ([]*apis.RegistryScanCommand, error) {
 	scanID := uuid.NewString()
-	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, len(images))
+	imagesCount := len(images)
+	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, imagesCount)
 	for image, tag := range images {
 		repository := image
 		parts := strings.SplitN(image, "/", 2)
@@ -266,14 +276,15 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 			ImageTag:    image + ":" + tag,
 			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
 			Args: map[string]interface{}{
-				identifiers.AttributeRegistryName:   imageRegistry.GetDisplayName(),
-				identifiers.AttributeRepository:     repository,
-				identifiers.AttributeTag:            tag,
-				identifiers.AttributeUseHTTP:        false,
-				identifiers.AttributeSkipTLSVerify:  false,
-				identifiers.AttributeSensor:         imageRegistry.GetBase().ClusterName,
-				identifiers.AttributeRegistryID:     imageRegistry.GetBase().GUID,
-				identifiers.AttributeRegistryScanID: scanID,
+				identifiers.AttributeRegistryName:            imageRegistry.GetDisplayName(),
+				identifiers.AttributeRepository:              repository,
+				identifiers.AttributeTag:                     tag,
+				identifiers.AttributeUseHTTP:                 false,
+				identifiers.AttributeSkipTLSVerify:           false,
+				identifiers.AttributeSensor:                  imageRegistry.GetBase().ClusterName,
+				identifiers.AttributeRegistryID:              imageRegistry.GetBase().GUID,
+				identifiers.AttributeRegistryScanID:          scanID,
+				identifiers.AttributeRegistryScanImagesCount: strconv.Itoa(imagesCount),
 			},
 		}
 		auth, err := client.GetDockerAuth()
