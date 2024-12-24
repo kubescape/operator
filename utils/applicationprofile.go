@@ -22,7 +22,7 @@ func SkipApplicationProfile(annotations map[string]string) (bool, error) {
 	}
 
 	if len(annotations) == 0 {
-		return true, fmt.Errorf("No Annotations") // skip
+		return true, fmt.Errorf("no annotations") // skip
 	}
 
 	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok && !slices.Contains(ann, status) {
