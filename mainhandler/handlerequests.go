@@ -3,10 +3,11 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	exporters "github.com/kubescape/operator/admission/exporter"
 	"os"
 	"regexp"
 	"time"
+
+	exporters "github.com/kubescape/operator/admission/exporter"
 
 	"github.com/kubescape/backend/pkg/versioncheck"
 	"github.com/kubescape/k8s-interface/workloadinterface"
@@ -426,7 +427,6 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				logger.L().Debug("naked pod younger than guard time detected, skipping scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("creationTimestamp", pod.CreationTimestamp.String()))
 				return nil
 			}
-
 			for _, instanceID := range instanceIDs {
 				s, _ := instanceID.GetSlug(false)
 				if ok := slugs[s]; ok {
@@ -441,28 +441,44 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					continue
 				}
 
-				// set scanning command
-				cmd := &apis.Command{
-					Wlid:        containerData.Wlid,
-					CommandName: apis.TypeScanImages,
-					Args: map[string]interface{}{
-						utils.ArgsContainerData: containerData,
-						utils.ArgsPod:           pod,
-					},
-				}
+				noContainerSlug, _ := instanceID.GetSlug(true)
+				if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, mainHandler.ksStorageClient, noContainerSlug, ns); appProfile != nil {
+					cmd := utils.GetApplicationProfileScanCommand(appProfile)
 
-				// send specific command to the channel
-				newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+					// send specific command to the channel
+					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+					logger.L().Info("triggering application profile scan", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
+						logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+						newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+						continue
+					}
+					newSessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+					logger.L().Info("action completed successfully", helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+					slugs[noContainerSlug] = true
+				} else {
+					// set scanning command
+					cmd := &apis.Command{
+						Wlid:        containerData.Wlid,
+						CommandName: apis.TypeScanImages,
+						Args: map[string]interface{}{
+							utils.ArgsContainerData: containerData,
+							utils.ArgsPod:           pod,
+						},
+					}
+					// send specific command to the channel
+					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+					logger.L().Info("triggering scan image", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 
-				logger.L().Info("triggering scan image", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
-				if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
-					logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
-					newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
-					continue
+					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
+						logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+						newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+						continue
+					}
+					newSessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+					logger.L().Info("action completed successfully", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+					slugs[s] = true
 				}
-				newSessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
-				logger.L().Info("action completed successfully", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
-				slugs[s] = true
 			}
 			return nil
 		}); err != nil {

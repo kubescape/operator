@@ -3,7 +3,6 @@ package watcher
 import (
 	"context"
 	"fmt"
-	"slices"
 	"time"
 
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
@@ -83,7 +82,7 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(sfEvents <-chan watch.Eve
 	defer close(errorCh)
 
 	for e := range sfEvents {
-		logger.L().Info("Matthias received application profile event", helpers.Interface("event", e))
+		logger.L().Info("received application profile event", helpers.Interface("event", e))
 		obj, ok := e.Object.(*spdxv1beta1.ApplicationProfile)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
@@ -101,7 +100,7 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(sfEvents <-chan watch.Eve
 			continue
 		}
 
-		if skipAP(obj.ObjectMeta.Annotations) {
+		if skip, _ := utils.SkipApplicationProfile(obj.ObjectMeta.Annotations); skip {
 			continue
 		}
 
@@ -117,26 +116,9 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(sfEvents <-chan watch.Eve
 			},
 		}
 		// send command
-		logger.L().Info("Matthias scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
+		logger.L().Info("scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
 		producedCommands <- cmd
 	}
-}
-
-func skipAP(annotations map[string]string) bool {
-	ann := []string{
-		"", // empty string for backward compatibility
-		helpersv1.Ready,
-		helpersv1.Completed,
-	}
-
-	if len(annotations) == 0 {
-		return true // skip
-	}
-
-	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok {
-		return !slices.Contains(ann, status)
-	}
-	return false // do not skip
 }
 
 func (wh *WatchHandler) getApplicationProfileWatcher() (watch.Interface, error) {

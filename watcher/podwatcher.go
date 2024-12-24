@@ -15,6 +15,7 @@ import (
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/panjf2000/ants/v2"
 
 	core1 "k8s.io/api/core/v1"
@@ -94,6 +95,8 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl
 		return
 	}
 
+	noContainerSlugs := map[string]bool{}
+
 	// there are a few use-cases:
 	// 1. new workload, new image - new wlid, new slug, new image // scan
 	// 2. new workload, existing image - new wlid, new slug, existing image // scan
@@ -118,7 +121,20 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl
 					continue
 				}
 
-				wh.scanImage(ctx, pod, containerData, workerPool)
+				noContainerSlug, _ := slugToInstanceID[slug].GetSlug(true)
+				if _, ok := noContainerSlugs[noContainerSlug]; ok {
+					// already scanned the application profile
+					wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
+					wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
+					continue
+				}
+
+				if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); appProfile != nil {
+					wh.scanApplicationProfile(ctx, appProfile, workerPool)
+					noContainerSlugs[noContainerSlug] = true
+				} else {
+					wh.scanImage(ctx, pod, containerData, workerPool)
+				}
 
 				wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
 				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
@@ -142,11 +158,22 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl
 				continue
 			}
 
-			// use-case 1, 2, 3
-			// scan image
-			wh.scanImage(ctx, pod, containerData, workerPool)
+			noContainerSlug, _ := slugToInstanceID[slug].GetSlug(true)
+			if _, ok := noContainerSlugs[noContainerSlug]; ok {
+				// already scanned the application profile
+				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
+				continue
+			}
 
+			// use-case 1, 2, 3
+			if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); appProfile != nil {
+				wh.scanApplicationProfile(ctx, appProfile, workerPool)
+				noContainerSlugs[noContainerSlug] = true
+			} else {
+				wh.scanImage(ctx, pod, containerData, workerPool)
+			}
 			wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
+
 		}
 	}
 
@@ -167,6 +194,17 @@ func (wh *WatchHandler) scanImage(ctx context.Context, pod *core1.Pod, container
 	logger.L().Info("scanning image", helpers.String("wlid", cmd.Wlid), helpers.String("slug", containerData.Slug), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 	if err := utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool); err != nil {
 		logger.L().Ctx(ctx).Error("failed to add command to channel", helpers.Error(err), helpers.String("slug", containerData.Slug), helpers.String("imageID", containerData.ImageID))
+	}
+}
+
+func (wh *WatchHandler) scanApplicationProfile(ctx context.Context, appProfile *v1beta1.ApplicationProfile, workerPool *ants.PoolWithFunc) {
+	// set scanning command
+	cmd := utils.GetApplicationProfileScanCommand(appProfile)
+
+	// send
+	logger.L().Info("scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+	if err := utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool); err != nil {
+		logger.L().Ctx(ctx).Error("failed to add command to channel", helpers.Error(err), helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
 	}
 }
 
