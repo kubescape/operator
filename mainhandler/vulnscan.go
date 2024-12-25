@@ -498,6 +498,10 @@ func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, 
 		},
 	}
 
+	if actionHandler.reporter != nil {
+		prepareSessionChain(sessionObj, cmd, actionHandler)
+	}
+
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanApplicationProfile); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
 	}
@@ -532,9 +536,9 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 		cmd.Args[identifiers.AttributeUseHTTP] = true
 	}
 
-	// Add instanceID only if not empty
-	if containerData.InstanceID != "" {
-		cmd.InstanceID = &containerData.InstanceID
+	// Add instanceID only if container is not empty
+	if containerData.Slug != "" {
+		cmd.InstanceID = &containerData.Slug
 	}
 	if actionHandler.reporter != nil {
 		prepareSessionChain(sessionObj, cmd, actionHandler)
