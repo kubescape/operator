@@ -18,6 +18,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 		{
 			name: "status is empty",
 			annotations: map[string]string{
+				helpersv1.CompletionMetadataKey: "complete",
 				helpersv1.StatusMetadataKey:     "",
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
@@ -27,6 +28,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 		{
 			name: "status is Ready",
 			annotations: map[string]string{
+				helpersv1.CompletionMetadataKey: "complete",
 				helpersv1.StatusMetadataKey:     helpersv1.Ready,
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
@@ -34,8 +36,41 @@ func TestSkipApplicationProfile(t *testing.T) {
 			wantSkip: false,
 		},
 		{
+			name: "partial AP",
+			annotations: map[string]string{
+				helpersv1.CompletionMetadataKey: "partial",
+				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.WlidMetadataKey:       "wlid",
+				helpersv1.InstanceIDMetadataKey: "instanceID",
+			},
+			wantSkip:    true,
+			expectedErr: fmt.Errorf("partial - workload restart required"),
+		},
+		{
+			name: "invalid completion status",
+			annotations: map[string]string{
+				helpersv1.CompletionMetadataKey: "invalid",
+				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.WlidMetadataKey:       "wlid",
+				helpersv1.InstanceIDMetadataKey: "instanceID",
+			},
+			wantSkip:    true,
+			expectedErr: fmt.Errorf("partial - workload restart required"),
+		},
+		{
+			name: "missing completion status",
+			annotations: map[string]string{
+				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.WlidMetadataKey:       "wlid",
+				helpersv1.InstanceIDMetadataKey: "instanceID",
+			},
+			wantSkip:    true,
+			expectedErr: fmt.Errorf("partial - workload restart required"),
+		},
+		{
 			name: "status is Completed",
 			annotations: map[string]string{
+				helpersv1.CompletionMetadataKey: "complete",
 				helpersv1.StatusMetadataKey:     helpersv1.Completed,
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
@@ -45,13 +80,14 @@ func TestSkipApplicationProfile(t *testing.T) {
 		{
 			name: "status is not recognized",
 			annotations: map[string]string{
-				helpersv1.StatusMetadataKey: "NotRecognized",
+				helpersv1.CompletionMetadataKey: "complete",
+				helpersv1.StatusMetadataKey:     "NotRecognized",
 			},
 			wantSkip:    true,
 			expectedErr: fmt.Errorf("invalid status"),
 		},
 		{
-			name:        "no status annotation",
+			name:        "no annotations",
 			annotations: map[string]string{},
 			wantSkip:    true,
 			expectedErr: fmt.Errorf("no annotations"),
@@ -59,18 +95,19 @@ func TestSkipApplicationProfile(t *testing.T) {
 		{
 			name: "missing instance WLID annotation",
 			annotations: map[string]string{
+				helpersv1.CompletionMetadataKey: "complete",
 				helpersv1.StatusMetadataKey:     helpersv1.Ready,
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
 			wantSkip:    true,
 			expectedErr: fmt.Errorf("missing WLID annotation"),
 		},
-
 		{
 			name: "missing instance ID annotation",
 			annotations: map[string]string{
-				helpersv1.StatusMetadataKey: helpersv1.Ready,
-				helpersv1.WlidMetadataKey:   "wlid",
+				helpersv1.CompletionMetadataKey: "complete",
+				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.WlidMetadataKey:       "wlid",
 			},
 			wantSkip:    true,
 			expectedErr: fmt.Errorf("missing InstanceID annotation"),
