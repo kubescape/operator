@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -44,7 +45,7 @@ func (ch *OperatorCommandsHandler) Start() {
 	for {
 		select {
 		case cmd := <-ch.commands:
-			if cmd.Spec.CommandType != "OperatorAPI" {
+			if cmd.Spec.CommandType != string(command.OperatorCommandTypeDeleteRegistry) {
 				logger.L().Info("not generic command" + cmd.Spec.CommandType)
 				continue
 			}
