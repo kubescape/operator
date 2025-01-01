@@ -246,16 +246,6 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 		return actionHandler.updateVulnScanCronJob(ctx)
 	case apis.TypeDeleteVulnScanCronJob:
 		return actionHandler.deleteVulnScanCronJob(ctx)
-	case apis.TypeSetRegistryScanCronJob:
-		return actionHandler.setRegistryScanCronJob(ctx, sessionObj)
-	case apis.TypeScanRegistry:
-		return actionHandler.scanRegistries(ctx, sessionObj)
-	case apis.TypeTestRegistryConnectivity:
-		return actionHandler.testRegistryConnectivity(ctx, sessionObj)
-	case apis.TypeUpdateRegistryScanCronJob:
-		return actionHandler.updateRegistryScanCronJob(ctx, sessionObj)
-	case apis.TypeDeleteRegistryScanCronJob:
-		return actionHandler.deleteRegistryScanCronJob(ctx)
 	case apis.TypeScanRegistryV2:
 		return actionHandler.scanRegistriesV2AndUpdateStatus(ctx, sessionObj)
 	default:

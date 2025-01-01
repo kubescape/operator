@@ -128,24 +128,22 @@ type IConfig interface {
 
 // OperatorConfig implements IConfig
 type OperatorConfig struct {
-	serviceConfig        Config
-	components           CapabilitiesConfig
-	clusterConfig        utilsmetadata.ClusterConfig
-	accountId            string
-	accessKey            string
-	eventReceiverRestURL string
+	serviceConfig Config
+	components    CapabilitiesConfig
+	clusterConfig utilsmetadata.ClusterConfig
+	accountId     string
+	accessKey     string
 }
 
 var _ IConfig = (*OperatorConfig)(nil)
 
 func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
 	return &OperatorConfig{
-		components:           components,
-		serviceConfig:        serviceConfig,
-		clusterConfig:        clusterConfig,
-		accountId:            creds.Account,
-		accessKey:            creds.AccessKey,
-		eventReceiverRestURL: eventReceiverRestURL,
+		components:    components,
+		serviceConfig: serviceConfig,
+		clusterConfig: clusterConfig,
+		accountId:     creds.Account,
+		accessKey:     creds.AccessKey,
 	}
 }
 
@@ -225,7 +223,7 @@ func (c *OperatorConfig) SkipNamespace(ns string) bool {
 }
 
 func (c *OperatorConfig) EventReceiverURL() string {
-	return c.eventReceiverRestURL
+	return ""
 }
 
 func (c *OperatorConfig) GuardTime() time.Duration {
