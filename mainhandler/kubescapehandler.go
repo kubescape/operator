@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	v1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -29,8 +29,8 @@ const (
 )
 
 type kubescapeResponseData struct {
-	reporter v1.IReportSender
-	scanID   string
+	scanID     string
+	sessionObj *utils.SessionObj
 }
 
 func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) error {
@@ -41,7 +41,7 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
-	kubescapeJobParams := getKubescapeJobParams(&actionHandler.command)
+	kubescapeJobParams := getKubescapeJobParams(actionHandler.command)
 	if kubescapeJobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
@@ -64,7 +64,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
-	jobParams := getKubescapeJobParams(&actionHandler.command)
+	jobParams := getKubescapeJobParams(actionHandler.command)
 	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
@@ -125,68 +125,39 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	return nil
 }
 
-func HandleKubescapeResponse(ctx context.Context, config config.IConfig, sendReport bool, payload interface{}) (bool, *time.Duration) {
+func HandleKubescapeResponse(ctx context.Context, config config.IConfig, payload interface{}) (bool, *time.Duration) {
 	data := payload.(*kubescapeResponseData)
 	logger.L().Info(fmt.Sprintf("handle kubescape response for scan id %s", data.scanID))
 
-	info := fmt.Sprintf("getting kubescape scanID %s job status", data.scanID)
-	errChan := make(chan error)
-	data.reporter.SendDetails(info, sendReport)
-	if err := <-errChan; err != nil {
-		logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send error report", helpers.Error(err))
-	}
-
 	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(config, data.scanID).String(), nil)
 	if err != nil {
-		info := fmt.Sprintf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendDetails(info, sendReport)
-		if err := <-errChan; err != nil {
-			logger.L().Ctx(ctx).Error("HandleKubescapeResponse failed to send status report", helpers.Error(err))
-		}
-		data.reporter.SendError(err, sendReport, true)
-		if err := <-errChan; err != nil {
-			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::error in HTTP GET + failed to send error report", helpers.Error(err))
-		}
+		data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(fmt.Errorf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())),
+			utils.WithPayload([]byte(data.scanID)))
 		logger.L().Ctx(ctx).Error("get scanID job status returned an error", helpers.String("scanID", data.scanID), helpers.Error(err))
 		return false, nil
 	}
 
 	response, err := readKubescapeV1ScanResponse(resp)
 	if err != nil {
-		info := fmt.Sprintf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())
-		data.reporter.SendDetails(info, sendReport)
-		if err := <-errChan; err != nil {
-			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send status report", helpers.Error(err))
-		}
-		data.reporter.SendError(err, sendReport, true)
-		if err := <-errChan; err != nil {
-			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::readKubescapeV1ScanResponse failed to send error report", helpers.Error(err))
-		}
+		data.sessionObj.SetOperatorCommandStatus(ctx,
+			utils.WithError(fmt.Errorf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())),
+			utils.WithPayload([]byte(data.scanID)))
 		logger.L().Ctx(ctx).Error("parse scanID job status returned an error", helpers.String("scanID", data.scanID), helpers.Error(err))
 		return false, nil
 	}
 
 	if response.Type == utilsapisv1.BusyScanResponseType {
 		nextTimeRehandled := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
-		info = fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String())
-		logger.L().Info(info)
-		data.reporter.SendDetails(info, sendReport)
-		if err := <-errChan; err != nil {
-			logger.L().Ctx(ctx).Error("HandleKubescapeResponse::BusyScanResponseType failed to send status report", helpers.Error(err))
-		}
+		logger.L().Info(fmt.Sprintf("Kubescape get job status for scanID '%s' is %s next handle time is %s", data.scanID, utilsapisv1.BusyScanResponseType, nextTimeRehandled.String()))
 		return true, &nextTimeRehandled
 	}
 
-	info = fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID)
-	logger.L().Info(info)
-	data.reporter.SendDetails(info, sendReport)
-	if err := <-errChan; err != nil {
-		logger.L().Ctx(ctx).Error("HandleKubescapeResponse::Done failed to send status report", helpers.Error(err))
-	}
+	logger.L().Info(fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID))
+	data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload([]byte(data.scanID)))
 	return false, nil
 }
 
-func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
+func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context, sessionObj *utils.SessionObj) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.kubescapeScan")
 	defer span.End()
 
@@ -216,20 +187,22 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	info := fmt.Sprintf("triggered successfully, scan ID: '%s'", response.ID)
 
 	if response.Type == utilsapisv1.ErrorScanResponseType {
-		info = fmt.Sprintf("Kubescape scanID '%s' returned an error: %s", response.ID, response.Response)
+		err := fmt.Errorf("%s", response.Response)
+		logger.L().Info("Kubescape scan returned an error", helpers.String("scanID", response.ID), helpers.Error(err))
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err), utils.WithPayload([]byte(response.ID)))
+	} else {
+		logger.L().Info("Kubescape scan triggered successfully", helpers.String("scanID", response.ID))
+		// sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload([]byte(response.ID)))
 	}
-	actionHandler.reporter.SendDetails(info, actionHandler.sendReport)
-	logger.L().Info(info)
 
 	data := &kubescapeResponseData{
-		reporter: actionHandler.reporter,
-		scanID:   response.ID,
+		scanID:     response.ID,
+		sessionObj: sessionObj,
 	}
 
-	if actionHandler.sendReport {
+	if actionHandler.sessionObj.ParentCommandDetails != nil {
 		nextHandledTime := WaitTimeForKubescapeScanResponse * time.Second
 		commandResponseData := createNewCommandResponseData(KubescapeResponse, HandleKubescapeResponse, data, &nextHandledTime)
 		insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
@@ -238,8 +211,8 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	return nil
 }
 
-func getCronTabSchedule(command armoapi.Command) string {
-	if kubescapeJobParams := getKubescapeJobParams(&command); kubescapeJobParams != nil {
+func getCronTabSchedule(command *armoapi.Command) string {
+	if kubescapeJobParams := getKubescapeJobParams(command); kubescapeJobParams != nil {
 		return kubescapeJobParams.CronTabSchedule
 	}
 	if schedule, ok := command.Args["cronTabSchedule"]; ok {

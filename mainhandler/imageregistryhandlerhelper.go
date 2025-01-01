@@ -104,7 +104,6 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(ctx context.Contex
 	jobParams := actionHandler.command.GetCronJobParams()
 	if jobParams == nil {
 		logger.L().Info("In updateRegistryScanCronJob failed with error: jobParams is nil")
-		sessionObj.Reporter.SetDetails("GetCronJobParams")
 		return fmt.Errorf("jobParams is nil")
 	}
 
@@ -121,7 +120,6 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(ctx context.Contex
 		err = actionHandler.updateSecret(sessionObj, name, registryScan.authConfig())
 		if err != nil {
 			logger.L().Ctx(ctx).Error("In updateRegistryScanCronJob: updateSecret failed", helpers.Error(err))
-			sessionObj.Reporter.SetDetails("updateSecret")
 			return err
 		}
 		logger.L().Info(fmt.Sprintf("updateRegistryScanCronJob: secret: %v updated successfully", name))
@@ -130,7 +128,6 @@ func (actionHandler *ActionHandler) updateRegistryScanCronJob(ctx context.Contex
 	err = actionHandler.updateConfigMap(sessionObj, name, registryScan)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("In updateRegistryScanCronJob: updateConfigMap failed", helpers.Error(err))
-		sessionObj.Reporter.SetDetails("updateConfigMap")
 		return err
 	}
 	logger.L().Info(fmt.Sprintf("updateRegistryScanCronJob: configmap: %v updated successfully", name))
@@ -143,7 +140,6 @@ func (actionHandler *ActionHandler) updateCronTabSchedule(ctx context.Context, n
 		err := actionHandler.updateCronJob(sessionObj, name)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("In updateRegistryScanCronJob: updateCronJob failed", helpers.Error(err))
-			sessionObj.Reporter.SetDetails("updateRegistryScanCronJob")
 			return err
 		}
 		logger.L().Info(fmt.Sprintf("updateRegistryScanCronJob: cronjob: %v updated successfully", name))
@@ -170,7 +166,6 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("In parseRegistryCommand", helpers.Error(err))
-		sessionObj.Reporter.SetDetails("loadRegistryScan")
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
@@ -181,7 +176,6 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 		err = registryScan.createTriggerRequestSecret(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName)
 		if err != nil {
 			logger.L().Info("In setRegistryScanCronJob: createTriggerRequestSecret failed", helpers.Error(err))
-			sessionObj.Reporter.SetDetails("createTriggerRequestSecret")
 			return err
 		}
 		logger.L().Info("setRegistryScanCronJob: secret created successfully")
@@ -191,7 +185,6 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	err = registryScan.createTriggerRequestConfigMap(actionHandler.k8sAPI, name)
 	if err != nil {
 		logger.L().Info("In setRegistryScanCronJob: createTriggerRequestConfigMap failed", helpers.Error(err))
-		sessionObj.Reporter.SetDetails("createTriggerRequestConfigMap")
 		return err
 	}
 	logger.L().Info("setRegistryScanCronJob: configmap created successfully")
@@ -199,7 +192,6 @@ func (actionHandler *ActionHandler) setRegistryScanCronJob(ctx context.Context, 
 	err = registryScan.createTriggerRequestCronJob(actionHandler.k8sAPI, name, registryScan.registryInfo.RegistryName, sessionObj.Command)
 	if err != nil {
 		logger.L().Info("In setRegistryScanCronJob: createTriggerRequestCronJob failed", helpers.Error(err))
-		sessionObj.Reporter.SetDetails("createTriggerRequestCronJob")
 		return err
 	}
 	logger.L().Info(fmt.Sprintf("setRegistryScanCronJob: cronjob: %s created successfully", name))

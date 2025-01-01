@@ -122,7 +122,7 @@ func TestPodWatch(t *testing.T) {
 			pool, _ := ants.NewPoolWithFunc(1, func(i interface{}) {
 				j := i.(utils.Job)
 				command := j.Obj().Command
-				actualCommands = append(actualCommands, command)
+				actualCommands = append(actualCommands, *command)
 				resourcesCreatedWg.Done()
 			})
 
@@ -380,7 +380,7 @@ func Test_handlePodWatcher(t *testing.T) {
 			pool, _ := ants.NewPoolWithFunc(1, func(i interface{}) {
 				j := i.(utils.Job)
 				command := j.Obj().Command
-				actualCommands = append(actualCommands, command)
+				actualCommands = append(actualCommands, *command)
 				resourcesCreatedWg.Done()
 			})
 

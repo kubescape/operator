@@ -218,5 +218,4 @@ func displayBuildTag() {
 func initHttpHandlers(config config.IConfig) {
 	mainhandler.KubescapeHttpClient = utils.InitHttpClient(config.KubescapeURL())
 	mainhandler.VulnScanHttpClient = utils.InitHttpClient(config.KubevulnURL())
-	utils.ReporterHttpClient = utils.InitHttpClient(config.EventReceiverURL())
 }

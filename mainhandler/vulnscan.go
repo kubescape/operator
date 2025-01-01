@@ -13,10 +13,10 @@ import (
 	"github.com/armosec/registryx/interfaces"
 	"github.com/armosec/registryx/registryclients"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/distribution/reference"
 	dockerregistry "github.com/docker/docker/api/types/registry"
-	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -27,7 +27,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/strings/slices"
 
 	"github.com/google/uuid"
 
@@ -118,10 +117,10 @@ func convertImagesToRegistryScanCommand(cluster string, registry *registryScan, 
 		}
 		for _, tag := range tags {
 			registryScanCommand := &apis.ImageScanParams{
-				ParentJobID: sessionObj.Reporter.GetJobID(),
+				ParentJobID: sessionObj.JobID,
 				JobID:       uuid.NewString(),
 				ImageTag:    repository + ":" + tag,
-				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+				Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Timestamp},
 				Args: map[string]interface{}{
 					identifiers.AttributeRegistryName:  registry.registry.hostname + "/" + registry.registry.projectID,
 					identifiers.AttributeRepository:    repositoryName,
@@ -157,14 +156,12 @@ func (actionHandler *ActionHandler) scanRegistries(ctx context.Context, sessionO
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("in parseRegistryCommand", helpers.Error(err))
-		sessionObj.Reporter.SetDetails("loadRegistryScan")
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
 	err = registryScan.validateRegistryScanInformation()
 	if err != nil {
 		logger.L().Ctx(ctx).Error("in parseRegistryCommand", helpers.Error(err))
-		sessionObj.Reporter.SetDetails("validateRegistryScanInformation")
 		return fmt.Errorf("scanRegistries failed with err %v", err)
 	}
 
@@ -220,7 +217,6 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 	if err != nil {
 		return fmt.Errorf("failed to get registry images scan commands with err %v", err)
 	}
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), imageRegistry), actionHandler.sendReport)
 	if err = sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList); err != nil {
 		return fmt.Errorf("failed to send scan commands with err %v", err)
 	}
@@ -271,10 +267,10 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 			repository = parts[1]
 		}
 		registryScanCommand := &apis.ImageScanParams{
-			ParentJobID: sessionObj.Reporter.GetJobID(),
+			ParentJobID: sessionObj.JobID,
 			JobID:       uuid.NewString(),
 			ImageTag:    image + ":" + tag,
-			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Reporter.GetTimestamp()},
+			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Timestamp},
 			Args: map[string]interface{}{
 				identifiers.AttributeRegistryName:            imageRegistry.GetDisplayName(),
 				identifiers.AttributeRepository:              repository,
@@ -329,14 +325,12 @@ func (actionHandler *ActionHandler) testRegistryConnectivity(ctx context.Context
 
 	registryScan, err := actionHandler.loadRegistryScan(ctx, sessionObj)
 	if err != nil {
-		sessionObj.Reporter.SetDetails("loadRegistryScan")
 		logger.L().Ctx(ctx).Error("in testRegistryConnectivity: loadRegistryScan failed", helpers.Error(err))
 		return err
 	}
 
 	err = registryScan.validateRegistryScanInformation()
 	if err != nil {
-		sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
 		logger.L().Ctx(ctx).Error("in testRegistryConnectivity: validateRegistryScanInformation failed", helpers.Error(err))
 		return err
 	}
@@ -373,8 +367,6 @@ func (actionHandler *ActionHandler) parseRegistryName(sessionObj *utils.SessionO
 		authMethodType = authMethod["type"].(string)
 	}
 
-	sessionObj.Reporter.SetTarget(fmt.Sprintf("%s: %s", identifiers.AttributeRegistryName, registryName))
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("registryInfo parsed: %v", registryInfo), actionHandler.sendReport)
 	return registryName, authMethodType
 }
 
@@ -383,40 +375,23 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "DENIED") || strings.Contains(strings.ToLower(err.Error()), "authentication") || strings.Contains(strings.ToLower(err.Error()), "empty token") {
 			// registry info is good, but authentication failed
-			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-			sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
-			sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
 			return fmt.Errorf("failed to retrieve repositories: authentication error: %v", err)
 		} else {
-			sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
 			return fmt.Errorf("testRegistryConnect failed with error:  %v", err)
 		}
 	}
 
-	sessionObj.Reporter.SetDetails(string(testRegistryInformationStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
-	sessionObj.Reporter.SetDetails(string(testRegistryAuthenticationStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
-
 	if len(repos) == 0 {
-		sessionObj.Reporter.SetDetails(fmt.Sprintf("%v failed with err %v", testRegistryRetrieveReposStatus, err))
 		return fmt.Errorf("failed to retrieve repositories: got empty list of repositories")
 	}
-
-	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveReposStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 
 	// check that we can pull tags. One is enough
 	if len(repos) > 0 {
 		reposToTags := make(map[string][]string)
-		if err := registry.setImageToTagsMap(ctx, repos[0], sessionObj.Reporter, reposToTags); err != nil {
-			sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
+		if err := registry.setImageToTagsMap(ctx, repos[0], reposToTags); err != nil {
 			return fmt.Errorf("setImageToTagsMap failed with err %v", err)
 		}
 	}
-
-	sessionObj.Reporter.SetDetails(string(testRegistryRetrieveTagsStatus))
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, actionHandler.sendReport)
 
 	var repositories []apitypes.Repository
 	for _, repo := range repos {
@@ -427,8 +402,8 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 
 	params := RepositoriesAndTagsParams{
 		RegistryName: registry.registryInfo.RegistryName,
-		CustomerGUID: sessionObj.Reporter.GetCustomerGUID(),
-		JobID:        sessionObj.Reporter.GetJobID(),
+		CustomerGUID: sessionObj.CustomerGUID,
+		JobID:        sessionObj.JobID,
 		Repositories: repositories,
 	}
 
@@ -440,12 +415,11 @@ func (actionHandler *ActionHandler) testRegistryConnect(ctx context.Context, reg
 }
 
 func (actionHandler *ActionHandler) scanRegistry(ctx context.Context, registry *registryScan, sessionObj *utils.SessionObj) error {
-	err := registry.getImagesForScanning(ctx, actionHandler.reporter)
+	err := registry.getImagesForScanning(ctx)
 	if err != nil {
 		return fmt.Errorf("GetImagesForScanning failed with err %v", err)
 	}
 	registryScanCMDList := convertImagesToRegistryScanCommand(actionHandler.config.ClusterName(), registry, sessionObj)
-	sessionObj.Reporter.SendDetails(fmt.Sprintf("sending %d images from registry %v to vuln scan", len(registryScanCMDList), registry.registry), actionHandler.sendReport)
 
 	return sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList)
 }
@@ -498,9 +472,7 @@ func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, 
 		},
 	}
 
-	if actionHandler.reporter != nil {
-		prepareSessionChain(sessionObj, cmd, actionHandler)
-	}
+	prepareSessionChain(sessionObj, cmd, actionHandler)
 
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanApplicationProfile); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
@@ -514,12 +486,12 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 			Session: apis.SessionChain{
 				ActionTitle: string(sessionObj.Command.CommandName),
 				JobIDs:      make([]string, 0),
-				Timestamp:   sessionObj.Reporter.GetTimestamp(),
+				Timestamp:   sessionObj.Timestamp,
 			},
 			Args:            map[string]interface{}{},
 			ImageTag:        containerData.ImageTag,
 			Credentialslist: imageScanConfig.authConfigs,
-			JobID:           sessionObj.Reporter.GetJobID(),
+			JobID:           sessionObj.JobID,
 		},
 		Wlid:          containerData.Wlid,
 		ContainerName: containerData.ContainerName,
@@ -540,9 +512,8 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 	if containerData.Slug != "" {
 		cmd.InstanceID = &containerData.Slug
 	}
-	if actionHandler.reporter != nil {
-		prepareSessionChain(sessionObj, cmd, actionHandler)
-	}
+
+	prepareSessionChain(sessionObj, cmd, actionHandler)
 
 	return cmd
 }
@@ -595,27 +566,26 @@ func getImageScanConfig(k8sAPI *k8sinterface.KubernetesApi, namespace string, po
 }
 
 func prepareSessionChain(sessionObj *utils.SessionObj, websocketScanCommand *apis.WebsocketScanCommand, actionHandler *ActionHandler) {
-	sessionParentJobId := sessionObj.Reporter.GetParentAction()
+	sessionParentJobId := sessionObj.ParentJobID
 	if sessionParentJobId != "" {
 		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, sessionParentJobId)
 		websocketScanCommand.Session.RootJobID = sessionParentJobId
 	}
-	sessionJobID := sessionObj.Reporter.GetJobID()
+	sessionJobID := sessionObj.JobID
 	if websocketScanCommand.Session.RootJobID == "" {
 		websocketScanCommand.Session.RootJobID = sessionJobID
 	}
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, sessionJobID)
 
-	if actionHandler.reporter.GetParentAction() != "" && !slices.Contains(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetParentAction()) {
-		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetParentAction())
+	if actionHandler.sessionObj.ParentJobID != "" && !slices.Contains(websocketScanCommand.Session.JobIDs, actionHandler.sessionObj.ParentJobID) {
+		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, actionHandler.sessionObj.ParentJobID)
 	}
 
-	if actionHandler.reporter.GetJobID() != "" && !slices.Contains(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetJobID()) {
-		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, actionHandler.reporter.GetJobID())
+	if actionHandler.sessionObj.JobID != "" && !slices.Contains(websocketScanCommand.Session.JobIDs, actionHandler.sessionObj.JobID) {
+		websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, actionHandler.sessionObj.JobID)
 	}
 
-	websocketScanCommand.ParentJobID = actionHandler.reporter.GetJobID()
-	websocketScanCommand.LastAction = actionHandler.reporter.GetActionIDN()
+	websocketScanCommand.ParentJobID = actionHandler.sessionObj.JobID
 	websocketScanCommand.SetJobID(uuid.NewString())
 	websocketScanCommand.Session.JobIDs = append(websocketScanCommand.Session.JobIDs, websocketScanCommand.GetJobID())
 }

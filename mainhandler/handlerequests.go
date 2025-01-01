@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	mapset "github.com/deckarep/golang-set/v2"
 	exporters "github.com/kubescape/operator/admission/exporter"
 
 	"github.com/kubescape/backend/pkg/versioncheck"
@@ -32,13 +33,10 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 
-	"github.com/google/uuid"
 	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 
 	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
-	"github.com/kubescape/backend/pkg/server/v1/systemreports"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
@@ -50,18 +48,16 @@ type MainHandler struct {
 	ksStorageClient        kssc.Interface
 	commandResponseChannel *commandResponseChannelData
 	config                 config.IConfig
-	sendReport             bool
 	exporter               *exporters.HTTPExporter
 }
 
 type ActionHandler struct {
-	command                apis.Command
-	reporter               beClientV1.IReportSender
+	sessionObj             *utils.SessionObj
+	command                *apis.Command
 	config                 config.IConfig
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
-	sendReport             bool
 	exporter               *exporters.HTTPExporter
 }
 
@@ -93,7 +89,6 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, e
 		ksStorageClient:        ksStorageClient,
 		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
 		config:                 config,
-		sendReport:             config.EventReceiverURL() != "",
 		exporter:               exporter,
 	}
 	pool, _ := ants.NewPoolWithFunc(config.ConcurrencyWorkers(), func(i interface{}) {
@@ -111,12 +106,10 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, e
 // CreateWebSocketHandler Create ws-handler obj
 func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, exporter *exporters.HTTPExporter) *ActionHandler {
 	return &ActionHandler{
-		reporter:               sessionObj.Reporter,
-		command:                sessionObj.Command,
+		sessionObj:             sessionObj,
 		k8sAPI:                 k8sAPI,
 		commandResponseChannel: commandResponseChannel,
 		config:                 config,
-		sendReport:             config.EventReceiverURL() != "",
 		exporter:               exporter,
 	}
 }
@@ -188,9 +181,6 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 
 	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
 
-	// the all user experience depends on this line(the user/backend must get the action name in order to understand the job report)
-	sessionObj.Reporter.SetActionName(string(sessionObj.Command.CommandName))
-
 	isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
 	switch sessionObj.Command.CommandName {
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob, apis.TypeSetKubescapeCronJob, apis.TypeDeleteKubescapeCronJob, apis.TypeUpdateKubescapeCronJob:
@@ -212,9 +202,9 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 		// handle requests
 		if err := mainHandler.HandleSingleRequest(ctx, &sessionObj); err != nil {
 			logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 		} else {
-			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
+			sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess())
 			logger.L().Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 		}
 	}
@@ -226,8 +216,6 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	defer span.End()
 
 	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.exporter)
-	actionHandler.reporter.SetActionName(string(sessionObj.Command.CommandName))
-	actionHandler.reporter.SendDetails("Handling single request", mainHandler.sendReport)
 
 	return actionHandler.runCommand(ctx, sessionObj)
 
@@ -245,7 +233,7 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	case utils.CommandScanApplicationProfile:
 		return actionHandler.scanApplicationProfile(ctx, sessionObj)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
-		return actionHandler.kubescapeScan(ctx)
+		return actionHandler.kubescapeScan(ctx, sessionObj)
 	case apis.TypeSetKubescapeCronJob:
 		return actionHandler.setKubescapeCronJob(ctx)
 	case apis.TypeUpdateKubescapeCronJob:
@@ -291,13 +279,12 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 	namespaces, err := mainHandler.getNamespaces(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
-		sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 		return
 	}
 
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, podLabels, fieldSelector)
 	logger.L().Info(info)
-	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 
 	listOptions := metav1.ListOptions{}
 	if len(podLabels) > 0 {
@@ -309,12 +296,12 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		listOptions.FieldSelector = k8sinterface.SelectorToString(set)
 	}
 
+	errors := mapset.NewSet[error]()
+
 	for _, ns := range namespaces {
 		if mainHandler.config.SkipNamespace(ns) {
 			continue
 		}
-
-		sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
 
 		if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 			return mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, opts)
@@ -336,28 +323,33 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 			cmd.Designators = make([]identifiers.PortalDesignator, 0)
 
 			// send specific command to the channel
-			newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+			newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, sessionObj.JobID, "")
 
 			if err != nil {
 				err := fmt.Errorf("invalid: %s, id: '%s'", err.Error(), newSessionObj.Command.GetID())
 				logger.L().Ctx(ctx).Error(err.Error())
-				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+				errors.Add(err)
 				return nil
 			}
 
 			logger.L().Info("triggering", helpers.String("id", newSessionObj.Command.GetID()))
 			if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
 				logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
-				sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+				errors.Add(err)
 				return nil
 			}
-			sessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
 			logger.L().Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
 			return nil
 		}); err != nil {
 			logger.L().Ctx(ctx).Warning(err.Error())
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+			errors.Add(err)
 		}
+	}
+
+	if errors.Cardinality() > 0 {
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithMultipleErrors(errors.ToSlice()))
+	} else {
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess())
 	}
 }
 
@@ -376,20 +368,19 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 	namespaces, err := mainHandler.getNamespaces(ctx, sessionObj)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to list namespaces", helpers.Error(err))
-		sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 		return
 	}
 
 	info := fmt.Sprintf("%s: id: '%s', namespaces: '%v', labels: '%v', fieldSelector: '%v'", sessionObj.Command.CommandName, sessionObj.Command.GetID(), namespaces, lbls, fields)
 	logger.L().Info(info)
-	sessionObj.Reporter.SendDetails(info, mainHandler.sendReport)
 
 	listOptions := metav1.ListOptions{
 		LabelSelector: k8sinterface.SelectorToString(lbls),
 		FieldSelector: k8sinterface.SelectorToString(fields),
 	}
 
-	sessionObj.Reporter.SendStatus(systemreports.JobSuccess, mainHandler.sendReport)
+	sessionObj.SetOperatorCommandStatus(ctx, nil, nil)
 
 	slugs := map[string]bool{}
 
@@ -446,14 +437,12 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					cmd := utils.GetApplicationProfileScanCommand(appProfile)
 
 					// send specific command to the channel
-					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, sessionObj.JobID, "")
 					logger.L().Info("triggering application profile scan", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
 					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
 						logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
-						newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 						continue
 					}
-					newSessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
 					logger.L().Info("action completed successfully", helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
 					slugs[noContainerSlug] = true
 				} else {
@@ -467,15 +456,13 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 						},
 					}
 					// send specific command to the channel
-					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, "Websocket", sessionObj.Reporter.GetJobID(), "", 1)
+					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, sessionObj.JobID, "")
 					logger.L().Info("triggering scan image", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 
 					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
 						logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
-						newSessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
 						continue
 					}
-					newSessionObj.Reporter.SendStatus(systemreports.JobDone, mainHandler.sendReport)
 					logger.L().Info("action completed successfully", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 					slugs[s] = true
 				}
@@ -483,7 +470,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 			return nil
 		}); err != nil {
 			logger.L().Ctx(ctx).Error("failed to list pods", helpers.String("namespace", ns), helpers.Error(err))
-			sessionObj.Reporter.SendError(err, mainHandler.sendReport, true)
+			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 			continue
 		}
 	}
@@ -519,7 +506,7 @@ func (mainHandler *MainHandler) StartupTriggerActions(ctx context.Context, actio
 		go func(index int) {
 			waitFunc := isActionNeedToWait(actions[index])
 			waitFunc(mainHandler.config)
-			sessionObj := utils.NewSessionObj(ctx, mainHandler.config, &actions[index], "Websocket", "", uuid.NewString(), 1)
+			sessionObj := utils.NewSessionObj(ctx, mainHandler.config, &actions[index], "", "")
 			l := utils.Job{}
 			l.SetContext(ctx)
 			l.SetObj(*sessionObj)

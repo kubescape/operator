@@ -19,7 +19,7 @@ import (
 func TestGetKubescapeV1ScanRequest(t *testing.T) {
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{
+			command: &apis.Command{
 				Args: map[string]interface{}{
 					utils.KubescapeScanV1: nil,
 				},
@@ -31,7 +31,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
+			command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
 		}
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
@@ -39,7 +39,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
+			command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
 		}
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)
@@ -48,7 +48,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
+			command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
 		}
 		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
 		assert.NoError(t, err)

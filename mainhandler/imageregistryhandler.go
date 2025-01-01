@@ -79,7 +79,6 @@ type registryScan struct {
 	mapImageToTags map[string][]string
 	registryInfo   armotypes.RegistryInfo
 	registry       registry
-	sendReport     bool
 }
 
 type RepositoriesAndTagsParams struct {
@@ -122,9 +121,8 @@ func NewRegistryScan(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi) 
 			IsHTTPS:       isHTTPS,
 			SkipTLSVerify: skipTlsVerify,
 		},
-		k8sAPI:     k8sAPI,
-		config:     config,
-		sendReport: config.EventReceiverURL() != "",
+		k8sAPI: k8sAPI,
+		config: config,
 	}
 }
 
@@ -303,18 +301,17 @@ func (registryScan *registryScan) createTriggerRequestConfigMap(k8sAPI *k8sinter
 	return nil
 }
 
-func (registryScan *registryScan) getImagesForScanning(ctx context.Context, reporter beClientV1.IReportSender) error {
+func (registryScan *registryScan) getImagesForScanning(ctx context.Context) error {
 	logger.L().Info("getImagesForScanning: enumerating repos...")
-	errChan := make(chan error)
+
 	repos, err := registryScan.enumerateRepos(ctx)
 	if err != nil {
-		reporter.SetDetails("enumerateRepos failed")
 		return err
 	}
 	logger.L().Info(fmt.Sprintf("GetImagesForScanning: enumerating repos successfully, found %d repos", len(repos)))
 
 	for _, repo := range repos {
-		if err := registryScan.setImageToTagsMap(ctx, repo, reporter, registryScan.mapImageToTags); err != nil {
+		if err := registryScan.setImageToTagsMap(ctx, repo, registryScan.mapImageToTags); err != nil {
 			logger.L().Ctx(ctx).Error("setImageToTagsMap failed", helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
 		}
 	}
@@ -322,20 +319,12 @@ func (registryScan *registryScan) getImagesForScanning(ctx context.Context, repo
 	if registryScan.isExceedScanLimit(imagesToScanLimit) {
 		registryScan.filterScanLimit(imagesToScanLimit)
 		errMsg := fmt.Sprintf("more than %d images provided. scanning only first %d images", imagesToScanLimit, imagesToScanLimit)
-		if reporter != nil {
-			err := errorWithDocumentationRef(errMsg)
-			reporter.SendWarning(err.Error(), registryScan.sendReport, true)
-			if err := <-errChan; err != nil {
-				logger.L().Ctx(ctx).Error("setImageToTagsMap failed to send error report",
-					helpers.String("registry", registryScan.registry.hostname), helpers.Error(err))
-			}
-		}
 		logger.L().Ctx(ctx).Warning("GetImagesForScanning: " + errMsg)
 	}
 	return nil
 }
 
-func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, sender beClientV1.IReportSender, imageToTags map[string][]string) error {
+func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo string, imageToTags map[string][]string) error {
 	logger.L().Info(fmt.Sprintf("Fetching repository %s tags", repo))
 	iRegistry, err := registryScan.makeRegistryInterface()
 	if err != nil {
@@ -365,10 +354,6 @@ func (registryScan *registryScan) setImageToTagsMap(ctx context.Context, repo st
 				if tagsForDigestLen > *tagsDepth {
 					tags = append(tags, tagsForDigest[:*tagsDepth]...)
 					errMsg := fmt.Sprintf("image %s has %d tags. scanning only first %d tags - %s", repo, tagsForDigestLen, *tagsDepth, strings.Join(tagsForDigest[:*tagsDepth], ","))
-					if sender != nil {
-						err := errorWithDocumentationRef(errMsg)
-						sender.SendWarning(err.Error(), registryScan.sendReport, true)
-					}
 					logger.L().Ctx(ctx).Warning("GetImagesForScanning: " + errMsg)
 				} else {
 					tags = append(tags, tagsForDigest...)
@@ -582,10 +567,7 @@ func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj 
 
 	if err := registryScan.setRegistryAuthFromSecret(ctx); err != nil {
 		logger.L().Info("parseRegistry: could not parse auth from secret, parsing from command", helpers.Error(err))
-	} else {
-		sessionObj.Reporter.SendDetails("secret loaded", registryScan.sendReport)
 	}
-
 	configMapMode, err := registryScan.getRegistryConfig(&registryScan.registryInfo)
 	if err != nil {
 		logger.L().Info("parseRegistry: could not get registry config", helpers.Error(err))
@@ -600,7 +582,7 @@ func (registryScan *registryScan) parseRegistry(ctx context.Context, sessionObj 
 	return nil
 }
 
-func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterface.KubernetesApi, name, registryName string, command apis.Command) error {
+func (registryScan *registryScan) createTriggerRequestCronJob(k8sAPI *k8sinterface.KubernetesApi, name, registryName string, command *apis.Command) error {
 
 	// cronjob template is stored as configmap in cluster
 	jobTemplateObj, err := getCronJobTemplate(k8sAPI, registryCronjobTemplate, registryScan.config.Namespace())
@@ -843,7 +825,7 @@ func (registryScan *registryScan) setHostnameAndProject() {
 func (registryScan *registryScan) SendRepositoriesAndTags(params RepositoriesAndTagsParams) error {
 	reqBody, err := json.Marshal(params.Repositories)
 	if err != nil {
-		return fmt.Errorf("in 'sendReport' failed to json.Marshal, reason: %v", err)
+		return fmt.Errorf("in 'SendRepositoriesAndTags' failed to json.Marshal, reason: %v", err)
 	}
 
 	url, err := beClientV1.GetRegistryRepositoriesUrl(registryScan.config.EventReceiverURL(), params.CustomerGUID, params.RegistryName, params.JobID)

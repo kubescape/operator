@@ -24,7 +24,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
-	req := getVulnScanRequest(&actionHandler.command)
+	req := getVulnScanRequest(actionHandler.command)
 
 	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "kubevuln-schedule", rand.NewSource(time.Now().UnixNano()).Int63()))
 
@@ -37,14 +37,14 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 		return err
 	}
 
-	scanJobParams := getJobParams(&actionHandler.command)
+	scanJobParams := getJobParams(actionHandler.command)
 	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
 		return fmt.Errorf("setVulnScanCronJob: CronTabSchedule not found")
 	}
 	setCronJobForTriggerRequest(jobTemplateObj, name, scanJobParams.CronTabSchedule, actionHandler.command.JobTracking.JobID)
 
 	// add namespace annotation
-	namespace := getNamespaceFromVulnScanCommand(&actionHandler.command)
+	namespace := getNamespaceFromVulnScanCommand(actionHandler.command)
 	logger.L().Info(fmt.Sprintf("setVulnScanCronJob: command namespace - '%s'", namespace))
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKeyDeprecated] = namespace // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKey] = namespace
@@ -64,7 +64,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
-	scanJobParams := getJobParams(&actionHandler.command)
+	scanJobParams := getJobParams(actionHandler.command)
 	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
 		return fmt.Errorf("updateVulnScanCronJob: CronTabSchedule not found")
 	}
@@ -99,7 +99,7 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob(ctx context.Context) e
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
-	scanJobParams := getJobParams(&actionHandler.command)
+	scanJobParams := getJobParams(actionHandler.command)
 	if scanJobParams == nil || scanJobParams.JobName == "" {
 		return fmt.Errorf("deleteVulnScanCronJob: CronTabSchedule not found")
 	}
