@@ -153,6 +153,8 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	commandWatchHandler := watcher.NewCommandWatchHandler(mainHandler.k8sAPI, mainHandler.config)
 	registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
 	go registryCommandsHandler.Start()
+	operatorCommandsHandler := watcher.NewOperatorCommandsHandler(ctx, mainHandler.eventWorkerPool, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
+	go operatorCommandsHandler.Start()
 
 	// wait for the kubevuln component to be ready
 	logger.L().Info("Waiting for vuln scan to be ready")
