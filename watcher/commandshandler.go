@@ -49,9 +49,10 @@ func (ch *OperatorCommandsHandler) Start() {
 				logger.L().Info("not generic command: " + cmd.Spec.CommandType)
 				continue
 			}
+			logger.L().Debug("OperatorCommandsHandler: received command", helpers.String("guid", fmt.Sprintf("%v", cmd.Spec.GUID)))
 			ch.invokeCommand(ch.ctx, cmd)
 		case <-ch.ctx.Done():
-			logger.L().Ctx(ch.ctx).Info("RegistryCommandsHandler: context done")
+			logger.L().Ctx(ch.ctx).Info("OperatorCommandsHandler: context done")
 			return
 		}
 	}
