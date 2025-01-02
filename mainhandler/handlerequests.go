@@ -371,8 +371,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 		FieldSelector: k8sinterface.SelectorToString(fields),
 	}
 
-	sessionObj.SetOperatorCommandStatus(ctx, nil, nil)
-
+	errors := mapset.NewSet[error]()
 	slugs := map[string]bool{}
 
 	for _, ns := range namespaces {
@@ -431,7 +430,8 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, sessionObj.JobID, "")
 					logger.L().Info("triggering application profile scan", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
 					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
-						logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+						logger.L().Error("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+						errors.Add(err)
 						continue
 					}
 					logger.L().Info("action completed successfully", helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
@@ -451,7 +451,8 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					logger.L().Info("triggering scan image", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
 
 					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
-						logger.L().Info("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+						logger.L().Error("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
+						errors.Add(err)
 						continue
 					}
 					logger.L().Info("action completed successfully", helpers.String("id", newSessionObj.Command.GetID()), helpers.String("slug", s), helpers.String("containerName", containerData.ContainerName), helpers.String("imageTag", containerData.ImageTag), helpers.String("imageID", containerData.ImageID))
@@ -461,9 +462,15 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 			return nil
 		}); err != nil {
 			logger.L().Ctx(ctx).Error("failed to list pods", helpers.String("namespace", ns), helpers.Error(err))
-			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
+			errors.Add(err)
 			continue
 		}
+	}
+
+	if errors.Cardinality() > 0 {
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithMultipleErrors(errors.ToSlice()))
+	} else {
+		sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess())
 	}
 }
 
