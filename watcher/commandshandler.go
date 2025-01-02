@@ -45,8 +45,8 @@ func (ch *OperatorCommandsHandler) Start() {
 	for {
 		select {
 		case cmd := <-ch.commands:
-			if cmd.Spec.CommandType != string(command.OperatorCommandTypeDeleteRegistry) {
-				logger.L().Info("not generic command" + cmd.Spec.CommandType)
+			if cmd.Spec.CommandType != string(command.OperatorCommandTypeOperatorAPI) {
+				logger.L().Info("not generic command: " + cmd.Spec.CommandType)
 				continue
 			}
 			ch.invokeCommand(ch.ctx, cmd)
