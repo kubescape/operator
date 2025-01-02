@@ -89,7 +89,7 @@ func sendAllImagesToRegistryScan(ctx context.Context, config config.IConfig, reg
 	return nil
 }
 
-func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.Context, sessionObj *utils.SessionObj) error {
+func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanRegistriesV2")
 	defer span.End()
 
@@ -98,12 +98,12 @@ func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.
 	}
 
 	scanTime := time.Now()
-	imageRegistry, err := actionHandler.loadRegistryFromSessionObj(sessionObj)
+	imageRegistry, err := actionHandler.loadRegistryFromSessionObj()
 	if err != nil {
 		return fmt.Errorf("failed to load registry from sessionObj with err %v", err)
 	}
 
-	err = actionHandler.scanRegistriesV2(ctx, sessionObj, imageRegistry)
+	err = actionHandler.scanRegistriesV2(ctx, imageRegistry)
 	if err != nil {
 		if err.Error() == noImagesToScanError { // nothing to scan
 			actionHandler.exporter.SendRegistryStatus(imageRegistry.GetBase().GUID, apitypes.Completed, "", scanTime)
@@ -117,8 +117,8 @@ func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.
 	return nil
 }
 
-func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
-	if err := actionHandler.loadRegistrySecret(ctx, sessionObj, imageRegistry); err != nil {
+func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageRegistry apitypes.ContainerImageRegistry) error {
+	if err := actionHandler.loadRegistrySecret(ctx, imageRegistry); err != nil {
 		return fmt.Errorf("failed to load secret with err %v", err)
 	}
 
@@ -134,7 +134,7 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 		return errors.New(noImagesToScanError)
 	}
 
-	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(sessionObj, client, imageRegistry, images)
+	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(client, imageRegistry, images)
 	if err != nil {
 		return fmt.Errorf("failed to get registry images scan commands with err %v", err)
 	}
@@ -145,8 +145,8 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, sessio
 	return nil
 }
 
-func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, sessionObj *utils.SessionObj, imageRegistry apitypes.ContainerImageRegistry) error {
-	secretName := sessionObj.Command.Args[apitypes.RegistrySecretNameArgKey].(string)
+func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, imageRegistry apitypes.ContainerImageRegistry) error {
+	secretName := actionHandler.sessionObj.Command.Args[apitypes.RegistrySecretNameArgKey].(string)
 	secret, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("loadRegistrySecret failed to get secret with err %v", err)
@@ -164,8 +164,8 @@ func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, sess
 	return nil
 }
 
-func (actionHandler *ActionHandler) loadRegistryFromSessionObj(sessionObj *utils.SessionObj) (apitypes.ContainerImageRegistry, error) {
-	regInfo := sessionObj.Command.Args[apitypes.RegistryInfoArgKey].(map[string]interface{})
+func (actionHandler *ActionHandler) loadRegistryFromSessionObj() (apitypes.ContainerImageRegistry, error) {
+	regInfo := actionHandler.sessionObj.Command.Args[apitypes.RegistryInfoArgKey].(map[string]interface{})
 	regInfoBytes, err := json.Marshal(regInfo)
 	if err != nil {
 		return nil, fmt.Errorf("scanRegistriesV2 failed to marshal command arg with err %v", err)
@@ -177,7 +177,7 @@ func (actionHandler *ActionHandler) loadRegistryFromSessionObj(sessionObj *utils
 	return imageRegistry, nil
 }
 
-func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *utils.SessionObj, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) ([]*apis.RegistryScanCommand, error) {
+func (actionHandler *ActionHandler) getRegistryImageScanCommands(client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry, images map[string]string) ([]*apis.RegistryScanCommand, error) {
 	scanID := uuid.NewString()
 	imagesCount := len(images)
 	registryScanCMDList := make([]*apis.RegistryScanCommand, 0, imagesCount)
@@ -188,10 +188,10 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 			repository = parts[1]
 		}
 		registryScanCommand := &apis.ImageScanParams{
-			ParentJobID: sessionObj.JobID,
+			ParentJobID: actionHandler.sessionObj.JobID,
 			JobID:       uuid.NewString(),
 			ImageTag:    image + ":" + tag,
-			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: sessionObj.Timestamp},
+			Session:     apis.SessionChain{ActionTitle: "vulnerability-scan", JobIDs: make([]string, 0), Timestamp: actionHandler.sessionObj.Timestamp},
 			Args: map[string]interface{}{
 				identifiers.AttributeRegistryName:            imageRegistry.GetDisplayName(),
 				identifiers.AttributeRepository:              repository,
@@ -216,7 +216,7 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(sessionObj *uti
 	return registryScanCMDList, nil
 }
 
-func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *utils.SessionObj) error {
+func (actionHandler *ActionHandler) scanImage(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanImage")
 	defer span.End()
 
@@ -224,11 +224,11 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *u
 		return errors.New("kubevuln is not enabled")
 	}
 
-	pod, _ := actionHandler.command.Args[utils.ArgsPod].(*corev1.Pod)
+	pod, _ := actionHandler.sessionObj.Command.Args[utils.ArgsPod].(*corev1.Pod)
 
-	containerData, ok := actionHandler.command.Args[utils.ArgsContainerData].(*utils.ContainerData)
+	containerData, ok := actionHandler.sessionObj.Command.Args[utils.ArgsContainerData].(*utils.ContainerData)
 	if !ok {
-		return fmt.Errorf("failed to get container for image %s", actionHandler.command.Args[utils.ArgsContainerData])
+		return fmt.Errorf("failed to get container for image %s", actionHandler.sessionObj.Command.Args[utils.ArgsContainerData])
 	}
 
 	imageScanConfig, err := getImageScanConfig(actionHandler.k8sAPI, actionHandler.config.Namespace(), pod, containerData.ImageTag)
@@ -237,15 +237,15 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context, sessionObj *u
 	}
 
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
-	cmd := actionHandler.getImageScanCommand(containerData, sessionObj, imageScanConfig)
+	cmd := actionHandler.getImageScanCommand(containerData, imageScanConfig)
 
-	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, sessionObj.Command.CommandName); err != nil {
+	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, actionHandler.sessionObj.Command.CommandName); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
 	}
 	return nil
 }
 
-func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, sessionObj *utils.SessionObj) error {
+func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanApplicationProfile")
 	defer span.End()
 
@@ -258,13 +258,13 @@ func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, 
 		Wlid: actionHandler.wlid,
 		ImageScanParams: apis.ImageScanParams{
 			Args: map[string]interface{}{
-				"name":      actionHandler.command.Args[utils.ArgsName],
-				"namespace": actionHandler.command.Args[utils.ArgsNamespace],
+				"name":      actionHandler.sessionObj.Command.Args[utils.ArgsName],
+				"namespace": actionHandler.sessionObj.Command.Args[utils.ArgsNamespace],
 			},
 		},
 	}
 
-	prepareSessionChain(sessionObj, cmd, actionHandler)
+	prepareSessionChain(actionHandler.sessionObj, cmd, actionHandler)
 
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanApplicationProfile); err != nil {
 		return fmt.Errorf("failed to send command to scanner with err %v", err)
@@ -272,18 +272,18 @@ func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context, 
 	return nil
 }
 
-func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, sessionObj *utils.SessionObj, imageScanConfig *ImageScanConfig) *apis.WebsocketScanCommand {
+func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.ContainerData, imageScanConfig *ImageScanConfig) *apis.WebsocketScanCommand {
 	cmd := &apis.WebsocketScanCommand{
 		ImageScanParams: apis.ImageScanParams{
 			Session: apis.SessionChain{
-				ActionTitle: string(sessionObj.Command.CommandName),
+				ActionTitle: string(actionHandler.sessionObj.Command.CommandName),
 				JobIDs:      make([]string, 0),
-				Timestamp:   sessionObj.Timestamp,
+				Timestamp:   actionHandler.sessionObj.Timestamp,
 			},
 			Args:            map[string]interface{}{},
 			ImageTag:        containerData.ImageTag,
 			Credentialslist: imageScanConfig.authConfigs,
-			JobID:           sessionObj.JobID,
+			JobID:           actionHandler.sessionObj.JobID,
 		},
 		Wlid:          containerData.Wlid,
 		ContainerName: containerData.ContainerName,
@@ -305,7 +305,7 @@ func (actionHandler *ActionHandler) getImageScanCommand(containerData *utils.Con
 		cmd.InstanceID = &containerData.Slug
 	}
 
-	prepareSessionChain(sessionObj, cmd, actionHandler)
+	prepareSessionChain(actionHandler.sessionObj, cmd, actionHandler)
 
 	return cmd
 }

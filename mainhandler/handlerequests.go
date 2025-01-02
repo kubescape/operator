@@ -53,7 +53,6 @@ type MainHandler struct {
 
 type ActionHandler struct {
 	sessionObj             *utils.SessionObj
-	command                *apis.Command
 	config                 config.IConfig
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
@@ -218,12 +217,12 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	defer span.End()
 
 	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.exporter)
-
-	return actionHandler.runCommand(ctx, sessionObj)
+	return actionHandler.runCommand(ctx)
 
 }
 
-func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *utils.SessionObj) error {
+func (actionHandler *ActionHandler) runCommand(ctx context.Context) error {
+	sessionObj := actionHandler.sessionObj
 	c := sessionObj.Command
 	if pkgwlid.IsWlid(c.GetID()) {
 		actionHandler.wlid = c.GetID()
@@ -231,11 +230,11 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 
 	switch c.CommandName {
 	case apis.TypeScanImages:
-		return actionHandler.scanImage(ctx, sessionObj)
+		return actionHandler.scanImage(ctx)
 	case utils.CommandScanApplicationProfile:
-		return actionHandler.scanApplicationProfile(ctx, sessionObj)
+		return actionHandler.scanApplicationProfile(ctx)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
-		return actionHandler.kubescapeScan(ctx, sessionObj)
+		return actionHandler.kubescapeScan(ctx)
 	case apis.TypeSetKubescapeCronJob:
 		return actionHandler.setKubescapeCronJob(ctx)
 	case apis.TypeUpdateKubescapeCronJob:
@@ -249,7 +248,7 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context, sessionObj *
 	case apis.TypeDeleteVulnScanCronJob:
 		return actionHandler.deleteVulnScanCronJob(ctx)
 	case apis.TypeScanRegistryV2:
-		return actionHandler.scanRegistriesV2AndUpdateStatus(ctx, sessionObj)
+		return actionHandler.scanRegistriesV2AndUpdateStatus(ctx)
 	default:
 		logger.L().Ctx(ctx).Error(fmt.Sprintf("Command %s not found", c.CommandName))
 	}

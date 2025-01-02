@@ -24,7 +24,7 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
-	req := getVulnScanRequest(actionHandler.command)
+	req := getVulnScanRequest(actionHandler.sessionObj.Command)
 
 	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "kubevuln-schedule", rand.NewSource(time.Now().UnixNano()).Int63()))
 
@@ -37,14 +37,14 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 		return err
 	}
 
-	scanJobParams := getJobParams(actionHandler.command)
+	scanJobParams := getJobParams(actionHandler.sessionObj.Command)
 	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
 		return fmt.Errorf("setVulnScanCronJob: CronTabSchedule not found")
 	}
-	setCronJobForTriggerRequest(jobTemplateObj, name, scanJobParams.CronTabSchedule, actionHandler.command.JobTracking.JobID)
+	setCronJobForTriggerRequest(jobTemplateObj, name, scanJobParams.CronTabSchedule, actionHandler.sessionObj.Command.JobTracking.JobID)
 
 	// add namespace annotation
-	namespace := getNamespaceFromVulnScanCommand(actionHandler.command)
+	namespace := getNamespaceFromVulnScanCommand(actionHandler.sessionObj.Command)
 	logger.L().Info(fmt.Sprintf("setVulnScanCronJob: command namespace - '%s'", namespace))
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKeyDeprecated] = namespace // deprecated
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKey] = namespace
@@ -64,7 +64,7 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
-	scanJobParams := getJobParams(actionHandler.command)
+	scanJobParams := getJobParams(actionHandler.sessionObj.Command)
 	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
 		return fmt.Errorf("updateVulnScanCronJob: CronTabSchedule not found")
 	}
@@ -81,8 +81,8 @@ func (actionHandler *ActionHandler) updateVulnScanCronJob(ctx context.Context) e
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.sessionObj.Command.JobTracking.JobID // deprecated
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.sessionObj.Command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
@@ -99,7 +99,7 @@ func (actionHandler *ActionHandler) deleteVulnScanCronJob(ctx context.Context) e
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
-	scanJobParams := getJobParams(actionHandler.command)
+	scanJobParams := getJobParams(actionHandler.sessionObj.Command)
 	if scanJobParams == nil || scanJobParams.JobName == "" {
 		return fmt.Errorf("deleteVulnScanCronJob: CronTabSchedule not found")
 	}

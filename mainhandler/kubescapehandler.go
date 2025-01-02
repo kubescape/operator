@@ -41,7 +41,7 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
-	kubescapeJobParams := getKubescapeJobParams(actionHandler.command)
+	kubescapeJobParams := getKubescapeJobParams(actionHandler.sessionObj.Command)
 	if kubescapeJobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
@@ -64,7 +64,7 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
-	jobParams := getKubescapeJobParams(actionHandler.command)
+	jobParams := getKubescapeJobParams(actionHandler.sessionObj.Command)
 	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
@@ -74,12 +74,11 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 		return err
 	}
 
-	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.command)
+	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.sessionObj.Command)
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobIDDeprecated] = actionHandler.command.JobTracking.JobID // deprecated
-	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.command.JobTracking.JobID
+	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationUpdateJobID] = actionHandler.sessionObj.Command.JobTracking.JobID
 
 	_, err = actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Update(context.Background(), jobTemplateObj, metav1.UpdateOptions{})
 	if err != nil {
@@ -96,7 +95,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
-	req, err := getKubescapeRequest(actionHandler.command.Args)
+	req, err := getKubescapeRequest(actionHandler.sessionObj.Command.Args)
 	if err != nil {
 		return err
 	}
@@ -114,7 +113,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 			return err
 		}
 
-		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.command), actionHandler.command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
+		setCronJobTemplate(jobTemplateObj, name, getCronTabSchedule(actionHandler.sessionObj.Command), actionHandler.sessionObj.Command.JobTracking.JobID, req.TargetNames[i], req.TargetType, req.HostScanner)
 
 		// create cronJob
 		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
@@ -157,7 +156,7 @@ func HandleKubescapeResponse(ctx context.Context, config config.IConfig, payload
 	return false, nil
 }
 
-func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context, sessionObj *utils.SessionObj) error {
+func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.kubescapeScan")
 	defer span.End()
 
@@ -165,7 +164,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context, sessionOb
 		return errors.New("kubescape is not enabled")
 	}
 
-	request, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+	request, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
 	if err != nil {
 		return err
 	}
@@ -191,7 +190,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context, sessionOb
 	if response.Type == utilsapisv1.ErrorScanResponseType {
 		err := fmt.Errorf("%s", response.Response)
 		logger.L().Info("Kubescape scan returned an error", helpers.String("scanID", response.ID), helpers.Error(err))
-		sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err), utils.WithPayload([]byte(response.ID)))
+		actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err), utils.WithPayload([]byte(response.ID)))
 	} else {
 		logger.L().Info("Kubescape scan triggered successfully", helpers.String("scanID", response.ID))
 		// sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload([]byte(response.ID)))
@@ -199,7 +198,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context, sessionOb
 
 	data := &kubescapeResponseData{
 		scanID:     response.ID,
-		sessionObj: sessionObj,
+		sessionObj: actionHandler.sessionObj,
 	}
 
 	if actionHandler.sessionObj.ParentCommandDetails != nil {
