@@ -244,7 +244,6 @@ func TestContinuousScanningService(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			utils.ReporterHttpClient = utils.InitHttpClient("")
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 			resourcesCreatedWg := &sync.WaitGroup{}
 			podsGvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "Pods"}
@@ -256,7 +255,7 @@ func TestContinuousScanningService(t *testing.T) {
 				j := i.(utils.Job)
 
 				command := j.Obj().Command
-				gotCommands.Add(command)
+				gotCommands.Add(*command)
 
 				resourcesCreatedWg.Done()
 			}

@@ -12,7 +12,6 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
-	"github.com/google/uuid"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
@@ -64,9 +63,7 @@ func ExtractImageID(imageID string) string {
 }
 
 func AddCommandToChannel(ctx context.Context, config config.IConfig, cmd *apis.Command, workerPool *ants.PoolWithFunc) error {
-
-	newSessionObj := NewSessionObj(ctx, config, cmd, "Websocket", "", uuid.NewString(), 1)
-
+	newSessionObj := NewSessionObj(ctx, config, cmd, "", "")
 	return workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj})
 }
 

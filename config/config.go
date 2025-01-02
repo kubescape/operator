@@ -36,9 +36,7 @@ type Capabilities struct {
 }
 
 type Components struct {
-	Gateway            Component `mapstructure:"gateway"`
 	HostScanner        Component `mapstructure:"hostScanner"`
-	Kollector          Component `mapstructure:"kollector"`
 	Kubescape          Component `mapstructure:"kubescape"`
 	KubescapeScheduler Component `mapstructure:"kubescapeScheduler"`
 	Kubevuln           Component `mapstructure:"kubevuln"`
@@ -114,7 +112,6 @@ type IConfig interface {
 	AccessKey() string
 	ClusterName() string
 	EventReceiverURL() string
-	GatewayWebsocketURL() string
 	ConcurrencyWorkers() int
 	Components() Components
 	AdmissionControllerEnabled() bool
@@ -131,24 +128,22 @@ type IConfig interface {
 
 // OperatorConfig implements IConfig
 type OperatorConfig struct {
-	serviceConfig        Config
-	components           CapabilitiesConfig
-	clusterConfig        utilsmetadata.ClusterConfig
-	accountId            string
-	accessKey            string
-	eventReceiverRestURL string
+	serviceConfig Config
+	components    CapabilitiesConfig
+	clusterConfig utilsmetadata.ClusterConfig
+	accountId     string
+	accessKey     string
 }
 
 var _ IConfig = (*OperatorConfig)(nil)
 
 func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
 	return &OperatorConfig{
-		components:           components,
-		serviceConfig:        serviceConfig,
-		clusterConfig:        clusterConfig,
-		accountId:            creds.Account,
-		accessKey:            creds.AccessKey,
-		eventReceiverRestURL: eventReceiverRestURL,
+		components:    components,
+		serviceConfig: serviceConfig,
+		clusterConfig: clusterConfig,
+		accountId:     creds.Account,
+		accessKey:     creds.AccessKey,
 	}
 }
 
@@ -192,10 +187,6 @@ func (c *OperatorConfig) MatchingRulesFilename() string {
 	return c.serviceConfig.MatchingRulesFilename
 }
 
-func (c *OperatorConfig) GatewayWebsocketURL() string {
-	return c.clusterConfig.GatewayWebsocketURL
-}
-
 func (c *OperatorConfig) ConcurrencyWorkers() int {
 	return c.serviceConfig.ConcurrencyWorkers
 }
@@ -232,7 +223,7 @@ func (c *OperatorConfig) SkipNamespace(ns string) bool {
 }
 
 func (c *OperatorConfig) EventReceiverURL() string {
-	return c.eventReceiverRestURL
+	return ""
 }
 
 func (c *OperatorConfig) GuardTime() time.Duration {

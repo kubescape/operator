@@ -15,18 +15,16 @@ import (
 )
 
 type HTTPHandler struct {
-	keyPair    *tls.Certificate
-	pool       *ants.PoolWithFunc
-	config     config.IConfig
-	sendReport bool
+	keyPair *tls.Certificate
+	pool    *ants.PoolWithFunc
+	config  config.IConfig
 }
 
 func NewHTTPHandler(pool *ants.PoolWithFunc, config config.IConfig) *HTTPHandler {
 	return &HTTPHandler{
-		keyPair:    nil,
-		pool:       pool,
-		config:     config,
-		sendReport: config.EventReceiverURL() != "",
+		keyPair: nil,
+		pool:    pool,
+		config:  config,
 	}
 }
 

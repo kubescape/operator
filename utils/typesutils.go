@@ -2,21 +2,13 @@ package utils
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/armosec/armoapi-go/identifiers"
-
-	"github.com/armosec/utils-go/httputils"
 	"github.com/google/uuid"
-	beClientV1 "github.com/kubescape/backend/pkg/client/v1"
-	beServerV1 "github.com/kubescape/backend/pkg/server/v1"
-	"github.com/kubescape/backend/pkg/server/v1/systemreports"
-	"github.com/kubescape/operator/config"
-)
 
-var (
-	ReporterHttpClient httputils.IHttpClient
+	beServerV1 "github.com/kubescape/backend/pkg/server/v1"
+	"github.com/kubescape/operator/config"
 )
 
 func GetRequestHeaders(accessKey string) map[string]string {
@@ -26,48 +18,22 @@ func GetRequestHeaders(accessKey string) map[string]string {
 	}
 }
 
-func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Command, message, parentID, jobID string, actionNumber int) *SessionObj {
-	var reporter beClientV1.IReportSender
-	if config.EventReceiverURL() == "" {
-		reporter = systemreports.NewNoReportSender()
-	} else {
-		report := systemreports.NewBaseReport(config.AccountID(), message)
-		target := command.GetID()
-		if target == identifiers.DesignatorsToken {
-			target = fmt.Sprintf("wlid://cluster-%s/", config.ClusterName())
-		}
-		if target == "" {
-			target = fmt.Sprintf("%v", command.Args)
-		}
-		report.SetTarget(target)
-
-		if jobID == "" {
-			jobID = uuid.NewString()
-		}
-		report.SetJobID(jobID)
-		report.SetParentAction(parentID)
-		report.SetActionIDN(actionNumber)
-		if command.CommandName != "" {
-			report.SetActionName(string(command.CommandName))
-		}
-
-		noHeaders := GetRequestHeaders(config.AccessKey())
-		reporter = beClientV1.NewBaseReportSender(config.EventReceiverURL(), ReporterHttpClient, noHeaders, report)
-	}
-
+func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Command, parentJobId, jobID string) *SessionObj {
 	sessionObj := SessionObj{
-		Command:  *command,
-		Reporter: reporter,
+		CustomerGUID: config.AccountID(),
+		JobID:        jobID,
+		ParentJobID:  parentJobId,
+		Command:      command,
+		Timestamp:    time.Now(),
 	}
 
-	sessionObj.Reporter.SendAsRoutine(true)
+	if jobID == "" {
+		sessionObj.JobID = uuid.NewString()
+	}
+
 	return &sessionObj
 }
 
-func NewJobTracking(reporter systemreports.IReporter) *apis.JobTracking {
-	return &apis.JobTracking{
-		JobID:            reporter.GetJobID(),
-		ParentID:         reporter.GetParentAction(),
-		LastActionNumber: reporter.GetActionIDN() + 1,
-	}
+func (s *SessionObj) SetOperatorCommandDetails(opcmd *OperatorCommandDetails) {
+	s.ParentCommandDetails = opcmd
 }

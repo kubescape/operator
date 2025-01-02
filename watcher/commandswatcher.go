@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/cenkalti/backoff"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
 	"github.com/kubescape/operator/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
@@ -21,6 +22,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
+
+const minOperatorCommandAge = 30 * time.Minute
 
 type CommandWatchHandler struct {
 	k8sAPI           *k8sinterface.KubernetesApi
@@ -123,7 +126,11 @@ func (cwh *CommandWatchHandler) AddHandler(obj runtime.Object) {
 			return
 		}
 
-		logger.L().Info("Received command", helpers.String("command", cmd.Name), helpers.String("GUID", cmd.Spec.GUID))
+		// Skip the command if it is older than the creation threshold
+		if cmd.CreationTimestamp.Time.Before(time.Now().Add(-minOperatorCommandAge)) {
+			logger.L().Info("Skipping old OperatorCommand", helpers.String("command", cmd.Name), helpers.String("GUID", cmd.Spec.GUID), helpers.String("CreationTimestamp", cmd.CreationTimestamp.String()))
+			return
+		}
 
 		// Skip the command if it has already been processed.
 		if cmd.Status.Completed {

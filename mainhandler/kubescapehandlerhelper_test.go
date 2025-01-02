@@ -19,38 +19,46 @@ import (
 func TestGetKubescapeV1ScanRequest(t *testing.T) {
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{
-				Args: map[string]interface{}{
-					utils.KubescapeScanV1: nil,
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{
+					Args: map[string]interface{}{
+						utils.KubescapeScanV1: nil,
+					},
 				},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
 		assert.NoError(t, err)
 		assert.NotNil(t, 0, req)
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
+			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
 		assert.NoError(t, err)
 		assert.Equal(t, "json", req.Format)
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
+			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
 	{
 		actionHandler := ActionHandler{
-			command: apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
+			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
