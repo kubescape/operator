@@ -146,27 +146,31 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		}
 	}()
 
-	eventQueue := watcher.NewCooldownQueue()
-	watchHandler := watcher.NewWatchHandler(mainHandler.config, mainHandler.k8sAPI, mainHandler.ksStorageClient, eventQueue)
-
 	commandWatchHandler := watcher.NewCommandWatchHandler(mainHandler.k8sAPI, mainHandler.config)
-	registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
-	go registryCommandsHandler.Start()
 	operatorCommandsHandler := watcher.NewOperatorCommandsHandler(ctx, mainHandler.eventWorkerPool, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
-	go operatorCommandsHandler.Start()
 
-	// wait for the kubevuln component to be ready
-	logger.L().Info("Waiting for vuln scan to be ready")
-	waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
-	waitFunc(mainHandler.config)
+	if mainHandler.config.Components().Kubevuln.Enabled {
+		eventQueue := watcher.NewCooldownQueue()
+		watchHandler := watcher.NewWatchHandler(mainHandler.config, mainHandler.k8sAPI, mainHandler.ksStorageClient, eventQueue)
 
-	// start watching
-	if mainHandler.config.NodeSbomGenerationEnabled() {
-		go watchHandler.SBOMWatch(ctx, mainHandler.eventWorkerPool)
-	} else {
-		go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
+		registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
+		go registryCommandsHandler.Start()
+
+		// wait for the kubevuln component to be ready
+		logger.L().Info("Waiting for vuln scan to be ready")
+		waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
+		waitFunc(mainHandler.config)
+
+		// start watching
+		if mainHandler.config.NodeSbomGenerationEnabled() {
+			go watchHandler.SBOMWatch(ctx, mainHandler.eventWorkerPool)
+		} else {
+			go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
+		}
+		go watchHandler.ApplicationProfileWatch(ctx, mainHandler.eventWorkerPool)
 	}
-	go watchHandler.ApplicationProfileWatch(ctx, mainHandler.eventWorkerPool)
+
+	go operatorCommandsHandler.Start()
 	go commandWatchHandler.CommandWatch(ctx)
 }
 

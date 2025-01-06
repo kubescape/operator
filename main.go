@@ -147,9 +147,7 @@ func main() {
 
 	// wait for requests to come from the websocket or from the REST API
 	go mainHandler.HandleCommandResponse(ctx)
-	if operatorConfig.Components().Kubevuln.Enabled {
-		mainHandler.HandleWatchers(ctx)
-	}
+	mainHandler.HandleWatchers(ctx)
 
 	if operatorConfig.ContinuousScanEnabled() {
 		go func(mh *mainhandler.MainHandler) {
