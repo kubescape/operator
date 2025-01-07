@@ -101,7 +101,7 @@ require (
 	github.com/anchore/syft v1.13.0 // indirect
 	github.com/armosec/gojay v1.2.17 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/aws-sdk-go v1.55.5 // indirect
+	github.com/aws/aws-sdk-go v1.55.6-0.20240912145455-7112c0a0c2d0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.32.5 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.28.5 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.46 // indirect
