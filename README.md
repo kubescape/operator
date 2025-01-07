@@ -19,7 +19,6 @@ If you will be running the Operator as part of the Kubescape cluster components,
 	```    
 	kubectl port-forward -n kubescape service/kubescape 8080:8080 & 
 	kubectl port-forward -n kubescape service/kubevuln 8081:8080 & 
-	kubectl port-forward -n kubescape service/gateway 8001:8001 &
 	```
 
 3. Add configuration files.
@@ -40,13 +39,7 @@ If you will be running the Operator as part of the Kubescape cluster components,
     "vulnerabilityScan": "enable"
   },
   "components": {
-    "gateway": {
-      "enabled": true
-    },
     "hostScanner": {
-      "enabled": true
-    },
-    "kollector": {
       "enabled": true
     },
     "kubescape": {
@@ -89,8 +82,6 @@ If you will be running the Operator as part of the Kubescape cluster components,
 
 ```json5
 {
-   "gatewayWebsocketURL": "127.0.0.1:8001",
-   "gatewayRestURL": "127.0.0.1:8002",
    "kubevulnURL": "127.0.0.1:8081",
    "kubescapeURL": "127.0.0.1:8080",
    "accountID": "*********************",
@@ -121,7 +112,6 @@ If you will be running the Operator as part of the Kubescape cluster components,
   "response": {
     "event-receiver-http": "https://report.armo.cloud",
     "event-receiver-ws": "wss://report.armo.cloud",
-    "gateway": "wss://ens.euprod1.cyberarmorsoft.com",
     "api-server": "https://api.armosec.io",
     "metrics": "otelcol.armosec.io:443"
   }
@@ -388,8 +378,6 @@ For example:
 
 ```json5
 {
-    "gatewayWebsocketURL": "",
-    "gatewayRestURL": "",
     "kubevulnURL": "",
     "kubescapeURL": "",
     "accountID": "*********************",

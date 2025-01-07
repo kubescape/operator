@@ -8,13 +8,7 @@
     "admissionController": "enable"
   },
   "components": {
-    "gateway": {
-      "enabled": true
-    },
     "hostScanner": {
-      "enabled": true
-    },
-    "kollector": {
       "enabled": true
     },
     "kubescape": {

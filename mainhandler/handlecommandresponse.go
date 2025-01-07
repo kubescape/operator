@@ -7,7 +7,7 @@ import (
 	"github.com/kubescape/operator/config"
 )
 
-type HandleCommandResponseCallBack func(ctx context.Context, config config.IConfig, sendReport bool, payload interface{}) (bool, *time.Duration)
+type HandleCommandResponseCallBack func(ctx context.Context, config config.IConfig, payload interface{}) (bool, *time.Duration)
 
 const (
 	MaxLimitationInsertToCommandResponseChannelGoRoutine = 10
@@ -74,7 +74,7 @@ func (mainHandler *MainHandler) HandleCommandResponse(ctx context.Context) {
 	mainHandler.createInsertCommandsResponseThreadPool()
 	for {
 		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
-		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, mainHandler.config, mainHandler.sendReport, data.payload)
+		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, mainHandler.config, data.payload)
 		if data.isCommandResponseNeedToBeRehandled {
 			insertNewCommandResponseData(mainHandler.commandResponseChannel, data)
 		}

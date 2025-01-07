@@ -2,12 +2,8 @@ package mainhandler
 
 import (
 	"context"
-	"reflect"
-	"testing"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/operator/config"
-	"github.com/stretchr/testify/assert"
 )
 
 // func TestSetImageToTagsMap(t *testing.T) {
@@ -52,23 +48,4 @@ func NewMockKubernetesAPI() *k8sinterface.KubernetesApi {
 		DiscoveryClient:  nil,
 		Context:          context.Background(),
 	}
-}
-
-func TestFilterRepositories(t *testing.T) {
-	k8sAPI := NewMockKubernetesAPI()
-	registryScan := NewRegistryScan(&config.OperatorConfig{}, k8sAPI)
-
-	registryScan.registry = registry{
-		hostname:  "quay.io",
-		projectID: "project",
-	}
-	repos := []string{"project/repo1", "project/repo2", "project/repo3", "project/repo4"}
-	registryScan.registryInfo.Include = append(registryScan.registryInfo.Include, "repo1", "project/repo2")
-	filtered := registryScan.filterRepositories(context.TODO(), repos)
-	assert.True(t, reflect.DeepEqual([]string{"project/repo1", "project/repo2"}, filtered))
-
-	registryScan.registryInfo.Include = []string{}
-	registryScan.registryInfo.Exclude = append(registryScan.registryInfo.Exclude, "repo1", "project/repo2")
-	filtered = registryScan.filterRepositories(context.TODO(), repos)
-	assert.True(t, reflect.DeepEqual([]string{"project/repo3", "project/repo4"}, filtered))
 }

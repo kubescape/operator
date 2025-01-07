@@ -82,7 +82,6 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(eventQueue *CooldownQueue
 	defer close(errorCh)
 
 	for e := range eventQueue.ResultChan {
-		logger.L().Info("received application profile event", helpers.Interface("event", e))
 		obj, ok := e.Object.(*spdxv1beta1.ApplicationProfile)
 		if !ok {
 			errorCh <- ErrUnsupportedObject

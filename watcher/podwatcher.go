@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) error {
+func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	watchOpts := v1.ListOptions{
 		Watch:         true,
 		FieldSelector: "status.phase=Running", // only when the pod is running
@@ -73,7 +73,6 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 			continue
 		}
 	}
-	return nil
 }
 
 // handlePodWatcher handles the pod watch events
