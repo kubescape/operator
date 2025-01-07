@@ -19,7 +19,7 @@ import (
 
 // ApplicationProfileWatch watches and processes changes on ApplicationProfile resources
 func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
-	inputEvents := make(chan watch.Event)
+	eventQueue := NewCooldownQueueWithParams(15*time.Second, 1*time.Second)
 	cmdCh := make(chan *apis.Command)
 	errorCh := make(chan error)
 	apEvents := make(<-chan watch.Event)
@@ -30,7 +30,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 		apWatcherUnavailable <- struct{}{}
 	}()
 
-	go wh.HandleApplicationProfileEvents(inputEvents, cmdCh, errorCh)
+	go wh.HandleApplicationProfileEvents(eventQueue, cmdCh, errorCh)
 
 	// notifyWatcherDown notifies the appropriate channel that the watcher
 	// is down and backs off for the retry interval to not produce
@@ -46,7 +46,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 		select {
 		case apEvent, ok := <-apEvents:
 			if ok {
-				inputEvents <- apEvent
+				eventQueue.Enqueue(apEvent)
 			} else {
 				notifyWatcherDown(apWatcherUnavailable)
 			}
@@ -78,10 +78,10 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 
 }
 
-func (wh *WatchHandler) HandleApplicationProfileEvents(sfEvents <-chan watch.Event, producedCommands chan<- *apis.Command, errorCh chan<- error) {
+func (wh *WatchHandler) HandleApplicationProfileEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(errorCh)
 
-	for e := range sfEvents {
+	for e := range eventQueue.ResultChan {
 		logger.L().Info("received application profile event", helpers.Interface("event", e))
 		obj, ok := e.Object.(*spdxv1beta1.ApplicationProfile)
 		if !ok {

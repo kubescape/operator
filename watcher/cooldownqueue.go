@@ -31,6 +31,10 @@ type CooldownQueue struct {
 
 // NewCooldownQueue returns a new Cooldown Queue
 func NewCooldownQueue() *CooldownQueue {
+	return NewCooldownQueueWithParams(defaultExpiration, evictionInterval)
+}
+
+func NewCooldownQueueWithParams(expiration, interval time.Duration) *CooldownQueue {
 	events := make(chan watch.Event)
 	chanMu := sync.Mutex{}
 	callback := func(key, value any) {
@@ -38,7 +42,7 @@ func NewCooldownQueue() *CooldownQueue {
 		defer chanMu.Unlock()
 		events <- value.(watch.Event)
 	}
-	c := cache.NewTTLWithCallback(defaultExpiration, evictionInterval, callback)
+	c := cache.NewTTLWithCallback(expiration, interval, callback)
 	return &CooldownQueue{
 		chanMu:     &chanMu,
 		seenEvents: c,
