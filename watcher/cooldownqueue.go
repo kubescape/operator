@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -52,10 +53,13 @@ func NewCooldownQueueWithParams(expiration, interval time.Duration) *CooldownQue
 }
 
 // makeEventKey creates a unique key for an event from a watcher
-func makeEventKey(e watch.Event) string {
+func makeEventKey(e watch.Event) (string, error) {
 	gvk := e.Object.GetObjectKind().GroupVersionKind()
-	meta := e.Object.(metav1.Object)
-	return strings.Join([]string{gvk.Group, gvk.Version, gvk.Kind, meta.GetNamespace(), meta.GetName()}, "/")
+	meta, ok := e.Object.(metav1.Object)
+	if !ok {
+		return "", errors.New("object does not implement metav1.Object")
+	}
+	return strings.Join([]string{gvk.Group, gvk.Version, gvk.Kind, meta.GetNamespace(), meta.GetName()}, "/"), nil
 }
 
 func (q *CooldownQueue) Closed() bool {
@@ -71,7 +75,10 @@ func (q *CooldownQueue) Enqueue(e watch.Event) {
 	if q.closed {
 		return
 	}
-	eventKey := makeEventKey(e)
+	eventKey, err := makeEventKey(e)
+	if err != nil {
+		return
+	}
 	q.seenEvents.Set(eventKey, e)
 }
 
