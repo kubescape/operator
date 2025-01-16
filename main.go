@@ -40,7 +40,6 @@ import (
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
 	ctx := context.Background()
-
 	flag.Parse()
 
 	isReadinessReady := false
