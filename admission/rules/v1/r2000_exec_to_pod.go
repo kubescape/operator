@@ -114,6 +114,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 		},
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
 			PodName:           event.GetName(),
+			PodNamespace:      event.GetNamespace(),
 			Namespace:         event.GetNamespace(),
 			WorkloadName:      workloadName,
 			WorkloadNamespace: workloadNamespace,
