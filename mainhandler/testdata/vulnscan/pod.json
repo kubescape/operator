@@ -14,7 +14,7 @@
     "spec": {
         "containers": [
             {
-                "image": "nginx:1.15",
+                "image": "private.docker.io/library/nginx:1.15",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "nginx",
                 "ports": [
@@ -33,6 +33,11 @@
                         "readOnly": true
                     }
                 ]
+            }
+        ],
+        "imagePullSecrets": [
+            {
+                "name": "regcreds"
             }
         ],
         "dnsPolicy": "ClusterFirst",
