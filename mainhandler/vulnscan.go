@@ -345,12 +345,12 @@ func getImageScanConfig(k8sAPI *k8sinterface.KubernetesApi, namespace string, po
 	if pod != nil {
 		// TODO: this should not happen every scan
 		// build a list of secrets from the the registry secrets
-		secrets, err := cloudsupport.GetImageRegistryCredentials(imageTag, pod)
+		secrets, err := cloudsupport.GetImageRegistryCredentials(k8sAPI, imageTag, pod)
 		if err != nil {
 			return nil, err
 		}
 		for i := range secrets {
-			imageScanConfig.authConfigs = append(imageScanConfig.authConfigs, secrets[i])
+			imageScanConfig.authConfigs = append(imageScanConfig.authConfigs, secrets[i]...)
 		}
 	}
 
