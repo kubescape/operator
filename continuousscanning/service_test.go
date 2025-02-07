@@ -151,7 +151,8 @@ func TestAddEventHandler(t *testing.T) {
 			tl := NewTargetLoader(f)
 			// We use the spy handler later to verify if it's been called
 			spyH := &spyHandler{called: false, wg: resourcesCreatedWg, mx: &sync.RWMutex{}}
-			css := NewContinuousScanningService(dynClient, tl, spyH)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, "", config.Config{Namespace: "kubescape"})
+			css := NewContinuousScanningService(operatorConfig, dynClient, tl, spyH)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
@@ -264,7 +265,7 @@ func TestContinuousScanningService(t *testing.T) {
 			triggeringHandler := NewTriggeringHandler(wp, operatorConfig)
 			stubFetcher := &stubFetcher{podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
-			css := NewContinuousScanningService(dynClient, loader, triggeringHandler)
+			css := NewContinuousScanningService(operatorConfig, dynClient, loader, triggeringHandler)
 			css.Launch(ctx)
 
 			// Create Pods to be listened
