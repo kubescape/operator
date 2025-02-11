@@ -3,6 +3,7 @@ package continuousscanning
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -185,33 +186,31 @@ func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject
 	ns := h.getObjectNamespace(uObject, nsFallback)
 	name, err := h.getObjectName(uObject)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get object name: %w", err)
 	}
 
 	err = storageClient.SpdxV1beta1().WorkloadConfigurationScans(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.L().Ctx(ctx).Error("cant delete workload configuration", helpers.Error(err))
-		return err
+		return fmt.Errorf("failed to delete workload configuration: %w", err)
 	}
 
 	err = storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.L().Ctx(ctx).Error("cant delete workload configuration summary", helpers.Error(err))
-		return err
+		return fmt.Errorf("failed to delete workload configuration summary: %w", err)
 	}
-	return err
+
+	err = storageClient.SpdxV1beta1().VulnerabilityManifestSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to delete vulnerability manifest summary: %w", err)
+	}
+	return nil
 }
 
 func (h *deletedCleanerHandler) deleteCRDs(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
-	kind := uObject.GetKind()
-	var err error
-
-	switch kind {
+	switch uObject.GetKind() {
 	default:
-		err = h.deleteScanArtifacts(ctx, uObject, storageClient)
+		return h.deleteScanArtifacts(ctx, uObject, storageClient)
 	}
-
-	return err
 }
 
 func (h *deletedCleanerHandler) Handle(ctx context.Context, e watch.Event) error {

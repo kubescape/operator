@@ -3,6 +3,7 @@ package continuousscanning
 import (
 	"context"
 
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/watcher"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -14,6 +15,7 @@ import (
 )
 
 type ContinuousScanningService struct {
+	cfg               config.IConfig
 	tl                TargetLoader
 	shutdownRequested chan struct{}
 	workDone          chan struct{}
@@ -44,6 +46,9 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
+				if s.cfg.SkipNamespace(e.Object.(metav1.Object).GetNamespace()) {
+					continue
+				}
 				out.Enqueue(e)
 			case <-shutdownCh:
 				return
@@ -100,12 +105,13 @@ func (s *ContinuousScanningService) Stop() {
 	<-s.workDone
 }
 
-func NewContinuousScanningService(client dynamic.Interface, tl TargetLoader, h ...EventHandler) *ContinuousScanningService {
+func NewContinuousScanningService(cfg config.IConfig, client dynamic.Interface, tl TargetLoader, h ...EventHandler) *ContinuousScanningService {
 	doneCh := make(chan struct{})
 	eventQueue := watcher.NewCooldownQueue()
 	workDone := make(chan struct{})
 
 	return &ContinuousScanningService{
+		cfg:               cfg,
 		tl:                tl,
 		k8sdynamic:        client,
 		shutdownRequested: doneCh,

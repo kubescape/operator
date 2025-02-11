@@ -133,7 +133,7 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) err
 	loader := cs.NewTargetLoader(fetcher)
 
 	dynClient := mainHandler.k8sAPI.DynamicClient
-	svc := cs.NewContinuousScanningService(dynClient, loader, triggeringHandler, deletingHandler)
+	svc := cs.NewContinuousScanningService(mainHandler.config, dynClient, loader, triggeringHandler, deletingHandler)
 	svc.Launch(ctx)
 
 	return nil
