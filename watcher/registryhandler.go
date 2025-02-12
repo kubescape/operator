@@ -116,6 +116,7 @@ func (ch *RegistryCommandsHandler) Start() {
 				status.Error = &v1alpha1.OperatorCommandStatusError{Message: err.Error()}
 			} else if len(payload) > 0 {
 				status.Payload = payload
+				status.PayloadStr = string(payload)
 			}
 
 			logger.L().Ctx(ctx).Info(fmt.Sprintf("finished handling %s command ", cmd.Spec.CommandType))

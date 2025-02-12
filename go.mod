@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/goradd/maps v0.1.5
 	github.com/gorilla/mux v1.8.1
-	github.com/kubescape/backend v0.0.26
+	github.com/kubescape/backend v0.0.27-0.20250212144422-1b20a1fa07db
 	github.com/kubescape/go-logger v0.0.23
 	github.com/kubescape/k8s-interface v0.0.176
 	github.com/kubescape/kubescape-network-scanner v0.0.15
