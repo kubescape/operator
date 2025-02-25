@@ -148,7 +148,7 @@ func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadat
 }
 
 func (c *OperatorConfig) ContinuousScanEnabled() bool {
-	return c.components.Capabilities.ContinuousScan == "enable"
+	return c.clusterConfig.ContinuousPostureScan
 }
 
 func (c *OperatorConfig) AdmissionControllerEnabled() bool {
