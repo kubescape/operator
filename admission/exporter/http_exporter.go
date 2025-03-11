@@ -120,18 +120,14 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 	k8sDetails.ClusterName = exporter.ClusterName
 
 	httpAlert := apitypes.RuntimeAlert{
-		Message:   ruleFailure.GetRuleAlert().RuleDescription,
-		HostName:  exporter.Host,
-		AlertType: apitypes.AlertTypeAdmission,
-		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
-			Timestamp: time.Now(),
-		},
+		Message:                ruleFailure.GetRuleAlert().RuleDescription,
+		HostName:               exporter.Host,
+		AlertType:              apitypes.AlertTypeAdmission,
+		BaseRuntimeAlert:       ruleFailure.GetBaseRuntimeAlert(),
 		AdmissionAlert:         ruleFailure.GetAdmissionsAlert(),
 		RuntimeAlertK8sDetails: k8sDetails,
-		RuleAlert: apitypes.RuleAlert{
-			RuleDescription: ruleFailure.GetRuleAlert().RuleDescription,
-		},
-		RuleID: ruleFailure.GetRuleId(),
+		RuleAlert:              ruleFailure.GetRuleAlert(),
+		RuleID:                 ruleFailure.GetRuleId(),
 	}
 	exporter.sendInAlertList(httpAlert, apitypes.ProcessTree{})
 }
