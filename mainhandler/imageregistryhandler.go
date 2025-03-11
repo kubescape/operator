@@ -7,15 +7,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubescape/k8s-interface/workloadinterface"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/pager"
-
 	regCommon "github.com/armosec/registryx/common"
-
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/pager"
 )
 
 type AuthMethods string

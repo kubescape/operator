@@ -9,17 +9,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/operator/config"
-	"github.com/kubescape/operator/utils"
-	"go.opentelemetry.io/otel"
-
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
-
+	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
+	"go.opentelemetry.io/otel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

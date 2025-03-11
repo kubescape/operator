@@ -1,9 +1,8 @@
 package docs
 
 import (
-	"net/http"
-
 	_ "embed"
+	"net/http"
 
 	"github.com/go-openapi/runtime/middleware"
 )

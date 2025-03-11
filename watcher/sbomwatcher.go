@@ -2,19 +2,17 @@ package watcher
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"time"
-
-	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
-	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/operator/utils"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/panjf2000/ants/v2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -59,7 +57,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			}
 		case err, ok := <-errorCh:
 			if ok {
-				logger.L().Ctx(ctx).Error(fmt.Sprintf("error in SBOMWatch: %v", err.Error()))
+				logger.L().Ctx(ctx).Error("error in SBOMWatch", helpers.Error(err))
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -134,7 +132,7 @@ func (wh *WatchHandler) HandleSBOMEvents(sfEvents <-chan watch.Event, producedCo
 
 func (wh *WatchHandler) getSBOMWatcher() (watch.Interface, error) {
 	// no need to support ExcludeNamespaces and IncludeNamespaces since node-agent will respect them as well
-	return wh.storageClient.SpdxV1beta1().SBOMSyfts("").Watch(context.Background(), v1.ListOptions{})
+	return wh.storageClient.SpdxV1beta1().SBOMSyfts("").Watch(context.Background(), metav1.ListOptions{})
 }
 
 func skipSBOM(annotations map[string]string) bool {

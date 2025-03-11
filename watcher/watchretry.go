@@ -10,7 +10,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -20,7 +20,7 @@ type resourceVersionGetter interface {
 
 var errWatchClosed = errors.New("watch channel closed")
 
-func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts v1.ListOptions) {
+func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts metav1.ListOptions) {
 	if err := backoff.RetryNotify(func() error {
 		watcher, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").Watch(context.Background(), watchOpts)
 		if err != nil {

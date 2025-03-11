@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kubescape/operator/admission/rules"
-	"github.com/kubescape/operator/objectcache"
-
+	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/operator/admission/rules"
+	"github.com/kubescape/operator/objectcache"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/authentication/user"
-
-	apitypes "github.com/armosec/armoapi-go/armotypes"
 )
 
 const (

@@ -7,11 +7,10 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
-
-	"github.com/armosec/armoapi-go/apis"
 )
 
 /*args may contain credentials*/

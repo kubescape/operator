@@ -11,6 +11,7 @@ import (
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -61,13 +62,14 @@ func GetApplicationProfileForRelevancyScan(ctx context.Context, storageClient ks
 	return nil
 }
 
-func GetApplicationProfileScanCommand(appProfile *v1beta1.ApplicationProfile) *apis.Command {
+func GetApplicationProfileScanCommand(appProfile *v1beta1.ApplicationProfile, pod *corev1.Pod) *apis.Command {
 	return &apis.Command{
 		Wlid:        appProfile.Annotations[helpersv1.WlidMetadataKey],
 		CommandName: apis.TypeScanApplicationProfile,
 		Args: map[string]interface{}{
 			ArgsName:      appProfile.Name,
 			ArgsNamespace: appProfile.Namespace,
+			ArgsPod:       pod,
 		},
 	}
 }

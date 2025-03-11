@@ -6,28 +6,28 @@ import (
 
 	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
-	core1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Test_extractImageIDsFromPod(t *testing.T) {
 	tests := []struct {
 		name     string
-		pod      *core1.Pod
+		pod      *corev1.Pod
 		expected []string
 	}{
 		{
 			name: "one container",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod1",
 					Namespace: "namespace1",
 				},
-				Status: core1.PodStatus{
-					ContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
@@ -39,23 +39,23 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 		},
 		{
 			name: "two containers",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod2",
 					Namespace: "namespace2",
 				},
-				Status: core1.PodStatus{
-					ContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
@@ -67,23 +67,23 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 		},
 		{
 			name: "init container",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod2",
 					Namespace: "namespace2",
 				},
-				Status: core1.PodStatus{
-					InitContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
@@ -103,22 +103,22 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 }
 func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 	tests := []struct {
-		pod      *core1.Pod
+		pod      *corev1.Pod
 		expected map[string][]string
 		name     string
 	}{
 		{
 			name: "one container",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod1",
 					Namespace: "namespace1",
 				},
-				Status: core1.PodStatus{
-					ContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
@@ -130,23 +130,23 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 		},
 		{
 			name: "two containers",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod2",
 					Namespace: "namespace2",
 				},
-				Status: core1.PodStatus{
-					ContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
@@ -161,23 +161,23 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 		},
 		{
 			name: "init container",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod2",
 					Namespace: "namespace2",
 				},
-				Status: core1.PodStatus{
-					InitContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:2",
 							Name:    "container2",
@@ -192,23 +192,23 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 		},
 		{
 			name: "two containers with same image",
-			pod: &core1.Pod{
-				ObjectMeta: v1.ObjectMeta{
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod2",
 					Namespace: "namespace2",
 				},
-				Status: core1.PodStatus{
-					ContainerStatuses: []core1.ContainerStatus{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container1",
 						},
 						{
-							State: core1.ContainerState{
-								Running: &core1.ContainerStateRunning{},
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
 							},
 							ImageID: "docker-pullable://alpine@sha256:1",
 							Name:    "container2",

@@ -10,33 +10,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armosec/armoapi-go/apis"
+	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/armoapi-go/identifiers"
 	"github.com/armosec/registryx/interfaces"
 	"github.com/armosec/registryx/registryclients"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/strings/slices"
-
+	"github.com/armosec/utils-go/httputils"
+	"github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/distribution/reference"
 	dockerregistry "github.com/docker/docker/api/types/registry"
+	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/cloudsupport"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/google/uuid"
-
-	"github.com/armosec/armoapi-go/apis"
-	apitypes "github.com/armosec/armoapi-go/armotypes"
-	"github.com/armosec/armoapi-go/identifiers"
-	"github.com/armosec/utils-k8s-go/armometadata"
-
-	"github.com/armosec/utils-go/httputils"
-	"github.com/kubescape/k8s-interface/cloudsupport"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 )
 
 func getAPScanURL(config config.IConfig) *url.URL {
@@ -100,7 +95,7 @@ func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.
 	scanTime := time.Now()
 	imageRegistry, err := actionHandler.loadRegistryFromSessionObj()
 	if err != nil {
-		return fmt.Errorf("failed to load registry from sessionObj with err %v", err)
+		return fmt.Errorf("failed to load registry from sessionObj: %w", err)
 	}
 
 	err = actionHandler.scanRegistriesV2(ctx, imageRegistry)
@@ -119,27 +114,27 @@ func (actionHandler *ActionHandler) scanRegistriesV2AndUpdateStatus(ctx context.
 
 func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageRegistry apitypes.ContainerImageRegistry) error {
 	if err := actionHandler.loadRegistrySecret(ctx, imageRegistry); err != nil {
-		return fmt.Errorf("failed to load secret with err %v", err)
+		return fmt.Errorf("failed to load secret: %w", err)
 	}
 
 	client, err := registryclients.GetRegistryClient(imageRegistry)
 	if err != nil {
-		return fmt.Errorf("failed to get registry client with err %v", err)
+		return fmt.Errorf("failed to get registry client: %w", err)
 	}
 
 	images, err := client.GetImagesToScan(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get registry images to scan with err %v", err)
+		return fmt.Errorf("failed to get registry images to scan: %w", err)
 	} else if len(images) == 0 {
 		return errors.New(noImagesToScanError)
 	}
 
 	registryScanCMDList, err := actionHandler.getRegistryImageScanCommands(client, imageRegistry, images)
 	if err != nil {
-		return fmt.Errorf("failed to get registry images scan commands with err %v", err)
+		return fmt.Errorf("failed to get registry images scan commands: %w", err)
 	}
 	if err = sendAllImagesToRegistryScan(ctx, actionHandler.config, registryScanCMDList); err != nil {
-		return fmt.Errorf("failed to send scan commands with err %v", err)
+		return fmt.Errorf("failed to send scan commands: %w", err)
 	}
 
 	return nil
@@ -149,17 +144,17 @@ func (actionHandler *ActionHandler) loadRegistrySecret(ctx context.Context, imag
 	secretName := actionHandler.sessionObj.Command.Args[apitypes.RegistrySecretNameArgKey].(string)
 	secret, err := actionHandler.k8sAPI.KubernetesClient.CoreV1().Secrets(actionHandler.config.Namespace()).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("loadRegistrySecret failed to get secret with err %v", err)
+		return fmt.Errorf("loadRegistrySecret failed to get secret: %w", err)
 	}
 
 	var secretMap map[string]interface{}
 	err = json.Unmarshal(secret.Data[apitypes.RegistryAuthFieldInSecret], &secretMap)
 	if err != nil {
-		return fmt.Errorf("loadRegistrySecret failed to unmarshal registry secret with err %v", err)
+		return fmt.Errorf("loadRegistrySecret failed to unmarshal registry secret: %w", err)
 	}
 	err = imageRegistry.FillSecret(secretMap)
 	if err != nil {
-		return fmt.Errorf("loadRegistrySecret failed to fill registry secret with err %v", err)
+		return fmt.Errorf("loadRegistrySecret failed to fill registry secret: %w", err)
 	}
 	return nil
 }
@@ -168,11 +163,11 @@ func (actionHandler *ActionHandler) loadRegistryFromSessionObj() (apitypes.Conta
 	regInfo := actionHandler.sessionObj.Command.Args[apitypes.RegistryInfoArgKey].(map[string]interface{})
 	regInfoBytes, err := json.Marshal(regInfo)
 	if err != nil {
-		return nil, fmt.Errorf("scanRegistriesV2 failed to marshal command arg with err %v", err)
+		return nil, fmt.Errorf("scanRegistriesV2 failed to marshal command arg: %w", err)
 	}
 	imageRegistry, err := apitypes.UnmarshalRegistry(regInfoBytes)
 	if err != nil {
-		return nil, fmt.Errorf("scanRegistriesV2 failed to unmarshal command with err %v", err)
+		return nil, fmt.Errorf("scanRegistriesV2 failed to unmarshal command: %w", err)
 	}
 	return imageRegistry, nil
 }
@@ -206,7 +201,7 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(client interfac
 		}
 		auth, err := client.GetDockerAuth()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get docker auth with err %v", err)
+			return nil, fmt.Errorf("failed to get docker auth: %w", err)
 		}
 		registryScanCommand.Credentialslist = append(registryScanCommand.Credentialslist, *auth)
 		registryScanCMDList = append(registryScanCMDList, &apis.RegistryScanCommand{
@@ -240,7 +235,7 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context) error {
 	cmd := actionHandler.getImageScanCommand(containerData, imageScanConfig)
 
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, actionHandler.sessionObj.Command.CommandName); err != nil {
-		return fmt.Errorf("failed to send command to scanner with err %v", err)
+		return fmt.Errorf("failed to send command to scanner: %w", err)
 	}
 	return nil
 }
@@ -253,6 +248,21 @@ func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context) 
 		return errors.New("kubevuln is not enabled")
 	}
 
+	// get the pod from the session object
+	pod, _ := actionHandler.sessionObj.Command.Args[utils.ArgsPod].(*corev1.Pod)
+
+	var authConfigs []dockerregistry.AuthConfig
+	if pod != nil {
+		// build a list of secrets from the registry secrets
+		secrets, err := cloudsupport.GetImageRegistryCredentials(actionHandler.k8sAPI, "", pod)
+		if err != nil {
+			return fmt.Errorf("failed to get registry credentials: %w", err)
+		}
+		for i := range secrets {
+			authConfigs = append(authConfigs, secrets[i]...)
+		}
+	}
+
 	span.AddEvent("scanning", trace.WithAttributes(attribute.String("wlid", actionHandler.wlid)))
 	cmd := &apis.WebsocketScanCommand{
 		Wlid: actionHandler.wlid,
@@ -261,13 +271,14 @@ func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context) 
 				"name":      actionHandler.sessionObj.Command.Args[utils.ArgsName],
 				"namespace": actionHandler.sessionObj.Command.Args[utils.ArgsNamespace],
 			},
+			Credentialslist: authConfigs,
 		},
 	}
 
 	prepareSessionChain(actionHandler.sessionObj, cmd, actionHandler)
 
 	if err := sendCommandToScanner(ctx, actionHandler.config, cmd, apis.TypeScanApplicationProfile); err != nil {
-		return fmt.Errorf("failed to send command to scanner with err %v", err)
+		return fmt.Errorf("failed to send command to scanner: %w", err)
 	}
 	return nil
 }
@@ -344,7 +355,7 @@ func getImageScanConfig(k8sAPI *k8sinterface.KubernetesApi, namespace string, po
 
 	if pod != nil {
 		// TODO: this should not happen every scan
-		// build a list of secrets from the the registry secrets
+		// build a list of secrets from the registry secrets
 		secrets, err := cloudsupport.GetImageRegistryCredentials(k8sAPI, imageTag, pod)
 		if err != nil {
 			return nil, err
@@ -398,7 +409,7 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to marshal websocketScanCommand with err %v", err)
+		return fmt.Errorf("failed to marshal websocketScanCommand: %w", err)
 	}
 	if command.GetWlid() == "" {
 		logger.L().Debug(fmt.Sprintf("sending scan command to kubevuln: %s", string(jsonScannerC)))

@@ -4,24 +4,20 @@ import (
 	"context"
 	"strings"
 
-	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
-	"github.com/kubescape/node-agent/pkg/watcher"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/kubescape/node-agent/pkg/k8sclient"
-
-	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
-
 	"github.com/goradd/maps"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/node-agent/pkg/k8sclient"
+	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
+	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
+	"github.com/kubescape/node-agent/pkg/watcher"
 	"github.com/kubescape/operator/admission/rulebinding"
 	"github.com/kubescape/operator/admission/rules"
 	rulesv1 "github.com/kubescape/operator/admission/rules/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (

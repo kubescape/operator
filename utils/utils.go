@@ -7,17 +7,16 @@ import (
 	"net/http"
 	"strings"
 
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
-
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
+	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/panjf2000/ants/v2"
-	core1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const KubescapeScanV1 = "scanV1"
@@ -67,7 +66,7 @@ func AddCommandToChannel(ctx context.Context, config config.IConfig, cmd *apis.C
 	return workerPool.Invoke(Job{ctx: ctx, sessionObj: *newSessionObj})
 }
 
-func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
+func ExtractContainersToImageIDsFromPod(pod *corev1.Pod) map[string]string {
 	containersToImageIDs := make(map[string]string)
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {
@@ -86,7 +85,7 @@ func ExtractContainersToImageIDsFromPod(pod *core1.Pod) map[string]string {
 	return containersToImageIDs
 }
 
-func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, instanceID instanceidhandler.IInstanceID, clusterName string) (*ContainerData, error) {
+func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *corev1.Pod, instanceID instanceidhandler.IInstanceID, clusterName string) (*ContainerData, error) {
 
 	wlid, err := getParentIDForPod(k8sAPI, pod, clusterName)
 	if err != nil {
@@ -111,7 +110,7 @@ func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, inst
 	}, nil
 }
 
-func getParentIDForPod(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, clusterName string) (string, error) {
+func getParentIDForPod(k8sAPI *k8sinterface.KubernetesApi, pod *corev1.Pod, clusterName string) (string, error) {
 	pod.TypeMeta.Kind = "Pod"
 	podMarshalled, err := json.Marshal(pod)
 	if err != nil {
@@ -131,7 +130,7 @@ func getParentIDForPod(k8sAPI *k8sinterface.KubernetesApi, pod *core1.Pod, clust
 	return pkgwlid.GetWLID(clusterName, wl.GetNamespace(), kind, name), nil
 }
 
-func getImage(pod *core1.Pod, instanceID instanceidhandler.IInstanceID) (string, string, bool) {
+func getImage(pod *corev1.Pod, instanceID instanceidhandler.IInstanceID) (string, string, bool) {
 	var imageTag, imageID string
 	switch instanceID.GetInstanceType() {
 	case instanceidhandlerv1.Container:
@@ -152,7 +151,7 @@ func getImage(pod *core1.Pod, instanceID instanceidhandler.IInstanceID) (string,
 }
 
 // returns the image and imageID of the container
-func getImageFromStatus(instanceID instanceidhandler.IInstanceID, containerStatuses []core1.ContainerStatus) (string, string) {
+func getImageFromStatus(instanceID instanceidhandler.IInstanceID, containerStatuses []corev1.ContainerStatus) (string, string) {
 	for _, containerStatus := range containerStatuses {
 		if instanceID.GetContainerName() == containerStatus.Name {
 			return containerStatus.Image, ExtractImageID(containerStatus.ImageID)
@@ -161,7 +160,7 @@ func getImageFromStatus(instanceID instanceidhandler.IInstanceID, containerStatu
 	return "", ""
 }
 
-func getImageFromSpec(instanceID instanceidhandler.IInstanceID, containers []core1.Container) string {
+func getImageFromSpec(instanceID instanceidhandler.IInstanceID, containers []corev1.Container) string {
 	for _, container := range containers {
 		if instanceID.GetContainerName() == container.Name {
 			return container.Image

@@ -11,7 +11,7 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/panjf2000/ants/v2"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -145,7 +145,7 @@ func discoveryService(ctx context.Context, regularClient kubernetes.Interface, d
 		return regularClient.CoreV1().Services("").List(ctx, opts)
 	}).EachListItem(ctx, serviceListOptions, func(obj k8sruntime.Object) error {
 		scanWg.Add(1)
-		service := obj.(*v1.Service)
+		service := obj.(*corev1.Service)
 		sra := serviceAuthentication{}
 		sra.kind = kind
 		sra.apiVersion = apiVersion

@@ -16,7 +16,7 @@ import (
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -38,7 +38,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.ApplicationProfile{
-						ObjectMeta: v1.ObjectMeta{
+						ObjectMeta: metav1.ObjectMeta{
 							Name:      "replicaset-nginx-6ccd565b7d",
 							Namespace: "systest-ns-rarz",
 							Annotations: map[string]string{
@@ -60,7 +60,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 				{
 					Type: watch.Modified,
 					Object: &spdxv1beta1.ApplicationProfile{
-						ObjectMeta: v1.ObjectMeta{
+						ObjectMeta: metav1.ObjectMeta{
 							Name:      "replicaset-nginx-7584b6f84c",
 							Namespace: "systest-ns-rarz",
 							Annotations: map[string]string{
@@ -182,7 +182,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 				}
 			}
 
-			actualObjects, _ := storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, v1.ListOptions{})
+			actualObjects, _ := storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, metav1.ListOptions{})
 
 			actualObjectNames := []string{}
 			for _, obj := range actualObjects.Items {

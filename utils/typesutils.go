@@ -6,7 +6,6 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/google/uuid"
-
 	beServerV1 "github.com/kubescape/backend/pkg/server/v1"
 	"github.com/kubescape/operator/config"
 )

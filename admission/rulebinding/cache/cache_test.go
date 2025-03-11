@@ -4,10 +4,9 @@ import (
 	"context"
 	"testing"
 
-	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
-
 	"github.com/goradd/maps"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 	"github.com/kubescape/operator/admission/rules"
 	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"

@@ -3,14 +3,13 @@ package mainhandler
 import (
 	"testing"
 
-	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
-	beUtils "github.com/kubescape/backend/pkg/utils"
-	"github.com/kubescape/operator/config"
-
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/boolutils"
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	beUtils "github.com/kubescape/backend/pkg/utils"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"

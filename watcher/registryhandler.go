@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/registryclients"
@@ -15,7 +17,7 @@ import (
 	"github.com/kubescape/operator/config"
 	"golang.org/x/sync/errgroup"
 	batchv1 "k8s.io/api/batch/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +26,6 @@ import (
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/yaml"
-	"time"
 )
 
 const (
@@ -342,12 +343,12 @@ func (ch *RegistryCommandsHandler) generateJobObject(registry armotypes.Containe
 	return job, nil
 }
 
-func (ch *RegistryCommandsHandler) generateSecretObject(registry armotypes.ContainerImageRegistry) (*v1.Secret, error) {
-	secret := v1.Secret{}
+func (ch *RegistryCommandsHandler) generateSecretObject(registry armotypes.ContainerImageRegistry) (*corev1.Secret, error) {
+	secret := corev1.Secret{}
 	secret.Name = registry.GetBase().ResourceName
 	secret.Kind = armotypes.K8sKindSecret
 	secret.APIVersion = armotypes.K8sApiVersionV1
-	secret.Type = v1.SecretTypeOpaque
+	secret.Type = corev1.SecretTypeOpaque
 	secret.Namespace = ch.config.Namespace()
 	secret.StringData = make(map[string]string)
 	registryAuthBytes, err := json.Marshal(registry.ExtractSecret())
@@ -359,8 +360,8 @@ func (ch *RegistryCommandsHandler) generateSecretObject(registry armotypes.Conta
 	return &secret, err
 }
 
-func (ch *RegistryCommandsHandler) generateConfigMapObject(registry armotypes.ContainerImageRegistry) (*v1.ConfigMap, error) {
-	configMap := v1.ConfigMap{}
+func (ch *RegistryCommandsHandler) generateConfigMapObject(registry armotypes.ContainerImageRegistry) (*corev1.ConfigMap, error) {
+	configMap := corev1.ConfigMap{}
 	configMap.Name = registry.GetBase().ResourceName
 	configMap.Kind = armotypes.K8sKindConfigMap
 	configMap.APIVersion = armotypes.K8sApiVersionV1

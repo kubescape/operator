@@ -2,10 +2,10 @@ package watcher
 
 import (
 	"github.com/kubescape/operator/utils"
-	core1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
+func extractImageIDsToContainersFromPod(pod *corev1.Pod) map[string][]string {
 	imageIDsToContainers := make(map[string][]string)
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		imageID := utils.ExtractImageID(containerStatus.ImageID)
@@ -27,7 +27,7 @@ func extractImageIDsToContainersFromPod(pod *core1.Pod) map[string][]string {
 	return imageIDsToContainers
 }
 
-func extractImageIDsFromPod(pod *core1.Pod) []string {
+func extractImageIDsFromPod(pod *corev1.Pod) []string {
 	imageIDs := []string{}
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Running != nil {

@@ -9,16 +9,14 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/kubescape/operator/config"
-	"github.com/kubescape/operator/utils"
-
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
-
 	"github.com/armosec/utils-go/boolutils"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -2,7 +2,6 @@ package objectcache
 
 import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
-
 	"k8s.io/client-go/kubernetes"
 )
 

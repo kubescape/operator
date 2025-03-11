@@ -1,9 +1,8 @@
 package rules
 
 import (
-	"github.com/kubescape/operator/admission/rules"
-
 	"github.com/goradd/maps"
+	"github.com/kubescape/operator/admission/rules"
 )
 
 const (

@@ -4,13 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	ktest "k8s.io/client-go/testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func assertWatchAction(t *testing.T, gotAction ktest.Action, wantGVR schema.GroupVersionResource) {

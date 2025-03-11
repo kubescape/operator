@@ -14,7 +14,7 @@ import (
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -34,7 +34,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSyft{
-						ObjectMeta: v1.ObjectMeta{
+						ObjectMeta: metav1.ObjectMeta{
 							Name: "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
 							Annotations: map[string]string{
 								helpersv1.ImageIDMetadataKey:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
@@ -46,7 +46,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				{
 					Type: watch.Modified,
 					Object: &spdxv1beta1.SBOMSyft{
-						ObjectMeta: v1.ObjectMeta{
+						ObjectMeta: metav1.ObjectMeta{
 							Name: "replicaset-nginx-6ccd565b7d-nginx-e4ff-657a",
 							Annotations: map[string]string{
 								helpersv1.ImageIDMetadataKey:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
@@ -87,7 +87,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				{
 					Type: watch.Added,
 					Object: &spdxv1beta1.SBOMSyft{
-						ObjectMeta: v1.ObjectMeta{
+						ObjectMeta: metav1.ObjectMeta{
 							Name: "replicaset-nginx-6ccd565b7d-nginx-49d3-1861",
 							Annotations: map[string]string{
 								helpersv1.ImageIDMetadataKey:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
@@ -168,7 +168,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 				}
 			}
 
-			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSyfts("").List(ctx, v1.ListOptions{})
+			actualObjects, _ := storageClient.SpdxV1beta1().SBOMSyfts("").List(ctx, metav1.ListOptions{})
 
 			var actualObjectNames []string
 			for _, obj := range actualObjects.Items {

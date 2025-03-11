@@ -3,9 +3,8 @@ package mainhandler
 import (
 	"testing"
 
-	"github.com/armosec/armoapi-go/identifiers"
-
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/identifiers"
 	"github.com/stretchr/testify/assert"
 )
 
