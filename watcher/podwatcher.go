@@ -4,27 +4,25 @@ import (
 	"context"
 	"time"
 
-	"github.com/kubescape/k8s-interface/workloadinterface"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/pager"
-
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/panjf2000/ants/v2"
-
-	core1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/tools/pager"
 )
 
 func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
-	watchOpts := v1.ListOptions{
+	watchOpts := metav1.ListOptions{
 		Watch:         true,
 		FieldSelector: "status.phase=Running", // only when the pod is running
 	}
@@ -38,7 +36,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 	// process events
 	for event := range wh.eventQueue.ResultChan {
 		// skip non-pod objects
-		pod, ok := event.Object.(*core1.Pod)
+		pod, ok := event.Object.(*corev1.Pod)
 		if !ok {
 			continue
 		}
@@ -60,7 +58,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 				logger.L().Debug("naked pod detected, delaying scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("time", untilPodMature.String()))
 				time.AfterFunc(untilPodMature, func() {
 					// use get to check if pod still exists
-					_, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, v1.GetOptions{})
+					_, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 					if err == nil {
 						logger.L().Debug("performing delayed scan for naked pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()))
 						wh.handlePodWatcher(ctx, pod, wl, workerPool)
@@ -76,7 +74,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 }
 
 // handlePodWatcher handles the pod watch events
-func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl *workloadinterface.Workload, workerPool *ants.PoolWithFunc) {
+func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, wl *workloadinterface.Workload, workerPool *ants.PoolWithFunc) {
 
 	// get pod instanceIDs
 	instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
@@ -129,7 +127,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl
 				}
 
 				if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); appProfile != nil {
-					wh.scanApplicationProfile(ctx, appProfile, workerPool)
+					wh.scanApplicationProfile(ctx, appProfile, pod, workerPool)
 					noContainerSlugs[noContainerSlug] = true
 				} else {
 					wh.scanImage(ctx, pod, containerData, workerPool)
@@ -166,7 +164,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl
 
 			// use-case 1, 2, 3
 			if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); appProfile != nil {
-				wh.scanApplicationProfile(ctx, appProfile, workerPool)
+				wh.scanApplicationProfile(ctx, appProfile, pod, workerPool)
 				noContainerSlugs[noContainerSlug] = true
 			} else {
 				wh.scanImage(ctx, pod, containerData, workerPool)
@@ -178,7 +176,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *core1.Pod, wl
 
 }
 
-func (wh *WatchHandler) scanImage(ctx context.Context, pod *core1.Pod, containerData *utils.ContainerData, workerPool *ants.PoolWithFunc) {
+func (wh *WatchHandler) scanImage(ctx context.Context, pod *corev1.Pod, containerData *utils.ContainerData, workerPool *ants.PoolWithFunc) {
 	// set scanning command
 	cmd := &apis.Command{
 		Wlid:        containerData.Wlid,
@@ -196,9 +194,9 @@ func (wh *WatchHandler) scanImage(ctx context.Context, pod *core1.Pod, container
 	}
 }
 
-func (wh *WatchHandler) scanApplicationProfile(ctx context.Context, appProfile *v1beta1.ApplicationProfile, workerPool *ants.PoolWithFunc) {
+func (wh *WatchHandler) scanApplicationProfile(ctx context.Context, appProfile *v1beta1.ApplicationProfile, pod *corev1.Pod, workerPool *ants.PoolWithFunc) {
 	// set scanning command
-	cmd := utils.GetApplicationProfileScanCommand(appProfile)
+	cmd := utils.GetApplicationProfileScanCommand(appProfile, pod)
 
 	// send
 	logger.L().Info("scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
@@ -208,13 +206,13 @@ func (wh *WatchHandler) scanApplicationProfile(ctx context.Context, appProfile *
 }
 
 func (wh *WatchHandler) listPods(ctx context.Context) error {
-	if err := pager.New(func(ctx context.Context, opts v1.ListOptions) (runtime.Object, error) {
+	if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return wh.k8sAPI.KubernetesClient.CoreV1().Pods("").List(ctx, opts)
-	}).EachListItem(ctx, v1.ListOptions{
+	}).EachListItem(ctx, metav1.ListOptions{
 		FieldSelector: "status.phase=Running", // only running pods
 	}, func(obj runtime.Object) error {
-		pod := obj.(*core1.Pod)
-		if pod.Status.Phase != core1.PodRunning {
+		pod := obj.(*corev1.Pod)
+		if pod.Status.Phase != corev1.PodRunning {
 			// skip non-running pods, for some reason the list includes non-running pods
 			return nil
 		}
@@ -234,14 +232,14 @@ func (wh *WatchHandler) listPods(ctx context.Context) error {
 	return nil
 }
 
-func mapSlugsToImageIDs(pod *core1.Pod, instanceIDs []instanceidhandler.IInstanceID) map[string]string {
+func mapSlugsToImageIDs(pod *corev1.Pod, instanceIDs []instanceidhandler.IInstanceID) map[string]string {
 	l := map[string]string{}
 	slugToImage(instanceIDs, l, pod.Status.ContainerStatuses)
 	slugToImage(instanceIDs, l, pod.Status.InitContainerStatuses)
 	slugToImage(instanceIDs, l, pod.Status.EphemeralContainerStatuses)
 	return l
 }
-func slugToImage(instanceIDs []instanceidhandler.IInstanceID, l map[string]string, containerStatuses []core1.ContainerStatus) {
+func slugToImage(instanceIDs []instanceidhandler.IInstanceID, l map[string]string, containerStatuses []corev1.ContainerStatus) {
 	for _, containerStatus := range containerStatuses {
 		imageID := utils.ExtractImageID(containerStatus.ImageID)
 		if imageID == "" {

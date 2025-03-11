@@ -5,20 +5,20 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
-	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
-	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
-
-	_ "net/http/pprof"
-
+	"github.com/armosec/utils-k8s-go/probes"
+	beUtils "github.com/kubescape/backend/pkg/utils"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
+	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
 	exporters "github.com/kubescape/operator/admission/exporter"
 	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
 	"github.com/kubescape/operator/admission/webhook"
@@ -26,15 +26,11 @@ import (
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/objectcache"
 	"github.com/kubescape/operator/restapihandler"
+	"github.com/kubescape/operator/servicehandler"
 	"github.com/kubescape/operator/utils"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"k8s.io/apimachinery/pkg/runtime"
 	restclient "k8s.io/client-go/rest"
-
-	"github.com/armosec/utils-k8s-go/probes"
-	beUtils "github.com/kubescape/backend/pkg/utils"
-	"github.com/kubescape/go-logger"
-
-	"github.com/kubescape/operator/servicehandler"
 )
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
@@ -109,7 +105,7 @@ func main() {
 	k8sConfig.ContentType = "application/vnd.kubernetes.protobuf"
 	ksStorageClient, err := kssc.NewForConfig(k8sConfig)
 	if err != nil {
-		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
+		logger.L().Ctx(ctx).Fatal("unable to initialize the storage client", helpers.Error(err))
 	}
 
 	kubernetesCache := objectcache.NewKubernetesCache(k8sApi)

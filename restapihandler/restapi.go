@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/docs"
 	"github.com/panjf2000/ants/v2"
-
-	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 

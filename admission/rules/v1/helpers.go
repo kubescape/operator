@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,7 +22,7 @@ func GetControllerDetails(event admission.Attributes, clientset kubernetes.Inter
 
 	pod, err := GetPodDetails(clientset, podName, namespace)
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to get pod details: %v", err)
+		return "", "", "", "", fmt.Errorf("failed to get pod details: %w", err)
 	}
 
 	workloadKind, workloadName, workloadNamespace := ExtractPodOwner(pod, clientset)
@@ -32,16 +32,16 @@ func GetControllerDetails(event admission.Attributes, clientset kubernetes.Inter
 }
 
 // GetPodDetails returns the pod details from the Kubernetes API server.
-func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*v1.Pod, error) {
+func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*corev1.Pod, error) {
 	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get pod: %v", err)
+		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
 	return pod, nil
 }
 
 // ExtractPodOwner returns the kind, name, and namespace of the controller that owns the pod.
-func ExtractPodOwner(pod *v1.Pod, clientset kubernetes.Interface) (string, string, string) {
+func ExtractPodOwner(pod *corev1.Pod, clientset kubernetes.Interface) (string, string, string) {
 	for _, ownerRef := range pod.OwnerReferences {
 		switch ownerRef.Kind {
 		case "ReplicaSet":
@@ -91,9 +91,9 @@ func GetContainerNameFromExecToPodEvent(event admission.Attributes) (string, err
 		return "", fmt.Errorf("object is not of type *unstructured.Unstructured")
 	}
 
-	podExecOptions := &v1.PodExecOptions{}
+	podExecOptions := &corev1.PodExecOptions{}
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, podExecOptions); err != nil {
-		return "", fmt.Errorf("failed to decode PodExecOptions: %v", err)
+		return "", fmt.Errorf("failed to decode PodExecOptions: %w", err)
 	}
 
 	return podExecOptions.Container, nil

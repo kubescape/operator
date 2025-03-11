@@ -8,24 +8,23 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kubescape/k8s-interface/workloadinterface"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
-	core1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -50,8 +49,8 @@ func readFileToBytes(filePath string) []byte {
 	}
 	return content
 }
-func bytesToPod(b []byte) *core1.Pod {
-	var pod *core1.Pod
+func bytesToPod(b []byte) *corev1.Pod {
+	var pod *corev1.Pod
 	json.Unmarshal(b, &pod)
 	return pod
 }
@@ -63,7 +62,7 @@ func bytesToRuntimeObj(b []byte) runtime.Object {
 	return obj
 }
 
-func podToInstanceIDs(p *core1.Pod) []instanceidhandler.IInstanceID {
+func podToInstanceIDs(p *corev1.Pod) []instanceidhandler.IInstanceID {
 	instanceIDs, _ := instanceidhandlerv1.GenerateInstanceIDFromPod(p)
 	return instanceIDs
 }
@@ -71,7 +70,7 @@ func podToInstanceIDs(p *core1.Pod) []instanceidhandler.IInstanceID {
 func TestPodWatch(t *testing.T) {
 	tt := []struct {
 		name                     string
-		pods                     []*core1.Pod
+		pods                     []*corev1.Pod
 		parentObjects            []runtime.Object
 		expectedObjectNames      []string
 		expectedErrors           []error
@@ -79,7 +78,7 @@ func TestPodWatch(t *testing.T) {
 	}{
 		{
 			name: "Adding pods",
-			pods: []*core1.Pod{
+			pods: []*corev1.Pod{
 				bytesToPod(readFileToBytes(podCollection)),
 			},
 			parentObjects: []runtime.Object{
@@ -131,12 +130,12 @@ func TestPodWatch(t *testing.T) {
 			go func() {
 				for i := range tc.pods {
 					tc.pods[i].Namespace = ""
-					wh.k8sAPI.KubernetesClient.CoreV1().Pods("default").Create(ctx, tc.pods[i], v1.CreateOptions{})
+					wh.k8sAPI.KubernetesClient.CoreV1().Pods("default").Create(ctx, tc.pods[i], metav1.CreateOptions{})
 				}
 			}()
 
 			resourcesCreatedWg.Wait()
-			actualObjects, _ := k8sAPI.KubernetesClient.CoreV1().Pods("").List(ctx, v1.ListOptions{})
+			actualObjects, _ := k8sAPI.KubernetesClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 
 			actualObjectNames := []string{}
 			for _, obj := range actualObjects.Items {
@@ -152,7 +151,7 @@ func TestPodWatch(t *testing.T) {
 func Test_handlePodWatcher(t *testing.T) {
 	tt := []struct {
 		name                      string
-		pods                      []*core1.Pod
+		pods                      []*corev1.Pod
 		parentObjects             []runtime.Object
 		expectedObjectNames       []string
 		expectedCommands          []apis.Command
@@ -162,7 +161,7 @@ func Test_handlePodWatcher(t *testing.T) {
 	}{
 		{
 			name: "Testing pod with many containers",
-			pods: []*core1.Pod{
+			pods: []*corev1.Pod{
 				// pod with 5 containers, this will test:
 				// (1) new workload, new image - new wlid, new slug, new image // scan
 				// (3) existing workload, new image - existing wlid, new slug, new image // scan
@@ -320,7 +319,7 @@ func Test_handlePodWatcher(t *testing.T) {
 		},
 		{
 			name:          "Testing pod with owner node",
-			pods:          []*core1.Pod{bytesToPod(readFileToBytes(podKubeProxy))},
+			pods:          []*corev1.Pod{bytesToPod(readFileToBytes(podKubeProxy))},
 			parentObjects: []runtime.Object{},
 			expectedCommands: []apis.Command{
 				{
@@ -427,12 +426,12 @@ func Test_handlePodWatcher(t *testing.T) {
 func Test_listPods(t *testing.T) {
 	tt := []struct {
 		name                string
-		pods                []*core1.Pod
+		pods                []*corev1.Pod
 		expectedObjectNames []string
 	}{
 		{
 			name: "list pods",
-			pods: []*core1.Pod{
+			pods: []*corev1.Pod{
 				bytesToPod(readFileToBytes(podCollection)),
 				bytesToPod(readFileToBytes(podRedis)),
 			},
@@ -459,14 +458,14 @@ func Test_listPods(t *testing.T) {
 			for i := range tc.pods {
 				resourcesCreatedWg.Add(1)
 				tc.pods[i].Namespace = ""
-				_, err := k8sAPI.KubernetesClient.CoreV1().Pods("").Create(ctx, tc.pods[i], v1.CreateOptions{})
+				_, err := k8sAPI.KubernetesClient.CoreV1().Pods("").Create(ctx, tc.pods[i], metav1.CreateOptions{})
 				assert.NoError(t, err)
 			}
 
 			go func() {
 				for e := range eventQueue.ResultChan {
 					assert.Equal(t, watch.Added, e.Type)
-					assert.Contains(t, tc.expectedObjectNames, e.Object.(*core1.Pod).Name)
+					assert.Contains(t, tc.expectedObjectNames, e.Object.(*corev1.Pod).Name)
 					resourcesCreatedWg.Done()
 				}
 			}()
@@ -508,7 +507,7 @@ func Test_slugToImage(t *testing.T) {
 	type args struct {
 		slugToImageID   map[string]string
 		instanceIDs     []instanceidhandler.IInstanceID
-		containerStatus []core1.ContainerStatus
+		containerStatus []corev1.ContainerStatus
 	}
 	tests := []struct {
 		expected map[string]string
@@ -591,7 +590,7 @@ func Test_slugToImage(t *testing.T) {
 
 func Test_mapSlugsToImageIDs(t *testing.T) {
 	type args struct {
-		pod         *core1.Pod
+		pod         *corev1.Pod
 		instanceIDs []instanceidhandler.IInstanceID
 	}
 	tests := []struct {

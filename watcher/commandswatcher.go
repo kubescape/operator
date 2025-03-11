@@ -10,17 +10,15 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
-	"github.com/kubescape/operator/config"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/pager"
-
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/kubescape/operator/config"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/tools/pager"
 )
 
 const minOperatorCommandAge = 30 * time.Minute
@@ -62,9 +60,9 @@ func (cwh *CommandWatchHandler) CommandWatch(ctx context.Context) {
 }
 
 func (cwh *CommandWatchHandler) listCommands(ctx context.Context) {
-	if err := pager.New(func(ctx context.Context, opts v1.ListOptions) (runtime.Object, error) {
+	if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return cwh.k8sAPI.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(cwh.config.Namespace()).List(context.Background(), opts)
-	}).EachListItem(ctx, v1.ListOptions{
+	}).EachListItem(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", command.OperatorCommandAppNameLabelKey, "operator"),
 	}, func(obj runtime.Object) error {
 		cwh.eventQueue.Enqueue(watch.Event{
@@ -78,7 +76,7 @@ func (cwh *CommandWatchHandler) listCommands(ctx context.Context) {
 }
 
 func (cwh *CommandWatchHandler) watchRetry(ctx context.Context) {
-	watchOpts := v1.ListOptions{
+	watchOpts := metav1.ListOptions{
 		Watch:         true,
 		LabelSelector: fmt.Sprintf("%s=%s", command.OperatorCommandAppNameLabelKey, "operator"),
 	}

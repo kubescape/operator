@@ -12,10 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubescape/node-agent/pkg/watcher"
-
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/node-agent/pkg/watcher"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -393,7 +392,7 @@ func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
 	var admissionReview admissionv1.AdmissionReview
 
 	if err := json.Unmarshal(body, &admissionReview); err != nil {
-		return nil, fmt.Errorf("could not parse admission review request: %v", err)
+		return nil, fmt.Errorf("could not parse admission review request: %w", err)
 	}
 
 	if admissionReview.Request == nil {

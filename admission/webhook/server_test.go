@@ -14,7 +14,7 @@ import (
 	"github.com/kubescape/node-agent/pkg/watcher"
 	"github.com/stretchr/testify/assert"
 	admissionv1 "k8s.io/api/admission/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apiserver/pkg/admission"
@@ -59,7 +59,7 @@ func TestHandleWebhookValidate(t *testing.T) {
 	review := admissionv1.AdmissionReview{
 		Request: &admissionv1.AdmissionRequest{
 			UID:  "12345",
-			Kind: v1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			Kind: metav1.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
 			Object: runtime.RawExtension{
 				Raw: []byte(`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"test"}}`),
 			},

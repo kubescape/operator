@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -19,7 +19,7 @@ func (om KubernetesCacheMockImpl) GetClientset() kubernetes.Interface {
 }
 
 func initializeClient(client kubernetes.Interface) {
-	pod := &v1.Pod{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
 			Namespace: "test-namespace",
@@ -35,17 +35,17 @@ func initializeClient(client kubernetes.Interface) {
 				},
 			},
 		},
-		Spec: v1.PodSpec{
+		Spec: corev1.PodSpec{
 			NodeName: "test-node",
-			Containers: []v1.Container{
+			Containers: []corev1.Container{
 				{
 					Name:  "test-container",
 					Image: "nginx:1.14.2",
 				},
 			},
 		},
-		Status: v1.PodStatus{
-			Phase: v1.PodRunning,
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
 			PodIP: "192.168.1.1",
 		},
 	}

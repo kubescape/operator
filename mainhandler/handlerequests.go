@@ -7,39 +7,33 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/identifiers"
+	"github.com/armosec/utils-go/boolutils"
+	"github.com/armosec/utils-go/httputils"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	mapset "github.com/deckarep/golang-set/v2"
-	exporters "github.com/kubescape/operator/admission/exporter"
-
 	"github.com/kubescape/backend/pkg/versioncheck"
-	"github.com/kubescape/k8s-interface/workloadinterface"
-	core1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/pager"
-
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/k8s-interface/workloadinterface"
+	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
+	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
+	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
 	"go.opentelemetry.io/otel"
-
-	"github.com/armosec/armoapi-go/identifiers"
-	"github.com/armosec/utils-go/boolutils"
-	"github.com/armosec/utils-go/httputils"
-
-	"github.com/armosec/armoapi-go/apis"
-
-	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
-	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
-
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
-	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
-	"github.com/kubescape/k8s-interface/k8sinterface"
-	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/pager"
 )
 
 type MainHandler struct {
@@ -117,7 +111,7 @@ func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi,
 func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) error {
 	ksStorageClient, err := kssc.NewForConfig(k8sinterface.GetK8sConfig())
 	if err != nil {
-		logger.L().Ctx(ctx).Fatal(fmt.Sprintf("Unable to initialize the storage client: %v", err))
+		logger.L().Ctx(ctx).Fatal("unable to initialize the storage client", helpers.Error(err))
 	}
 
 	triggeringHandler := cs.NewTriggeringHandler(mainHandler.eventWorkerPool, mainHandler.config)
@@ -301,7 +295,7 @@ func (mainHandler *MainHandler) HandleScopedRequest(ctx context.Context, session
 		if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 			return mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, opts)
 		}).EachListItem(ctx, listOptions, func(obj runtime.Object) error {
-			pod := obj.(*core1.Pod)
+			pod := obj.(*corev1.Pod)
 			podId := pkgwlid.GetWLID(mainHandler.config.ClusterName(), pod.GetNamespace(), "pod", pod.GetName())
 			cmd := sessionObj.Command.DeepCopy()
 
@@ -385,8 +379,8 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 		if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 			return mainHandler.k8sAPI.KubernetesClient.CoreV1().Pods(ns).List(ctx, opts)
 		}).EachListItem(ctx, listOptions, func(obj runtime.Object) error {
-			pod := obj.(*core1.Pod)
-			if pod.Status.Phase != core1.PodRunning {
+			pod := obj.(*corev1.Pod)
+			if pod.Status.Phase != corev1.PodRunning {
 				// skip non-running pods, for some reason the list includes non-running pods
 				return nil
 			}
@@ -428,7 +422,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 
 				noContainerSlug, _ := instanceID.GetSlug(true)
 				if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, mainHandler.ksStorageClient, noContainerSlug, ns); appProfile != nil {
-					cmd := utils.GetApplicationProfileScanCommand(appProfile)
+					cmd := utils.GetApplicationProfileScanCommand(appProfile, pod)
 
 					// send specific command to the channel
 					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, sessionObj.JobID, "")

@@ -9,11 +9,10 @@ import (
 	"sync"
 	"time"
 
+	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/admission/rules"
-
-	apitypes "github.com/armosec/armoapi-go/armotypes"
 )
 
 type HTTPExporterConfig struct {

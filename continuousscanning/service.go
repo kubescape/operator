@@ -3,15 +3,14 @@ package continuousscanning
 import (
 	"context"
 
+	armoapi "github.com/armosec/armoapi-go/apis"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/watcher"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
-
-	armoapi "github.com/armosec/armoapi-go/apis"
-	"github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
 )
 
 type ContinuousScanningService struct {

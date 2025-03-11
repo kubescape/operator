@@ -5,13 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/utils/ptr"
-
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
+	sets "github.com/deckarep/golang-set/v2"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -24,8 +20,10 @@ import (
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	sets "github.com/deckarep/golang-set/v2"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/utils/ptr"
 )
 
 var orphanableWorkloadTypes = sets.NewSet[string]("Pod", "ReplicaSet", "Job")

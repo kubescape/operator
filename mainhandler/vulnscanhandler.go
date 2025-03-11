@@ -10,7 +10,6 @@ import (
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/go-logger"
 	"go.opentelemetry.io/otel"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

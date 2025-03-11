@@ -8,7 +8,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -53,17 +53,17 @@ var TestAuthentications = serviceAuthentication{
 func Test_translate(t *testing.T) {
 	tests := []struct {
 		name  string
-		ports []v1.ServicePort
+		ports []corev1.ServicePort
 		want  []Port
 	}{
 		{
 			name:  "empty",
-			ports: []v1.ServicePort{},
+			ports: []corev1.ServicePort{},
 			want:  []Port{},
 		},
 		{
 			name: "one port",
-			ports: []v1.ServicePort{
+			ports: []corev1.ServicePort{
 				{
 					Port:     80,
 					Protocol: "TCP",
@@ -78,7 +78,7 @@ func Test_translate(t *testing.T) {
 		},
 		{
 			name: "two ports",
-			ports: []v1.ServicePort{
+			ports: []corev1.ServicePort{
 				{
 					Port:     80,
 					Protocol: "TCP",
@@ -126,13 +126,13 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 		{
 			name: "existing_services_found",
 			services: []runtime.Object{
-				&v1.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "service1",
 						Namespace: "test1",
 					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
 							{
 								Port:     80,
 								Protocol: "TCP",
@@ -145,13 +145,13 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 					},
 				},
 
-				&v1.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "service2",
 						Namespace: "test2",
 					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
 							{
 								Port:     80,
 								Protocol: "TCP",
@@ -189,13 +189,13 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 		{
 			name: "existing_service_missing_port",
 			services: []runtime.Object{
-				&v1.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "service1",
 						Namespace: "test1",
 					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
 							{
 								Port:     80,
 								Protocol: "TCP",
@@ -221,7 +221,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 		{
 			name: "headless_service",
 			services: []runtime.Object{
-				&v1.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "service1",
 						Namespace: "test1",
@@ -229,9 +229,9 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 							"label1": "value1",
 						},
 					},
-					Spec: v1.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						ClusterIP: "None",
-						Ports:     []v1.ServicePort{},
+						Ports:     []corev1.ServicePort{},
 					},
 				},
 			},
@@ -246,7 +246,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 		{
 			name: "delete_service",
 			services: []runtime.Object{
-				&v1.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "service1",
 						Namespace: "test1",
@@ -254,8 +254,8 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 							"label1": "value1",
 						},
 					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
 							{
 								Port:     80,
 								Protocol: "TCP",
@@ -270,13 +270,13 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 					"spec":     map[string]interface{}{"clusterIP": "", "ports": []interface{}{map[string]interface{}{"applicationLayer": "", "authenticated": nil, "port": int64(80), "presentationLayer": "", "protocol": "TCP", "sessionLayer": ""}}}}},
 			},
 			delete: []runtime.Object{
-				&v1.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "deleteService",
 						Namespace: "delete",
 					},
-					Spec: v1.ServiceSpec{
-						Ports: []v1.ServicePort{
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{
 							{
 								Port:     80,
 								Protocol: "TCP",
@@ -322,7 +322,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 				crds, _ = dynamicClient.Resource(ServiceScanSchema).List(ctx, metav1.ListOptions{})
 				if tc.delete != nil {
 					for _, delService := range tc.delete {
-						err = regClient.CoreV1().Services(delService.(*v1.Service).Namespace).Delete(ctx, delService.(*v1.Service).Name, metav1.DeleteOptions{})
+						err = regClient.CoreV1().Services(delService.(*corev1.Service).Namespace).Delete(ctx, delService.(*corev1.Service).Name, metav1.DeleteOptions{})
 						require.NoError(t, err)
 						tc.delete = nil
 					}
@@ -336,7 +336,7 @@ func TestDiscoveryServiceHandler(t *testing.T) {
 
 }
 
-func getClusterServices(ctx context.Context, regularClient kubernetes.Interface) (*v1.ServiceList, error) {
+func getClusterServices(ctx context.Context, regularClient kubernetes.Interface) (*corev1.ServiceList, error) {
 	services, err := regularClient.CoreV1().Services("").List(ctx, serviceListOptions)
 	if err != nil {
 		logger.L().Ctx(ctx).Error(err.Error())

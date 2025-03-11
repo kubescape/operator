@@ -3,9 +3,9 @@ package servicehandler
 import (
 	"context"
 
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/kubescape-network-scanner/cmd"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type Port struct {
@@ -32,7 +32,7 @@ func (port *Port) scan(ctx context.Context, ip string) {
 	}
 }
 
-func K8sPortsTranslator(sp []v1.ServicePort) []Port {
+func K8sPortsTranslator(sp []corev1.ServicePort) []Port {
 	ports := make([]Port, 0, len(sp))
 	for _, port := range sp {
 		ports = append(ports,
