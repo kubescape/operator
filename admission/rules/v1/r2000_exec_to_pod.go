@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
@@ -81,6 +82,12 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 		containerName = ""
 	}
 
+	cmdline, err := getCommandLine(event.GetObject().(*unstructured.Unstructured))
+	if err != nil {
+		logger.L().Error("Failed to get command line from exec to pod event", helpers.Error(err))
+		cmdline = ""
+	}
+
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
@@ -121,7 +128,56 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 			ContainerName:     containerName,
 		},
 		RuleID: R2000ID,
+		RuntimeProcessDetails: apitypes.ProcessTree{
+			ProcessTree: apitypes.Process{
+				Cmdline: cmdline,
+				Comm:    extractComm(cmdline),
+			},
+		},
 	}
 
 	return &ruleFailure
+}
+
+func getCommandLine(object *unstructured.Unstructured) (string, error) {
+	commandField, ok := object.Object["command"]
+	if !ok {
+		return "", fmt.Errorf("alert is missing admission alert object command")
+	}
+	command, ok := interfaceToStringSlice(commandField)
+	if !ok {
+		return "", fmt.Errorf("alert cannot convert alert object command to string list")
+	}
+
+	return strings.Join(command, " "), nil
+}
+
+func extractComm(cmdline string) string {
+	comm := strings.Split(cmdline, " ")
+	if len(comm) == 0 {
+		return cmdline
+	}
+
+	return comm[0]
+}
+
+func interfaceToStringSlice(data interface{}) ([]string, bool) {
+	switch v := data.(type) {
+	case []string:
+		return v, true
+	case []interface{}:
+		result := make([]string, len(v))
+		for i, item := range v {
+			str, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			result[i] = str
+		}
+		return result, true
+	case string:
+		return []string{v}, true
+	default:
+		return nil, false
+	}
 }
