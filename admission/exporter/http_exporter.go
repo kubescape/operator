@@ -126,7 +126,7 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 		AdmissionAlert:         ruleFailure.GetAdmissionsAlert(),
 		RuntimeAlertK8sDetails: k8sDetails,
 		RuleAlert:              ruleFailure.GetRuleAlert(),
-		RuleID:                 ruleFailure.GetRuleId(),
+		RuleID:                 ruleFailure.GetRuleId(),	
 	}
 	exporter.sendInAlertList(httpAlert, apitypes.ProcessTree{})
 }
