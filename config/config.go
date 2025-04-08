@@ -102,7 +102,9 @@ type Config struct {
 	ExcludeNamespaces          []string                      `mapstructure:"excludeNamespaces"`
 	IncludeNamespaces          []string                      `mapstructure:"includeNamespaces"`
 	// PodScanGuardTime specifies the minimum age a pod without a parent must have before it is scanned
-	PodScanGuardTime time.Duration `mapstructure:"podScanGuardTime"`
+	PodScanGuardTime              time.Duration `mapstructure:"podScanGuardTime"`
+	RegistryScanningSkipTlsVerify bool          `mapstructure:"registryScanningSkipTlsVerify"`
+	RegistryScanningInsecure      bool          `mapstructure:"registryScanningInsecure"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -124,6 +126,8 @@ type IConfig interface {
 	KubevulnURL() string
 	SkipNamespace(ns string) bool
 	GuardTime() time.Duration
+	RegistryScanningSkipTlsVerify() bool
+	RegistryScanningInsecure() bool
 }
 
 // OperatorConfig implements IConfig
@@ -230,6 +234,14 @@ func (c *OperatorConfig) GuardTime() time.Duration {
 	return c.serviceConfig.PodScanGuardTime
 }
 
+func (c *OperatorConfig) RegistryScanningSkipTlsVerify() bool {
+	return c.serviceConfig.RegistryScanningSkipTlsVerify
+}
+
+func (c *OperatorConfig) RegistryScanningInsecure() bool {
+	return c.serviceConfig.RegistryScanningInsecure
+}
+
 func LoadConfig(path string) (Config, error) {
 	viper.AddConfigPath(path)
 	viper.SetConfigName("config")
@@ -243,6 +255,8 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("matchingRulesFilename", "/etc/config/matchingRules.json")
 	viper.SetDefault("eventDeduplicationInterval", 2*time.Minute)
 	viper.SetDefault("podScanGuardTime", time.Hour)
+	viper.SetDefault("registryScanningSkipTlsVerify", false)
+	viper.SetDefault("registryScanningInsecure", false)
 
 	viper.AutomaticEnv()
 

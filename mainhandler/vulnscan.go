@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/armosec/registryx/common"
 	"net/url"
 	"strconv"
 	"strings"
@@ -117,7 +118,11 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageR
 		return fmt.Errorf("failed to load secret: %w", err)
 	}
 
-	client, err := registryclients.GetRegistryClient(imageRegistry)
+	options := &common.RegistryOptions{}
+	options = options.WithSkipTLSVerify(
+		actionHandler.config.RegistryScanningSkipTlsVerify()).
+		WithInsecure(actionHandler.config.RegistryScanningInsecure())
+	client, err := registryclients.GetRegistryClient(imageRegistry, options)
 	if err != nil {
 		return fmt.Errorf("failed to get registry client: %w", err)
 	}
@@ -191,8 +196,8 @@ func (actionHandler *ActionHandler) getRegistryImageScanCommands(client interfac
 				identifiers.AttributeRegistryName:            imageRegistry.GetDisplayName(),
 				identifiers.AttributeRepository:              repository,
 				identifiers.AttributeTag:                     tag,
-				identifiers.AttributeUseHTTP:                 false,
-				identifiers.AttributeSkipTLSVerify:           false,
+				identifiers.AttributeUseHTTP:                 actionHandler.config.RegistryScanningInsecure(),
+				identifiers.AttributeSkipTLSVerify:           actionHandler.config.RegistryScanningSkipTlsVerify(),
 				identifiers.AttributeSensor:                  imageRegistry.GetBase().ClusterName,
 				identifiers.AttributeRegistryID:              imageRegistry.GetBase().GUID,
 				identifiers.AttributeRegistryScanID:          scanID,
