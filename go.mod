@@ -6,7 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/armosec/armoapi-go v0.0.526
-	github.com/armosec/registryx v0.0.25
+	github.com/armosec/registryx v0.0.27
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.32
 	github.com/cenkalti/backoff v2.2.1+incompatible

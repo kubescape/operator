@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/armosec/registryx/common"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -151,7 +152,12 @@ func (ch *RegistryCommandsHandler) checkRegistry(cmd v1alpha1.OperatorCommand) (
 		logger.L().Error("checkRegistry - failed to unmarshal command payload", helpers.Error(err))
 		return nil, err
 	}
-	client, err := registryclients.GetRegistryClient(registry)
+
+	options := &common.RegistryOptions{}
+	options = options.WithSkipTLSVerify(
+		ch.config.RegistryScanningSkipTlsVerify()).
+		WithInsecure(ch.config.RegistryScanningInsecure())
+	client, err := registryclients.GetRegistryClient(registry, options)
 	if err != nil {
 		logger.L().Error("checkRegistry - failed to get registry client", helpers.Error(err))
 		return nil, err
