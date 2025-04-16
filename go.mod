@@ -20,7 +20,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/kubescape/backend v0.0.26
 	github.com/kubescape/go-logger v0.0.23
-	github.com/kubescape/k8s-interface v0.0.188
+	github.com/kubescape/k8s-interface v0.0.191
 	github.com/kubescape/kubescape-network-scanner v0.0.15
 	github.com/kubescape/node-agent v0.2.253
 	github.com/kubescape/opa-utils v0.0.285
