@@ -11,7 +11,7 @@ require (
 	github.com/armosec/utils-k8s-go v0.0.32
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/deckarep/golang-set/v2 v2.7.0
+	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v27.5.1+incompatible
 	github.com/go-openapi/runtime v0.28.0
