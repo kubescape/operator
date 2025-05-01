@@ -28,7 +28,10 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 	}
 
 	// list pods and add them to the queue, this is for the pods that were created before the watch started
-	wh.listPods(ctx)
+	err := wh.listPods(ctx)
+	if err != nil {
+		logger.L().Error("failed to list existing pods", helpers.Error(err))
+	}
 
 	// start watching
 	go wh.watchRetry(ctx, watchOpts)

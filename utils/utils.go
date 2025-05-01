@@ -87,7 +87,7 @@ func ExtractContainersToImageIDsFromPod(pod *corev1.Pod) map[string]string {
 
 func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *corev1.Pod, instanceID instanceidhandler.IInstanceID, clusterName string) (*ContainerData, error) {
 
-	wlid, err := getParentIDForPod(k8sAPI, pod, clusterName)
+	wlid, err := GetParentIDForPod(k8sAPI, pod, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func PodToContainerData(k8sAPI *k8sinterface.KubernetesApi, pod *corev1.Pod, ins
 	}, nil
 }
 
-func getParentIDForPod(k8sAPI *k8sinterface.KubernetesApi, pod *corev1.Pod, clusterName string) (string, error) {
+func GetParentIDForPod(k8sAPI *k8sinterface.KubernetesApi, pod *corev1.Pod, clusterName string) (string, error) {
 	pod.TypeMeta.Kind = "Pod"
 	podMarshalled, err := json.Marshal(pod)
 	if err != nil {
