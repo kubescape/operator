@@ -25,6 +25,7 @@ var (
 )
 
 type WatchHandler struct {
+	ImageToWlid    maps.SafeMap[string, string] // map of <hash> : <wlid>
 	SlugToImageID  maps.SafeMap[string, string] // map of <Slug> : string <image ID>
 	WlidAndImageID mapset.Set[string]           // set of <wlid+imageID>
 	storageClient  kssc.Interface
