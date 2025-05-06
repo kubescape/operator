@@ -395,7 +395,7 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				return nil
 			}
 			wl := workloadinterface.NewWorkloadObj(unstructuredObj)
-			instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
+			instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl, mainHandler.config.ExcludeJsonPaths())
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
 				return nil
