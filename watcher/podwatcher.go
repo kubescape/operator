@@ -80,7 +80,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, wl *workloadinterface.Workload, workerPool *ants.PoolWithFunc) {
 
 	// get pod instanceIDs
-	instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl)
+	instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl, wh.cfg.ExcludeJsonPaths())
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
 		return

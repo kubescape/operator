@@ -105,6 +105,7 @@ type Config struct {
 	PodScanGuardTime              time.Duration `mapstructure:"podScanGuardTime"`
 	RegistryScanningSkipTlsVerify bool          `mapstructure:"registryScanningSkipTlsVerify"`
 	RegistryScanningInsecure      bool          `mapstructure:"registryScanningInsecure"`
+	ExcludeJsonPaths              []string      `mapstructure:"excludeJsonPaths"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -128,6 +129,7 @@ type IConfig interface {
 	GuardTime() time.Duration
 	RegistryScanningSkipTlsVerify() bool
 	RegistryScanningInsecure() bool
+	ExcludeJsonPaths() []string
 }
 
 // OperatorConfig implements IConfig
@@ -240,6 +242,10 @@ func (c *OperatorConfig) RegistryScanningSkipTlsVerify() bool {
 
 func (c *OperatorConfig) RegistryScanningInsecure() bool {
 	return c.serviceConfig.RegistryScanningInsecure
+}
+
+func (c *OperatorConfig) ExcludeJsonPaths() []string {
+	return c.serviceConfig.ExcludeJsonPaths
 }
 
 func LoadConfig(path string) (Config, error) {
