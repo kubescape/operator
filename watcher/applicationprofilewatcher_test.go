@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	corev1 "k8s.io/api/core/v1"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 	tt := []struct {
 		name                      string
 		inputEvents               []watch.Event
+		objects                   []runtime.Object
 		expectedObjectNames       []string
 		expectedCommands          []*apis.Command
 		expectedErrors            []error
@@ -79,6 +81,66 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 						},
 					},
 				},
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.ApplicationProfile{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "workflow-foo-1747274700",
+							Namespace: "systest-ns-rarz",
+							Annotations: map[string]string{
+								helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo-1747274700",
+								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
+								helpersv1.CompletionMetadataKey: helpersv1.Complete,
+								helpersv1.StatusMetadataKey:     helpersv1.Ready,
+							},
+							Labels: map[string]string{
+								helpersv1.KindMetadataKey: "Pod",
+								helpersv1.NameMetadataKey: "foo-1747274700",
+							},
+						},
+						Spec: spdxv1beta1.ApplicationProfileSpec{
+							Containers: []spdxv1beta1.ApplicationProfileContainer{{
+								Name:     "nginx",
+								ImageID:  "docker.io/library/nginx@sha256:91ec405acd96b4645695911d675f71897c6f57531265c7302c7e16088b9f37ab",
+								ImageTag: "nginx:1.28-otel",
+							}},
+						},
+					},
+				},
+				{
+					Type: watch.Added,
+					Object: &spdxv1beta1.ApplicationProfile{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "workflow-foo2-2747274700",
+							Namespace: "systest-ns-rarz",
+							Annotations: map[string]string{
+								helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo2-2747274700",
+								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
+								helpersv1.CompletionMetadataKey: helpersv1.Complete,
+								helpersv1.StatusMetadataKey:     helpersv1.Ready,
+							},
+							Labels: map[string]string{
+								helpersv1.KindMetadataKey: "Pod",
+								helpersv1.NameMetadataKey: "foo2-2747274700",
+							},
+						},
+						Spec: spdxv1beta1.ApplicationProfileSpec{
+							Containers: []spdxv1beta1.ApplicationProfileContainer{{
+								Name:     "nginx",
+								ImageID:  "docker.io/library/nginx@sha256:391f518c1133681a00217e77976665c056bcdbe185a22efbcd6e4ae67c450d1a",
+								ImageTag: "nginx:1.28-perl",
+							}},
+						},
+					},
+				},
+			},
+			objects: []runtime.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "foo2-2747274700",
+						Namespace: "systest-ns-rarz",
+					},
+				},
 			},
 			expectedCommands: []*apis.Command{
 				{
@@ -97,10 +159,34 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 						utils.ArgsNamespace: "systest-ns-rarz",
 					},
 				},
+				{
+					CommandName: utils.CommandScanApplicationProfile,
+					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
+					Args: map[string]interface{}{
+						utils.ArgsName:      "workflow-foo-1747274700",
+						utils.ArgsNamespace: "systest-ns-rarz",
+					},
+				},
+				{
+					CommandName: utils.CommandScanApplicationProfile,
+					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
+					Args: map[string]interface{}{
+						utils.ArgsName:      "workflow-foo2-2747274700",
+						utils.ArgsNamespace: "systest-ns-rarz",
+						utils.ArgsPod: &corev1.Pod{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "foo2-2747274700",
+								Namespace: "systest-ns-rarz",
+							},
+						},
+					},
+				},
 			},
 			expectedObjectNames: []string{
 				"replicaset-nginx-6ccd565b7d",
 				"replicaset-nginx-7584b6f84c",
+				"workflow-foo-1747274700",
+				"workflow-foo2-2747274700",
 			},
 			expectedSlugToImageIDMap: map[string]string{
 				"replicaset-nginx-6ccd565b7d-nginx-49d3-1861": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
@@ -142,7 +228,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 			assert.NoError(t, err)
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 
-			k8sClient := k8sfake.NewClientset()
+			k8sClient := k8sfake.NewClientset(tc.objects...)
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
 
