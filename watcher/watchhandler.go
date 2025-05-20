@@ -9,6 +9,7 @@ import (
 	"github.com/goradd/maps"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 )
 
@@ -25,13 +26,13 @@ var (
 )
 
 type WatchHandler struct {
-	ImageToWlid    maps.SafeMap[string, string] // map of <hash> : <wlid>
-	SlugToImageID  maps.SafeMap[string, string] // map of <Slug> : string <image ID>
-	WlidAndImageID mapset.Set[string]           // set of <wlid+imageID>
-	storageClient  kssc.Interface
-	cfg            config.IConfig
-	k8sAPI         *k8sinterface.KubernetesApi
-	eventQueue     *CooldownQueue
+	ImageToContainerData maps.SafeMap[string, utils.ContainerData] // map of <hash> : <container data>
+	SlugToImageID        maps.SafeMap[string, string]              // map of <Slug> : string <image ID>
+	WlidAndImageID       mapset.Set[string]                        // set of <wlid+imageID>
+	storageClient        kssc.Interface
+	cfg                  config.IConfig
+	k8sAPI               *k8sinterface.KubernetesApi
+	eventQueue           *CooldownQueue
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it

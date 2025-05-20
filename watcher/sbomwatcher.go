@@ -75,7 +75,10 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			containerStatuses := slices.Concat(pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses, pod.Status.EphemeralContainerStatuses)
 			for _, containerStatus := range containerStatuses {
 				hash := hashFromImageID(containerStatus.ImageID)
-				wh.ImageToWlid.Set(hash, wlid)
+				wh.ImageToContainerData.Set(hash, utils.ContainerData{
+					ContainerName: containerStatus.Name,
+					Wlid:          wlid,
+				})
 			}
 		case sbomEvent, ok := <-sbomEvents:
 			if ok {
@@ -137,10 +140,12 @@ func (wh *WatchHandler) HandleSBOMEvents(sfEvents <-chan watch.Event, producedCo
 		}
 
 		imageID := obj.ObjectMeta.Annotations[helpersv1.ImageIDMetadataKey]
+		imageContainerData := wh.ImageToContainerData.Get(hashFromImageID(imageID))
 		containerData := &utils.ContainerData{
-			ImageID:  imageID,
-			ImageTag: obj.ObjectMeta.Annotations[helpersv1.ImageTagMetadataKey],
-			Wlid:     wh.ImageToWlid.Get(hashFromImageID(imageID)),
+			ContainerName: imageContainerData.ContainerName,
+			ImageID:       imageID,
+			ImageTag:      obj.ObjectMeta.Annotations[helpersv1.ImageTagMetadataKey],
+			Wlid:          imageContainerData.Wlid,
 		}
 
 		if err := validateContainerData(containerData); err != nil {
