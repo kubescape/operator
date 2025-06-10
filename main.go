@@ -125,6 +125,8 @@ func main() {
 	cloudMetadata, err = cloudmetadata.GetCloudMetadata(ctx, k8sApi, nodeName)
 	if err != nil {
 		logger.L().Ctx(ctx).Error("error getting cloud metadata", helpers.Error(err))
+	} else {
+		logger.L().Ctx(ctx).Info("cloud metadata retrieved successfully", helpers.Interface("cloudMetadata", cloudMetadata))
 	}
 
 	exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName(), cloudMetadata)
