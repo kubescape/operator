@@ -38,6 +38,7 @@ type HTTPExporter struct {
 	alertCountLock     sync.Mutex
 	alertCountStart    time.Time
 	alertLimitNotified bool
+	cloudMetadata      *apitypes.CloudMetadata
 }
 
 type HTTPAlertsList struct {
@@ -47,8 +48,9 @@ type HTTPAlertsList struct {
 }
 
 type HTTPAlertsListSpec struct {
-	Alerts      []apitypes.RuntimeAlert `json:"alerts"`
-	ProcessTree apitypes.ProcessTree    `json:"processTree"`
+	Alerts        []apitypes.RuntimeAlert `json:"alerts"`
+	ProcessTree   apitypes.ProcessTree    `json:"processTree"`
+	CloudMetadata apitypes.CloudMetadata  `json:"cloudMetadata"`
 }
 
 func (config *HTTPExporterConfig) Validate() error {
@@ -73,7 +75,7 @@ func (config *HTTPExporterConfig) Validate() error {
 }
 
 // InitHTTPExporter initializes an HTTPExporter with the given URL, headers, timeout, and method
-func InitHTTPExporter(config HTTPExporterConfig, clusterName string) (*HTTPExporter, error) {
+func InitHTTPExporter(config HTTPExporterConfig, clusterName string, cloudMetadata *apitypes.CloudMetadata) (*HTTPExporter, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -84,6 +86,7 @@ func InitHTTPExporter(config HTTPExporterConfig, clusterName string) (*HTTPExpor
 		httpClient: &http.Client{
 			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
 		},
+		cloudMetadata: cloudMetadata,
 	}, nil
 }
 
@@ -126,7 +129,7 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 		AdmissionAlert:         ruleFailure.GetAdmissionsAlert(),
 		RuntimeAlertK8sDetails: k8sDetails,
 		RuleAlert:              ruleFailure.GetRuleAlert(),
-		RuleID:                 ruleFailure.GetRuleId(),	
+		RuleID:                 ruleFailure.GetRuleId(),
 	}
 	exporter.sendInAlertList(httpAlert, apitypes.ProcessTree{})
 }
@@ -135,8 +138,9 @@ func (exporter *HTTPExporter) sendInAlertList(httpAlert apitypes.RuntimeAlert, p
 	// create the HTTPAlertsListSpec struct
 	// TODO: accumulate alerts and send them in a batch
 	httpAlertsListSpec := HTTPAlertsListSpec{
-		Alerts:      []apitypes.RuntimeAlert{httpAlert},
-		ProcessTree: processTree,
+		Alerts:        []apitypes.RuntimeAlert{httpAlert},
+		ProcessTree:   processTree,
+		CloudMetadata: exporter.getCloudMetadata(),
 	}
 	// create the HTTPAlertsList struct
 	httpAlertsList := HTTPAlertsList{
@@ -222,4 +226,13 @@ func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		logger.L().Error("failed to clear response body", helpers.Error(err))
 	}
+}
+
+func (exporter *HTTPExporter) getCloudMetadata() apitypes.CloudMetadata {
+	if exporter.cloudMetadata == nil {
+		return apitypes.CloudMetadata{}
+	}
+
+	metadata := *exporter.cloudMetadata
+	return metadata
 }

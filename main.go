@@ -12,11 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-k8s-go/probes"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/node-agent/pkg/cloudmetadata"
 	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
 	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
 	exporters "github.com/kubescape/operator/admission/exporter"
@@ -118,7 +120,14 @@ func main() {
 		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
 	}
 
-	exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName())
+	var cloudMetadata *armotypes.CloudMetadata
+	nodeName := os.Getenv("NODE_NAME")
+	cloudMetadata, err = cloudmetadata.GetCloudMetadata(ctx, k8sApi, nodeName)
+	if err != nil {
+		logger.L().Ctx(ctx).Error("error getting cloud metadata", helpers.Error(err))
+	}
+
+	exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName(), cloudMetadata)
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
 	}
