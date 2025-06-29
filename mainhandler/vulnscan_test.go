@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"testing"
 
 	dockerregistry "github.com/docker/docker/api/types/registry"
@@ -94,8 +95,22 @@ func Test_ActionHandler_getImageScanConfig(t *testing.T) {
 			objects: []runtime.Object{fileToSecret("testdata/vulnscan/regcreds.json")},
 			want: &ImageScanConfig{
 				authConfigs: []dockerregistry.AuthConfig{
-					{Username: "YWRtaW4=", Password: "SGFyYm9yMTIzNDU=", Auth: "YWRtaW46SGFyYm9yMTIzNDU=", ServerAddress: "private.docker.io"},
 					{Username: "matthyx", Password: "toto", Auth: "bWF0dGh5eDp0b3Rv", ServerAddress: "https://index.docker.io/v1/"},
+					{Username: "YWRtaW4=", Password: "SGFyYm9yMTIzNDU=", Auth: "YWRtaW46SGFyYm9yMTIzNDU=", ServerAddress: "private.docker.io"},
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "pod with registry secret with httpheaders",
+			args: args{
+				pod: fileToPod("testdata/vulnscan/pod.json"),
+			},
+			objects: []runtime.Object{fileToSecret("testdata/vulnscan/regcreds-with-httpheaders.json")},
+			want: &ImageScanConfig{
+				authConfigs: []dockerregistry.AuthConfig{
+					{Username: "", Password: "", Auth: "<REDACTED>", ServerAddress: "https://index.docker.io/v1/"},
+					{Username: "", Password: "", Auth: "<REDACTED>", ServerAddress: "registry.horizons.sh"},
 				},
 			},
 			wantErr: assert.NoError,
@@ -111,6 +126,10 @@ func Test_ActionHandler_getImageScanConfig(t *testing.T) {
 			if !tt.wantErr(t, err, fmt.Sprintf("getImageScanConfig(%v, %v, %v, %v)", k8sApiMock, tt.args.namespace, tt.args.pod, tt.args.imageTag)) {
 				return
 			}
+			// sort for stable comparison
+			sort.Slice(got.authConfigs, func(i, j int) bool {
+				return got.authConfigs[i].ServerAddress < got.authConfigs[j].ServerAddress
+			})
 			assert.Equalf(t, tt.want, got, "getImageScanConfig(%v, %v, %v, %v)", k8sApiMock, tt.args.namespace, tt.args.pod, tt.args.imageTag)
 		})
 	}
