@@ -6,6 +6,7 @@ import (
 	"time"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/armoapi-go/armotypes/common"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/admission/rules"
@@ -94,6 +95,13 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 			FixSuggestions: "If this is a legitimate action, please consider removing this workload from the binding of this rule",
 			Severity:       R2000ExecToPodRuleDescriptor.Priority,
 			Timestamp:      time.Unix(0, time.Now().UnixNano()),
+			Identifiers: &common.Identifiers{
+				Process: &common.ProcessEntity{
+					Name:        extractComm(cmdline),
+					CommandLine: cmdline,
+				},
+			},
+			UniqueID: fmt.Sprintf("%s%s%s", event.GetNamespace(), event.GetName(), containerName),
 		},
 		AdmissionAlert: apitypes.AdmissionAlert{
 			Kind:             event.GetKind(),
