@@ -80,6 +80,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access ob
 			FixSuggestions: "If this is a legitimate action, please consider removing this workload from the binding of this rule",
 			Severity:       R2001PortForwardRuleDescriptor.Priority,
 			Timestamp:      time.Unix(0, time.Now().UnixNano()),
+			UniqueID:       fmt.Sprintf("%s%s%s", event.GetNamespace(), event.GetName(), workloadName),
 		},
 		AdmissionAlert: apitypes.AdmissionAlert{
 			Kind:             event.GetKind(),
