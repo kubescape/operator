@@ -15,12 +15,14 @@ import (
 	"github.com/panjf2000/ants/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/tools/pager"
 )
 
 // SBOMWatch watches and processes changes on SBOMs
 func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
-	inputEvents := make(chan watch.Event)
+	eventQueue := NewCooldownQueueWithParams(15*time.Second, 1*time.Second)
 	cmdCh := make(chan *apis.Command)
 	errorCh := make(chan error)
 	sbomEvents := make(<-chan watch.Event)
@@ -47,7 +49,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 	go wh.watchRetry(ctx, watchOpts)
 
 	// start watching SBOMs
-	go wh.HandleSBOMEvents(inputEvents, cmdCh, errorCh)
+	go wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
 
 	// notifyWatcherDown notifies the appropriate channel that the watcher
 	// is down and backs off for the retry interval to not produce
@@ -55,6 +57,21 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 	notifyWatcherDown := func(watcherDownCh chan<- struct{}) {
 		go func() { watcherDownCh <- struct{}{} }()
 		time.Sleep(retryInterval)
+	}
+
+	// get the initial SBOMs
+	if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return wh.storageClient.SpdxV1beta1().SBOMSyfts("").List(ctx, opts)
+	}).EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+		sbom := obj.(*spdxv1beta1.SBOMSyft)
+		// simulate "add" event
+		eventQueue.Enqueue(watch.Event{
+			Type:   watch.Added,
+			Object: sbom,
+		})
+		return nil
+	}); err != nil {
+		logger.L().Ctx(ctx).Error("failed to list existing SBOMs", helpers.Error(err))
 	}
 
 	var watcher watch.Interface
@@ -82,7 +99,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			}
 		case sbomEvent, ok := <-sbomEvents:
 			if ok {
-				inputEvents <- sbomEvent
+				eventQueue.Enqueue(sbomEvent)
 			} else {
 				notifyWatcherDown(sbomWatcherUnavailable)
 			}
@@ -114,10 +131,10 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 
 }
 
-func (wh *WatchHandler) HandleSBOMEvents(sfEvents <-chan watch.Event, producedCommands chan<- *apis.Command, errorCh chan<- error) {
+func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(errorCh)
 
-	for e := range sfEvents {
+	for e := range eventQueue.ResultChan {
 		obj, ok := e.Object.(*spdxv1beta1.SBOMSyft)
 		if !ok {
 			errorCh <- ErrUnsupportedObject

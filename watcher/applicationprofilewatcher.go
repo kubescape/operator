@@ -14,8 +14,10 @@ import (
 	"github.com/panjf2000/ants/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/pager"
 )
 
 // ApplicationProfileWatch watches and processes changes on ApplicationProfile resources
@@ -41,6 +43,21 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 		time.Sleep(retryInterval)
 	}
 
+	// get the initial profiles
+	if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return wh.storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, opts)
+	}).EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+		ap := obj.(*spdxv1beta1.ApplicationProfile)
+		// simulate "add" event
+		eventQueue.Enqueue(watch.Event{
+			Type:   watch.Added,
+			Object: ap,
+		})
+		return nil
+	}); err != nil {
+		logger.L().Ctx(ctx).Error("failed to list existing application profiles", helpers.Error(err))
+	}
+
 	var watcher watch.Interface
 	var err error
 	for {
@@ -53,7 +70,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 			}
 		case cmd, ok := <-cmdCh:
 			if ok {
-				utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
+				_ = utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
 			} else {
 				notifyWatcherDown(apWatcherUnavailable)
 			}

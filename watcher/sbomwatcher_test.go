@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"testing"
+	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -128,24 +129,24 @@ func TestHandleSBOMEvents(t *testing.T) {
 			assert.NoError(t, err)
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
 
-			k8sClient := k8sfake.NewSimpleClientset()
+			k8sClient := k8sfake.NewClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
 
-			inputEvents := make(chan watch.Event)
+			eventQueue := NewCooldownQueueWithParams(1*time.Second, 1*time.Second)
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
 			wh := NewWatchHandler(operatorConfig, k8sAPI, storageClient, nil)
 
-			go wh.HandleSBOMEvents(inputEvents, cmdCh, errorCh)
+			go wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
 
 			go func() {
 				for _, e := range tc.inputEvents {
-					inputEvents <- e
+					eventQueue.Enqueue(e)
 				}
-
-				close(inputEvents)
+				time.Sleep(5 * time.Second)
+				eventQueue.Stop()
 			}()
 
 			done := false
@@ -177,7 +178,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 
 			assert.Equal(t, tc.expectedObjectNames, actualObjectNames, "Objects in the storage don’t match")
 			assert.Equal(t, tc.expectedErrors, actualErrors, "Errors don’t match")
-			assert.Equal(t, tc.expectedCommands, actualCommands, "Commands don’t match")
+			assert.ElementsMatch(t, tc.expectedCommands, actualCommands, "Commands don’t match")
 		})
 
 	}

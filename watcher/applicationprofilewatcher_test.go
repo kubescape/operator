@@ -3,8 +3,6 @@ package watcher
 import (
 	"context"
 	_ "embed"
-	"errors"
-	corev1 "k8s.io/api/core/v1"
 	"testing"
 	"time"
 
@@ -17,6 +15,7 @@ import (
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -196,7 +195,6 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
 				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
 			},
-			expectedErrors: []error{},
 		},
 		{
 			name: "Delete event",
@@ -210,14 +208,13 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 			expectedObjectNames:       []string{""},
 			expectedSlugToImageIDMap:  map[string]string{},
 			expectedWlidAndImageIDMap: []string{},
-			expectedErrors:            []error{},
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare starting startingObjects for storage
-			startingObjects := []runtime.Object{}
+			var startingObjects []runtime.Object
 			for _, e := range tc.inputEvents {
 				startingObjects = append(startingObjects, e.Object)
 			}
@@ -249,8 +246,8 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 			}()
 
 			done := false
-			actualErrors := []error{}
-			actualCommands := []*apis.Command{}
+			var actualErrors []error
+			var actualCommands []*apis.Command
 			for !done {
 				select {
 				case err, ok := <-errorCh:
@@ -270,17 +267,14 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 
 			actualObjects, _ := storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, metav1.ListOptions{})
 
-			actualObjectNames := []string{}
+			var actualObjectNames []string
 			for _, obj := range actualObjects.Items {
 				actualObjectNames = append(actualObjectNames, obj.ObjectMeta.Name)
 			}
 
 			assert.Equal(t, tc.expectedObjectNames, actualObjectNames, "Objects in the storage don’t match")
-			assert.Equal(t, len(tc.expectedErrors), len(actualErrors), "Errors don’t match")
-			for i := range actualErrors {
-				assert.True(t, errors.Is(actualErrors[i], tc.expectedErrors[i]), "Errors don’t match")
-			}
-			assert.ElementsMatchf(t, tc.expectedCommands, actualCommands, "Commands don’t match")
+			assert.Equal(t, tc.expectedErrors, actualErrors, "Errors don’t match")
+			assert.ElementsMatch(t, tc.expectedCommands, actualCommands, "Commands don’t match")
 		})
 
 	}
