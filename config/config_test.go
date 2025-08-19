@@ -6,6 +6,7 @@ import (
 
 	"github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/backend/pkg/utils"
+	"github.com/kubescape/operator/admission/rulesupdate"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -96,6 +97,11 @@ func TestLoadConfig(t *testing.T) {
 				ExcludeNamespaces:          []string{"kube-system", "kubescape"},
 				IncludeNamespaces:          []string{},
 				PodScanGuardTime:           time.Hour,
+				RulesUpdateConfig: rulesupdate.RulesUpdatorConfig{
+					Enabled:   false,
+					Interval:  5 * time.Minute,
+					Namespace: "kubescape",
+				},
 			},
 		},
 	}

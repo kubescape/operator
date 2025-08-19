@@ -23,6 +23,7 @@ import (
 	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
 	exporters "github.com/kubescape/operator/admission/exporter"
 	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
+	"github.com/kubescape/operator/admission/rulesupdate"
 	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/mainhandler"
@@ -118,6 +119,11 @@ func main() {
 	if components.ServiceScanConfig.Enabled {
 		logger.L().Info("service discovery enabled and started with interval: ", helpers.String("interval", components.ServiceScanConfig.Interval.String()))
 		go servicehandler.DiscoveryServiceHandler(ctx, k8sApi, components.ServiceScanConfig.Interval)
+	}
+
+	if cfg.RulesUpdateConfig.Enabled {
+		rulesUpdater := rulesupdate.NewRulesUpdator(ctx, k8sApi, cfg.RulesUpdateConfig)
+		rulesUpdater.Start()
 	}
 
 	var cloudMetadata *armotypes.CloudMetadata
