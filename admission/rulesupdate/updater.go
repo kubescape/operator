@@ -65,6 +65,8 @@ func (ru *RulesUpdator) Start() {
 }
 
 func (ru *RulesUpdator) SendUpdateRulesCommand() error {
+
+	logger.L().Info("sending update rules command")
 	cmd := &v1alpha1.OperatorCommand{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "kubescape.io/v1alpha1",
@@ -99,5 +101,6 @@ func (ru *RulesUpdator) SendUpdateRulesCommand() error {
 		return fmt.Errorf("error creating OperatorCommand: %v", err)
 	}
 
+	logger.L().Info("update rules command sent")
 	return nil
 }

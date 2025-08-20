@@ -267,7 +267,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("registryScanningInsecure", false)
 	viper.SetDefault("rulesUpdateConfig.enabled", false)
 	viper.SetDefault("rulesUpdateConfig.interval", 5*time.Minute)
-	viper.SetDefault("rulesUpdateConfig.namespace", "kubescape")
+	viper.SetDefault("rulesUpdateConfig.namespace", "default")
 
 	viper.AutomaticEnv()
 
