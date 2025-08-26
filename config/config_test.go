@@ -185,7 +185,7 @@ func TestValidateConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.credentials, "", Config{})
+			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.credentials, Config{})
 			err := ValidateConfig(operatorConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)

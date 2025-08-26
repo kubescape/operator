@@ -103,7 +103,7 @@ func TestPodWatch(t *testing.T) {
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
 
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
 
 			k8sClient := k8sfake.NewSimpleClientset(tc.parentObjects...)
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), tc.parentObjects...)
@@ -361,7 +361,7 @@ func Test_handlePodWatcher(t *testing.T) {
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
 
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
 
 			k8sClient := k8sfake.NewSimpleClientset(tc.parentObjects...)
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), tc.parentObjects...)
@@ -445,7 +445,7 @@ func Test_listPods(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare starting startingObjects for storage
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, "", config.Config{})
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{})
 			ctx := context.Background()
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)

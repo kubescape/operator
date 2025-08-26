@@ -127,7 +127,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, "", cfg)
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
 
 			k8sClient := k8sfake.NewClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
