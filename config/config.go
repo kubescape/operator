@@ -114,7 +114,6 @@ type IConfig interface {
 	AccountID() string
 	AccessKey() string
 	ClusterName() string
-	EventReceiverURL() string
 	ConcurrencyWorkers() int
 	Components() Components
 	AdmissionControllerEnabled() bool
@@ -143,7 +142,7 @@ type OperatorConfig struct {
 
 var _ IConfig = (*OperatorConfig)(nil)
 
-func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, eventReceiverRestURL string, serviceConfig Config) *OperatorConfig {
+func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, serviceConfig Config) *OperatorConfig {
 	return &OperatorConfig{
 		components:    components,
 		serviceConfig: serviceConfig,
@@ -226,10 +225,6 @@ func (c *OperatorConfig) SkipNamespace(ns string) bool {
 		}
 	}
 	return false
-}
-
-func (c *OperatorConfig) EventReceiverURL() string {
-	return ""
 }
 
 func (c *OperatorConfig) GuardTime() time.Duration {
