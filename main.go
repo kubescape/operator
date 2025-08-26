@@ -66,24 +66,13 @@ func main() {
 			helpers.Int("accountLength", len(credentials.Account)))
 	}
 
-	var eventReceiverRestURL string
-	if components.Components.ServiceDiscovery.Enabled {
-		services, err := config.GetServiceURLs("/etc/config/services.json")
-		if err != nil {
-			logger.L().Ctx(ctx).Fatal("failed discovering urls", helpers.Error(err))
-		}
-
-		eventReceiverRestURL = services.GetReportReceiverHttpUrl()
-		logger.L().Debug("setting eventReceiverRestURL", helpers.String("url", eventReceiverRestURL))
-	}
-
 	cfg, err := config.LoadConfig("/etc/config")
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load config error", helpers.Error(err))
 	}
 
 	// wrapper for all configs
-	operatorConfig := config.NewOperatorConfig(components, clusterConfig, credentials, eventReceiverRestURL, cfg)
+	operatorConfig := config.NewOperatorConfig(components, clusterConfig, credentials, cfg)
 	if err := config.ValidateConfig(operatorConfig); err != nil {
 		logger.L().Ctx(ctx).Error("validate config error", helpers.Error(err))
 	}
