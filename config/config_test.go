@@ -97,10 +97,10 @@ func TestLoadConfig(t *testing.T) {
 				ExcludeNamespaces:          []string{"kube-system", "kubescape"},
 				IncludeNamespaces:          []string{},
 				PodScanGuardTime:           time.Hour,
-				RulesUpdateConfig: rulesupdate.RulesUpdatorConfig{
+				RulesUpdateConfig: rulesupdate.RulesUpdaterConfig{
 					Enabled:   false,
 					Interval:  5 * time.Minute,
-					Namespace: "kubescape",
+					Namespace: "default",
 				},
 			},
 		},

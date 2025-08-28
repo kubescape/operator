@@ -19,7 +19,7 @@ const (
 	OperatorCommandTypeRuntimeUpdateRules = "RuntimeUpdateRules"
 )
 
-type RulesUpdator struct {
+type RulesUpdater struct {
 	k8sClient *k8sinterface.KubernetesApi
 	interval  time.Duration
 	namespace string
@@ -27,15 +27,15 @@ type RulesUpdator struct {
 	cancel    context.CancelFunc
 }
 
-type RulesUpdatorConfig struct {
+type RulesUpdaterConfig struct {
 	Interval  time.Duration `mapstructure:"interval"`
 	Namespace string        `mapstructure:"namespace"`
 	Enabled   bool          `mapstructure:"enabled"`
 }
 
-func NewRulesUpdator(ctx context.Context, k8sClient *k8sinterface.KubernetesApi, config RulesUpdatorConfig) *RulesUpdator {
+func NewRulesUpdator(ctx context.Context, k8sClient *k8sinterface.KubernetesApi, config RulesUpdaterConfig) *RulesUpdater {
 	ctx, cancel := context.WithCancel(ctx)
-	updater := &RulesUpdator{
+	updater := &RulesUpdater{
 		k8sClient: k8sClient,
 		interval:  config.Interval,
 		namespace: config.Namespace,
@@ -46,7 +46,7 @@ func NewRulesUpdator(ctx context.Context, k8sClient *k8sinterface.KubernetesApi,
 	return updater
 }
 
-func (ru *RulesUpdator) Start() {
+func (ru *RulesUpdater) Start() {
 	logger.L().Info("rules updater started")
 	go func() {
 		for {
@@ -64,7 +64,7 @@ func (ru *RulesUpdator) Start() {
 	}()
 }
 
-func (ru *RulesUpdator) SendUpdateRulesCommand() error {
+func (ru *RulesUpdater) SendUpdateRulesCommand() error {
 
 	logger.L().Info("sending update rules command")
 	cmd := &v1alpha1.OperatorCommand{

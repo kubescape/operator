@@ -107,7 +107,7 @@ type Config struct {
 	RegistryScanningSkipTlsVerify bool                           `mapstructure:"registryScanningSkipTlsVerify"`
 	RegistryScanningInsecure      bool                           `mapstructure:"registryScanningInsecure"`
 	ExcludeJsonPaths              []string                       `mapstructure:"excludeJsonPaths"`
-	RulesUpdateConfig             rulesupdate.RulesUpdatorConfig `mapstructure:"rulesUpdateConfig"`
+	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
 }
 
 // IConfig is an interface for all config types used in the operator
