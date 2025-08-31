@@ -22,7 +22,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/goradd/maps v1.2.0
 	github.com/gorilla/mux v1.8.1
-	github.com/kubescape/backend v0.0.26
+	github.com/kubescape/backend v0.0.28
 	github.com/kubescape/go-logger v0.0.23
 	github.com/kubescape/k8s-interface v0.0.196
 	github.com/kubescape/kubescape-network-scanner v0.0.15
@@ -311,5 +311,3 @@ require (
 )
 
 replace github.com/project-copacetic/copacetic => github.com/anubhav06/copacetic v0.0.0-20230821175613-0a7915a62e10
-
-replace github.com/kubescape/backend => github.com/kubescape/backend v0.0.27-0.20250819110111-c029fc246dc3
