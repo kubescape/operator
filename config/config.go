@@ -14,6 +14,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	exporters "github.com/kubescape/operator/admission/exporter"
+	"github.com/kubescape/operator/admission/rulesupdate"
 	"github.com/spf13/viper"
 )
 
@@ -102,10 +103,11 @@ type Config struct {
 	ExcludeNamespaces          []string                      `mapstructure:"excludeNamespaces"`
 	IncludeNamespaces          []string                      `mapstructure:"includeNamespaces"`
 	// PodScanGuardTime specifies the minimum age a pod without a parent must have before it is scanned
-	PodScanGuardTime              time.Duration `mapstructure:"podScanGuardTime"`
-	RegistryScanningSkipTlsVerify bool          `mapstructure:"registryScanningSkipTlsVerify"`
-	RegistryScanningInsecure      bool          `mapstructure:"registryScanningInsecure"`
-	ExcludeJsonPaths              []string      `mapstructure:"excludeJsonPaths"`
+	PodScanGuardTime              time.Duration                  `mapstructure:"podScanGuardTime"`
+	RegistryScanningSkipTlsVerify bool                           `mapstructure:"registryScanningSkipTlsVerify"`
+	RegistryScanningInsecure      bool                           `mapstructure:"registryScanningInsecure"`
+	ExcludeJsonPaths              []string                       `mapstructure:"excludeJsonPaths"`
+	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -258,6 +260,9 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("podScanGuardTime", time.Hour)
 	viper.SetDefault("registryScanningSkipTlsVerify", false)
 	viper.SetDefault("registryScanningInsecure", false)
+	viper.SetDefault("rulesUpdateConfig.enabled", false)
+	viper.SetDefault("rulesUpdateConfig.interval", 5*time.Minute)
+	viper.SetDefault("rulesUpdateConfig.namespace", "default")
 
 	viper.AutomaticEnv()
 

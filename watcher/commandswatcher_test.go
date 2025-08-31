@@ -90,7 +90,7 @@ func TestRegistryCommandWatch(t *testing.T) {
 
 func setupEnvAndWatchers(t *testing.T, ctx context.Context, k8sAPI *k8sinterface.KubernetesApi) {
 	// install operator command crd
-	url := "https://raw.githubusercontent.com/kubescape/helm-charts/main/charts/dependency_chart/operatorcommand-crds/crds/operator-command.crd.yaml"
+	url := "https://raw.githubusercontent.com/kubescape/helm-charts/refs/heads/main/charts/kubescape-operator/crds/operator-command.crd.yaml"
 	resp, err := http.Get(url)
 	require.NoError(t, err)
 	defer resp.Body.Close()
