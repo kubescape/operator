@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -167,4 +168,17 @@ func getImageFromSpec(instanceID instanceidhandler.IInstanceID, containers []cor
 		}
 	}
 	return ""
+}
+
+func PodHasParent(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	if len(pod.OwnerReferences) > 0 {
+		return slices.Contains([]string{"apps/v1", "batch/v1", "batch/v1beta1"}, pod.OwnerReferences[0].APIVersion)
+	}
+	if podHash, ok := pod.Labels["pod-template-hash"]; ok && podHash != "" {
+		return true
+	}
+	return false
 }

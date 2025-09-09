@@ -9,8 +9,6 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
-	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/panjf2000/ants/v2"
@@ -46,16 +44,7 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 		// handle pod events
 		switch event.Type {
 		case watch.Modified, watch.Added:
-			// need to set APIVersion and Kind before unstructured conversion, preparing for instanceID extraction
-			pod.APIVersion = "v1"
-			pod.Kind = "Pod"
-			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
-			if err != nil {
-				logger.L().Ctx(ctx).Error("failed to convert pod to unstructured", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
-				continue
-			}
-			wl := workloadinterface.NewWorkloadObj(unstructuredObj)
-			if !k8sinterface.WorkloadHasParent(wl) && time.Now().Before(pod.CreationTimestamp.Add(wh.cfg.GuardTime())) {
+			if !utils.PodHasParent(pod) && time.Now().Before(pod.CreationTimestamp.Add(wh.cfg.GuardTime())) {
 				// for naked pods, only handle if pod still exists when older than guard time
 				untilPodMature := time.Until(pod.CreationTimestamp.Add(wh.cfg.GuardTime()))
 				logger.L().Debug("naked pod detected, delaying scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("time", untilPodMature.String()))
@@ -64,11 +53,11 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 					_, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 					if err == nil {
 						logger.L().Debug("performing delayed scan for naked pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()))
-						wh.handlePodWatcher(ctx, pod, wl, workerPool)
+						wh.handlePodWatcher(ctx, pod, workerPool)
 					}
 				})
 			} else {
-				wh.handlePodWatcher(ctx, pod, wl, workerPool)
+				wh.handlePodWatcher(ctx, pod, workerPool)
 			}
 		default:
 			continue
@@ -77,10 +66,10 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 }
 
 // handlePodWatcher handles the pod watch events
-func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, wl *workloadinterface.Workload, workerPool *ants.PoolWithFunc) {
+func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, workerPool *ants.PoolWithFunc) {
 
 	// get pod instanceIDs
-	instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl, wh.cfg.ExcludeJsonPaths())
+	instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromRuntimeObj(pod, wh.cfg.ExcludeJsonPaths())
 	if err != nil {
 		logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
 		return

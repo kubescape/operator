@@ -18,7 +18,6 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/k8s-interface/workloadinterface"
 	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	exporters "github.com/kubescape/operator/admission/exporter"
@@ -388,21 +387,14 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 			pod.APIVersion = "v1"
 			pod.Kind = "Pod"
 
-			// get pod instanceIDs
-			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&pod)
-			if err != nil {
-				logger.L().Ctx(ctx).Error("failed to convert pod to unstructured", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
-				return nil
-			}
-			wl := workloadinterface.NewWorkloadObj(unstructuredObj)
-			instanceIDs, err := instanceidhandlerv1.GenerateInstanceID(wl, mainHandler.config.ExcludeJsonPaths())
+			instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromRuntimeObj(pod, mainHandler.config.ExcludeJsonPaths())
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to generate instance ID for pod", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.Error(err))
 				return nil
 			}
 
 			// for naked pods, only handle if pod is older than guard time
-			if !k8sinterface.WorkloadHasParent(wl) && time.Now().Before(pod.CreationTimestamp.Add(mainHandler.config.GuardTime())) {
+			if !utils.PodHasParent(pod) && time.Now().Before(pod.CreationTimestamp.Add(mainHandler.config.GuardTime())) {
 				logger.L().Debug("naked pod younger than guard time detected, skipping scan", helpers.String("pod", pod.GetName()), helpers.String("namespace", pod.GetNamespace()), helpers.String("creationTimestamp", pod.CreationTimestamp.String()))
 				return nil
 			}

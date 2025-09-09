@@ -201,7 +201,7 @@ func hashFromImageID(imageID string) string {
 func skipSBOM(annotations map[string]string) bool {
 	ann := []string{
 		"", // empty string for backward compatibility
-		helpersv1.Ready,
+		helpersv1.Learning,
 		helpersv1.Completed,
 	}
 

@@ -29,7 +29,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 			name: "status is Ready",
 			annotations: map[string]string{
 				helpersv1.CompletionMetadataKey: "complete",
-				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
@@ -39,7 +39,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 			name: "partial AP",
 			annotations: map[string]string{
 				helpersv1.CompletionMetadataKey: "partial",
-				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
@@ -50,7 +50,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 			name: "invalid completion status",
 			annotations: map[string]string{
 				helpersv1.CompletionMetadataKey: "invalid",
-				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
@@ -60,7 +60,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 		{
 			name: "missing completion status",
 			annotations: map[string]string{
-				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
@@ -96,7 +96,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 			name: "missing instance WLID annotation",
 			annotations: map[string]string{
 				helpersv1.CompletionMetadataKey: "complete",
-				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
 			wantSkip:    true,
@@ -106,7 +106,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 			name: "missing instance ID annotation",
 			annotations: map[string]string{
 				helpersv1.CompletionMetadataKey: "complete",
-				helpersv1.StatusMetadataKey:     helpersv1.Ready,
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
 				helpersv1.WlidMetadataKey:       "wlid",
 			},
 			wantSkip:    true,

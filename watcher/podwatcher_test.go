@@ -13,7 +13,6 @@ import (
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
-	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
@@ -63,7 +62,7 @@ func bytesToRuntimeObj(b []byte) runtime.Object {
 }
 
 func podToInstanceIDs(p *corev1.Pod) []instanceidhandler.IInstanceID {
-	instanceIDs, _ := instanceidhandlerv1.GenerateInstanceIDFromPod(p)
+	instanceIDs, _ := instanceidhandlerv1.GenerateInstanceIDFromRuntimeObj(p, nil)
 	return instanceIDs
 }
 
@@ -384,10 +383,7 @@ func Test_handlePodWatcher(t *testing.T) {
 			})
 
 			for _, pod := range tc.pods {
-				unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
-				assert.NoError(t, err)
-				wl := workloadinterface.NewWorkloadObj(unstructuredObj)
-				wh.handlePodWatcher(ctx, pod, wl, pool)
+				wh.handlePodWatcher(ctx, pod, pool)
 			}
 			resourcesCreatedWg.Wait()
 
