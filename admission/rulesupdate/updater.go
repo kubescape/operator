@@ -50,15 +50,16 @@ func (ru *RulesUpdater) Start() {
 	logger.L().Info("rules updater started")
 	go func() {
 		for {
+			if err := ru.SendUpdateRulesCommand(); err != nil {
+				logger.L().Error("error sending update rules command", helpers.Error(err))
+			}
 			select {
 			case <-ru.ctx.Done():
 				ru.cancel()
 				logger.L().Info("rules updater stopped")
 				return
 			case <-time.After(ru.interval):
-				if err := ru.SendUpdateRulesCommand(); err != nil {
-					logger.L().Error("error sending update rules command", helpers.Error(err))
-				}
+				// continue loop
 			}
 		}
 	}()
