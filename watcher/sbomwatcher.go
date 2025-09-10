@@ -45,8 +45,10 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 		logger.L().Error("failed to list existing pods", helpers.Error(err))
 	}
 
-	// start watching pods
-	go wh.watchRetry(ctx, watchOpts)
+	// start watching pods, only run this if we have a backend
+	if wh.cfg.Components().ServiceDiscovery.Enabled {
+		go wh.watchRetry(ctx, watchOpts)
+	}
 
 	// start watching SBOMs
 	go wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
