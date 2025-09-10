@@ -18,7 +18,7 @@ import (
 func SkipApplicationProfile(annotations map[string]string) (bool, error) {
 	ann := []string{
 		"", // empty string for backward compatibility
-		helpersv1.Ready,
+		helpersv1.Learning,
 		helpersv1.Completed,
 	}
 
@@ -26,7 +26,7 @@ func SkipApplicationProfile(annotations map[string]string) (bool, error) {
 		return true, fmt.Errorf("no annotations") // skip
 	}
 
-	if completionStatus, ok := annotations[helpersv1.CompletionMetadataKey]; !ok || completionStatus != helpersv1.Complete {
+	if completionStatus, ok := annotations[helpersv1.CompletionMetadataKey]; !ok || completionStatus != helpersv1.Full {
 		return true, fmt.Errorf("partial - workload restart required") // skip
 	}
 

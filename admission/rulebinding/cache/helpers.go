@@ -4,7 +4,6 @@ import (
 	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 	"github.com/kubescape/node-agent/pkg/utils"
 	"github.com/kubescape/node-agent/pkg/watcher"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -12,15 +11,6 @@ import (
 
 func uniqueName(obj metav1.Object) string {
 	return utils.CreateK8sPodID(obj.GetNamespace(), obj.GetName())
-}
-
-func unstructuredToPod(obj *unstructured.Unstructured) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-	if err := k8sruntime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, pod); err != nil {
-		return nil, err
-	}
-	return pod, nil
-
 }
 
 func unstructuredToRuleBinding(obj *unstructured.Unstructured) (*typesv1.RuntimeAlertRuleBinding, error) {

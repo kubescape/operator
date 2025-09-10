@@ -45,8 +45,8 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 							Annotations: map[string]string{
 								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d",
 								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.CompletionMetadataKey: helpersv1.Complete,
-								helpersv1.StatusMetadataKey:     helpersv1.Ready,
+								helpersv1.CompletionMetadataKey: helpersv1.Full,
+								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 						},
 						Spec: spdxv1beta1.ApplicationProfileSpec{
@@ -67,8 +67,8 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 							Annotations: map[string]string{
 								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-7584b6f84c",
 								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.CompletionMetadataKey: helpersv1.Complete,
-								helpersv1.StatusMetadataKey:     helpersv1.Ready,
+								helpersv1.CompletionMetadataKey: helpersv1.Full,
+								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 						},
 						Spec: spdxv1beta1.ApplicationProfileSpec{
@@ -89,8 +89,8 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 							Annotations: map[string]string{
 								helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo-1747274700",
 								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
-								helpersv1.CompletionMetadataKey: helpersv1.Complete,
-								helpersv1.StatusMetadataKey:     helpersv1.Ready,
+								helpersv1.CompletionMetadataKey: helpersv1.Full,
+								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 							Labels: map[string]string{
 								helpersv1.KindMetadataKey: "Pod",
@@ -115,8 +115,8 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 							Annotations: map[string]string{
 								helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo2-2747274700",
 								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
-								helpersv1.CompletionMetadataKey: helpersv1.Complete,
-								helpersv1.StatusMetadataKey:     helpersv1.Ready,
+								helpersv1.CompletionMetadataKey: helpersv1.Full,
+								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 							Labels: map[string]string{
 								helpersv1.KindMetadataKey: "Pod",
