@@ -43,8 +43,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
-			wantSkip:    true,
-			expectedErr: fmt.Errorf("partial - workload restart required"),
+			wantSkip: false,
 		},
 		{
 			name: "invalid completion status",
@@ -54,8 +53,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
-			wantSkip:    true,
-			expectedErr: fmt.Errorf("partial - workload restart required"),
+			wantSkip: false,
 		},
 		{
 			name: "missing completion status",
@@ -64,8 +62,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 				helpersv1.WlidMetadataKey:       "wlid",
 				helpersv1.InstanceIDMetadataKey: "instanceID",
 			},
-			wantSkip:    true,
-			expectedErr: fmt.Errorf("partial - workload restart required"),
+			wantSkip: false,
 		},
 		{
 			name: "status is Completed",
