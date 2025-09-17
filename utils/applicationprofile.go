@@ -26,10 +26,6 @@ func SkipApplicationProfile(annotations map[string]string) (bool, error) {
 		return true, fmt.Errorf("no annotations") // skip
 	}
 
-	if completionStatus, ok := annotations[helpersv1.CompletionMetadataKey]; !ok || completionStatus != helpersv1.Full {
-		return true, fmt.Errorf("partial - workload restart required") // skip
-	}
-
 	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok && !slices.Contains(ann, status) {
 		return true, fmt.Errorf("invalid status")
 	}
