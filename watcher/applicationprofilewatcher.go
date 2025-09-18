@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -14,7 +15,9 @@ import (
 	"github.com/panjf2000/ants/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
@@ -121,7 +124,10 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(eventQueue *CooldownQueue
 			continue
 		}
 
-		// TODO check if we can skip processing (based on size?)
+		// eventually skip processing if there is no matching pod
+		if wh.cfg.SkipProfilesWithoutInstances() && !wh.hasMatchingPod(obj.Labels) {
+			continue
+		}
 
 		// assemble command arguments
 		args := map[string]interface{}{
@@ -166,4 +172,52 @@ func getPod(client kubernetes.Interface, obj *spdxv1beta1.ApplicationProfile) (*
 
 	pod, err := client.CoreV1().Pods(obj.Namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	return pod, err
+}
+
+func (wh *WatchHandler) hasMatchingPod(labels map[string]string) bool {
+	// construct the GroupVersionResource for the workload
+	gvr := schema.GroupVersionResource{
+		Group:    labels[helpersv1.ApiGroupMetadataKey],
+		Version:  labels[helpersv1.ApiVersionMetadataKey],
+		Resource: strings.ToLower(labels[helpersv1.KindMetadataKey]) + "s",
+	}
+	name := labels[helpersv1.NameMetadataKey]
+	namespace := labels[helpersv1.NamespaceMetadataKey]
+	// get the unstructured workload object
+	workloadObj, err := wh.k8sAPI.DynamicClient.Resource(gvr).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		logger.L().Debug("hasMatchingPod - failed to get workload matching labels", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
+		return false
+	}
+	// extract the pod selector labels
+	selector, found, err := unstructured.NestedMap(workloadObj.Object, "spec", "selector", "matchLabels")
+	if err != nil || !found {
+		logger.L().Debug("hasMatchingPod - failed to get pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
+		return false
+	}
+	// convert the map of labels to a label selector string
+	labelsStr := strings.Builder{}
+	for key, val := range selector {
+		if labelsStr.Len() > 0 {
+			labelsStr.WriteString(",")
+		}
+		labelsStr.WriteString(fmt.Sprintf("%s=%s", key, val))
+	}
+	if labelsStr.Len() == 0 {
+		logger.L().Debug("hasMatchingPod - empty pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name))
+		return false
+	}
+	// list pods matching the selector
+	podList, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: labelsStr.String(),
+	})
+	if err != nil {
+		logger.L().Debug("hasMatchingPod - failed to list pods matching selector", helpers.String("selector", labelsStr.String()), helpers.String("namespace", namespace), helpers.Error(err))
+		return false
+	}
+	if len(podList.Items) > 0 {
+		return true
+	}
+	// no matching pods found
+	return false
 }
