@@ -10,16 +10,21 @@ import (
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 func TestHandleApplicationProfileEvents(t *testing.T) {
@@ -277,5 +282,134 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 			assert.ElementsMatch(t, tc.expectedCommands, actualCommands, "Commands don’t match")
 		})
 
+	}
+}
+
+func TestWatchHandler_hasMatchingPod(t *testing.T) {
+	objects := []runtime.Object{
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-pod-1",
+				Namespace: "web",
+				Labels: map[string]string{
+					"app": "nginx",
+				},
+			},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-deployment",
+				Namespace: "web",
+				Labels: map[string]string{
+					"app": "nginx",
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "nginx",
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "nginx",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "nginx",
+								Image: "nginx:1.14.0",
+							},
+						},
+					},
+				},
+			},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "empty-deployment",
+				Namespace: "web",
+				Labels: map[string]string{
+					"app": "empty",
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "empty",
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "empty",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{},
+					},
+				},
+			},
+		},
+	}
+	sch := runtime.NewScheme()
+	err := scheme.AddToScheme(sch) // Registers core types like v1.Pod
+	require.NoError(t, err)
+	wh := &WatchHandler{
+		k8sAPI: &k8sinterface.KubernetesApi{
+			KubernetesClient: k8sfake.NewClientset(objects...),
+			DynamicClient:    dynamicfake.NewSimpleDynamicClient(sch, objects...),
+		},
+	}
+	tests := []struct {
+		name   string
+		labels map[string]string
+		want   bool
+	}{
+		{
+			name:   "No labels",
+			labels: map[string]string{},
+			want:   false,
+		},
+		{
+			name: "Matching labels",
+			labels: map[string]string{
+				helpersv1.ApiGroupMetadataKey:   "apps",
+				helpersv1.ApiVersionMetadataKey: "v1",
+				helpersv1.KindMetadataKey:       "Deployment",
+				helpersv1.NameMetadataKey:       "nginx-deployment",
+				helpersv1.NamespaceMetadataKey:  "web",
+			},
+			want: true,
+		},
+		{
+			name: "Non-matching labels",
+			labels: map[string]string{
+				helpersv1.ApiGroupMetadataKey:   "apps",
+				helpersv1.ApiVersionMetadataKey: "v1",
+				helpersv1.KindMetadataKey:       "Deployment",
+				helpersv1.NameMetadataKey:       "nginx-deployment",
+				helpersv1.NamespaceMetadataKey:  "other",
+			},
+			want: false,
+		},
+		{
+			name: "No pods",
+			labels: map[string]string{
+				helpersv1.ApiGroupMetadataKey:   "apps",
+				helpersv1.ApiVersionMetadataKey: "v1",
+				helpersv1.KindMetadataKey:       "Deployment",
+				helpersv1.NameMetadataKey:       "empty-deployment",
+				helpersv1.NamespaceMetadataKey:  "web",
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equalf(t, tt.want, wh.hasMatchingPod(tt.labels), "hasMatchingPod(%v)", tt.labels)
+		})
 	}
 }

@@ -108,6 +108,7 @@ type Config struct {
 	RegistryScanningInsecure      bool                           `mapstructure:"registryScanningInsecure"`
 	ExcludeJsonPaths              []string                       `mapstructure:"excludeJsonPaths"`
 	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
+	SkipProfilesWithoutInstances  bool                           `mapstructure:"skipProfilesWithoutInstances"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -131,6 +132,7 @@ type IConfig interface {
 	RegistryScanningSkipTlsVerify() bool
 	RegistryScanningInsecure() bool
 	ExcludeJsonPaths() []string
+	SkipProfilesWithoutInstances() bool
 }
 
 // OperatorConfig implements IConfig
@@ -243,6 +245,10 @@ func (c *OperatorConfig) RegistryScanningInsecure() bool {
 
 func (c *OperatorConfig) ExcludeJsonPaths() []string {
 	return c.serviceConfig.ExcludeJsonPaths
+}
+
+func (c *OperatorConfig) SkipProfilesWithoutInstances() bool {
+	return c.serviceConfig.SkipProfilesWithoutInstances
 }
 
 func LoadConfig(path string) (Config, error) {
