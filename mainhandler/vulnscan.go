@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/armosec/registryx/common"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/armosec/registryx/common"
 
 	"github.com/armosec/armoapi-go/apis"
 	apitypes "github.com/armosec/armoapi-go/armotypes"
@@ -245,8 +246,8 @@ func (actionHandler *ActionHandler) scanImage(ctx context.Context) error {
 	return nil
 }
 
-func (actionHandler *ActionHandler) scanApplicationProfile(ctx context.Context) error {
-	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanApplicationProfile")
+func (actionHandler *ActionHandler) scanContainerProfile(ctx context.Context) error {
+	ctx, span := otel.Tracer("").Start(ctx, "actionHandler.scanContainerProfile")
 	defer span.End()
 
 	if !actionHandler.config.Components().Kubevuln.Enabled {

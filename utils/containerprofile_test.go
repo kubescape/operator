@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSkipApplicationProfile(t *testing.T) {
+func TestSkipContainerProfile(t *testing.T) {
 	tests := []struct {
 		annotations map[string]string
 		name        string
@@ -113,7 +113,7 @@ func TestSkipApplicationProfile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotSkip, err := SkipApplicationProfile(tt.annotations)
+			gotSkip, err := SkipContainerProfile(tt.annotations)
 			assert.Equal(t, tt.wantSkip, gotSkip)
 			assert.Equal(t, tt.expectedErr, err)
 		})
