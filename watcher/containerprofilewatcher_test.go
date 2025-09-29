@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-func TestHandleApplicationProfileEvents(t *testing.T) {
+func TestHandleContainerProfileEvents(t *testing.T) {
 	tt := []struct {
 		name                      string
 		inputEvents               []watch.Event
@@ -39,11 +39,11 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 		expectedWlidAndImageIDMap []string
 	}{
 		{
-			name: "Adding a new application profile should produce a matching scan command",
+			name: "Adding a new container profile should produce a matching scan command",
 			inputEvents: []watch.Event{
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.ApplicationProfile{
+					Object: &spdxv1beta1.ContainerProfile{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "replicaset-nginx-6ccd565b7d",
 							Namespace: "systest-ns-rarz",
@@ -54,18 +54,15 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 						},
-						Spec: spdxv1beta1.ApplicationProfileSpec{
-							Containers: []spdxv1beta1.ApplicationProfileContainer{{
-								Name:     "nginx",
-								ImageID:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-								ImageTag: "nginx:1.14.0",
-							}},
+						Spec: spdxv1beta1.ContainerProfileSpec{
+							ImageID:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+							ImageTag: "nginx:1.14.0",
 						},
 					},
 				},
 				{
 					Type: watch.Modified,
-					Object: &spdxv1beta1.ApplicationProfile{
+					Object: &spdxv1beta1.ContainerProfile{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "replicaset-nginx-7584b6f84c",
 							Namespace: "systest-ns-rarz",
@@ -76,18 +73,15 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 						},
-						Spec: spdxv1beta1.ApplicationProfileSpec{
-							InitContainers: []spdxv1beta1.ApplicationProfileContainer{{
-								Name:     "nginx",
-								ImageID:  "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
-								ImageTag: "nginx:latest",
-							}},
+						Spec: spdxv1beta1.ContainerProfileSpec{
+							ImageID:  "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
+							ImageTag: "nginx:latest",
 						},
 					},
 				},
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.ApplicationProfile{
+					Object: &spdxv1beta1.ContainerProfile{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "workflow-foo-1747274700",
 							Namespace: "systest-ns-rarz",
@@ -102,18 +96,15 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 								helpersv1.NameMetadataKey: "foo-1747274700",
 							},
 						},
-						Spec: spdxv1beta1.ApplicationProfileSpec{
-							Containers: []spdxv1beta1.ApplicationProfileContainer{{
-								Name:     "nginx",
-								ImageID:  "docker.io/library/nginx@sha256:91ec405acd96b4645695911d675f71897c6f57531265c7302c7e16088b9f37ab",
-								ImageTag: "nginx:1.28-otel",
-							}},
+						Spec: spdxv1beta1.ContainerProfileSpec{
+							ImageID:  "docker.io/library/nginx@sha256:91ec405acd96b4645695911d675f71897c6f57531265c7302c7e16088b9f37ab",
+							ImageTag: "nginx:1.28-otel",
 						},
 					},
 				},
 				{
 					Type: watch.Added,
-					Object: &spdxv1beta1.ApplicationProfile{
+					Object: &spdxv1beta1.ContainerProfile{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "workflow-foo2-2747274700",
 							Namespace: "systest-ns-rarz",
@@ -128,12 +119,9 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 								helpersv1.NameMetadataKey: "foo2-2747274700",
 							},
 						},
-						Spec: spdxv1beta1.ApplicationProfileSpec{
-							Containers: []spdxv1beta1.ApplicationProfileContainer{{
-								Name:     "nginx",
-								ImageID:  "docker.io/library/nginx@sha256:391f518c1133681a00217e77976665c056bcdbe185a22efbcd6e4ae67c450d1a",
-								ImageTag: "nginx:1.28-perl",
-							}},
+						Spec: spdxv1beta1.ContainerProfileSpec{
+							ImageID:  "docker.io/library/nginx@sha256:391f518c1133681a00217e77976665c056bcdbe185a22efbcd6e4ae67c450d1a",
+							ImageTag: "nginx:1.28-perl",
 						},
 					},
 				},
@@ -148,7 +136,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 			},
 			expectedCommands: []*apis.Command{
 				{
-					CommandName: utils.CommandScanApplicationProfile,
+					CommandName: utils.CommandScanContainerProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
 					Args: map[string]interface{}{
 						utils.ArgsName:      "replicaset-nginx-6ccd565b7d",
@@ -156,7 +144,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 					},
 				},
 				{
-					CommandName: utils.CommandScanApplicationProfile,
+					CommandName: utils.CommandScanContainerProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
 					Args: map[string]interface{}{
 						utils.ArgsName:      "replicaset-nginx-7584b6f84c",
@@ -164,7 +152,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 					},
 				},
 				{
-					CommandName: utils.CommandScanApplicationProfile,
+					CommandName: utils.CommandScanContainerProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
 					Args: map[string]interface{}{
 						utils.ArgsName:      "workflow-foo-1747274700",
@@ -172,7 +160,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 					},
 				},
 				{
-					CommandName: utils.CommandScanApplicationProfile,
+					CommandName: utils.CommandScanContainerProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
 					Args: map[string]interface{}{
 						utils.ArgsName:      "workflow-foo2-2747274700",
@@ -206,7 +194,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 			inputEvents: []watch.Event{
 				{
 					Type:   watch.Deleted,
-					Object: &spdxv1beta1.ApplicationProfile{},
+					Object: &spdxv1beta1.ContainerProfile{},
 				},
 			},
 			expectedCommands:          []*apis.Command{},
@@ -240,7 +228,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 
 			wh := NewWatchHandler(operatorConfig, k8sAPI, storageClient, nil)
 
-			go wh.HandleApplicationProfileEvents(eventQueue, cmdCh, errorCh)
+			go wh.HandleContainerProfileEvents(eventQueue, cmdCh, errorCh)
 
 			go func() {
 				for _, e := range tc.inputEvents {
@@ -270,7 +258,7 @@ func TestHandleApplicationProfileEvents(t *testing.T) {
 				}
 			}
 
-			actualObjects, _ := storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, metav1.ListOptions{})
+			actualObjects, _ := storageClient.SpdxV1beta1().ContainerProfiles("").List(ctx, metav1.ListOptions{})
 
 			var actualObjectNames []string
 			for _, obj := range actualObjects.Items {

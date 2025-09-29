@@ -30,7 +30,7 @@ const ArgsName = "name"
 const ArgsNamespace = "namespace"
 const dockerPullableURN = "docker-pullable://"
 
-const CommandScanApplicationProfile = "scanApplicationProfile"
+const CommandScanContainerProfile = "scanContainerProfile"
 
 func MapToString(m map[string]interface{}) []string {
 	s := []string{}

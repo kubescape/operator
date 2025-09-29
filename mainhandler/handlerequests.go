@@ -160,7 +160,7 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		} else {
 			go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
 		}
-		go watchHandler.ApplicationProfileWatch(ctx, mainHandler.eventWorkerPool)
+		go watchHandler.ContainerProfileWatch(ctx, mainHandler.eventWorkerPool)
 	}
 
 	go operatorCommandsHandler.Start()
@@ -228,8 +228,8 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context) error {
 	switch c.CommandName {
 	case apis.TypeScanImages:
 		return actionHandler.scanImage(ctx)
-	case utils.CommandScanApplicationProfile:
-		return actionHandler.scanApplicationProfile(ctx)
+	case utils.CommandScanContainerProfile:
+		return actionHandler.scanContainerProfile(ctx)
 	case apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
 		return actionHandler.kubescapeScan(ctx)
 	case apis.TypeSetKubescapeCronJob:
@@ -413,18 +413,18 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 				}
 
 				noContainerSlug, _ := instanceID.GetSlug(true)
-				if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, mainHandler.ksStorageClient, noContainerSlug, ns); appProfile != nil {
-					cmd := utils.GetApplicationProfileScanCommand(appProfile, pod)
+				if profile := utils.GetContainerProfileForRelevancyScan(ctx, mainHandler.ksStorageClient, noContainerSlug, ns); profile != nil {
+					cmd := utils.GetContainerProfileScanCommand(profile, pod)
 
 					// send specific command to the channel
 					newSessionObj := utils.NewSessionObj(ctx, mainHandler.config, cmd, sessionObj.JobID, "")
-					logger.L().Info("triggering application profile scan", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+					logger.L().Info("triggering container profile scan", helpers.String("wlid", cmd.Wlid), helpers.String("name", profile.Name), helpers.String("namespace", profile.Namespace))
 					if err := mainHandler.HandleSingleRequest(ctx, newSessionObj); err != nil {
-						logger.L().Error("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+						logger.L().Error("failed to complete action", helpers.Error(err), helpers.String("id", newSessionObj.Command.GetID()), helpers.String("name", profile.Name), helpers.String("namespace", profile.Namespace))
 						errors.Add(err)
 						continue
 					}
-					logger.L().Info("action completed successfully", helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+					logger.L().Info("action completed successfully", helpers.String("name", profile.Name), helpers.String("namespace", profile.Namespace))
 					slugs[noContainerSlug] = true
 				} else {
 					// set scanning command

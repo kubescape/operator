@@ -112,14 +112,14 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 
 				noContainerSlug, _ := slugToInstanceID[slug].GetSlug(true)
 				if _, ok := noContainerSlugs[noContainerSlug]; ok {
-					// already scanned the application profile
+					// already scanned the container profile
 					wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
 					wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 					continue
 				}
 
-				if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); appProfile != nil {
-					wh.scanApplicationProfile(ctx, appProfile, pod, workerPool)
+				if profile := utils.GetContainerProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); profile != nil {
+					wh.scanContainerProfile(ctx, profile, pod, workerPool)
 					noContainerSlugs[noContainerSlug] = true
 				} else {
 					wh.scanImage(ctx, pod, containerData, workerPool)
@@ -149,14 +149,14 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 
 			noContainerSlug, _ := slugToInstanceID[slug].GetSlug(true)
 			if _, ok := noContainerSlugs[noContainerSlug]; ok {
-				// already scanned the application profile
+				// already scanned the container profile
 				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 				continue
 			}
 
 			// use-case 1, 2, 3
-			if appProfile := utils.GetApplicationProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); appProfile != nil {
-				wh.scanApplicationProfile(ctx, appProfile, pod, workerPool)
+			if profile := utils.GetContainerProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); profile != nil {
+				wh.scanContainerProfile(ctx, profile, pod, workerPool)
 				noContainerSlugs[noContainerSlug] = true
 			} else {
 				wh.scanImage(ctx, pod, containerData, workerPool)
@@ -186,14 +186,14 @@ func (wh *WatchHandler) scanImage(ctx context.Context, pod *corev1.Pod, containe
 	}
 }
 
-func (wh *WatchHandler) scanApplicationProfile(ctx context.Context, appProfile *v1beta1.ApplicationProfile, pod *corev1.Pod, workerPool *ants.PoolWithFunc) {
+func (wh *WatchHandler) scanContainerProfile(ctx context.Context, profile *v1beta1.ContainerProfile, pod *corev1.Pod, workerPool *ants.PoolWithFunc) {
 	// set scanning command
-	cmd := utils.GetApplicationProfileScanCommand(appProfile, pod)
+	cmd := utils.GetContainerProfileScanCommand(profile, pod)
 
 	// send
-	logger.L().Info("scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+	logger.L().Info("scanning container profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", profile.Name), helpers.String("namespace", profile.Namespace))
 	if err := utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool); err != nil {
-		logger.L().Ctx(ctx).Error("failed to add command to channel", helpers.Error(err), helpers.String("wlid", cmd.Wlid), helpers.String("name", appProfile.Name), helpers.String("namespace", appProfile.Namespace))
+		logger.L().Ctx(ctx).Error("failed to add command to channel", helpers.Error(err), helpers.String("wlid", cmd.Wlid), helpers.String("name", profile.Name), helpers.String("namespace", profile.Namespace))
 	}
 }
 

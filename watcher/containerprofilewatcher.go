@@ -23,8 +23,8 @@ import (
 	"k8s.io/client-go/tools/pager"
 )
 
-// ApplicationProfileWatch watches and processes changes on ApplicationProfile resources
-func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
+// ContainerProfileWatch watches and processes changes on ContainerProfile resources
+func (wh *WatchHandler) ContainerProfileWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
 	eventQueue := NewCooldownQueueWithParams(15*time.Second, 1*time.Second)
 	cmdCh := make(chan *apis.Command)
 	errorCh := make(chan error)
@@ -36,7 +36,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 		apWatcherUnavailable <- struct{}{}
 	}()
 
-	go wh.HandleApplicationProfileEvents(eventQueue, cmdCh, errorCh)
+	go wh.HandleContainerProfileEvents(eventQueue, cmdCh, errorCh)
 
 	// notifyWatcherDown notifies the appropriate channel that the watcher
 	// is down and backs off for the retry interval to not produce
@@ -48,9 +48,9 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 
 	// get the initial profiles
 	if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return wh.storageClient.SpdxV1beta1().ApplicationProfiles("").List(ctx, opts)
+		return wh.storageClient.SpdxV1beta1().ContainerProfiles("").List(ctx, opts)
 	}).EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-		ap := obj.(*spdxv1beta1.ApplicationProfile)
+		ap := obj.(*spdxv1beta1.ContainerProfile)
 		// simulate "add" event
 		eventQueue.Enqueue(watch.Event{
 			Type:   watch.Added,
@@ -58,7 +58,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 		})
 		return nil
 	}); err != nil {
-		logger.L().Ctx(ctx).Error("failed to list existing application profiles", helpers.Error(err))
+		logger.L().Ctx(ctx).Error("failed to list existing container profiles", helpers.Error(err))
 	}
 
 	var watcher watch.Interface
@@ -79,7 +79,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 			}
 		case err, ok := <-errorCh:
 			if ok {
-				logger.L().Ctx(ctx).Error("error in ApplicationProfileWatch", helpers.Error(err))
+				logger.L().Ctx(ctx).Error("error in ContainerProfileWatch", helpers.Error(err))
 			} else {
 				notifyWatcherDown(apWatcherUnavailable)
 			}
@@ -88,7 +88,7 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 				watcher.Stop()
 			}
 
-			watcher, err = wh.getApplicationProfileWatcher()
+			watcher, err = wh.getContainerProfileWatcher()
 			if err != nil {
 				notifyWatcherDown(apWatcherUnavailable)
 			} else {
@@ -99,11 +99,11 @@ func (wh *WatchHandler) ApplicationProfileWatch(ctx context.Context, workerPool 
 
 }
 
-func (wh *WatchHandler) HandleApplicationProfileEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
+func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(errorCh)
 
 	for e := range eventQueue.ResultChan {
-		obj, ok := e.Object.(*spdxv1beta1.ApplicationProfile)
+		obj, ok := e.Object.(*spdxv1beta1.ContainerProfile)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
 			continue
@@ -120,7 +120,7 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(eventQueue *CooldownQueue
 			continue
 		}
 
-		if skip, _ := utils.SkipApplicationProfile(obj.ObjectMeta.Annotations); skip {
+		if skip, _ := utils.SkipContainerProfile(obj.ObjectMeta.Annotations); skip {
 			continue
 		}
 
@@ -146,21 +146,21 @@ func (wh *WatchHandler) HandleApplicationProfileEvents(eventQueue *CooldownQueue
 		// create command
 		cmd := &apis.Command{
 			Wlid:        obj.Annotations[helpersv1.WlidMetadataKey],
-			CommandName: utils.CommandScanApplicationProfile,
+			CommandName: utils.CommandScanContainerProfile,
 			Args:        args,
 		}
 		// send command
-		logger.L().Info("scanning application profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
+		logger.L().Info("scanning container profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
 		producedCommands <- cmd
 	}
 }
 
-func (wh *WatchHandler) getApplicationProfileWatcher() (watch.Interface, error) {
+func (wh *WatchHandler) getContainerProfileWatcher() (watch.Interface, error) {
 	// no need to support ExcludeNamespaces and IncludeNamespaces since node-agent will respect them as well
-	return wh.storageClient.SpdxV1beta1().ApplicationProfiles("").Watch(context.Background(), metav1.ListOptions{})
+	return wh.storageClient.SpdxV1beta1().ContainerProfiles("").Watch(context.Background(), metav1.ListOptions{})
 }
 
-func getPod(client kubernetes.Interface, obj *spdxv1beta1.ApplicationProfile) (*corev1.Pod, error) {
+func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
 	if kind, ok := obj.Labels[helpersv1.KindMetadataKey]; !ok || kind != "Pod" {
 		return nil, nil
 	}
