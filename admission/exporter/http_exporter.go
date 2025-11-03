@@ -41,6 +41,8 @@ type HTTPExporter struct {
 	cloudMetadata      *apitypes.CloudMetadata
 }
 
+var _ Exporter = (*HTTPExporter)(nil)
+
 type HTTPAlertsList struct {
 	Kind       string             `json:"kind"`
 	ApiVersion string             `json:"apiVersion"`

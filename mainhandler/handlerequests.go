@@ -41,7 +41,7 @@ type MainHandler struct {
 	ksStorageClient        kssc.Interface
 	commandResponseChannel *commandResponseChannelData
 	config                 config.IConfig
-	exporter               *exporters.HTTPExporter
+	exporter               exporters.Exporter
 }
 
 type ActionHandler struct {
@@ -50,7 +50,7 @@ type ActionHandler struct {
 	k8sAPI                 *k8sinterface.KubernetesApi
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
-	exporter               *exporters.HTTPExporter
+	exporter               exporters.Exporter
 }
 
 type waitFunc func(clusterConfig config.IConfig)
@@ -72,7 +72,7 @@ func init() {
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, exporter *exporters.HTTPExporter, ksStorageClient kssc.Interface) *MainHandler {
+func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, exporter exporters.Exporter, ksStorageClient kssc.Interface) *MainHandler {
 
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
@@ -96,7 +96,7 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, e
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, exporter *exporters.HTTPExporter) *ActionHandler {
+func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, exporter exporters.Exporter) *ActionHandler {
 	return &ActionHandler{
 		sessionObj:             sessionObj,
 		k8sAPI:                 k8sAPI,

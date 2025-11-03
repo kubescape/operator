@@ -20,11 +20,11 @@ import (
 type AdmissionValidator struct {
 	kubernetesClient *k8sinterface.KubernetesApi
 	objectCache      objectcache.ObjectCache
-	exporter         *exporters.HTTPExporter
+	exporter         exporters.Exporter
 	ruleBindingCache rulebinding.RuleBindingCache
 }
 
-func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, objectCache objectcache.ObjectCache, exporter *exporters.HTTPExporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
+func NewAdmissionValidator(kubernetesClient *k8sinterface.KubernetesApi, objectCache objectcache.ObjectCache, exporter exporters.Exporter, ruleBindingCache rulebinding.RuleBindingCache) *AdmissionValidator {
 	return &AdmissionValidator{
 		kubernetesClient: kubernetesClient,
 		objectCache:      objectCache,

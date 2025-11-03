@@ -124,9 +124,14 @@ func main() {
 		logger.L().Ctx(ctx).Info("cloud metadata retrieved successfully", helpers.Interface("cloudMetadata", cloudMetadata))
 	}
 
-	exporter, err := exporters.InitHTTPExporter(*operatorConfig.HttpExporterConfig(), operatorConfig.ClusterName(), cloudMetadata)
-	if err != nil {
-		logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
+	var exporter exporters.Exporter
+	if exporterConfig := operatorConfig.HttpExporterConfig(); exporterConfig != nil {
+		exporter, err = exporters.InitHTTPExporter(*exporterConfig, operatorConfig.ClusterName(), cloudMetadata)
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
+		}
+	} else {
+		exporter = exporters.MockExporter{}
 	}
 
 	// setup main handler
