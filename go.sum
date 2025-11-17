@@ -145,12 +145,12 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-metrics v0.3.10/go.mod h1:4O98XIr/9W0sxpJ8UaYkvjk10Iff7SnFrb4QAOwNTFc=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/armosec/armoapi-go v0.0.643 h1:dxEG28VAMxGtJakkhTngqZPRGZTY2CYWEfZ+7Zqt77k=
-github.com/armosec/armoapi-go v0.0.643/go.mod h1:9jAH0g8ZsryhiBDd/aNMX4+n10bGwTx/doWCyyjSxts=
+github.com/armosec/armoapi-go v0.0.644 h1:2CZxWZReXO6KachaL0AnK8OhNcKHnnr4siqW6tkjLfc=
+github.com/armosec/armoapi-go v0.0.644/go.mod h1:9jAH0g8ZsryhiBDd/aNMX4+n10bGwTx/doWCyyjSxts=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
 github.com/armosec/gojay v1.2.17/go.mod h1:vuvX3DlY0nbVrJ0qCklSS733AWMoQboq3cFyuQW9ybc=
-github.com/armosec/registryx v0.0.30 h1:2qwYiLGxiLnxaYbb1rq52TmQBZIAFKaZKz4IxD/jUjo=
-github.com/armosec/registryx v0.0.30/go.mod h1:+gjdcYWMIpahzOBKdrDZcNZfqOyceOzJFnj9t16PHog=
+github.com/armosec/registryx v0.0.31 h1:/TgdPoWzUHYZmSUrjo/F7qUnA4J47vkqo6LZL24g5UE=
+github.com/armosec/registryx v0.0.31/go.mod h1:dm7/1yJllY2MDS8oxGyR+64NAepwDXV4/2Q5mnD8yHs=
 github.com/armosec/utils-go v0.0.58 h1:g9RnRkxZAmzTfPe2ruMo2OXSYLwVSegQSkSavOfmaIE=
 github.com/armosec/utils-go v0.0.58/go.mod h1:CdqKHKruVJMCxGcZXYW9J+5P9FZou8dMzVpcB0Xt8pk=
 github.com/armosec/utils-k8s-go v0.0.32 h1:jpyS8cTWFaLWmqp4pFu2f5kWMa4KhZIUV8iA2yRdtkk=
