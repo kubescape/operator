@@ -1,21 +1,24 @@
 name: pull_request_created
+permissions: read-all
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
-      - '**.md' ### Ignore running when .md files change
-      - '**.yaml' ### Ignore running when .md files change
-      - '**.json' ### Ignore running when .md files change
-      - '.github/*' ### Ignore running when files under path: .github/* changed.
+      - '*.md'
+      - '*.yaml'
+      - '.github/workflows/*'
 
 concurrency:
-  group: ${{ github.head_ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   pr-created:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    permissions:
+      pull-requests: write
+      security-events: write
     uses: kubescape/workflows/.github/workflows/incluster-comp-pr-created.yaml@main
     with:
+      CGO_ENABLED: 0
       GO_VERSION: "1.25"
     secrets: inherit

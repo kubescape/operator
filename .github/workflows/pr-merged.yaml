@@ -1,13 +1,18 @@
-name: build
+name: pr-merged
+permissions: read-all
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
     branches:
     - 'main'
     paths-ignore:
-      - '**.md' ### Ignore running when README.MD changed.
-      - '.github/workflows/*' ### Ignore running when files under path: .github/workflows/* changed.
+      - '*.md'
+      - '*.yaml'
+      - '.github/workflows/*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   reset-run-number:
@@ -22,27 +27,22 @@ jobs:
       with:
         base: -73
         run-id: ${{ github.run_number }}
-    - name: debug
-      run: |
-             if [ -z "QUAYIO_REGISTRY_PASSWORD" ]; then
-                echo "QUAYIO_REGISTRY_PASSWORD is not set"
-                exit 1
-             fi
-             if [ -z "QUAYIO_REGISTRY_USERNAME" ]; then
-                    echo "QUAYIO_REGISTRY_USERNAME is not set"
-                    exit 1
-             fi
+
   pr-merged:
-    if: ${{ github.event.pull_request.merged == true }} ## Skip if not merged to master
+    if: ${{ github.event.pull_request.merged == true }} ## Skip if not merged
     needs: reset-run-number
+    permissions:
+      id-token: write
+      packages: write
+      contents: write
+      pull-requests: read
     uses: kubescape/workflows/.github/workflows/incluster-comp-pr-merged.yaml@main
     with:
       IMAGE_NAME: quay.io/${{ github.repository_owner }}/operator
       IMAGE_TAG: v0.2.${{ needs.reset-run-number.outputs.run-number }}
       COMPONENT_NAME: operator
-      SYSTEM_TESTS_BRANCH: master
       CGO_ENABLED: 0
-      GO111MODULE: ""
+      GO111MODULE: "on"
       BUILD_PLATFORM: linux/amd64,linux/arm64
       GO_VERSION: "1.25"
       REQUIRED_TESTS: '[
