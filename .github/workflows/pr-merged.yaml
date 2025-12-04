@@ -22,7 +22,16 @@ jobs:
       with:
         base: -73
         run-id: ${{ github.run_number }}
-
+    - name: debug
+      run: |
+             if [ -z "$QUAY_PASSWORD" ]; then
+                echo "QUAY_PASSWORD is not set"
+                exit 1
+             fi
+             if [ -z "$QUAY_USERNAME" ]; then
+                    echo "QUAY_USERNAME is not set"
+                    exit 1
+             fi
   pr-merged:
     if: ${{ github.event.pull_request.merged == true }} ## Skip if not merged to master
     needs: reset-run-number
