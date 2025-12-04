@@ -24,12 +24,12 @@ jobs:
         run-id: ${{ github.run_number }}
     - name: debug
       run: |
-             if [ -z "$QUAY_PASSWORD" ]; then
-                echo "QUAY_PASSWORD is not set"
+             if [ -z "QUAYIO_REGISTRY_PASSWORD" ]; then
+                echo "QUAYIO_REGISTRY_PASSWORD is not set"
                 exit 1
              fi
-             if [ -z "$QUAY_USERNAME" ]; then
-                    echo "QUAY_USERNAME is not set"
+             if [ -z "QUAYIO_REGISTRY_USERNAME" ]; then
+                    echo "QUAYIO_REGISTRY_USERNAME is not set"
                     exit 1
              fi
   pr-merged:
