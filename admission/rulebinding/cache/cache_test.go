@@ -16,9 +16,10 @@ import (
 
 func NewCacheMock() *RBCache {
 	return &RBCache{
-		k8sClient:     k8sinterface.NewKubernetesApiMock(),
-		ruleCreator:   &rules.RuleCreatorMock{},
-		rbNameToRules: maps.SafeMap[string, []rules.RuleEvaluator]{}, // rule binding name -> []created rules
+		k8sClient:          k8sinterface.NewKubernetesApiMock(),
+		ruleCreator:        &rules.RuleCreatorMock{},
+		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{}, // rule binding name -> []created rules
+		ignoreRuleBindings: false,
 	}
 }
 
@@ -34,7 +35,7 @@ func TestNewCache(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			k8sAPI := utils.NewK8sInterfaceFake(nil)
-			cache := NewCache(k8sAPI)
+			cache := NewCache(k8sAPI, false)
 
 			assert.NotNil(t, cache)
 			assert.Equal(t, k8sAPI, cache.k8sClient)
@@ -201,6 +202,47 @@ func TestRuntimeObjAddHandler(t *testing.T) {
 		})
 
 	}
+}
+
+func TestListRulesForObjectIgnoreBindings(t *testing.T) {
+	c := &RBCache{
+		k8sClient:          k8sinterface.NewKubernetesApiMock(),
+		ruleCreator:        &rules.RuleCreatorMock{},
+		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{},
+		ignoreRuleBindings: true,
+	}
+
+	t.Run("namespaced object returns all rules", func(t *testing.T) {
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name":      "any",
+					"namespace": "ns",
+				},
+			},
+		}
+
+		ruleEvaluators := c.ListRulesForObject(context.Background(), obj)
+		assert.Len(t, ruleEvaluators, 2)
+		assert.Equal(t, "rule-1", ruleEvaluators[0].ID())
+		assert.Equal(t, "rule-2", ruleEvaluators[1].ID())
+	})
+
+	t.Run("cluster object respects includeClusterObjects=false", func(t *testing.T) {
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "cluster-obj",
+					"labels": map[string]interface{}{
+						"includeClusterObjects": "false",
+					},
+				},
+			},
+		}
+
+		ruleEvaluators := c.ListRulesForObject(context.Background(), obj)
+		assert.Len(t, ruleEvaluators, 0)
+	})
 }
 
 func TestCreateRule(t *testing.T) {

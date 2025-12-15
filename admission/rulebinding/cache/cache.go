@@ -34,14 +34,17 @@ type RBCache struct {
 	ruleCreator    rules.RuleCreator
 	watchResources []watcher.WatchResource
 	notifiers      []*chan rulebindingmanager.RuleBindingNotify
+	// when true, skip rule binding filtering and return all rules
+	ignoreRuleBindings bool
 }
 
-func NewCache(k8sClient k8sclient.K8sClientInterface) *RBCache {
+func NewCache(k8sClient k8sclient.K8sClientInterface, ignoreRuleBindings bool) *RBCache {
 	return &RBCache{
-		k8sClient:      k8sClient,
-		ruleCreator:    rulesv1.NewRuleCreator(),
-		rbNameToRB:     maps.SafeMap[string, typesv1.RuntimeAlertRuleBinding]{},
-		watchResources: resourcesToWatch(),
+		k8sClient:          k8sClient,
+		ruleCreator:        rulesv1.NewRuleCreator(),
+		rbNameToRB:         maps.SafeMap[string, typesv1.RuntimeAlertRuleBinding]{},
+		watchResources:     resourcesToWatch(),
+		ignoreRuleBindings: ignoreRuleBindings,
 	}
 }
 
@@ -54,6 +57,18 @@ func (c *RBCache) WatchResources() []watcher.WatchResource {
 // ------------------ rulebindingmanager.RuleBindingCache methods -----------------------
 
 func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.Unstructured) []rules.RuleEvaluator {
+	if c.ignoreRuleBindings {
+		// rules update is enabled, apply all rules regardless of bindings, but still respect
+		// cluster object opt-out label to avoid surprising cluster-level enforcement.
+		if object.GetNamespace() == "" {
+			includeClusterObjects, ok := object.GetLabels()[IncludeClusterObjects]
+			if ok && includeClusterObjects == "false" {
+				return []rules.RuleEvaluator{}
+			}
+		}
+		return c.ruleCreator.CreateAllRules()
+	}
+
 	var rulesSlice []rules.RuleEvaluator
 	var rbNames []string
 

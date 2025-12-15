@@ -25,6 +25,14 @@ func (r *RuleCreatorMock) CreateRuleByName(name string) RuleEvaluator {
 	return &RuleMock{RuleName: name}
 }
 
+func (r *RuleCreatorMock) CreateAllRules() []RuleEvaluator {
+	// return a couple of deterministic mock rules so tests can assert length/order
+	return []RuleEvaluator{
+		&RuleMock{RuleID: "rule-1"},
+		&RuleMock{RuleID: "rule-2"},
+	}
+}
+
 var _ RuleEvaluator = (*RuleMock)(nil)
 
 type RuleMock struct {

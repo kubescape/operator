@@ -50,3 +50,11 @@ func (r *RuleCreatorImpl) CreateRuleByName(name string) rules.RuleEvaluator {
 func (r *RuleCreatorImpl) GetAllRuleDescriptors() []RuleDescriptor {
 	return r.ruleDescriptions
 }
+
+func (r *RuleCreatorImpl) CreateAllRules() []rules.RuleEvaluator {
+	all := make([]rules.RuleEvaluator, 0, len(r.ruleDescriptions))
+	for _, rd := range r.ruleDescriptions {
+		all = append(all, rd.RuleCreationFunc())
+	}
+	return all
+}

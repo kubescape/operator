@@ -133,6 +133,7 @@ type IConfig interface {
 	RegistryScanningInsecure() bool
 	ExcludeJsonPaths() []string
 	SkipProfilesWithoutInstances() bool
+	RulesUpdateEnabled() bool
 }
 
 // OperatorConfig implements IConfig
@@ -249,6 +250,10 @@ func (c *OperatorConfig) ExcludeJsonPaths() []string {
 
 func (c *OperatorConfig) SkipProfilesWithoutInstances() bool {
 	return c.serviceConfig.SkipProfilesWithoutInstances
+}
+
+func (c *OperatorConfig) RulesUpdateEnabled() bool {
+	return c.serviceConfig.RulesUpdateConfig.Enabled
 }
 
 func LoadConfig(path string) (Config, error) {
