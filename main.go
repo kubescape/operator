@@ -173,8 +173,8 @@ func main() {
 		// Create watchers
 		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi, ksStorageClient.SpdxV1beta1(), operatorConfig.SkipNamespace)
 
-		// create ruleBinding cache
-		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi)
+		// create ruleBinding cache (when rules update is enabled we ignore bindings and run all rules)
+		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi, operatorConfig.RulesUpdateEnabled())
 		dWatcher.AddAdaptor(ruleBindingCache)
 
 		ruleBindingNotify := make(chan rulebindingmanager.RuleBindingNotify, 100)

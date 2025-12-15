@@ -20,6 +20,8 @@ type RuleCreator interface {
 	CreateRulesByTags(tags []string) []RuleEvaluator
 	CreateRuleByID(id string) RuleEvaluator
 	CreateRuleByName(name string) RuleEvaluator
+	// CreateAllRules returns all available rules; used when rule bindings are ignored.
+	CreateAllRules() []RuleEvaluator
 }
 
 type RuleEvaluator interface {
