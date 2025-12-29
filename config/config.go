@@ -71,13 +71,14 @@ type NodeAgentAutoscalerResourceBounds struct {
 
 // NodeAgentAutoscalerConfig defines the configuration for node agent autoscaling
 type NodeAgentAutoscalerConfig struct {
-	Enabled             bool                                   `json:"enabled" mapstructure:"enabled"`
-	NodeGroupLabel      string                                 `json:"nodeGroupLabel" mapstructure:"nodeGroupLabel"`
-	ResourcePercentages NodeAgentAutoscalerResourcePercentages `json:"resourcePercentages" mapstructure:"resourcePercentages"`
-	MinResources        NodeAgentAutoscalerResourceBounds      `json:"minResources" mapstructure:"minResources"`
-	MaxResources        NodeAgentAutoscalerResourceBounds      `json:"maxResources" mapstructure:"maxResources"`
-	ReconcileInterval   time.Duration                          `json:"reconcileInterval" mapstructure:"reconcileInterval"`
-	TemplatePath        string                                 `json:"templatePath" mapstructure:"templatePath"`
+	Enabled                bool                                   `json:"enabled" mapstructure:"enabled"`
+	NodeGroupLabel         string                                 `json:"nodeGroupLabel" mapstructure:"nodeGroupLabel"`
+	ResourcePercentages    NodeAgentAutoscalerResourcePercentages `json:"resourcePercentages" mapstructure:"resourcePercentages"`
+	MinResources           NodeAgentAutoscalerResourceBounds      `json:"minResources" mapstructure:"minResources"`
+	MaxResources           NodeAgentAutoscalerResourceBounds      `json:"maxResources" mapstructure:"maxResources"`
+	ReconcileInterval      time.Duration                          `json:"reconcileInterval" mapstructure:"reconcileInterval"`
+	TemplatePath           string                                 `json:"templatePath" mapstructure:"templatePath"`
+	OperatorDeploymentName string                                 `json:"operatorDeploymentName" mapstructure:"operatorDeploymentName"`
 }
 
 type Server struct {
@@ -319,6 +320,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("nodeAgentAutoscaler.maxResources.memory", "4Gi")
 	viper.SetDefault("nodeAgentAutoscaler.reconcileInterval", 5*time.Minute)
 	viper.SetDefault("nodeAgentAutoscaler.templatePath", "/etc/templates/daemonset-template.yaml")
+	viper.SetDefault("nodeAgentAutoscaler.operatorDeploymentName", "operator")
 
 	viper.AutomaticEnv()
 

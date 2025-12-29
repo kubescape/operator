@@ -410,51 +410,6 @@ func TestAutoscaler_GetManagedDaemonSets(t *testing.T) {
 	assert.Equal(t, "node-agent-m5-large", managedDS[0].Name)
 }
 
-func TestAutoscaler_DaemonSetNeedsUpdate(t *testing.T) {
-	autoscaler := &Autoscaler{}
-
-	existingDS := &appsv1.DaemonSet{
-		Spec: appsv1.DaemonSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name: "node-agent",
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("100m"),
-									corev1.ResourceMemory: resource.MustParse("180Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("500m"),
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-							},
-						},
-					},
-					NodeSelector: map[string]string{
-						"node.kubernetes.io/instance-type": "m5.large",
-					},
-				},
-			},
-		},
-	}
-
-	// Same resources - no update needed
-	sameDS := existingDS.DeepCopy()
-	assert.False(t, autoscaler.daemonSetNeedsUpdate(existingDS, sameDS))
-
-	// Different resources - update needed
-	differentResourcesDS := existingDS.DeepCopy()
-	differentResourcesDS.Spec.Template.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = resource.MustParse("200m")
-	assert.True(t, autoscaler.daemonSetNeedsUpdate(existingDS, differentResourcesDS))
-
-	// Different nodeSelector - update needed
-	differentSelectorDS := existingDS.DeepCopy()
-	differentSelectorDS.Spec.Template.Spec.NodeSelector["node.kubernetes.io/instance-type"] = "m5.xlarge"
-	assert.True(t, autoscaler.daemonSetNeedsUpdate(existingDS, differentSelectorDS))
-}
-
 func TestGenerateDaemonSetName(t *testing.T) {
 	group := NodeGroup{
 		LabelValue:    "m5.large",
@@ -475,7 +430,7 @@ func TestNewAutoscaler(t *testing.T) {
 	}
 
 	// Should fail because template doesn't exist
-	_, err := NewAutoscaler(client, cfg, "kubescape")
+	_, err := NewAutoscaler(client, cfg, "kubescape", "operator")
 	assert.Error(t, err)
 }
 

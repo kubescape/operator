@@ -2,10 +2,14 @@ package nodeagentautoscaler
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
 	"text/template"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,6 +43,9 @@ type TemplateResourcePair struct {
 type TemplateRenderer struct {
 	templatePath string
 	template     *template.Template
+	mu           sync.RWMutex // Protects template during reload
+	watcher      *fsnotify.Watcher
+	stopCh       chan struct{}
 }
 
 // NewTemplateRenderer creates a new TemplateRenderer
@@ -66,7 +73,10 @@ func (tr *TemplateRenderer) loadTemplate() error {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
 
+	tr.mu.Lock()
 	tr.template = tmpl
+	tr.mu.Unlock()
+
 	logger.L().Debug("loaded DaemonSet template", helpers.String("path", tr.templatePath))
 
 	return nil
@@ -75,6 +85,85 @@ func (tr *TemplateRenderer) loadTemplate() error {
 // ReloadTemplate reloads the template from disk
 func (tr *TemplateRenderer) ReloadTemplate() error {
 	return tr.loadTemplate()
+}
+
+// StartWatching starts watching the template file for changes
+// When the ConfigMap is updated, Kubernetes updates the mounted file, triggering a reload
+func (tr *TemplateRenderer) StartWatching(ctx context.Context) error {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("failed to create file watcher: %w", err)
+	}
+	tr.watcher = watcher
+	tr.stopCh = make(chan struct{})
+
+	// Watch the directory containing the template (ConfigMap mount point)
+	// Kubernetes ConfigMaps are mounted as symlinks, so we watch the directory
+	dir := filepath.Dir(tr.templatePath)
+	if err := watcher.Add(dir); err != nil {
+		watcher.Close()
+		return fmt.Errorf("failed to watch directory %s: %w", dir, err)
+	}
+
+	logger.L().Info("started watching template file for changes",
+		helpers.String("path", tr.templatePath),
+		helpers.String("directory", dir))
+
+	go tr.watchLoop(ctx)
+	return nil
+}
+
+// watchLoop watches for file changes and reloads the template
+func (tr *TemplateRenderer) watchLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			logger.L().Debug("template watcher stopped due to context cancellation")
+			return
+		case <-tr.stopCh:
+			logger.L().Debug("template watcher stopped")
+			return
+		case event, ok := <-tr.watcher.Events:
+			if !ok {
+				return
+			}
+			// ConfigMaps are updated via symlink swaps, which show as CREATE events
+			// Also handle WRITE events for direct file modifications
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
+				// Check if the changed file is our template
+				// For ConfigMap mounts, the actual file is ..data/<filename> linked to <filename>
+				basename := filepath.Base(event.Name)
+				templateBasename := filepath.Base(tr.templatePath)
+				if basename == templateBasename || basename == "..data" {
+					logger.L().Info("template file changed, reloading",
+						helpers.String("event", event.Name),
+						helpers.String("operation", event.Op.String()))
+					if err := tr.ReloadTemplate(); err != nil {
+						logger.L().Error("failed to reload template after file change", helpers.Error(err))
+					} else {
+						logger.L().Info("template reloaded successfully")
+					}
+				}
+			}
+		case err, ok := <-tr.watcher.Errors:
+			if !ok {
+				return
+			}
+			logger.L().Error("template watcher error", helpers.Error(err))
+		}
+	}
+}
+
+// StopWatching stops the file watcher
+func (tr *TemplateRenderer) StopWatching() {
+	if tr.stopCh != nil {
+		close(tr.stopCh)
+		tr.stopCh = nil
+	}
+	if tr.watcher != nil {
+		tr.watcher.Close()
+		tr.watcher = nil
+	}
 }
 
 // formatMemory formats a memory quantity to a human-readable string with proper units (Mi, Gi)
@@ -120,8 +209,12 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 		},
 	}
 
+	tr.mu.RLock()
 	var buf bytes.Buffer
-	if err := tr.template.Execute(&buf, data); err != nil {
+	err := tr.template.Execute(&buf, data)
+	tr.mu.RUnlock()
+
+	if err != nil {
 		return nil, fmt.Errorf("failed to render template: %w", err)
 	}
 

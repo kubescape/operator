@@ -169,10 +169,16 @@ func main() {
 	// Start node agent autoscaler if enabled
 	autoscalerConfig := operatorConfig.NodeAgentAutoscalerConfig()
 	if autoscalerConfig.Enabled {
+		// Get operator deployment name from config, fall back to "operator" if empty
+		operatorDeploymentName := autoscalerConfig.OperatorDeploymentName
+		if operatorDeploymentName == "" {
+			operatorDeploymentName = "operator"
+		}
 		autoscaler, err := nodeagentautoscaler.NewAutoscaler(
 			k8sApi.KubernetesClient,
 			autoscalerConfig,
 			operatorConfig.Namespace(),
+			operatorDeploymentName,
 		)
 		if err != nil {
 			logger.L().Ctx(ctx).Error("failed to initialize node agent autoscaler", helpers.Error(err))

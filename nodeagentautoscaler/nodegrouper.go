@@ -2,6 +2,8 @@ package nodeagentautoscaler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
 	"strings"
 
@@ -101,6 +103,9 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 	for _, group := range groupMap {
 		groups = append(groups, *group)
 	}
+
+	// Detect and resolve naming collisions
+	groups = resolveNameCollisions(groups)
 
 	logger.L().Debug("discovered node groups",
 		helpers.Int("count", len(groups)),
@@ -208,6 +213,39 @@ func sanitizeName(name string) string {
 	}
 
 	return sanitized
+}
+
+// resolveNameCollisions detects sanitized name collisions and adds hash suffixes to resolve them
+// For example, if "m5.large" and "m5_large" both sanitize to "m5-large", this function
+// will rename them to "m5-large-a1b2c3" and "m5-large-d4e5f6" respectively
+func resolveNameCollisions(groups []NodeGroup) []NodeGroup {
+	// Build map of sanitized names to detect collisions
+	sanitizedToIndices := make(map[string][]int)
+	for i := range groups {
+		sanitizedToIndices[groups[i].SanitizedName] = append(sanitizedToIndices[groups[i].SanitizedName], i)
+	}
+
+	// Add short hash suffix for collisions
+	for sanitized, indices := range sanitizedToIndices {
+		if len(indices) > 1 {
+			logger.L().Warning("detected sanitized name collision, adding hash suffix to disambiguate",
+				helpers.String("sanitizedName", sanitized),
+				helpers.Int("collisionCount", len(indices)))
+
+			for _, idx := range indices {
+				hash := shortHash(groups[idx].LabelValue)
+				groups[idx].SanitizedName = sanitized + "-" + hash
+			}
+		}
+	}
+
+	return groups
+}
+
+// shortHash returns a short (6 character) hash of the input string
+func shortHash(input string) string {
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:])[:6]
 }
 
 // isNodeReady checks if a node is in Ready condition
