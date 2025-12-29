@@ -55,6 +55,31 @@ type ServiceScanConfig struct {
 	Interval time.Duration `json:"interval"`
 }
 
+// NodeAgentAutoscalerResourcePercentages defines the resource percentages for autoscaling
+type NodeAgentAutoscalerResourcePercentages struct {
+	RequestCPU    int `json:"requestCPU" mapstructure:"requestCPU"`
+	RequestMemory int `json:"requestMemory" mapstructure:"requestMemory"`
+	LimitCPU      int `json:"limitCPU" mapstructure:"limitCPU"`
+	LimitMemory   int `json:"limitMemory" mapstructure:"limitMemory"`
+}
+
+// NodeAgentAutoscalerResourceBounds defines min/max resource bounds
+type NodeAgentAutoscalerResourceBounds struct {
+	CPU    string `json:"cpu" mapstructure:"cpu"`
+	Memory string `json:"memory" mapstructure:"memory"`
+}
+
+// NodeAgentAutoscalerConfig defines the configuration for node agent autoscaling
+type NodeAgentAutoscalerConfig struct {
+	Enabled             bool                                   `json:"enabled" mapstructure:"enabled"`
+	NodeGroupLabel      string                                 `json:"nodeGroupLabel" mapstructure:"nodeGroupLabel"`
+	ResourcePercentages NodeAgentAutoscalerResourcePercentages `json:"resourcePercentages" mapstructure:"resourcePercentages"`
+	MinResources        NodeAgentAutoscalerResourceBounds      `json:"minResources" mapstructure:"minResources"`
+	MaxResources        NodeAgentAutoscalerResourceBounds      `json:"maxResources" mapstructure:"maxResources"`
+	ReconcileInterval   time.Duration                          `json:"reconcileInterval" mapstructure:"reconcileInterval"`
+	TemplatePath        string                                 `json:"templatePath" mapstructure:"templatePath"`
+}
+
 type Server struct {
 	Account      string `json:"account"`
 	DiscoveryURL string `json:"discoveryUrl"`
@@ -109,6 +134,7 @@ type Config struct {
 	ExcludeJsonPaths              []string                       `mapstructure:"excludeJsonPaths"`
 	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
 	SkipProfilesWithoutInstances  bool                           `mapstructure:"skipProfilesWithoutInstances"`
+	NodeAgentAutoscaler           NodeAgentAutoscalerConfig      `mapstructure:"nodeAgentAutoscaler"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -134,6 +160,7 @@ type IConfig interface {
 	ExcludeJsonPaths() []string
 	SkipProfilesWithoutInstances() bool
 	RulesUpdateEnabled() bool
+	NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig
 }
 
 // OperatorConfig implements IConfig
@@ -256,6 +283,10 @@ func (c *OperatorConfig) RulesUpdateEnabled() bool {
 	return c.serviceConfig.RulesUpdateConfig.Enabled
 }
 
+func (c *OperatorConfig) NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig {
+	return c.serviceConfig.NodeAgentAutoscaler
+}
+
 func LoadConfig(path string) (Config, error) {
 	viper.AddConfigPath(path)
 	viper.SetConfigName("config")
@@ -274,6 +305,20 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("rulesUpdateConfig.enabled", false)
 	viper.SetDefault("rulesUpdateConfig.interval", 5*time.Minute)
 	viper.SetDefault("rulesUpdateConfig.namespace", "default")
+
+	// Node agent autoscaler defaults
+	viper.SetDefault("nodeAgentAutoscaler.enabled", false)
+	viper.SetDefault("nodeAgentAutoscaler.nodeGroupLabel", "node.kubernetes.io/instance-type")
+	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.requestCPU", 2)
+	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.requestMemory", 2)
+	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.limitCPU", 5)
+	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.limitMemory", 5)
+	viper.SetDefault("nodeAgentAutoscaler.minResources.cpu", "100m")
+	viper.SetDefault("nodeAgentAutoscaler.minResources.memory", "180Mi")
+	viper.SetDefault("nodeAgentAutoscaler.maxResources.cpu", "2000m")
+	viper.SetDefault("nodeAgentAutoscaler.maxResources.memory", "4Gi")
+	viper.SetDefault("nodeAgentAutoscaler.reconcileInterval", 5*time.Minute)
+	viper.SetDefault("nodeAgentAutoscaler.templatePath", "/etc/templates/daemonset-template.yaml")
 
 	viper.AutomaticEnv()
 
