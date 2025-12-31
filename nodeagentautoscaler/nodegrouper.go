@@ -190,6 +190,8 @@ func clampQuantity(q, min, max resource.Quantity) resource.Quantity {
 }
 
 // sanitizeName converts a label value to a DNS-safe name
+// TODO: Consider moving to github.com/kubescape/k8s-interface as a shared utility.
+// See: https://github.com/kubescape/kubevuln/blob/main/internal/tools/tools.go#L35
 func sanitizeName(name string) string {
 	// Replace any non-alphanumeric characters with dashes
 	reg := regexp.MustCompile("[^a-zA-Z0-9]+")

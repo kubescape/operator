@@ -167,25 +167,31 @@ func (tr *TemplateRenderer) StopWatching() {
 }
 
 // formatMemory formats a memory quantity to a human-readable string with proper units (Mi, Gi)
+// Only uses Gi for exact multiples of 1Gi to preserve precision (e.g., 1536Mi stays as 1536Mi, not 1Gi)
 func formatMemory(q resource.Quantity) string {
 	bytes := q.Value()
 
-	// Use Gi for values >= 1Gi
-	if bytes >= 1024*1024*1024 {
-		gi := bytes / (1024 * 1024 * 1024)
-		return fmt.Sprintf("%dGi", gi)
+	// Use Gi only for exact multiples of 1Gi to preserve precision
+	gi := int64(1024 * 1024 * 1024)
+	if bytes >= gi && bytes%gi == 0 {
+		return fmt.Sprintf("%dGi", bytes/gi)
 	}
 
-	// Use Mi for most values
-	mi := bytes / (1024 * 1024)
-	if mi > 0 {
-		return fmt.Sprintf("%dMi", mi)
+	// Use Mi for most values (exact multiples of 1Mi)
+	mi := int64(1024 * 1024)
+	if bytes >= mi && bytes%mi == 0 {
+		return fmt.Sprintf("%dMi", bytes/mi)
+	}
+
+	// Use Mi with rounding for non-exact values >= 1Mi
+	if bytes >= mi {
+		return fmt.Sprintf("%dMi", bytes/mi)
 	}
 
 	// Use Ki for small values
-	ki := bytes / 1024
-	if ki > 0 {
-		return fmt.Sprintf("%dKi", ki)
+	ki := int64(1024)
+	if bytes >= ki {
+		return fmt.Sprintf("%dKi", bytes/ki)
 	}
 
 	// Fall back to bytes

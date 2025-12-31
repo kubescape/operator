@@ -181,10 +181,9 @@ func main() {
 			operatorDeploymentName,
 		)
 		if err != nil {
-			logger.L().Ctx(ctx).Error("failed to initialize node agent autoscaler", helpers.Error(err))
-		} else {
-			go autoscaler.Start(ctx)
+			logger.L().Ctx(ctx).Fatal("failed to initialize node agent autoscaler", helpers.Error(err))
 		}
+		go autoscaler.Start(ctx)
 	}
 
 	if operatorConfig.AdmissionControllerEnabled() {

@@ -27,9 +27,9 @@ func TestFormatMemory(t *testing.T) {
 			expected: "1Gi",
 		},
 		{
-			name:     "1536Mi becomes Gi",
+			name:     "1536Mi stays as Mi (preserves precision)",
 			input:    "1536Mi",
-			expected: "1Gi", // 1536Mi >= 1Gi threshold, so uses Gi
+			expected: "1536Mi", // Not an exact Gi multiple, so keeps Mi to preserve precision
 		},
 		{
 			name:     "2Gi",
@@ -42,9 +42,9 @@ func TestFormatMemory(t *testing.T) {
 			expected: "630Mi",
 		},
 		{
-			name:     "bytes to Gi",
-			input:    "1652991180", // ~1.5Gi
-			expected: "1Gi",
+			name:     "bytes to Mi (preserves precision)",
+			input:    "1652991180", // ~1576Mi, not an exact Gi multiple
+			expected: "1576Mi",
 		},
 		{
 			name:     "4Gi",
