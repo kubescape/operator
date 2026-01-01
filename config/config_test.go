@@ -102,6 +102,27 @@ func TestLoadConfig(t *testing.T) {
 					Interval:  5 * time.Minute,
 					Namespace: "default",
 				},
+				NodeAgentAutoscaler: NodeAgentAutoscalerConfig{
+					Enabled:        false,
+					NodeGroupLabel: "node.kubernetes.io/instance-type",
+					ResourcePercentages: NodeAgentAutoscalerResourcePercentages{
+						RequestCPU:    2,
+						RequestMemory: 2,
+						LimitCPU:      5,
+						LimitMemory:   5,
+					},
+					MinResources: NodeAgentAutoscalerResourceBounds{
+						CPU:    "100m",
+						Memory: "180Mi",
+					},
+					MaxResources: NodeAgentAutoscalerResourceBounds{
+						CPU:    "2000m",
+						Memory: "4Gi",
+					},
+					ReconcileInterval:      5 * time.Minute,
+					TemplatePath:           "/etc/templates/daemonset-template.yaml",
+					OperatorDeploymentName: "operator",
+				},
 			},
 		},
 	}

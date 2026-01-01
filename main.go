@@ -27,6 +27,7 @@ import (
 	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/mainhandler"
+	"github.com/kubescape/operator/nodeagentautoscaler"
 	"github.com/kubescape/operator/objectcache"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/servicehandler"
@@ -163,6 +164,26 @@ func main() {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 			}
 		}(mainHandler)
+	}
+
+	// Start node agent autoscaler if enabled
+	autoscalerConfig := operatorConfig.NodeAgentAutoscalerConfig()
+	if autoscalerConfig.Enabled {
+		// Get operator deployment name from config, fall back to "operator" if empty
+		operatorDeploymentName := autoscalerConfig.OperatorDeploymentName
+		if operatorDeploymentName == "" {
+			operatorDeploymentName = "operator"
+		}
+		autoscaler, err := nodeagentautoscaler.NewAutoscaler(
+			k8sApi.KubernetesClient,
+			autoscalerConfig,
+			operatorConfig.Namespace(),
+			operatorDeploymentName,
+		)
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to initialize node agent autoscaler", helpers.Error(err))
+		}
+		go autoscaler.Start(ctx)
 	}
 
 	if operatorConfig.AdmissionControllerEnabled() {
