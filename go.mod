@@ -5,7 +5,7 @@ go 1.24.1
 toolchain go1.24.5
 
 require (
-	github.com/armosec/armoapi-go v0.0.644
+	github.com/armosec/armoapi-go v0.0.673
 	github.com/armosec/registryx v0.0.32
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.32
