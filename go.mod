@@ -6,7 +6,7 @@ toolchain go1.24.5
 
 require (
 	github.com/armosec/armoapi-go v0.0.644
-	github.com/armosec/registryx v0.0.31
+	github.com/armosec/registryx v0.0.32
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.32
 	github.com/aws/aws-sdk-go-v2 v1.36.5
@@ -18,6 +18,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.3.3+incompatible
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-openapi/runtime v0.28.0
 	github.com/google/uuid v1.6.0
 	github.com/goradd/maps v1.2.0
@@ -161,7 +162,6 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/github/go-spdx/v2 v2.3.3 // indirect
