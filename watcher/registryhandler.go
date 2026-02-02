@@ -188,7 +188,7 @@ func (ch *RegistryCommandsHandler) checkRegistry(cmd v1alpha1.OperatorCommand) (
 	return payload, nil
 }
 
-// Uses AWS SDK instead of HTTP calls for ECR to avoid _catalog endpoint issues
+// Uses AWS SDK instead of HTTP calls for ECR to avoid _catalog endpoint issue
 func (ch *RegistryCommandsHandler) checkECRRegistry(registry armotypes.ContainerImageRegistry) ([]byte, error) {
 	var registryURI string
 	if awsRegistry, ok := registry.(*armotypes.AWSImageRegistry); ok {
