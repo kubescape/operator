@@ -571,8 +571,8 @@ github.com/gookit/color v1.2.5/go.mod h1:AhIE+pS6D4Ql0SQWbBeXPHw7gY0/sjHoA4s/n1K
 github.com/gookit/color v1.6.0 h1:JjJXBTk1ETNyqyilJhkTXJYYigHG24TM9Xa2M1xAhRA=
 github.com/gookit/color v1.6.0/go.mod h1:9ACFc7/1IpHGBW8RwuDm/0YEnhg3dwwXpoMsmtyHfjs=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
-github.com/goradd/maps v1.2.0 h1:oYGfDONzuRYpy4i+Ct1YMFR+eiI0VkNwghDu1KF03OQ=
-github.com/goradd/maps v1.2.0/go.mod h1:O3i5k17BAjHa9h5dzGWWfRJizF03umiBDZsNSqFdbVA=
+github.com/goradd/maps v1.3.0 h1:toF7ALsgbjQBmmmRSACTAEO+9g2rApW8dU1WirFQyrE=
+github.com/goradd/maps v1.3.0/go.mod h1:O3i5k17BAjHa9h5dzGWWfRJizF03umiBDZsNSqFdbVA=
 github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
 github.com/gorilla/securecookie v1.1.1/go.mod h1:ra0sb63/xPlUeL+yeDciTfxMRAA+MP+HVt/4epWDjd4=
