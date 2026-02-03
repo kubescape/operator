@@ -21,7 +21,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-openapi/runtime v0.28.0
 	github.com/google/uuid v1.6.0
-	github.com/goradd/maps v1.2.0
+	github.com/goradd/maps v1.3.0
 	github.com/gorilla/mux v1.8.1
 	github.com/kubescape/backend v0.0.28
 	github.com/kubescape/go-logger v0.0.26
