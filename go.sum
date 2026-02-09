@@ -149,8 +149,8 @@ github.com/armosec/armoapi-go v0.0.673 h1:Pwsf/K2Y1U8IExntU0iD+F0iAz1ys6BhiPyqEu
 github.com/armosec/armoapi-go v0.0.673/go.mod h1:9jAH0g8ZsryhiBDd/aNMX4+n10bGwTx/doWCyyjSxts=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
 github.com/armosec/gojay v1.2.17/go.mod h1:vuvX3DlY0nbVrJ0qCklSS733AWMoQboq3cFyuQW9ybc=
-github.com/armosec/registryx v0.0.32 h1:rWFH8RavYk7OUsmJ1h4a2Jo4DNZtGb8UNsJbRaiR+74=
-github.com/armosec/registryx v0.0.32/go.mod h1:dm7/1yJllY2MDS8oxGyR+64NAepwDXV4/2Q5mnD8yHs=
+github.com/armosec/registryx v0.0.33 h1:skEwSEg7/fWM3hq0iMJqIFp8tnbnXJrrwhpE6rZ3zZ4=
+github.com/armosec/registryx v0.0.33/go.mod h1:dm7/1yJllY2MDS8oxGyR+64NAepwDXV4/2Q5mnD8yHs=
 github.com/armosec/utils-go v0.0.58 h1:g9RnRkxZAmzTfPe2ruMo2OXSYLwVSegQSkSavOfmaIE=
 github.com/armosec/utils-go v0.0.58/go.mod h1:CdqKHKruVJMCxGcZXYW9J+5P9FZou8dMzVpcB0Xt8pk=
 github.com/armosec/utils-k8s-go v0.0.32 h1:jpyS8cTWFaLWmqp4pFu2f5kWMa4KhZIUV8iA2yRdtkk=
