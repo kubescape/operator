@@ -56,4 +56,5 @@ func TestR2000(t *testing.T) {
 	assert.Equal(t, "Exec to pod detected on pod test-pod", result.GetRuleAlert().RuleDescription)
 	assert.Equal(t, "test-pod", result.GetRuntimeAlertK8sDetails().PodName)
 	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().Namespace)
+	assert.Equal(t, "containerd://abcdef1234567890", result.GetRuntimeAlertK8sDetails().ContainerID)
 }

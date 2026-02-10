@@ -71,16 +71,28 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 
 	client := access.GetClientset()
 
-	workloadKind, workloadName, workloadNamespace, nodeName, err := GetControllerDetails(event, client)
+	pod, err := GetPodDetails(client, event.GetName(), event.GetNamespace())
 	if err != nil {
-		logger.L().Error("Failed to get parent workload details", helpers.Error(err))
+		logger.L().Error("Failed to get pod details", helpers.Error(err))
 		return nil
 	}
+	workloadKind, workloadName, workloadNamespace := ExtractPodOwner(pod, client)
+	nodeName := pod.Spec.NodeName
 
 	containerName, err := GetContainerNameFromExecToPodEvent(event)
 	if err != nil {
 		logger.L().Error("Failed to get container name from exec to pod event", helpers.Error(err))
 		containerName = ""
+	}
+
+	var containerID string
+	if containerName != "" {
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.Name == containerName {
+				containerID = cs.ContainerID
+				break
+			}
+		}
 	}
 
 	cmdline, err := getCommandLine(event.GetObject().(*unstructured.Unstructured))
@@ -134,6 +146,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 			WorkloadKind:      workloadKind,
 			NodeName:          nodeName,
 			ContainerName:     containerName,
+			ContainerID:       containerID,
 		},
 		RuleID: R2000ID,
 		RuntimeProcessDetails: apitypes.ProcessTree{

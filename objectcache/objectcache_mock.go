@@ -47,6 +47,14 @@ func initializeClient(client kubernetes.Interface) {
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			PodIP: "192.168.1.1",
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:        "test-container",
+					ContainerID: "containerd://abcdef1234567890",
+					Image:       "nginx:1.14.2",
+					ImageID:     "docker-pullable://nginx@sha256:abc123def456",
+				},
+			},
 		},
 	}
 
