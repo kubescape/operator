@@ -4,8 +4,10 @@ import (
 	"context"
 
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -19,6 +21,16 @@ func (om KubernetesCacheMockImpl) GetClientset() kubernetes.Interface {
 }
 
 func initializeClient(client kubernetes.Interface) {
+	// Create a ReplicaSet first
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload",
+			Namespace: "test-namespace",
+			UID:       types.UID("test-replicaset-uid-12345"),
+		},
+	}
+	client.AppsV1().ReplicaSets("test-namespace").Create(context.TODO(), replicaSet, metav1.CreateOptions{})
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -32,6 +44,7 @@ func initializeClient(client kubernetes.Interface) {
 				{
 					Kind: "ReplicaSet",
 					Name: "test-workload",
+					UID:  types.UID("test-replicaset-uid-12345"),
 				},
 			},
 		},
@@ -47,6 +60,14 @@ func initializeClient(client kubernetes.Interface) {
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			PodIP: "192.168.1.1",
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:        "test-container",
+					ContainerID: "containerd://abcdef1234567890",
+					Image:       "nginx:1.14.2",
+					ImageID:     "docker-pullable://nginx@sha256:abc123def456",
+				},
+			},
 		},
 	}
 
