@@ -69,11 +69,14 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access ob
 
 	client := access.GetClientset()
 
-	workloadKind, workloadName, workloadNamespace, nodeName, err := GetControllerDetails(event, client)
+	_, workloadKind, workloadName, workloadNamespace, nodeName, err := GetControllerDetails(event, client)
 	if err != nil {
 		logger.L().Error("Failed to get parent workload details", helpers.Error(err))
 		return nil
 	}
+
+	workloadUID := GetWorkloadUID(client, workloadKind, workloadName, workloadNamespace)
+
 	ruleFailure := GenericRuleFailure{
 		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{
 			AlertName:      rule.Name(),
@@ -111,6 +114,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access ob
 			WorkloadName:      workloadName,
 			WorkloadNamespace: workloadNamespace,
 			WorkloadKind:      workloadKind,
+			WorkloadUID:       workloadUID,
 			NodeName:          nodeName,
 		},
 		RuleID: R2001ID,

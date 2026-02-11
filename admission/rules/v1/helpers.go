@@ -12,28 +12,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// GetControllerDetails returns the kind, name, namespace, and node name of the controller that owns the pod.
-func GetControllerDetails(event admission.Attributes, clientset kubernetes.Interface) (string, string, string, string, error) {
-	podName, namespace := event.GetName(), event.GetNamespace()
-
-	if podName == "" || namespace == "" {
-		return "", "", "", "", fmt.Errorf("invalid pod details from admission event")
-	}
-
-	pod, err := GetPodDetails(clientset, podName, namespace)
-	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to get pod details: %w", err)
-	}
-
-	workloadKind, workloadName, workloadNamespace := ExtractPodOwner(pod, clientset)
-	nodeName := pod.Spec.NodeName
-
-	return workloadKind, workloadName, workloadNamespace, nodeName, nil
-}
-
-// GetControllerDetailsWithPod returns the pod and controller details (kind, name, namespace, and node name).
-// This variant returns the pod object to allow further inspection of container details.
-func GetControllerDetailsWithPod(event admission.Attributes, clientset kubernetes.Interface) (*corev1.Pod, string, string, string, string, error) {
+// GetControllerDetails returns the pod and controller details (pod, kind, name, namespace, and node name).
+func GetControllerDetails(event admission.Attributes, clientset kubernetes.Interface) (*corev1.Pod, string, string, string, string, error) {
 	podName, namespace := event.GetName(), event.GetNamespace()
 
 	if podName == "" || namespace == "" {
@@ -121,9 +101,18 @@ func GetContainerNameFromExecToPodEvent(event admission.Attributes) (string, err
 
 // GetContainerID returns the container ID for the given container name from the pod status.
 // It checks regular containers, init containers, and ephemeral containers.
-// Returns an empty string if the container is not found or containerName is empty.
+// When containerName is empty, falls back to the first container (matching Kubernetes default behavior).
+// Returns an empty string if the container is not found or pod is nil.
 func GetContainerID(pod *corev1.Pod, containerName string) string {
-	if containerName == "" || pod == nil {
+	if pod == nil {
+		return ""
+	}
+
+	// If containerName is empty, Kubernetes defaults to the first container
+	if containerName == "" {
+		if len(pod.Status.ContainerStatuses) > 0 {
+			return pod.Status.ContainerStatuses[0].ContainerID
+		}
 		return ""
 	}
 
