@@ -52,6 +52,7 @@ func TestR2000(t *testing.T) {
 	assert.Equal(t, "test-workload", result.GetRuntimeAlertK8sDetails().WorkloadName)
 	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().WorkloadNamespace)
 	assert.Equal(t, "ReplicaSet", result.GetRuntimeAlertK8sDetails().WorkloadKind)
+	assert.Equal(t, "test-replicaset-uid-12345", result.GetRuntimeAlertK8sDetails().WorkloadUID)
 	assert.Equal(t, "test-node", result.GetRuntimeAlertK8sDetails().NodeName)
 	assert.Equal(t, "Exec to pod detected on pod test-pod", result.GetRuleAlert().RuleDescription)
 	assert.Equal(t, "test-pod", result.GetRuntimeAlertK8sDetails().PodName)
