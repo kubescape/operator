@@ -71,7 +71,7 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 
 	client := access.GetClientset()
 
-	pod, workloadKind, workloadName, workloadNamespace, nodeName, err := GetControllerDetails(event, client)
+	pod, workloadKind, workloadName, workloadNamespace, workloadUID, nodeName, err := GetControllerDetails(event, client)
 	if err != nil {
 		logger.L().Error("Failed to get pod details", helpers.Error(err))
 		return nil
@@ -84,7 +84,6 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 	}
 
 	containerID := GetContainerID(pod, containerName)
-	workloadUID := GetWorkloadUID(client, workloadKind, workloadName, workloadNamespace)
 
 	cmdline, err := getCommandLine(event.GetObject().(*unstructured.Unstructured))
 	if err != nil {
