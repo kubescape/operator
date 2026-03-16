@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -142,5 +143,74 @@ func GetContainerID(pod *corev1.Pod, containerName string) string {
 		}
 	}
 
+	return ""
+}
+
+// GetContainerImage returns the container image name for the given container name from the pod spec.
+// When containerName is empty, falls back to the first container (matching Kubernetes default behavior).
+func GetContainerImage(pod *corev1.Pod, containerName string) string {
+	if pod == nil {
+		return ""
+	}
+
+	if containerName == "" {
+		if len(pod.Spec.Containers) > 0 {
+			return pod.Spec.Containers[0].Image
+		}
+		return ""
+	}
+
+	for _, c := range pod.Spec.Containers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	for _, c := range pod.Spec.InitContainers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	for _, c := range pod.Spec.EphemeralContainers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	return ""
+}
+
+// GetContainerImageDigest returns the image digest (from ImageID) for the given container name from the pod status.
+// The "docker-pullable://" prefix is stripped so the result is a clean registry digest reference.
+// When containerName is empty, falls back to the first container (matching Kubernetes default behavior).
+func GetContainerImageDigest(pod *corev1.Pod, containerName string) string {
+	if pod == nil {
+		return ""
+	}
+
+	extractDigest := func(imageID string) string {
+		return strings.TrimPrefix(imageID, "docker-pullable://")
+	}
+
+	if containerName == "" {
+		if len(pod.Status.ContainerStatuses) > 0 {
+			return extractDigest(pod.Status.ContainerStatuses[0].ImageID)
+		}
+		return ""
+	}
+
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == containerName {
+			return extractDigest(cs.ImageID)
+		}
+	}
+	for _, cs := range pod.Status.InitContainerStatuses {
+		if cs.Name == containerName {
+			return extractDigest(cs.ImageID)
+		}
+	}
+	for _, cs := range pod.Status.EphemeralContainerStatuses {
+		if cs.Name == containerName {
+			return extractDigest(cs.ImageID)
+		}
+	}
 	return ""
 }

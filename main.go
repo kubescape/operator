@@ -125,9 +125,11 @@ func main() {
 		logger.L().Ctx(ctx).Info("cloud metadata retrieved successfully", helpers.Interface("cloudMetadata", cloudMetadata))
 	}
 
+	clusterUID := utils.GetClusterUID(k8sApi.GetKubernetesClient())
+
 	var exporter exporters.Exporter
 	if exporterConfig := operatorConfig.HttpExporterConfig(); exporterConfig != nil {
-		exporter, err = exporters.InitHTTPExporter(*exporterConfig, operatorConfig.ClusterName(), cloudMetadata)
+		exporter, err = exporters.InitHTTPExporter(*exporterConfig, operatorConfig.ClusterName(), cloudMetadata, clusterUID)
 		if err != nil {
 			logger.L().Ctx(ctx).Fatal("failed to initialize HTTP exporter", helpers.Error(err))
 		}
