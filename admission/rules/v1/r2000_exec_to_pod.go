@@ -138,6 +138,8 @@ func (rule *R2000ExecToPod) ProcessEvent(event admission.Attributes, access obje
 			NodeName:          nodeName,
 			ContainerName:     containerName,
 			ContainerID:       containerID,
+			Image:             GetContainerImage(pod, containerName),
+			ImageDigest:       GetContainerImageDigest(pod, containerName),
 		},
 		RuleID: R2000ID,
 		RuntimeProcessDetails: apitypes.ProcessTree{

@@ -32,6 +32,7 @@ type HTTPExporter struct {
 	config      HTTPExporterConfig
 	Host        string `json:"host"`
 	ClusterName string `json:"clusterName"`
+	ClusterUID  string `json:"clusterUID"`
 	httpClient  *http.Client
 	// alertCount is the number of alerts sent in the last minute, used to limit the number of alerts sent, so we don't overload the system or reach the rate limit
 	alertCount         int
@@ -77,13 +78,14 @@ func (config *HTTPExporterConfig) Validate() error {
 }
 
 // InitHTTPExporter initializes an HTTPExporter with the given URL, headers, timeout, and method
-func InitHTTPExporter(config HTTPExporterConfig, clusterName string, cloudMetadata *apitypes.CloudMetadata) (*HTTPExporter, error) {
+func InitHTTPExporter(config HTTPExporterConfig, clusterName string, cloudMetadata *apitypes.CloudMetadata, clusterUID string) (*HTTPExporter, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
 	return &HTTPExporter{
 		ClusterName: clusterName,
+		ClusterUID:  clusterUID,
 		config:      config,
 		httpClient: &http.Client{
 			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
@@ -104,6 +106,7 @@ func (exporter *HTTPExporter) sendAlertLimitReached() {
 		},
 		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
 			ClusterName: exporter.ClusterName,
+			ClusterUID:  exporter.ClusterUID,
 			NodeName:    "Operator",
 		},
 	}
@@ -122,6 +125,7 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 	// populate the RuntimeAlert struct with the data from the failedRule
 	k8sDetails := ruleFailure.GetRuntimeAlertK8sDetails()
 	k8sDetails.ClusterName = exporter.ClusterName
+	k8sDetails.ClusterUID = exporter.ClusterUID
 
 	httpAlert := apitypes.RuntimeAlert{
 		Message:                ruleFailure.GetRuleAlert().RuleDescription,

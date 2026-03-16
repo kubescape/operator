@@ -69,7 +69,7 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access ob
 
 	client := access.GetClientset()
 
-	_, workloadKind, workloadName, workloadNamespace, workloadUID, nodeName, err := GetControllerDetails(event, client)
+	pod, workloadKind, workloadName, workloadNamespace, workloadUID, nodeName, err := GetControllerDetails(event, client)
 	if err != nil {
 		logger.L().Error("Failed to get parent workload details", helpers.Error(err))
 		return nil
@@ -114,6 +114,8 @@ func (rule *R2001PortForward) ProcessEvent(event admission.Attributes, access ob
 			WorkloadKind:      workloadKind,
 			WorkloadUID:       workloadUID,
 			NodeName:          nodeName,
+			Image:             GetContainerImage(pod, ""),
+			ImageDigest:       GetContainerImageDigest(pod, ""),
 		},
 		RuleID: R2001ID,
 	}

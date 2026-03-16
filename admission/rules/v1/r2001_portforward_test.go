@@ -49,4 +49,7 @@ func TestR2001(t *testing.T) {
 	assert.Equal(t, "Port forward detected on pod test-pod", result.GetRuleAlert().RuleDescription)
 	assert.Equal(t, "test-pod", result.GetRuntimeAlertK8sDetails().PodName)
 	assert.Equal(t, "test-namespace", result.GetRuntimeAlertK8sDetails().Namespace)
+	// Image fields should fall back to first container (no container name for port-forward)
+	assert.Equal(t, "nginx:1.14.2", result.GetRuntimeAlertK8sDetails().Image)
+	assert.Equal(t, "nginx@sha256:abc123def456", result.GetRuntimeAlertK8sDetails().ImageDigest)
 }
