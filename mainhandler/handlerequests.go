@@ -405,6 +405,12 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					continue
 				}
 
+				noContainerSlug, _ := instanceID.GetSlug(true)
+				if ok := slugs[noContainerSlug]; ok {
+					// container profile already scanned for this workload, skip remaining containers
+					continue
+				}
+
 				// get container data
 				containerData, err := utils.PodToContainerData(mainHandler.k8sAPI, pod, instanceID, mainHandler.config.ClusterName())
 				if err != nil {
@@ -412,7 +418,6 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 					continue
 				}
 
-				noContainerSlug, _ := instanceID.GetSlug(true)
 				if profile := utils.GetContainerProfileForRelevancyScan(ctx, mainHandler.ksStorageClient, noContainerSlug, ns); profile != nil {
 					cmd := utils.GetContainerProfileScanCommand(profile, pod)
 
