@@ -26,6 +26,9 @@ func SkipContainerProfile(annotations map[string]string) (bool, error) {
 		return true, fmt.Errorf("no annotations") // skip
 	}
 
+	if _, ok := annotations[helpersv1.ReportSeriesIdMetadataKey]; ok {
+		return true, nil // skip TS profiles
+	}
 	if status, ok := annotations[helpersv1.StatusMetadataKey]; ok && !slices.Contains(ann, status) {
 		return true, fmt.Errorf("invalid status")
 	}
