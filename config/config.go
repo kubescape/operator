@@ -7,12 +7,7 @@ import (
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
-	"github.com/kubescape/backend/pkg/servicediscovery"
-	"github.com/kubescape/backend/pkg/servicediscovery/schema"
-	v2 "github.com/kubescape/backend/pkg/servicediscovery/v2"
 	"github.com/kubescape/backend/pkg/utils"
-	"github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
 	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/admission/rulesupdate"
 	"github.com/spf13/viper"
@@ -346,18 +341,6 @@ func LoadClusterConfig() (utilsmetadata.ClusterConfig, error) {
 	}
 
 	return *clusterConfig, err
-}
-
-func GetServiceURLs(filePath string) (schema.IBackendServices, error) {
-	pathAndFileName, present := os.LookupEnv("SERVICES")
-	if !present {
-		pathAndFileName = filePath
-	}
-	logger.L().Debug("discovery service URLs from file", helpers.String("path", pathAndFileName))
-
-	return servicediscovery.GetServices(
-		v2.NewServiceDiscoveryFileV2(pathAndFileName),
-	)
 }
 
 func ValidateConfig(config IConfig) error {
