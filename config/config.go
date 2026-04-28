@@ -74,6 +74,7 @@ type NodeAgentAutoscalerConfig struct {
 	ReconcileInterval      time.Duration                          `json:"reconcileInterval" mapstructure:"reconcileInterval"`
 	TemplatePath           string                                 `json:"templatePath" mapstructure:"templatePath"`
 	OperatorDeploymentName string                                 `json:"operatorDeploymentName" mapstructure:"operatorDeploymentName"`
+	GoMemLimitPercentage   float64                                `json:"goMemLimitPercentage" mapstructure:"goMemLimitPercentage"`
 }
 
 type Server struct {
@@ -316,6 +317,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("nodeAgentAutoscaler.reconcileInterval", 5*time.Minute)
 	viper.SetDefault("nodeAgentAutoscaler.templatePath", "/etc/templates/daemonset-template.yaml")
 	viper.SetDefault("nodeAgentAutoscaler.operatorDeploymentName", "operator")
+	viper.SetDefault("nodeAgentAutoscaler.goMemLimitPercentage", 0.8)
 
 	viper.AutomaticEnv()
 
