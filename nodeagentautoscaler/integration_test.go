@@ -14,10 +14,11 @@ import (
 // TestIntegration_HelmGeneratedTemplate tests rendering with the actual Helm-generated template
 // Run with: go test -tags=integration -v -run TestIntegration_HelmGeneratedTemplate
 // Requires the template file to be extracted first from Helm:
-//   helm template test ../../helm-charts/charts/kubescape-operator \
-//     --set nodeAgent.autoscaler.enabled=true --set clusterName=test \
-//     | grep -A 300 "daemonset-template.yaml:" | tail -n +2 | sed 's/^    //' \
-//     | awk '/^---/{exit} {print}' > /tmp/test-daemonset-template.yaml
+//
+//	helm template test ../../helm-charts/charts/kubescape-operator \
+//	  --set nodeAgent.autoscaler.enabled=true --set clusterName=test \
+//	  | grep -A 300 "daemonset-template.yaml:" | tail -n +2 | sed 's/^    //' \
+//	  | awk '/^---/{exit} {print}' > /tmp/test-daemonset-template.yaml
 func TestIntegration_HelmGeneratedTemplate(t *testing.T) {
 	templatePath := "/tmp/test-daemonset-template.yaml"
 
@@ -27,7 +28,7 @@ func TestIntegration_HelmGeneratedTemplate(t *testing.T) {
 	}
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath)
+	renderer, err := NewTemplateRenderer(templatePath, 0.8)
 	require.NoError(t, err)
 
 	// Test data simulating a node group
@@ -76,4 +77,3 @@ func TestIntegration_HelmGeneratedTemplate(t *testing.T) {
 		container.Resources.Limits.Cpu().String(),
 		container.Resources.Limits.Memory().String())
 }
-
