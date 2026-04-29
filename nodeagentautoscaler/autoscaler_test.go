@@ -423,14 +423,14 @@ func TestGenerateDaemonSetName(t *testing.T) {
 func TestNewAutoscaler(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	cfg := config.NodeAgentAutoscalerConfig{
-		Enabled:           true,
-		NodeGroupLabel:    "node.kubernetes.io/instance-type",
-		ReconcileInterval: 5 * time.Minute,
-		TemplatePath:      "/tmp/nonexistent-template.yaml", // Will fail
+		Enabled:              true,
+		GoMemLimitPercentage: 0.8,
+		NodeGroupLabel:       "node.kubernetes.io/instance-type",
+		ReconcileInterval:    5 * time.Minute,
+		TemplatePath:         "/tmp/nonexistent-template.yaml", // Will fail
 	}
 
 	// Should fail because template doesn't exist
 	_, err := NewAutoscaler(client, cfg, "kubescape", "operator")
 	assert.Error(t, err)
 }
-
