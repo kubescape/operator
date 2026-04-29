@@ -122,6 +122,7 @@ func TestLoadConfig(t *testing.T) {
 					ReconcileInterval:      5 * time.Minute,
 					TemplatePath:           "/etc/templates/daemonset-template.yaml",
 					OperatorDeploymentName: "operator",
+					GoMemLimitPercentage:   0.8,
 				},
 			},
 		},

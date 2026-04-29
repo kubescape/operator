@@ -25,6 +25,8 @@ type TemplateData struct {
 	NodeGroupLabel string
 	// Resources contains the calculated resource requests and limits
 	Resources TemplateResources
+	// GoMemLimit is the GOMEMLIMIT value derived from the memory limit and percentage (e.g., "360MiB")
+	GoMemLimit string
 }
 
 // TemplateResources holds the resource values for template rendering
@@ -41,17 +43,23 @@ type TemplateResourcePair struct {
 
 // TemplateRenderer loads and renders DaemonSet templates
 type TemplateRenderer struct {
-	templatePath string
-	template     *template.Template
-	mu           sync.RWMutex // Protects template during reload
-	watcher      *fsnotify.Watcher
-	stopCh       chan struct{}
+	templatePath         string
+	template             *template.Template
+	mu                   sync.RWMutex // Protects template during reload
+	watcher              *fsnotify.Watcher
+	stopCh               chan struct{}
+	goMemLimitPercentage float64
 }
 
 // NewTemplateRenderer creates a new TemplateRenderer
-func NewTemplateRenderer(templatePath string) (*TemplateRenderer, error) {
+func NewTemplateRenderer(templatePath string, goMemLimitPercentage float64) (*TemplateRenderer, error) {
+	if goMemLimitPercentage <= 0 || goMemLimitPercentage > 1.0 {
+		return nil, fmt.Errorf("goMemLimitPercentage %v is out of valid range (0, 1.0]", goMemLimitPercentage)
+	}
+
 	tr := &TemplateRenderer{
-		templatePath: templatePath,
+		templatePath:         templatePath,
+		goMemLimitPercentage: goMemLimitPercentage,
 	}
 
 	if err := tr.loadTemplate(); err != nil {
@@ -200,6 +208,9 @@ func formatMemory(q resource.Quantity) string {
 
 // RenderDaemonSet renders a DaemonSet for the given node group and resources
 func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources CalculatedResources) (*appsv1.DaemonSet, error) {
+	limitBytes := resources.Limits.Memory.Value()
+	goMemLimitMiB := int64(float64(limitBytes) * tr.goMemLimitPercentage / (1024 * 1024))
+
 	data := TemplateData{
 		Name:           fmt.Sprintf("node-agent-%s", group.SanitizedName),
 		NodeGroupLabel: group.LabelValue,
@@ -213,6 +224,7 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 				Memory: formatMemory(resources.Limits.Memory),
 			},
 		},
+		GoMemLimit: fmt.Sprintf("%dMiB", goMemLimitMiB),
 	}
 
 	tr.mu.RLock()
@@ -236,7 +248,8 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 		helpers.String("requestCPU", data.Resources.Requests.CPU),
 		helpers.String("requestMemory", data.Resources.Requests.Memory),
 		helpers.String("limitCPU", data.Resources.Limits.CPU),
-		helpers.String("limitMemory", data.Resources.Limits.Memory))
+		helpers.String("limitMemory", data.Resources.Limits.Memory),
+		helpers.String("goMemLimit", data.GoMemLimit))
 
 	return ds, nil
 }
