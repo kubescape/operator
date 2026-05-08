@@ -127,6 +127,9 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageR
 	if err != nil {
 		return fmt.Errorf("failed to get registry client: %w", err)
 	}
+	if err := populateGitLabRepositoriesForScan(ctx, client, imageRegistry); err != nil {
+		return fmt.Errorf("failed to prepare registry scan: %w", err)
+	}
 
 	images, err := client.GetImagesToScan(ctx)
 	if err != nil {
@@ -143,6 +146,20 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageR
 		return fmt.Errorf("failed to send scan commands: %w", err)
 	}
 
+	return nil
+}
+
+func populateGitLabRepositoriesForScan(ctx context.Context, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry) error {
+	base := imageRegistry.GetBase()
+	if base.Provider != apitypes.Gitlab || len(base.Repositories) > 0 {
+		return nil
+	}
+
+	repositories, err := client.GetAllRepositories(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get GitLab repositories: %w", err)
+	}
+	base.Repositories = repositories
 	return nil
 }
 
