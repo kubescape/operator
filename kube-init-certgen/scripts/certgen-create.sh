@@ -8,7 +8,6 @@ OUT_DIR=""
 CA_NAME="ca"
 CERT_NAME="cert"
 KEY_NAME="key"
-SECRET_TYPE="Opaque"
 DAYS="36500"
 
 usage() {
@@ -21,7 +20,6 @@ Usage: certgen-create.sh [flags]
       --ca-name        Key in the secret for the CA cert (default: ca)
       --cert-name      Key in the secret for the leaf cert (default: cert)
       --key-name       Key in the secret for the leaf key (default: key)
-      --secret-type    Type of the secret (default: Opaque)
       --days           Validity in days (default: 36500 ~= 100y)
 EOF
   exit 2
@@ -36,7 +34,6 @@ while [[ $# -gt 0 ]]; do
     --ca-name)        CA_NAME="$2";     shift 2;;
     --cert-name)      CERT_NAME="$2";   shift 2;;
     --key-name)       KEY_NAME="$2";    shift 2;;
-    --secret-type)    SECRET_TYPE="$2"; shift 2;;
     --days)           DAYS="$2";        shift 2;;
     -h|--help)        usage;;
     *) echo "unknown flag: $1" >&2; usage;;
@@ -103,7 +100,6 @@ cp "$TMP/tls.key" "$OUT_DIR/$KEY_NAME"
 
 # Persist to a new secret so subsequent pod restarts and the patch step can reuse it.
 kubectl -n "$NAMESPACE" create secret generic "$SECRET_NAME" \
-  --type="$SECRET_TYPE" \
   --from-file="${CA_NAME}=$TMP/ca.crt" \
   --from-file="${CERT_NAME}=$TMP/tls.crt" \
   --from-file="${KEY_NAME}=$TMP/tls.key"
