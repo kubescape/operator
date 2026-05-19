@@ -25,7 +25,9 @@ import (
 	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
 	"github.com/kubescape/operator/admission/rulesupdate"
 	"github.com/kubescape/operator/admission/webhook"
+	securityexceptionv1 "github.com/kubescape/operator/api/kubescape/v1"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/controllers"
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/nodeagentautoscaler"
 	"github.com/kubescape/operator/objectcache"
@@ -33,8 +35,11 @@ import (
 	"github.com/kubescape/operator/servicehandler"
 	"github.com/kubescape/operator/utils"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	restclient "k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
@@ -139,6 +144,40 @@ func main() {
 
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi, exporter, ksStorageClient)
+	{
+		scheme := runtime.NewScheme()
+		if err := corev1.AddToScheme(scheme); err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to add core scheme", helpers.Error(err))
+		}
+		if err := securityexceptionv1.AddToScheme(scheme); err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to add security exception scheme", helpers.Error(err))
+		}
+
+		mgr, err := ctrl.NewManager(k8sConfig, ctrl.Options{
+			Scheme: scheme,
+			Metrics: metricsserver.Options{
+				BindAddress: "0",
+			},
+		})
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to create security exception manager", helpers.Error(err))
+		}
+
+		dispatcher := controllers.NewRescanDispatcher(operatorConfig, mainHandler.EventWorkerPool())
+		handler := controllers.NewSecurityExceptionWatchHandler(mgr.GetClient(), operatorConfig, dispatcher)
+		if err := handler.SetupWithManager(mgr); err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to setup security exception handler", helpers.Error(err))
+		}
+		if err := mgr.Add(handler); err != nil {
+			logger.L().Ctx(ctx).Fatal("failed to register security exception handler", helpers.Error(err))
+		}
+
+		go func() {
+			if err := mgr.Start(ctx); err != nil {
+				logger.L().Ctx(ctx).Fatal("security exception manager stopped", helpers.Error(err))
+			}
+		}()
+	}
 
 	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), operatorConfig)
