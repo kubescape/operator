@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
@@ -16,87 +15,24 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/pager"
 )
 
-// ContainerProfileWatch watches and processes changes on ContainerProfile resources
+// ContainerProfileWatch uses the generic resource watcher for ContainerProfiles
 func (wh *WatchHandler) ContainerProfileWatch(ctx context.Context, workerPool *ants.PoolWithFunc) {
-	eventQueue := NewCooldownQueueWithParams(15*time.Second, 1*time.Second)
-	cmdCh := make(chan *apis.Command)
-	errorCh := make(chan error)
-	apEvents := make(<-chan watch.Event)
-
-	// The watcher is considered unavailable by default
-	apWatcherUnavailable := make(chan struct{})
-	go func() {
-		apWatcherUnavailable <- struct{}{}
-	}()
-
-	go wh.HandleContainerProfileEvents(eventQueue, cmdCh, errorCh)
-
-	// notifyWatcherDown notifies the appropriate channel that the watcher
-	// is down and backs off for the retry interval to not produce
-	// unnecessary events
-	notifyWatcherDown := func(watcherDownCh chan<- struct{}) {
-		go func() { watcherDownCh <- struct{}{} }()
-		time.Sleep(retryInterval)
-	}
-
-	// get the initial profiles
-	if err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return wh.storageClient.SpdxV1beta1().ContainerProfiles("").List(ctx, opts)
-	}).EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-		ap := obj.(*spdxv1beta1.ContainerProfile)
-		// simulate "add" event
-		eventQueue.Enqueue(watch.Event{
-			Type:   watch.Added,
-			Object: ap,
-		})
-		return nil
-	}); err != nil {
-		logger.L().Ctx(ctx).Error("failed to list existing container profiles", helpers.Error(err))
-	}
-
-	var watcher watch.Interface
-	var err error
-	for {
-		select {
-		case apEvent, ok := <-apEvents:
-			if ok {
-				eventQueue.Enqueue(apEvent)
-			} else {
-				notifyWatcherDown(apWatcherUnavailable)
-			}
-		case cmd, ok := <-cmdCh:
-			if ok {
-				_ = utils.AddCommandToChannel(ctx, wh.cfg, cmd, workerPool)
-			} else {
-				notifyWatcherDown(apWatcherUnavailable)
-			}
-		case err, ok := <-errorCh:
-			if ok {
-				logger.L().Ctx(ctx).Error("error in ContainerProfileWatch", helpers.Error(err))
-			} else {
-				notifyWatcherDown(apWatcherUnavailable)
-			}
-		case <-apWatcherUnavailable:
-			if watcher != nil {
-				watcher.Stop()
-			}
-
-			watcher, err = wh.getContainerProfileWatcher()
-			if err != nil {
-				notifyWatcherDown(apWatcherUnavailable)
-			} else {
-				apEvents = watcher.ResultChan()
-			}
+	GenericResourceWatch[*spdxv1beta1.ContainerProfile](ctx, wh.cfg, workerPool, func(ctx context.Context, opts metav1.ListOptions) ([]*spdxv1beta1.ContainerProfile, string, string, error) {
+		list, err := wh.storageClient.SpdxV1beta1().ContainerProfiles("").List(ctx, opts)
+		if err != nil {
+			return nil, "", "", err
 		}
-	}
-
+		items := make([]*spdxv1beta1.ContainerProfile, len(list.Items))
+		for i := range list.Items {
+			items[i] = &list.Items[i]
+		}
+		return items, list.Continue, list.ResourceVersion, nil
+	}, wh.HandleContainerProfileEvents)
 }
 
 func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
@@ -153,11 +89,6 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 		logger.L().Info("scanning container profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
 		producedCommands <- cmd
 	}
-}
-
-func (wh *WatchHandler) getContainerProfileWatcher() (watch.Interface, error) {
-	// no need to support ExcludeNamespaces and IncludeNamespaces since node-agent will respect them as well
-	return wh.storageClient.SpdxV1beta1().ContainerProfiles("").Watch(context.Background(), metav1.ListOptions{})
 }
 
 func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
