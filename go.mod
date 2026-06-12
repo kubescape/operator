@@ -3,7 +3,7 @@ module github.com/kubescape/operator
 go 1.25.8
 
 require (
-	github.com/armosec/armoapi-go v0.0.673
+	github.com/armosec/armoapi-go v0.0.719
 	github.com/armosec/registryx v0.0.35
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.35
