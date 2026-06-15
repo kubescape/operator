@@ -132,6 +132,11 @@ type Config struct {
 	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
 	SkipProfilesWithoutInstances  bool                           `mapstructure:"skipProfilesWithoutInstances"`
 	NodeAgentAutoscaler           NodeAgentAutoscalerConfig      `mapstructure:"nodeAgentAutoscaler"`
+	// OpenProtectionConfigMapName, when non-empty, enables the open-protection
+	// watcher: the operator resolves active RuntimeRuleAlertBinding selectors to
+	// the union of their profileDataRequired.opens and publishes it into this
+	// ConfigMap (in the operator namespace) for the storage apiserver to read.
+	OpenProtectionConfigMapName string `mapstructure:"openProtectionConfigMapName"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -158,6 +163,7 @@ type IConfig interface {
 	SkipProfilesWithoutInstances() bool
 	RulesUpdateEnabled() bool
 	NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig
+	OpenProtectionConfigMapName() string
 }
 
 // OperatorConfig implements IConfig
@@ -211,6 +217,10 @@ func (c *OperatorConfig) HttpExporterConfig() *exporters.HTTPExporterConfig {
 
 func (c *OperatorConfig) Namespace() string {
 	return c.serviceConfig.Namespace
+}
+
+func (c *OperatorConfig) OpenProtectionConfigMapName() string {
+	return c.serviceConfig.OpenProtectionConfigMapName
 }
 
 func (c *OperatorConfig) CleanUpRoutineInterval() time.Duration {

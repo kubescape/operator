@@ -5,6 +5,7 @@ go 1.25.8
 require (
 	github.com/armosec/armoapi-go v0.0.719
 	github.com/armosec/registryx v0.0.35
+	github.com/armosec/rulelibrary v0.0.71-0.20260612121633-c246d476b172
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.35
 	github.com/aws/aws-sdk-go-v2 v1.41.5
