@@ -161,13 +161,13 @@ func (wh *WatchHandler) getContainerProfileWatcher() (watch.Interface, error) {
 }
 
 func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
-	if kind, ok := obj.Labels[helpersv1.KindMetadataKey]; !ok || kind != "Pod" {
+	if kind, ok := obj.Labels[helpersv1.RelatedKindMetadataKey]; !ok || kind != "Pod" {
 		return nil, nil
 	}
 
-	podName, ok := obj.Labels[helpersv1.NameMetadataKey]
+	podName, ok := obj.Labels[helpersv1.RelatedNameMetadataKey]
 	if !ok || podName == "" {
-		return nil, fmt.Errorf("label %s is missing", helpersv1.NameMetadataKey)
+		return nil, fmt.Errorf("label %s is missing", helpersv1.RelatedNameMetadataKey)
 	}
 
 	pod, err := client.CoreV1().Pods(obj.Namespace).Get(context.TODO(), podName, metav1.GetOptions{})
@@ -179,10 +179,10 @@ func (wh *WatchHandler) hasMatchingPod(labels map[string]string) bool {
 	gvr := schema.GroupVersionResource{
 		Group:    labels[helpersv1.ApiGroupMetadataKey],
 		Version:  labels[helpersv1.ApiVersionMetadataKey],
-		Resource: strings.ToLower(labels[helpersv1.KindMetadataKey]) + "s",
+		Resource: strings.ToLower(labels[helpersv1.RelatedKindMetadataKey]) + "s",
 	}
-	name := labels[helpersv1.NameMetadataKey]
-	namespace := labels[helpersv1.NamespaceMetadataKey]
+	name := labels[helpersv1.RelatedNameMetadataKey]
+	namespace := labels[helpersv1.RelatedNamespaceMetadataKey]
 	// get the unstructured workload object
 	workloadObj, err := wh.k8sAPI.DynamicClient.Resource(gvr).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
