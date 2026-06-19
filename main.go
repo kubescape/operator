@@ -32,6 +32,7 @@ import (
 	"github.com/kubescape/operator/mainhandler"
 	"github.com/kubescape/operator/nodeagentautoscaler"
 	"github.com/kubescape/operator/objectcache"
+	"github.com/kubescape/operator/openprotection"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/servicehandler"
 	"github.com/kubescape/operator/utils"
@@ -234,6 +235,21 @@ func main() {
 
 		dWatcher.Start(ctx)
 		defer dWatcher.Stop(ctx)
+	}
+
+	// Open-protection watcher: independent of the admission controller. It watches
+	// RuntimeRuleAlertBinding, resolves the active rules' profileDataRequired.opens
+	// against the rule library, and publishes their union into a ConfigMap that the
+	// storage apiserver reads to pin sensitive prefixes during profile collapse.
+	if cmName := operatorConfig.OpenProtectionConfigMapName(); cmName != "" {
+		opWatcher := dynamicwatcher.NewWatchHandler(k8sApi, ksStorageClient.SpdxV1beta1(), operatorConfig.SkipNamespace)
+		publisher := openprotection.NewConfigMapPublisher(k8sApi.GetKubernetesClient(), operatorConfig.Namespace(), cmName)
+		protectionWatcher := openprotection.NewWatcher(publisher, openprotection.DefaultDebounce)
+		opWatcher.AddAdaptor(protectionWatcher)
+
+		go protectionWatcher.Run(ctx)
+		opWatcher.Start(ctx)
+		defer opWatcher.Stop(ctx)
 	}
 
 	if logger.L().GetLevel() == helpers.DebugLevel.String() {
