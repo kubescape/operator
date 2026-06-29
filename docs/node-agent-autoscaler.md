@@ -95,14 +95,22 @@ Each DaemonSet selects the nodes it runs on based on the grouping label:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: node.kubernetes.io/instance-type   # the grouping label key
+          - key: <NodeGroupLabelKey>   # the configured grouping label key
             operator: DoesNotExist
   ```
 
   This ensures a `node-agent` is deployed on label-less nodes (on-prem / custom
   clusters) without requiring the cluster operator to label nodes manually. The
   branch is driven by `IsDefaultGroup` in the template data; the DaemonSet
-  template must therefore include both branches.
+  template must therefore include both branches. Both the `nodeSelector` and this
+  affinity key off `NodeGroupLabelKey` (the operator's configured grouping label),
+  so they always match the label the operator actually groups by — even when it is
+  overridden from the default `node.kubernetes.io/instance-type`.
+
+The label-less population is tracked under an internal sentinel key, so a node
+that legitimately carries `<groupingLabel>=<defaultNodeGroup>` forms its own
+normal (nodeSelector-targeted) group and is never merged into the affinity-based
+default group.
 
 ### NodeGrouper (`nodegrouper.go`)
 
@@ -162,10 +170,11 @@ Manages DaemonSet template loading and rendering.
 
 ```go
 type TemplateData struct {
-    Name           string            // e.g., "node-agent-m5-large"
-    NodeGroupLabel string            // e.g., "m5.large"
-    IsDefaultGroup bool              // true for the fallback group of label-less nodes
-    Resources      TemplateResources // Requests and limits
+    Name              string            // e.g., "node-agent-m5-large"
+    NodeGroupLabel    string            // the group's label value, e.g., "m5.large"
+    NodeGroupLabelKey string            // the configured grouping label key, e.g., "node.kubernetes.io/instance-type"
+    IsDefaultGroup    bool              // true for the fallback group of label-less nodes
+    Resources         TemplateResources // Requests and limits
 }
 
 type TemplateResources struct {

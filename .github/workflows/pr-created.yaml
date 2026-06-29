@@ -26,8 +26,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: operator
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
-      - name: Build with integration tag
-        run: go test -tags=integration -run=^$ ./...
+      # The node-agent autoscaler integration tests render the actual DaemonSet
+      # template that lives in the helm-charts repo. Check it out and extract the
+      # template so the tests run for real instead of skipping (see
+      # nodeagentautoscaler/integration_test.go).
+      - name: Checkout helm-charts
+        uses: actions/checkout@v4
+        with:
+          repository: kubescape/helm-charts
+          ref: main
+          path: helm-charts
+      - uses: azure/setup-helm@v4
+      - name: Extract node-agent daemonset template
+        run: |
+          helm template test helm-charts/charts/kubescape-operator \
+            --kube-version 1.29.0 \
+            --set nodeAgent.autoscaler.enabled=true --set clusterName=test \
+          | grep -A 400 "daemonset-template.yaml:" | tail -n +2 | sed 's/^    //' \
+          | awk '/^---/{exit} {print}' > /tmp/test-daemonset-template.yaml
+          test -s /tmp/test-daemonset-template.yaml || { echo "template extraction produced an empty file"; exit 1; }
+      - name: Build and run integration tests
+        working-directory: operator
+        run: go test -tags=integration ./...

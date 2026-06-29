@@ -105,14 +105,14 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: node.kubernetes.io/instance-type
+              - key: {{ .NodeGroupLabelKey }}
                 operator: DoesNotExist
       nodeSelector:
         kubernetes.io/os: linux
 {{- else }}
       nodeSelector:
         kubernetes.io/os: linux
-        node.kubernetes.io/instance-type: "{{ .NodeGroupLabel }}"
+        {{ .NodeGroupLabelKey }}: "{{ .NodeGroupLabel }}"
 {{- end }}
 `
 
@@ -123,7 +123,7 @@ spec:
 	require.NoError(t, err)
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath, 0.8)
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
 	require.NoError(t, err)
 
 	// Test data
@@ -200,14 +200,14 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: node.kubernetes.io/instance-type
+              - key: {{ .NodeGroupLabelKey }}
                 operator: DoesNotExist
       nodeSelector:
         kubernetes.io/os: linux
 {{- else }}
       nodeSelector:
         kubernetes.io/os: linux
-        node.kubernetes.io/instance-type: "{{ .NodeGroupLabel }}"
+        {{ .NodeGroupLabelKey }}: "{{ .NodeGroupLabel }}"
 {{- end }}
 `
 
@@ -215,7 +215,7 @@ spec:
 	templatePath := filepath.Join(tmpDir, "daemonset-template.yaml")
 	require.NoError(t, os.WriteFile(templatePath, []byte(templateContent), 0644))
 
-	renderer, err := NewTemplateRenderer(templatePath, 0.8)
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
 	require.NoError(t, err)
 
 	group := NodeGroup{
@@ -257,7 +257,7 @@ func TestTemplateRenderer_RenderDaemonSet_InvalidTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should fail to create renderer
-	_, err = NewTemplateRenderer(templatePath, 0.8)
+	_, err = NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse template")
 }
@@ -279,14 +279,14 @@ func TestTemplateRenderer_NewTemplateRenderer_InvalidPercentage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewTemplateRenderer(templatePath, tt.percentage)
+			_, err := NewTemplateRenderer(templatePath, tt.percentage, "node.kubernetes.io/instance-type")
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "out of valid range")
 		})
 	}
 
 	// Boundary: exactly 1.0 should be valid
-	_, err = NewTemplateRenderer(templatePath, 1.0)
+	_, err = NewTemplateRenderer(templatePath, 1.0, "node.kubernetes.io/instance-type")
 	assert.NoError(t, err)
 }
 
@@ -350,7 +350,7 @@ spec:
 	require.NoError(t, err)
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath, 0.8)
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
 	require.NoError(t, err)
 
 	group := NodeGroup{
@@ -456,7 +456,7 @@ spec:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			renderer, err := NewTemplateRenderer(templatePath, tt.percentage)
+			renderer, err := NewTemplateRenderer(templatePath, tt.percentage, "node.kubernetes.io/instance-type")
 			require.NoError(t, err)
 
 			group := NodeGroup{LabelValue: "m5.large", SanitizedName: "m5-large"}

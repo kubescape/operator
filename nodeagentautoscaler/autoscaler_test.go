@@ -2,6 +2,8 @@ package nodeagentautoscaler
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -198,7 +200,7 @@ func TestNodeGrouper_GetNodeGroups(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(nodes...)
+	client := fake.NewClientset(nodes...)
 
 	cfg := config.NodeAgentAutoscalerConfig{
 		Enabled:        true,
@@ -269,7 +271,7 @@ func TestNodeGrouper_GetNodeGroups_SkipsNodesWithoutLabel(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(nodes...)
+	client := fake.NewClientset(nodes...)
 
 	cfg := config.NodeAgentAutoscalerConfig{
 		Enabled:        true,
@@ -340,7 +342,7 @@ func TestNodeGrouper_GetNodeGroups_DefaultNodeGroup(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(nodes...)
+	client := fake.NewClientset(nodes...)
 
 	cfg := config.NodeAgentAutoscalerConfig{
 		Enabled:          true,
@@ -361,8 +363,72 @@ func TestNodeGrouper_GetNodeGroups_DefaultNodeGroup(t *testing.T) {
 	}
 	require.Contains(t, byLabel, "default")
 	assert.Equal(t, 2, byLabel["default"].NodeCount)
+	assert.True(t, byLabel["default"].IsDefault, "fallback group must be flagged IsDefault")
 	require.Contains(t, byLabel, "m5.large")
 	assert.Equal(t, 1, byLabel["m5.large"].NodeCount)
+	assert.False(t, byLabel["m5.large"].IsDefault, "a labelled group must not be flagged IsDefault")
+}
+
+// TestNodeGrouper_GetNodeGroups_DefaultValueCollision ensures a node legitimately
+// labelled "<groupingLabel>=default" is NOT merged with the synthetic fallback group
+// of label-less nodes: they must stay distinct groups with distinct names so the
+// labelled node keeps a nodeSelector-targeted DaemonSet (not the DoesNotExist path).
+func TestNodeGrouper_GetNodeGroups_DefaultValueCollision(t *testing.T) {
+	ctx := context.Background()
+
+	newNode := func(name string, labels map[string]string) *corev1.Node {
+		return &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+		}
+	}
+
+	nodes := []runtime.Object{
+		// A node legitimately labelled with the value "default".
+		newNode("labelled-default", map[string]string{"node.kubernetes.io/instance-type": "default"}),
+		// Two nodes missing the grouping label entirely.
+		newNode("no-label-1", map[string]string{}),
+		newNode("no-label-2", map[string]string{}),
+	}
+
+	client := fake.NewClientset(nodes...)
+	cfg := config.NodeAgentAutoscalerConfig{
+		Enabled:          true,
+		NodeGroupLabel:   "node.kubernetes.io/instance-type",
+		DefaultNodeGroup: "default",
+	}
+
+	groups, err := NewNodeGrouper(client, cfg, "kubescape").GetNodeGroups(ctx)
+	require.NoError(t, err)
+
+	// Two distinct groups, not one merged bucket.
+	require.Len(t, groups, 2)
+
+	var labelled, fallback *NodeGroup
+	for i := range groups {
+		if groups[i].IsDefault {
+			fallback = &groups[i]
+		} else {
+			labelled = &groups[i]
+		}
+	}
+
+	require.NotNil(t, labelled, "the legitimately labelled =default node must form its own group")
+	assert.Equal(t, 1, labelled.NodeCount)
+	assert.False(t, labelled.IsDefault)
+
+	require.NotNil(t, fallback, "label-less nodes must form the fallback group")
+	assert.Equal(t, 2, fallback.NodeCount)
+	assert.True(t, fallback.IsDefault)
+
+	// Names must be unique so they render to distinct DaemonSets.
+	assert.NotEqual(t, labelled.SanitizedName, fallback.SanitizedName)
 }
 
 func TestNodeGrouper_CalculateResources(t *testing.T) {
@@ -476,7 +542,7 @@ func TestAutoscaler_GetManagedDaemonSets(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(daemonSets...)
+	client := fake.NewClientset(daemonSets...)
 
 	autoscaler := &Autoscaler{
 		client:    client,
@@ -500,7 +566,7 @@ func TestGenerateDaemonSetName(t *testing.T) {
 }
 
 func TestNewAutoscaler(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	cfg := config.NodeAgentAutoscalerConfig{
 		Enabled:              true,
 		GoMemLimitPercentage: 0.8,
@@ -512,4 +578,117 @@ func TestNewAutoscaler(t *testing.T) {
 	// Should fail because template doesn't exist
 	_, err := NewAutoscaler(client, cfg, "kubescape", "operator")
 	assert.Error(t, err)
+}
+
+// reconcileTestTemplate is a minimal DaemonSet template exercising both targeting
+// branches, used by the Reconcile test.
+const reconcileTestTemplate = `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: "{{ .Name }}"
+  namespace: kubescape
+  labels:
+    kubescape.io/managed-by: operator-autoscaler
+    kubescape.io/node-group: "{{ .NodeGroupLabel }}"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-agent
+    spec:
+      containers:
+      - name: node-agent
+        image: "quay.io/kubescape/node-agent:test"
+        resources:
+          requests:
+            cpu: "{{ .Resources.Requests.CPU }}"
+            memory: "{{ .Resources.Requests.Memory }}"
+          limits:
+            cpu: "{{ .Resources.Limits.CPU }}"
+            memory: "{{ .Resources.Limits.Memory }}"
+{{- if .IsDefaultGroup }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: {{ .NodeGroupLabelKey }}
+                operator: DoesNotExist
+      nodeSelector:
+        kubernetes.io/os: linux
+{{- else }}
+      nodeSelector:
+        kubernetes.io/os: linux
+        {{ .NodeGroupLabelKey }}: "{{ .NodeGroupLabel }}"
+{{- end }}
+`
+
+// TestAutoscaler_Reconcile_CreatesPerGroupAndDeletesOrphans verifies that Reconcile
+// creates one DaemonSet per node group (keyed by the unique DaemonSet name) and
+// removes managed DaemonSets whose group no longer exists.
+func TestAutoscaler_Reconcile_CreatesPerGroupAndDeletesOrphans(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "daemonset-template.yaml")
+	require.NoError(t, os.WriteFile(templatePath, []byte(reconcileTestTemplate), 0644))
+
+	newNode := func(name string, labels map[string]string) *corev1.Node {
+		return &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+		}
+	}
+
+	// A stale managed DaemonSet whose group no longer exists -> must be deleted.
+	orphan := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-agent-gone",
+			Namespace: "kubescape",
+			Labels:    map[string]string{ManagedByLabel: ManagedByValue, NodeGroupLabelKey: "gone"},
+		},
+	}
+
+	client := fake.NewClientset(
+		newNode("labelled", map[string]string{"node.kubernetes.io/instance-type": "m5.large"}),
+		newNode("no-label", map[string]string{}),
+		orphan,
+	)
+
+	cfg := config.NodeAgentAutoscalerConfig{
+		Enabled:              true,
+		NodeGroupLabel:       "node.kubernetes.io/instance-type",
+		DefaultNodeGroup:     "default",
+		GoMemLimitPercentage: 0.8,
+		ResourcePercentages:  config.NodeAgentAutoscalerResourcePercentages{RequestCPU: 2, RequestMemory: 2, LimitCPU: 5, LimitMemory: 5},
+		MinResources:         config.NodeAgentAutoscalerResourceBounds{CPU: "100m", Memory: "180Mi"},
+		MaxResources:         config.NodeAgentAutoscalerResourceBounds{CPU: "2000m", Memory: "4Gi"},
+		ReconcileInterval:    5 * time.Minute,
+		TemplatePath:         templatePath,
+	}
+
+	a, err := NewAutoscaler(client, cfg, "kubescape", "")
+	require.NoError(t, err)
+
+	require.NoError(t, a.Reconcile(ctx))
+
+	list, err := client.AppsV1().DaemonSets("kubescape").List(ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+
+	names := map[string]bool{}
+	for _, ds := range list.Items {
+		names[ds.Name] = true
+	}
+	assert.True(t, names["node-agent-m5-large"], "labelled group DaemonSet should exist")
+	assert.True(t, names["node-agent-default"], "default group DaemonSet should exist")
+	assert.False(t, names["node-agent-gone"], "orphaned DaemonSet should be deleted")
 }

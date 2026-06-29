@@ -29,7 +29,7 @@ func TestIntegration_HelmGeneratedTemplate(t *testing.T) {
 	}
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath, 0.8)
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
 	require.NoError(t, err)
 
 	// Test data simulating a node group
@@ -89,7 +89,7 @@ func TestIntegration_HelmGeneratedTemplate_DefaultGroup(t *testing.T) {
 		t.Skip("Integration test requires template file. Run Helm extraction first. See test comments for instructions.")
 	}
 
-	renderer, err := NewTemplateRenderer(templatePath, 0.8)
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
 	require.NoError(t, err)
 
 	group := NodeGroup{
@@ -107,6 +107,9 @@ func TestIntegration_HelmGeneratedTemplate_DefaultGroup(t *testing.T) {
 
 	assert.Equal(t, "node-agent-default", ds.Name)
 
+	// The OS selector must survive in the default branch (else the DaemonSet could
+	// target unsupported nodes).
+	assert.Equal(t, "linux", ds.Spec.Template.Spec.NodeSelector["kubernetes.io/os"])
 	// Must not pin to an instance-type value (the nodes lack the label).
 	assert.NotContains(t, ds.Spec.Template.Spec.NodeSelector, "node.kubernetes.io/instance-type")
 

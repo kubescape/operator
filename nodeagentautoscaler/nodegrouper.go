@@ -16,6 +16,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// defaultGroupKey is the internal map key for the fallback group of label-less
+// nodes. The leading NUL byte makes it impossible to clash with a real Kubernetes
+// label value, so the fallback population is never merged with a real group.
+const defaultGroupKey = "\x00default-node-group"
+
 // NodeGroup represents a group of nodes with the same label value
 type NodeGroup struct {
 	// LabelValue is the value of the grouping label (e.g., "m5.large")
@@ -80,6 +85,11 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 
 		labelValue, ok := node.Labels[ng.config.NodeGroupLabel]
 		isDefault := false
+		// groupKey buckets nodes. For labelled nodes it is the label value. For
+		// label-less nodes it is a sentinel that cannot be a valid label value, so the
+		// fallback population is never merged with a real group whose value happens to
+		// equal DefaultNodeGroup (e.g. a node legitimately labelled "...=default").
+		groupKey := labelValue
 		if !ok {
 			// Cloud managed Kubernetes (AKS, EKS, GKE) populate this field automatically.
 			// For on-prem or custom clusters the label may be absent, so fall back to the
@@ -96,16 +106,14 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 				helpers.String("requiredLabel", ng.config.NodeGroupLabel),
 				helpers.String("defaultNodeGroup", ng.config.DefaultNodeGroup))
 			labelValue = ng.config.DefaultNodeGroup
+			groupKey = defaultGroupKey
 			isDefault = true
 		}
 
-		if group, exists := groupMap[labelValue]; exists {
+		if group, exists := groupMap[groupKey]; exists {
 			group.NodeCount++
-			// A label value can be shared by labelled and label-less nodes; if any
-			// member lacks the label, the group must be targeted via the affinity path.
-			group.IsDefault = group.IsDefault || isDefault
 		} else {
-			groupMap[labelValue] = &NodeGroup{
+			groupMap[groupKey] = &NodeGroup{
 				LabelValue:        labelValue,
 				SanitizedName:     sanitizeName(labelValue),
 				AllocatableCPU:    *node.Status.Allocatable.Cpu(),
@@ -253,8 +261,13 @@ func resolveNameCollisions(groups []NodeGroup) []NodeGroup {
 				helpers.Int("collisionCount", len(indices)))
 
 			for _, idx := range indices {
-				hash := shortHash(groups[idx].LabelValue)
-				groups[idx].SanitizedName = sanitized + "-" + hash
+				// Salt the fallback group so it cannot hash to the same suffix as a
+				// real group sharing its LabelValue (e.g. a node labelled "...=default").
+				hashInput := groups[idx].LabelValue
+				if groups[idx].IsDefault {
+					hashInput = defaultGroupKey + hashInput
+				}
+				groups[idx].SanitizedName = sanitized + "-" + shortHash(hashInput)
 			}
 		}
 	}

@@ -41,20 +41,20 @@ const (
 
 // Autoscaler manages node-agent DaemonSets based on node groups
 type Autoscaler struct {
-	client               kubernetes.Interface
-	config               config.NodeAgentAutoscalerConfig
-	namespace            string
-	nodeGrouper          *NodeGrouper
-	templateRenderer     *TemplateRenderer
-	stopCh               chan struct{}
-	operatorDeployment   string // Name of the operator deployment (for owner references)
-	ownerRef             *metav1.OwnerReference
-	eventRecorder        record.EventRecorder
+	client             kubernetes.Interface
+	config             config.NodeAgentAutoscalerConfig
+	namespace          string
+	nodeGrouper        *NodeGrouper
+	templateRenderer   *TemplateRenderer
+	stopCh             chan struct{}
+	operatorDeployment string // Name of the operator deployment (for owner references)
+	ownerRef           *metav1.OwnerReference
+	eventRecorder      record.EventRecorder
 }
 
 // NewAutoscaler creates a new Autoscaler instance
 func NewAutoscaler(client kubernetes.Interface, cfg config.NodeAgentAutoscalerConfig, namespace string, operatorDeploymentName string) (*Autoscaler, error) {
-	templateRenderer, err := NewTemplateRenderer(cfg.TemplatePath, cfg.GoMemLimitPercentage)
+	templateRenderer, err := NewTemplateRenderer(cfg.TemplatePath, cfg.GoMemLimitPercentage, cfg.NodeGroupLabel)
 	if err != nil {
 		return nil, err
 	}
@@ -177,21 +177,23 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 		return err
 	}
 
-	// Build a map of existing DaemonSets by node group
-	existingByNodeGroup := make(map[string]*appsv1.DaemonSet)
+	// Build a map of existing DaemonSets by name. The DaemonSet name (derived from
+	// the group's sanitized, collision-resolved name) is the unique per-group
+	// identity. The kubescape.io/node-group label value is NOT unique: the default
+	// group and a real group can legitimately share a label value (e.g. "default").
+	existingByName := make(map[string]*appsv1.DaemonSet, len(existingDaemonSets))
 	for i := range existingDaemonSets {
 		ds := &existingDaemonSets[i]
-		if nodeGroup, ok := ds.Labels[NodeGroupLabelKey]; ok {
-			existingByNodeGroup[nodeGroup] = ds
-		}
+		existingByName[ds.Name] = ds
 	}
 
-	// Track which node groups we've processed
-	processedNodeGroups := make(map[string]bool)
+	// Track which DaemonSets we've processed (by name)
+	processedNames := make(map[string]bool)
 
 	// Create or update DaemonSets for each node group
 	for _, group := range nodeGroups {
-		processedNodeGroups[group.LabelValue] = true
+		dsName := GenerateDaemonSetName(group)
+		processedNames[dsName] = true
 
 		// Calculate resources for this group
 		resources, err := a.nodeGrouper.CalculateResources(group)
@@ -231,7 +233,7 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 		}
 
 		// Check if DaemonSet exists
-		if existingDS, exists := existingByNodeGroup[group.LabelValue]; exists {
+		if existingDS, exists := existingByName[dsName]; exists {
 			// Update if needed
 			if err := a.updateDaemonSetIfNeeded(ctx, existingDS, desiredDS); err != nil {
 				logger.L().Error("failed to update DaemonSet",
@@ -249,8 +251,8 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 	}
 
 	// Delete orphaned DaemonSets (node groups that no longer exist)
-	for nodeGroup, ds := range existingByNodeGroup {
-		if !processedNodeGroups[nodeGroup] {
+	for name, ds := range existingByName {
+		if !processedNames[name] {
 			if err := a.deleteDaemonSet(ctx, ds); err != nil {
 				logger.L().Error("failed to delete orphaned DaemonSet",
 					helpers.String("name", ds.Name),
@@ -352,7 +354,6 @@ func (a *Autoscaler) updateDaemonSetIfNeeded(ctx context.Context, existing, desi
 	return nil
 }
 
-
 // deleteDaemonSet deletes a DaemonSet
 func (a *Autoscaler) deleteDaemonSet(ctx context.Context, ds *appsv1.DaemonSet) error {
 	logger.L().Info("deleting orphaned DaemonSet",
@@ -381,4 +382,3 @@ func (a *Autoscaler) recordEvent(obj runtime.Object, eventType, reason, message 
 		a.eventRecorder.Event(obj, eventType, reason, message)
 	}
 }
-
