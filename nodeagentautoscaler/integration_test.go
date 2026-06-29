@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -76,4 +77,52 @@ func TestIntegration_HelmGeneratedTemplate(t *testing.T) {
 		container.Resources.Requests.Memory().String(),
 		container.Resources.Limits.Cpu().String(),
 		container.Resources.Limits.Memory().String())
+}
+
+// TestIntegration_HelmGeneratedTemplate_DefaultGroup verifies the default group
+// (nodes missing the grouping label) renders with a DoesNotExist node affinity and
+// without an instance-type nodeSelector, using the actual Helm-generated template.
+func TestIntegration_HelmGeneratedTemplate_DefaultGroup(t *testing.T) {
+	templatePath := "/tmp/test-daemonset-template.yaml"
+
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		t.Skip("Integration test requires template file. Run Helm extraction first. See test comments for instructions.")
+	}
+
+	renderer, err := NewTemplateRenderer(templatePath, 0.8)
+	require.NoError(t, err)
+
+	group := NodeGroup{
+		LabelValue:    "default",
+		SanitizedName: "default",
+		IsDefault:     true,
+	}
+	resources := CalculatedResources{
+		Requests: ResourcePair{CPU: resource.MustParse("100m"), Memory: resource.MustParse("200Mi")},
+		Limits:   ResourcePair{CPU: resource.MustParse("500m"), Memory: resource.MustParse("1Gi")},
+	}
+
+	ds, err := renderer.RenderDaemonSet(group, resources)
+	require.NoError(t, err, "Failed to render default-group DaemonSet - check template YAML structure")
+
+	assert.Equal(t, "node-agent-default", ds.Name)
+
+	// Must not pin to an instance-type value (the nodes lack the label).
+	assert.NotContains(t, ds.Spec.Template.Spec.NodeSelector, "node.kubernetes.io/instance-type")
+
+	// Must select nodes where the grouping label does not exist.
+	require.NotNil(t, ds.Spec.Template.Spec.Affinity)
+	require.NotNil(t, ds.Spec.Template.Spec.Affinity.NodeAffinity)
+	terms := ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	require.NotNil(t, terms)
+	require.NotEmpty(t, terms.NodeSelectorTerms)
+
+	var foundDoesNotExist bool
+	for _, expr := range terms.NodeSelectorTerms[0].MatchExpressions {
+		if expr.Key == "node.kubernetes.io/instance-type" {
+			assert.Equal(t, corev1.NodeSelectorOpDoesNotExist, expr.Operator)
+			foundDoesNotExist = true
+		}
+	}
+	assert.True(t, foundDoesNotExist, "expected a DoesNotExist match expression on the grouping label")
 }

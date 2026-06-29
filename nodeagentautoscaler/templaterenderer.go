@@ -23,6 +23,10 @@ type TemplateData struct {
 	Name string
 	// NodeGroupLabel is the value of the node group label
 	NodeGroupLabel string
+	// IsDefaultGroup is true for the fallback group of nodes that do not carry the
+	// grouping label. The template should select these nodes via a "DoesNotExist"
+	// node affinity rather than a nodeSelector matching NodeGroupLabel.
+	IsDefaultGroup bool
 	// Resources contains the calculated resource requests and limits
 	Resources TemplateResources
 	// GoMemLimit is the GOMEMLIMIT value derived from the memory limit and percentage (e.g., "360MiB")
@@ -214,6 +218,7 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 	data := TemplateData{
 		Name:           fmt.Sprintf("node-agent-%s", group.SanitizedName),
 		NodeGroupLabel: group.LabelValue,
+		IsDefaultGroup: group.IsDefault,
 		Resources: TemplateResources{
 			Requests: TemplateResourcePair{
 				CPU:    resources.Requests.CPU.String(),
@@ -258,4 +263,3 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 func GenerateDaemonSetName(group NodeGroup) string {
 	return fmt.Sprintf("node-agent-%s", group.SanitizedName)
 }
-

@@ -103,8 +103,9 @@ func TestLoadConfig(t *testing.T) {
 					Namespace: "default",
 				},
 				NodeAgentAutoscaler: NodeAgentAutoscalerConfig{
-					Enabled:        false,
-					NodeGroupLabel: "node.kubernetes.io/instance-type",
+					Enabled:          false,
+					NodeGroupLabel:   "node.kubernetes.io/instance-type",
+					DefaultNodeGroup: "default",
 					ResourcePercentages: NodeAgentAutoscalerResourcePercentages{
 						RequestCPU:    2,
 						RequestMemory: 2,

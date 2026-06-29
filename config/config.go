@@ -66,8 +66,13 @@ type NodeAgentAutoscalerResourceBounds struct {
 
 // NodeAgentAutoscalerConfig defines the configuration for node agent autoscaling
 type NodeAgentAutoscalerConfig struct {
-	Enabled                bool                                   `json:"enabled" mapstructure:"enabled"`
-	NodeGroupLabel         string                                 `json:"nodeGroupLabel" mapstructure:"nodeGroupLabel"`
+	Enabled        bool   `json:"enabled" mapstructure:"enabled"`
+	NodeGroupLabel string `json:"nodeGroupLabel" mapstructure:"nodeGroupLabel"`
+	// DefaultNodeGroup is the group value assigned to nodes that do not carry the
+	// NodeGroupLabel. This ensures a node-agent DaemonSet is still deployed on such
+	// nodes (e.g. on-prem or custom clusters that do not populate the label).
+	// If set to an empty string, nodes without the label are skipped.
+	DefaultNodeGroup       string                                 `json:"defaultNodeGroup" mapstructure:"defaultNodeGroup"`
 	ResourcePercentages    NodeAgentAutoscalerResourcePercentages `json:"resourcePercentages" mapstructure:"resourcePercentages"`
 	MinResources           NodeAgentAutoscalerResourceBounds      `json:"minResources" mapstructure:"minResources"`
 	MaxResources           NodeAgentAutoscalerResourceBounds      `json:"maxResources" mapstructure:"maxResources"`
@@ -306,6 +311,7 @@ func LoadConfig(path string) (Config, error) {
 	// Node agent autoscaler defaults
 	viper.SetDefault("nodeAgentAutoscaler.enabled", false)
 	viper.SetDefault("nodeAgentAutoscaler.nodeGroupLabel", "node.kubernetes.io/instance-type")
+	viper.SetDefault("nodeAgentAutoscaler.defaultNodeGroup", "default")
 	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.requestCPU", 2)
 	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.requestMemory", 2)
 	viper.SetDefault("nodeAgentAutoscaler.resourcePercentages.limitCPU", 5)

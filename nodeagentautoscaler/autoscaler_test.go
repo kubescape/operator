@@ -286,6 +286,85 @@ func TestNodeGrouper_GetNodeGroups_SkipsNodesWithoutLabel(t *testing.T) {
 	assert.Equal(t, 1, groups[0].NodeCount)
 }
 
+func TestNodeGrouper_GetNodeGroups_DefaultNodeGroup(t *testing.T) {
+	ctx := context.Background()
+
+	// Two nodes without the grouping label, one with it.
+	nodes := []runtime.Object{
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node-with-label",
+				Labels: map[string]string{
+					"node.kubernetes.io/instance-type": "m5.large",
+				},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "node-without-label-1",
+				Labels: map[string]string{},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("8"),
+					corev1.ResourceMemory: resource.MustParse("32Gi"),
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "node-without-label-2",
+				Labels: map[string]string{},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("8"),
+					corev1.ResourceMemory: resource.MustParse("32Gi"),
+				},
+			},
+		},
+	}
+
+	client := fake.NewSimpleClientset(nodes...)
+
+	cfg := config.NodeAgentAutoscalerConfig{
+		Enabled:          true,
+		NodeGroupLabel:   "node.kubernetes.io/instance-type",
+		DefaultNodeGroup: "default",
+	}
+
+	ng := NewNodeGrouper(client, cfg, "kubescape")
+	groups, err := ng.GetNodeGroups(ctx)
+
+	require.NoError(t, err)
+	// Both unlabeled nodes collapse into the "default" group alongside the labeled one.
+	assert.Len(t, groups, 2)
+
+	byLabel := make(map[string]NodeGroup, len(groups))
+	for _, g := range groups {
+		byLabel[g.LabelValue] = g
+	}
+	require.Contains(t, byLabel, "default")
+	assert.Equal(t, 2, byLabel["default"].NodeCount)
+	require.Contains(t, byLabel, "m5.large")
+	assert.Equal(t, 1, byLabel["m5.large"].NodeCount)
+}
+
 func TestNodeGrouper_CalculateResources(t *testing.T) {
 	cfg := config.NodeAgentAutoscalerConfig{
 		ResourcePercentages: config.NodeAgentAutoscalerResourcePercentages{

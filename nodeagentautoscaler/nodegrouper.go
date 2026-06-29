@@ -28,6 +28,10 @@ type NodeGroup struct {
 	AllocatableMemory resource.Quantity
 	// NodeCount is the number of nodes in this group
 	NodeCount int
+	// IsDefault is true when this group was formed from nodes missing the
+	// NodeGroupLabel. Such a group cannot be targeted by a nodeSelector on the
+	// (absent) label, so its DaemonSet uses a "DoesNotExist" node affinity instead.
+	IsDefault bool
 }
 
 // CalculatedResources represents the calculated resource requests and limits
@@ -75,18 +79,31 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 		}
 
 		labelValue, ok := node.Labels[ng.config.NodeGroupLabel]
+		isDefault := false
 		if !ok {
-			// If label doesn't exist, log an error and skip this node
-			// Cloud managed Kubernetes (AKS, EKS, GKE) populate this field automatically
-			// For on-prem or custom clusters, the infrastructure must be configured to set this label
-			logger.L().Ctx(ctx).Error("node missing required label for autoscaler, node-agent will not be deployed on this node",
+			// Cloud managed Kubernetes (AKS, EKS, GKE) populate this field automatically.
+			// For on-prem or custom clusters the label may be absent, so fall back to the
+			// configured default group to ensure a node-agent is still deployed on this node.
+			if ng.config.DefaultNodeGroup == "" {
+				// Default group disabled: preserve the strict behavior and skip the node.
+				logger.L().Ctx(ctx).Error("node missing required label for autoscaler, node-agent will not be deployed on this node",
+					helpers.String("node", node.Name),
+					helpers.String("requiredLabel", ng.config.NodeGroupLabel))
+				continue
+			}
+			logger.L().Debug("node missing node group label, assigning default node group",
 				helpers.String("node", node.Name),
-				helpers.String("requiredLabel", ng.config.NodeGroupLabel))
-			continue
+				helpers.String("requiredLabel", ng.config.NodeGroupLabel),
+				helpers.String("defaultNodeGroup", ng.config.DefaultNodeGroup))
+			labelValue = ng.config.DefaultNodeGroup
+			isDefault = true
 		}
 
 		if group, exists := groupMap[labelValue]; exists {
 			group.NodeCount++
+			// A label value can be shared by labelled and label-less nodes; if any
+			// member lacks the label, the group must be targeted via the affinity path.
+			group.IsDefault = group.IsDefault || isDefault
 		} else {
 			groupMap[labelValue] = &NodeGroup{
 				LabelValue:        labelValue,
@@ -94,6 +111,7 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 				AllocatableCPU:    *node.Status.Allocatable.Cpu(),
 				AllocatableMemory: *node.Status.Allocatable.Memory(),
 				NodeCount:         1,
+				IsDefault:         isDefault,
 			}
 		}
 	}
@@ -259,4 +277,3 @@ func isNodeReady(node *corev1.Node) bool {
 	}
 	return false
 }
-

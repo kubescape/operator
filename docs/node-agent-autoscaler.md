@@ -79,6 +79,31 @@ annotations:
   argocd.argoproj.io/sync-options: Prune=false
 ```
 
+**Node Targeting:**
+
+Each DaemonSet selects the nodes it runs on based on the grouping label:
+
+- **Normal groups** use a `nodeSelector` matching the grouping label value, e.g.
+  `node.kubernetes.io/instance-type: m5.large`.
+- **The default group** (`IsDefaultGroup`) targets nodes that are *missing* the
+  grouping label. A `nodeSelector` cannot match an absent label, so its template
+  branch instead uses a `DoesNotExist` node affinity:
+
+  ```yaml
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.kubernetes.io/instance-type   # the grouping label key
+            operator: DoesNotExist
+  ```
+
+  This ensures a `node-agent` is deployed on label-less nodes (on-prem / custom
+  clusters) without requiring the cluster operator to label nodes manually. The
+  branch is driven by `IsDefaultGroup` in the template data; the DaemonSet
+  template must therefore include both branches.
+
 ### NodeGrouper (`nodegrouper.go`)
 
 Handles node discovery and resource calculation.
@@ -139,6 +164,7 @@ Manages DaemonSet template loading and rendering.
 type TemplateData struct {
     Name           string            // e.g., "node-agent-m5-large"
     NodeGroupLabel string            // e.g., "m5.large"
+    IsDefaultGroup bool              // true for the fallback group of label-less nodes
     Resources      TemplateResources // Requests and limits
 }
 
@@ -193,6 +219,7 @@ The autoscaler is configured via the operator's ConfigMap:
 type NodeAgentAutoscalerConfig struct {
     Enabled             bool          // Enable/disable autoscaler
     NodeGroupLabel      string        // Label to group nodes by
+    DefaultNodeGroup    string        // Group value for nodes missing NodeGroupLabel (default: "default"; empty = skip)
     ResourcePercentages struct {
         RequestCPU    int  // % of allocatable CPU for requests
         RequestMemory int  // % of allocatable memory for requests
@@ -295,7 +322,8 @@ kubectl get events -n kubescape --field-selector reason=Created,reason=Deleted
 
 | Scenario | Behavior |
 |----------|----------|
-| Node missing group label | Log error, skip node (no DaemonSet for it) |
+| Node missing group label (`DefaultNodeGroup` set) | Assign node to the default group (targeted via `DoesNotExist` affinity) so a node-agent is still deployed |
+| Node missing group label (`DefaultNodeGroup` empty) | Log error, skip node (no DaemonSet for it) |
 | Template parse error | Fatal error on startup |
 | Template render error | Log error, skip node group |
 | API error (create/update/delete) | Log error, continue reconciliation |
