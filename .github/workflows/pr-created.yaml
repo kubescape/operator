@@ -44,6 +44,9 @@ jobs:
       - uses: azure/setup-helm@v4
       - name: Extract node-agent daemonset template
         run: |
+          # The chart has local (file://) subchart dependencies that must be
+          # vendored into charts/ before templating a fresh checkout.
+          helm dependency build helm-charts/charts/kubescape-operator
           helm template test helm-charts/charts/kubescape-operator \
             --kube-version 1.29.0 \
             --set nodeAgent.autoscaler.enabled=true --set clusterName=test \
