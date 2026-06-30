@@ -107,10 +107,24 @@ Each DaemonSet selects the nodes it runs on based on the grouping label:
   so they always match the label the operator actually groups by — even when it is
   overridden from the default `node.kubernetes.io/instance-type`.
 
+The default group affinity carries **only** the `DoesNotExist` term; its OS
+requirement is already enforced by the `nodeSelector`. Non-default groups are not
+given an operator-managed affinity at all, so any user-provided `nodeAgent.affinity`
+(zone / GPU / topology constraints) is preserved for them.
+
 The label-less population is tracked under an internal sentinel key, so a node
 that legitimately carries `<groupingLabel>=<defaultNodeGroup>` forms its own
 normal (nodeSelector-targeted) group and is never merged into the affinity-based
 default group.
+
+> **Edge case — shared `kubescape.io/node-group` value.** In the unlikely event a
+> node is *labelled* `<groupingLabel>=<defaultNodeGroup>` while other nodes lack
+> the label, the real group and the synthetic default group both render their
+> `kubescape.io/node-group` selector value as `<defaultNodeGroup>`, so the two
+> DaemonSets share a pod selector. This is safe in practice — their node targeting
+> is mutually exclusive (label-present vs. absent) and `ownerReferences` prevent
+> pod adoption across them — but `kubectl get pods -l kubescape.io/node-group=…`
+> will list both groups' pods together.
 
 ### NodeGrouper (`nodegrouper.go`)
 
@@ -141,6 +155,15 @@ func calculatePercentage(q resource.Quantity, percent int) resource.Quantity {
     return *resource.NewMilliQuantity(result, q.Format)
 }
 ```
+
+**Representative allocatable per group:**
+
+Instance-type groups are homogeneous by definition, so a group's allocatable is
+taken from the first node seen. The **default group** is the exception: label-less
+nodes can be heterogeneous (mixed on-prem/bare-metal hardware), so it is sized off
+the **minimum** allocatable CPU/memory across its nodes. This guarantees the
+node-agent's requests fit every node in the group and makes the result independent
+of the (unstable) node list order.
 
 **Naming Collision Detection:**
 

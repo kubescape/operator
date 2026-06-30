@@ -431,6 +431,52 @@ func TestNodeGrouper_GetNodeGroups_DefaultValueCollision(t *testing.T) {
 	assert.NotEqual(t, labelled.SanitizedName, fallback.SanitizedName)
 }
 
+// TestNodeGrouper_GetNodeGroups_DefaultGroupSizesOffMinimum verifies the
+// heterogeneous default group is sized from the minimum allocatable across its
+// nodes (a safe lower bound), not the arbitrary first-listed node.
+func TestNodeGrouper_GetNodeGroups_DefaultGroupSizesOffMinimum(t *testing.T) {
+	ctx := context.Background()
+
+	newNode := func(name, cpu, mem string) *corev1.Node {
+		return &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{}},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse(cpu),
+					corev1.ResourceMemory: resource.MustParse(mem),
+				},
+			},
+		}
+	}
+
+	// Big node first, small node last: first-node sizing would pick 64 cores;
+	// minimum sizing must pick the 2-core / 4Gi box.
+	nodes := []runtime.Object{
+		newNode("big", "64", "256Gi"),
+		newNode("small", "2", "4Gi"),
+	}
+
+	client := fake.NewClientset(nodes...)
+	cfg := config.NodeAgentAutoscalerConfig{
+		Enabled:          true,
+		NodeGroupLabel:   "node.kubernetes.io/instance-type",
+		DefaultNodeGroup: "default",
+	}
+
+	groups, err := NewNodeGrouper(client, cfg, "kubescape").GetNodeGroups(ctx)
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+
+	g := groups[0]
+	require.True(t, g.IsDefault)
+	assert.Equal(t, 2, g.NodeCount)
+	minCPU := resource.MustParse("2")
+	minMem := resource.MustParse("4Gi")
+	assert.Equal(t, minCPU.MilliValue(), g.AllocatableCPU.MilliValue(), "CPU should be the group minimum")
+	assert.Equal(t, minMem.Value(), g.AllocatableMemory.Value(), "memory should be the group minimum")
+}
+
 func TestNodeGrouper_CalculateResources(t *testing.T) {
 	cfg := config.NodeAgentAutoscalerConfig{
 		ResourcePercentages: config.NodeAgentAutoscalerResourcePercentages{

@@ -112,6 +112,19 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 
 		if group, exists := groupMap[groupKey]; exists {
 			group.NodeCount++
+			if group.IsDefault {
+				// Instance-type groups are homogeneous, so the first node is
+				// representative. The default group is the opposite: label-less nodes
+				// can be wildly heterogeneous (on-prem mixed hardware). Size it off the
+				// minimum allocatable across its nodes so requests fit every node and
+				// the result is independent of (unstable) node list order.
+				if nodeCPU := *node.Status.Allocatable.Cpu(); nodeCPU.Cmp(group.AllocatableCPU) < 0 {
+					group.AllocatableCPU = nodeCPU
+				}
+				if nodeMem := *node.Status.Allocatable.Memory(); nodeMem.Cmp(group.AllocatableMemory) < 0 {
+					group.AllocatableMemory = nodeMem
+				}
+			}
 		} else {
 			groupMap[groupKey] = &NodeGroup{
 				LabelValue:        labelValue,
