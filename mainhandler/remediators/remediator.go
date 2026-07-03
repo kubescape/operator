@@ -73,11 +73,12 @@ type Remediator interface {
 	Revert(ctx context.Context, t Target, dryRun bool) (Result, error)
 }
 
-// NewRegistry builds the set of remediators backed by the given client. Phase 1
-// ships annotate only; quarantine/cordon are added in later phases by extending
-// this map.
+// NewRegistry builds the set of remediators backed by the given client. New
+// actions are added by extending this map; the command pipeline does not change.
+// cordon is added in a later phase.
 func NewRegistry(client kubernetes.Interface) map[apis.OperatorActionType]Remediator {
 	return map[apis.OperatorActionType]Remediator{
-		apis.OperatorActionAnnotate: NewAnnotateRemediator(client),
+		apis.OperatorActionAnnotate:   NewAnnotateRemediator(client),
+		apis.OperatorActionQuarantine: NewQuarantineRemediator(client),
 	}
 }

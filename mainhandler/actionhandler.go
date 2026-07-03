@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -12,6 +13,7 @@ import (
 	"github.com/kubescape/operator/mainhandler/remediators"
 	"github.com/kubescape/operator/utils"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -80,34 +82,67 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 		helpers.String("dryRun", fmt.Sprintf("%t", dryRun)))
 
 	switch args.Action {
-	case apis.OperatorActionAnnotate:
-		r := registry[apis.OperatorActionAnnotate]
-		plan, err := r.Plan(ctx, remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef})
-		if err != nil {
-			return err
-		}
-		result, err := r.Apply(ctx, plan, dryRun)
-		if err != nil {
-			return err
-		}
-		return actionHandler.recordActionResult(ctx, result)
+	case apis.OperatorActionAnnotate, apis.OperatorActionQuarantine:
+		req := remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef}
+		return actionHandler.applyRemediation(ctx, registry[args.Action], req, dryRun)
 
 	case apis.OperatorActionRevert:
-		// Phase 1: the only applied action is annotate, so revert undoes it.
 		// Pass dryRun so a default (no --confirm) revert previews instead of writing.
-		r := registry[apis.OperatorActionAnnotate]
-		result, err := r.Revert(ctx, target, dryRun)
-		if err != nil {
-			return err
-		}
-		return actionHandler.recordActionResult(ctx, result)
+		return actionHandler.revertTarget(ctx, registry, target, dryRun)
 
-	case apis.OperatorActionQuarantine, apis.OperatorActionCordon:
+	case apis.OperatorActionCordon:
 		return fmt.Errorf("operatorAction: action %q is not implemented yet (planned for a later phase)", args.Action)
 
 	default:
 		return fmt.Errorf("operatorAction: unknown action %q", args.Action)
 	}
+}
+
+// applyRemediation runs a remediator's Plan -> Apply and records the result.
+func (actionHandler *ActionHandler) applyRemediation(ctx context.Context, r remediators.Remediator, req remediators.Request, dryRun bool) error {
+	plan, err := r.Plan(ctx, req)
+	if err != nil {
+		return err
+	}
+	result, err := r.Apply(ctx, plan, dryRun)
+	if err != nil {
+		return err
+	}
+	return actionHandler.recordActionResult(ctx, result)
+}
+
+// revertTarget undoes every reversible action on the target. Each Revert is
+// idempotent — a missing annotation or NetworkPolicy is a no-op — so revert is
+// safe to call without knowing which action was originally applied. A target
+// object that no longer exists (NotFound) is skipped, not treated as an error,
+// so a leftover artifact (e.g. a NetworkPolicy whose workload was deleted) is
+// still cleaned up.
+func (actionHandler *ActionHandler) revertTarget(ctx context.Context, registry map[apis.OperatorActionType]remediators.Remediator, target remediators.Target, dryRun bool) error {
+	reversible := []apis.OperatorActionType{apis.OperatorActionAnnotate, apis.OperatorActionQuarantine}
+	var descriptions []string
+	applied := false
+	for _, action := range reversible {
+		r, ok := registry[action]
+		if !ok {
+			continue
+		}
+		result, err := r.Revert(ctx, target, dryRun)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return err
+		}
+		descriptions = append(descriptions, result.Description)
+		applied = applied || result.Applied
+	}
+	return actionHandler.recordActionResult(ctx, remediators.Result{
+		Action:      string(apis.OperatorActionRevert),
+		Target:      target,
+		DryRun:      dryRun,
+		Applied:     applied,
+		Description: strings.Join(descriptions, "; "),
+	})
 }
 
 // recordActionResult writes the result to the OperatorCommand status payload
