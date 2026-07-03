@@ -145,6 +145,26 @@ func TestAnnotateRevert(t *testing.T) {
 	assert.Equal(t, "keep-me", got.Annotations["unrelated"], "unrelated annotations must be preserved")
 }
 
+// revert runs on every target regardless of which action was applied, so a
+// workload that was never annotated must be reported as a no-op ("nothing to
+// revert", Applied=false) instead of claiming annotations were removed — and it
+// must not issue a patch.
+func TestAnnotateRevertNoAnnotationsIsNoop(t *testing.T) {
+	client := k8sfake.NewClientset(annotatedDeployment("payments", "api", map[string]string{"unrelated": "keep-me"}))
+	patched := false
+	client.PrependReactor("patch", "deployments", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		patched = true
+		return false, nil, nil
+	})
+	r := NewAnnotateRemediator(client)
+
+	res, err := r.Revert(context.Background(), Target{Kind: "Deployment", Namespace: "payments", Name: "api"}, false)
+	require.NoError(t, err)
+	assert.False(t, res.Applied, "nothing to revert")
+	assert.Contains(t, res.Description, "nothing to revert")
+	assert.False(t, patched, "revert must not patch a workload with no kubescape annotations")
+}
+
 // A dry-run revert must request server-side dry-run and never persist, mirroring
 // Apply — so the safe-by-default contract holds for revert too.
 func TestAnnotateRevertDryRun(t *testing.T) {

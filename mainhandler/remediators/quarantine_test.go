@@ -171,6 +171,65 @@ func TestQuarantineApplyAlreadyExists(t *testing.T) {
 	assert.True(t, res.Applied)
 }
 
+// Re-quarantining after the workload's selector changed must reconcile the
+// existing policy to the new selector, not leave the stale one in place (which
+// would report success while the running pods stay unisolated).
+func TestQuarantineApplyReconcilesSelectorDrift(t *testing.T) {
+	client := k8sfake.NewClientset(deploymentWithSelector("payments", "api", map[string]string{"app": "api"}))
+	r := NewQuarantineRemediator(client)
+
+	plan, err := r.Plan(context.Background(), Request{Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"}})
+	require.NoError(t, err)
+	_, err = r.Apply(context.Background(), plan, false)
+	require.NoError(t, err)
+
+	// The workload is edited/redeployed with a new selector.
+	_, err = client.AppsV1().Deployments("payments").Update(context.Background(),
+		deploymentWithSelector("payments", "api", map[string]string{"app": "api", "track": "blue"}), metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	plan, err = r.Plan(context.Background(), Request{Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"}})
+	require.NoError(t, err)
+	res, err := r.Apply(context.Background(), plan, false)
+	require.NoError(t, err)
+	assert.True(t, res.Applied)
+
+	got, err := client.NetworkingV1().NetworkPolicies("payments").Get(context.Background(), "kubescape-quarantine-deployment-api", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"app": "api", "track": "blue"}, got.Spec.PodSelector.MatchLabels,
+		"an already-existing policy must be reconciled to the current selector")
+}
+
+// Reconciling an already-correct policy must issue the update as a server-side
+// dry-run when dryRun is set, honoring the safe-by-default contract.
+func TestQuarantineApplyReconcileHonorsDryRun(t *testing.T) {
+	client := k8sfake.NewClientset(deploymentWithSelector("payments", "api", map[string]string{"app": "api"}))
+	r := NewQuarantineRemediator(client)
+
+	plan, err := r.Plan(context.Background(), Request{Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"}})
+	require.NoError(t, err)
+	_, err = r.Apply(context.Background(), plan, false)
+	require.NoError(t, err)
+
+	_, err = client.AppsV1().Deployments("payments").Update(context.Background(),
+		deploymentWithSelector("payments", "api", map[string]string{"app": "api", "track": "blue"}), metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	var dryRun []string
+	client.PrependReactor("update", "networkpolicies", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		dryRun = action.(clienttesting.UpdateActionImpl).UpdateOptions.DryRun
+		return false, nil, nil
+	})
+
+	plan, err = r.Plan(context.Background(), Request{Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"}})
+	require.NoError(t, err)
+	res, err := r.Apply(context.Background(), plan, true)
+	require.NoError(t, err)
+	assert.True(t, res.DryRun)
+	assert.False(t, res.Applied)
+	assert.Equal(t, []string{metav1.DryRunAll}, dryRun, "a dry-run reconcile must request server-side dry-run")
+}
+
 func TestQuarantineRevert(t *testing.T) {
 	existing := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "kubescape-quarantine-deployment-api", Labels: map[string]string{LabelQuarantine: "true"}},

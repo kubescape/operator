@@ -73,9 +73,28 @@ func (r *AnnotateRemediator) Apply(ctx context.Context, p Plan, dryRun bool) (Re
 // Apply, dryRun=true issues a server-side dry-run (validated against admission,
 // never persisted); only dryRun=false performs a real write — so the
 // safe-by-default contract is honored for revert too.
+//
+// The contract's revert verb undoes every reversible action without naming which
+// one was applied, so revert runs annotate even on a workload that was only
+// quarantined. To keep the audit trail honest, a workload carrying none of the
+// remediation annotations is reported as a no-op ("nothing to revert",
+// Applied=false) rather than claiming annotations were removed.
 func (r *AnnotateRemediator) Revert(ctx context.Context, t Target, dryRun bool) (Result, error) {
 	if err := validateTarget(t); err != nil {
 		return Result{}, err
+	}
+	annotations, err := r.getAnnotations(ctx, t)
+	if err != nil {
+		return Result{}, err
+	}
+	if !hasAnyKey(annotations, AnnotationRemediated, AnnotationReason, AnnotationFindingRef) {
+		return Result{
+			Action:      string(apis.OperatorActionRevert),
+			Target:      t,
+			DryRun:      dryRun,
+			Applied:     false,
+			Description: fmt.Sprintf("no kubescape remediation annotations on %s; nothing to revert", t),
+		}, nil
 	}
 	// A JSON merge patch deletes a key by setting it to null.
 	patch, err := annotationPatch(map[string]interface{}{
@@ -107,6 +126,40 @@ func (r *AnnotateRemediator) desiredAnnotations(req Request) map[string]string {
 		annotations[AnnotationFindingRef] = req.FindingRef
 	}
 	return annotations
+}
+
+// getAnnotations reads the live target's annotations so Revert can tell whether
+// there is anything to undo. A NotFound is returned to the caller (the action
+// handler skips a target that no longer exists).
+func (r *AnnotateRemediator) getAnnotations(ctx context.Context, t Target) (map[string]string, error) {
+	switch strings.ToLower(t.Kind) {
+	case "deployment":
+		o, err := r.client.AppsV1().Deployments(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return o.Annotations, nil
+	case "statefulset":
+		o, err := r.client.AppsV1().StatefulSets(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return o.Annotations, nil
+	case "daemonset":
+		o, err := r.client.AppsV1().DaemonSets(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return o.Annotations, nil
+	case "pod":
+		o, err := r.client.CoreV1().Pods(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return o.Annotations, nil
+	default:
+		return nil, fmt.Errorf("annotate: unsupported target kind %q (supported: Deployment, StatefulSet, DaemonSet, Pod)", t.Kind)
+	}
 }
 
 // patch applies a JSON merge patch to the target object using the typed client
@@ -162,6 +215,16 @@ func toInterfaceMap(in map[string]string) map[string]interface{} {
 		out[k] = v
 	}
 	return out
+}
+
+// hasAnyKey reports whether m contains at least one of keys.
+func hasAnyKey(m map[string]string, keys ...string) bool {
+	for _, k := range keys {
+		if _, ok := m[k]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func validateTarget(t Target) error {
