@@ -166,7 +166,16 @@ func (wh *SecurityExceptionWatchHandler) consumeWatch(ctx context.Context, gvr s
 				sleepCtx(ctx, wh.watchRetryInterval)
 				return
 			}
-			if event.Type == watch.Bookmark || event.Type == watch.Error {
+			if event.Type == watch.Bookmark {
+				continue
+			}
+			if event.Type == watch.Error {
+				// carries a *metav1.Status with the reason the watch failed
+				// (e.g. "resource version too old") — worth surfacing before
+				// the watch is re-established.
+				logger.L().Ctx(ctx).Error("security exception watch error event",
+					helpers.String("resource", gvr.Resource),
+					helpers.Interface("status", event.Object))
 				continue
 			}
 			if _, ok := event.Object.(*unstructured.Unstructured); !ok {
@@ -269,10 +278,17 @@ func (wh *SecurityExceptionWatchHandler) expiryLoop(ctx context.Context) {
 // rescan (tracked in expiredSeen).
 func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 	now := wh.clock()
-	newlyExpired := false
 
-	wh.mu.Lock()
-	defer wh.mu.Unlock()
+	// entry captures the expiry decision for one exception, computed outside the
+	// lock so the (potentially slow) List calls never block forgetExpired.
+	type entry struct {
+		key       string
+		expired   bool
+		kind      string
+		name      string
+		namespace string
+	}
+	var entries []entry
 	for _, gvr := range []schema.GroupVersionResource{securityExceptionGVR, clusterSecurityExceptionGVR} {
 		list, err := wh.dynamicClient.Resource(gvr).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -282,25 +298,38 @@ func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 		}
 		for i := range list.Items {
 			item := &list.Items[i]
-			key := expiredKey(gvr, item)
 			expiresAt, ok := parseExpiresAt(item)
-			if !ok || now.Before(expiresAt) {
-				// not expired (or never expires): drop any stale mark so a future
-				// re-expiry (e.g. expiresAt pushed out then back) is caught again
-				delete(wh.expiredSeen, key)
-				continue
-			}
-			if _, seen := wh.expiredSeen[key]; seen {
-				continue
-			}
-			wh.expiredSeen[key] = struct{}{}
-			newlyExpired = true
-			logger.L().Info("security exception expired, requesting rescan",
-				helpers.String("kind", item.GetKind()),
-				helpers.String("name", item.GetName()),
-				helpers.String("namespace", item.GetNamespace()))
+			entries = append(entries, entry{
+				key:       expiredKey(gvr, item),
+				expired:   ok && !now.Before(expiresAt),
+				kind:      item.GetKind(),
+				name:      item.GetName(),
+				namespace: item.GetNamespace(),
+			})
 		}
 	}
+
+	newlyExpired := false
+	wh.mu.Lock()
+	for _, e := range entries {
+		if !e.expired {
+			// not expired (or never expires): drop any stale mark so a future
+			// re-expiry (e.g. expiresAt pushed out then back) is caught again
+			delete(wh.expiredSeen, e.key)
+			continue
+		}
+		if _, seen := wh.expiredSeen[e.key]; seen {
+			continue
+		}
+		wh.expiredSeen[e.key] = struct{}{}
+		newlyExpired = true
+		logger.L().Info("security exception expired, requesting rescan",
+			helpers.String("kind", e.kind),
+			helpers.String("name", e.name),
+			helpers.String("namespace", e.namespace))
+	}
+	wh.mu.Unlock()
+
 	if newlyExpired {
 		wh.requestRescan()
 	}
