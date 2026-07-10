@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -46,22 +47,61 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 		return fmt.Errorf("operatorAction: ttl/auto-revert is not supported yet (later phase); omit ttl")
 	}
 
-	// Phase 1 ships explicit-target actions only. Findings-driven Selector
-	// targeting (reading the stored scan-result CRDs) arrives in phase 2.
-	if args.Target == nil {
-		if args.Selector != nil {
-			return fmt.Errorf("operatorAction: findings-driven selector targeting is not supported yet (phase 2); provide an explicit target")
+	// Resolve the target set: an explicit Target, or a findings-driven Selector
+	// that reads the stored configuration-scan summaries (no re-scan). Exactly
+	// one of the two must be provided.
+	targets, err := actionHandler.resolveTargets(ctx, args)
+	if err != nil {
+		return err
+	}
+
+	dryRun := args.IsDryRun()
+	registry := remediators.NewRegistry(actionHandler.k8sAPI.KubernetesClient)
+
+	// A single target (explicit, or a selector that resolved to one) returns its
+	// error verbatim. A multi-target selector runs every target and aggregates
+	// failures so one bad workload does not abandon the rest.
+	if len(targets) == 1 {
+		return actionHandler.handleActionOnTarget(ctx, args, targets[0], registry, dryRun)
+	}
+	var errs []error
+	for _, target := range targets {
+		if err := actionHandler.handleActionOnTarget(ctx, args, target, registry, dryRun); err != nil {
+			errs = append(errs, fmt.Errorf("target %s: %w", target, err))
 		}
-		return fmt.Errorf("operatorAction: a target is required")
 	}
+	return errors.Join(errs...)
+}
 
-	target := remediators.Target{
-		Kind:      args.Target.Kind,
-		Namespace: args.Target.Namespace,
-		Name:      args.Target.Name,
+// resolveTargets returns the concrete objects the action operates on. An
+// explicit Target is used as-is; a Selector is resolved against stored findings.
+// A selector that matches nothing is an error, not a silent no-op, so the caller
+// learns the action had no effect.
+func (actionHandler *ActionHandler) resolveTargets(ctx context.Context, args apis.OperatorActionArgs) ([]remediators.Target, error) {
+	if args.Target != nil {
+		return []remediators.Target{{
+			Kind:      args.Target.Kind,
+			Namespace: args.Target.Namespace,
+			Name:      args.Target.Name,
+		}}, nil
 	}
+	if args.Selector != nil {
+		targets, err := actionHandler.resolveSelectorTargets(ctx, args.Selector)
+		if err != nil {
+			return nil, err
+		}
+		if len(targets) == 0 {
+			return nil, fmt.Errorf("operatorAction: selector matched no workloads (control=%q minSeverity=%q)", args.Selector.Control, args.Selector.MinSeverity)
+		}
+		return targets, nil
+	}
+	return nil, fmt.Errorf("operatorAction: a target is required")
+}
 
-	// All Phase-1 target kinds are namespaced. Require the namespace up front so
+// handleActionOnTarget enforces the per-target safety rails and dispatches the
+// action to the matching remediator. It runs once per resolved target.
+func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, args apis.OperatorActionArgs, target remediators.Target, registry map[apis.OperatorActionType]remediators.Remediator, dryRun bool) error {
+	// All current target kinds are namespaced. Require the namespace up front so
 	// the excluded-namespace rail below is actually enforced, instead of an empty
 	// namespace slipping past it and failing late at the API server.
 	if remediators.IsNamespacedKind(target.Kind) && target.Namespace == "" {
@@ -72,9 +112,6 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 	if target.Namespace != "" && actionHandler.config.SkipNamespace(target.Namespace) {
 		return fmt.Errorf("operatorAction: namespace %q is excluded from remediation", target.Namespace)
 	}
-
-	dryRun := args.IsDryRun()
-	registry := remediators.NewRegistry(actionHandler.k8sAPI.KubernetesClient)
 
 	logger.L().Info("handling operator action",
 		helpers.String("action", string(args.Action)),

@@ -48,6 +48,7 @@ type ActionHandler struct {
 	sessionObj             *utils.SessionObj
 	config                 config.IConfig
 	k8sAPI                 *k8sinterface.KubernetesApi
+	ksStorageClient        kssc.Interface
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
 	exporter               exporters.Exporter
@@ -96,10 +97,11 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, e
 }
 
 // CreateWebSocketHandler Create ws-handler obj
-func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, exporter exporters.Exporter) *ActionHandler {
+func NewActionHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, ksStorageClient kssc.Interface, sessionObj *utils.SessionObj, commandResponseChannel *commandResponseChannelData, exporter exporters.Exporter) *ActionHandler {
 	return &ActionHandler{
 		sessionObj:             sessionObj,
 		k8sAPI:                 k8sAPI,
+		ksStorageClient:        ksStorageClient,
 		commandResponseChannel: commandResponseChannel,
 		config:                 config,
 		exporter:               exporter,
@@ -218,7 +220,7 @@ func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, session
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 
-	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, sessionObj, mainHandler.commandResponseChannel, mainHandler.exporter)
+	actionHandler := NewActionHandler(mainHandler.config, mainHandler.k8sAPI, mainHandler.ksStorageClient, sessionObj, mainHandler.commandResponseChannel, mainHandler.exporter)
 	return actionHandler.runCommand(ctx)
 
 }
