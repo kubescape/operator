@@ -163,6 +163,14 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		go watchHandler.ContainerProfileWatch(ctx, mainHandler.eventWorkerPool)
 	}
 
+	// Watch SecurityException/ClusterSecurityException CRDs and rescan posture on
+	// change or expiry, so exception edits take effect without waiting for the
+	// next scheduled scan.
+	if mainHandler.config.Components().Kubescape.Enabled {
+		securityExceptionWatchHandler := watcher.NewSecurityExceptionWatchHandler(mainHandler.config, mainHandler.k8sAPI.GetDynamicClient(), mainHandler.eventWorkerPool)
+		go securityExceptionWatchHandler.SecurityExceptionWatch(ctx)
+	}
+
 	go operatorCommandsHandler.Start()
 	go commandWatchHandler.CommandWatch(ctx)
 }
