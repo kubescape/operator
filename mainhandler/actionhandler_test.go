@@ -10,6 +10,9 @@ import (
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/mainhandler/remediators"
 	"github.com/kubescape/operator/utils"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,11 +43,17 @@ func newTestConfig(serviceConfig config.Config) config.IConfig {
 
 func newActionHandlerForTest(t *testing.T, client kubernetes.Interface, cfg config.IConfig, args apis.OperatorActionArgs) *ActionHandler {
 	t.Helper()
+	return newActionHandlerForTestWithStorage(t, client, kssfake.NewSimpleClientset(), cfg, args)
+}
+
+func newActionHandlerForTestWithStorage(t *testing.T, client kubernetes.Interface, storageClient kssc.Interface, cfg config.IConfig, args apis.OperatorActionArgs) *ActionHandler {
+	t.Helper()
 	argsMap, err := args.ToArgs()
 	require.NoError(t, err)
 	return &ActionHandler{
-		k8sAPI: utils.NewK8sInterfaceFake(client),
-		config: cfg,
+		k8sAPI:          utils.NewK8sInterfaceFake(client),
+		ksStorageClient: storageClient,
+		config:          cfg,
 		sessionObj: &utils.SessionObj{
 			Command: &apis.Command{CommandName: apis.TypeOperatorAction, Args: argsMap},
 		},
@@ -166,15 +175,81 @@ func TestHandleOperatorAction_ExcludedNamespaceRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "excluded from remediation")
 }
 
-func TestHandleOperatorAction_SelectorTargetingNotYetSupported(t *testing.T) {
-	client := k8sfake.NewClientset()
-	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+// A findings-driven selector annotates exactly the workloads that fail the
+// requested control — and leaves the ones that pass it untouched.
+func TestHandleOperatorAction_SelectorAnnotatesMatchingWorkloads(t *testing.T) {
+	client := k8sfake.NewClientset(
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "web"}},
+	)
+	storageClient := kssfake.NewSimpleClientset(
+		scanSummary("payments", "Deployment", "api", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": failedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{High: 1}),
+		scanSummary("payments", "Deployment", "web", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": passedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{}),
+	)
+
+	ah := newActionHandlerForTestWithStorage(t, client, storageClient, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action:   apis.OperatorActionAnnotate,
-		Selector: &apis.OperatorActionSelector{Control: "C-0016", MinSeverity: "High"},
+		Selector: &apis.OperatorActionSelector{Control: "C-0016"},
+		Reason:   "C-0016",
+		DryRun:   boolPtr(false),
 	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+
+	api, err := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "true", api.Annotations[remediators.AnnotationRemediated], "workload failing C-0016 must be annotated")
+
+	web, err := client.AppsV1().Deployments("payments").Get(context.Background(), "web", metav1.GetOptions{})
+	require.NoError(t, err)
+	_, ok := web.Annotations[remediators.AnnotationRemediated]
+	assert.False(t, ok, "workload passing C-0016 must be left untouched")
+}
+
+// A selector without --confirm must default to a server-side dry-run for every
+// matched workload, never a real write.
+func TestHandleOperatorAction_SelectorDefaultsToDryRun(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	var dryRun []string
+	capturePatchDryRun(client, "deployments", &dryRun)
+	storageClient := kssfake.NewSimpleClientset(
+		scanSummary("payments", "Deployment", "api", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": failedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{High: 1}),
+	)
+
+	ah := newActionHandlerForTestWithStorage(t, client, storageClient, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action:   apis.OperatorActionAnnotate,
+		Selector: &apis.OperatorActionSelector{Control: "C-0016"},
+		// DryRun intentionally nil
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	assert.Equal(t, []string{metav1.DryRunAll}, dryRun, "a selector action without dryRun must default to server-side dry-run")
+}
+
+// A selector that matches no stored finding is an explicit error, not a silent
+// no-op, so the caller learns the action had no effect.
+func TestHandleOperatorAction_SelectorMatchesNothing(t *testing.T) {
+	client := k8sfake.NewClientset()
+	storageClient := kssfake.NewSimpleClientset(
+		scanSummary("payments", "Deployment", "web", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": passedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{}),
+	)
+
+	ah := newActionHandlerForTestWithStorage(t, client, storageClient, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action:   apis.OperatorActionAnnotate,
+		Selector: &apis.OperatorActionSelector{Control: "C-0016"},
+	})
+
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "selector targeting is not supported yet")
+	assert.Contains(t, err.Error(), "matched no workloads")
 }
 
 func TestHandleOperatorAction_TargetRequired(t *testing.T) {
