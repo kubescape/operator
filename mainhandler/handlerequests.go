@@ -165,6 +165,18 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		go watchHandler.ContainerProfileWatch(ctx, mainHandler.eventWorkerPool)
 	}
 
+	// Watch SecurityException/ClusterSecurityException CRDs and rescan posture on
+	// change or expiry, so exception edits take effect without waiting for the
+	// next scheduled scan. Gated on the riskAcceptance capability to match the
+	// Helm chart, which only grants the operator get/list/watch on these CRDs when
+	// riskAcceptance is enabled; starting the watcher without that RBAC would just
+	// loop on permission-denied. Kubescape must also be enabled since the rescan
+	// dispatches a posture scan.
+	if mainHandler.config.RiskAcceptanceEnabled() && mainHandler.config.Components().Kubescape.Enabled {
+		securityExceptionWatchHandler := watcher.NewSecurityExceptionWatchHandler(mainHandler.config, mainHandler.k8sAPI.GetDynamicClient(), mainHandler.eventWorkerPool)
+		go securityExceptionWatchHandler.SecurityExceptionWatch(ctx)
+	}
+
 	go operatorCommandsHandler.Start()
 	go commandWatchHandler.CommandWatch(ctx)
 }

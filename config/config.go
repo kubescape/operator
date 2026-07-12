@@ -29,6 +29,7 @@ type Capabilities struct {
 	Seccomp              string `json:"seccomp"`
 	VulnerabilityScan    string `json:"vulnerabilityScan"`
 	AdmissionController  string `json:"admissionController"`
+	RiskAcceptance       string `json:"riskAcceptance"`
 }
 
 type Components struct {
@@ -150,6 +151,7 @@ type IConfig interface {
 	AdmissionControllerEnabled() bool
 	ContinuousScanEnabled() bool
 	NodeSbomGenerationEnabled() bool
+	RiskAcceptanceEnabled() bool
 	CleanUpRoutineInterval() time.Duration
 	MatchingRulesFilename() string
 	TriggerSecurityFramework() bool
@@ -196,6 +198,15 @@ func (c *OperatorConfig) AdmissionControllerEnabled() bool {
 
 func (c *OperatorConfig) NodeSbomGenerationEnabled() bool {
 	return c.components.Capabilities.NodeSbomGeneration == "enable"
+}
+
+// RiskAcceptanceEnabled reports whether the riskAcceptance capability is on. The
+// SecurityException watcher must gate on this because the operator's RBAC for
+// securityexceptions/clustersecurityexceptions is only granted by the Helm chart
+// when riskAcceptance is enabled — starting the watcher otherwise yields a
+// permission-denied watch loop with no rescans.
+func (c *OperatorConfig) RiskAcceptanceEnabled() bool {
+	return c.components.Capabilities.RiskAcceptance == "enable"
 }
 
 func (c *OperatorConfig) KubevulnURL() string {
