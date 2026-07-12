@@ -33,16 +33,13 @@ func shortenTunables(t *testing.T) {
 	origCooldown := securityExceptionCooldown
 	origEviction := securityExceptionEvictionInterval
 	origThrottle := securityExceptionRescanThrottle
-	origRetry := securityExceptionWatchRetryInterval
 	securityExceptionCooldown = 10 * time.Millisecond
 	securityExceptionEvictionInterval = 5 * time.Millisecond
 	securityExceptionRescanThrottle = 10 * time.Millisecond
-	securityExceptionWatchRetryInterval = 10 * time.Millisecond
 	t.Cleanup(func() {
 		securityExceptionCooldown = origCooldown
 		securityExceptionEvictionInterval = origEviction
 		securityExceptionRescanThrottle = origThrottle
-		securityExceptionWatchRetryInterval = origRetry
 	})
 }
 
@@ -197,20 +194,28 @@ func TestSweepExpiredRearmsWhenExpiryPushedOut(t *testing.T) {
 	assert.Len(t, wh.rescanSignal, 0)
 }
 
-func TestListExistingEnqueuesEachObject(t *testing.T) {
-	wh, _ := recordingHandler(t,
-		newSecurityException("prod", "a", ""),
-		newSecurityException("prod", "b", ""),
-	)
+func TestSecurityExceptionWatchDispatchesForLiveCreate(t *testing.T) {
+	// Start with no exceptions, then create one after the informer is running:
+	// the informer (not a one-shot list) must pick up the post-start change and
+	// dispatch a rescan.
+	wh, dispatched := recordingHandler(t)
 
-	require.NoError(t, wh.listExisting(context.Background(), securityExceptionGVR))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go wh.SecurityExceptionWatch(ctx)
 
-	got := drainEvents(t, wh.eventQueue, 2, time.Second)
-	names := map[string]bool{}
-	for _, e := range got {
-		names[e.Object.(*unstructured.Unstructured).GetName()] = true
+	// give the informer a moment to establish its watch before creating
+	time.Sleep(50 * time.Millisecond)
+	_, err := wh.dynamicClient.Resource(securityExceptionGVR).Namespace("prod").
+		Create(ctx, newSecurityException("prod", "created-live", ""), metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	select {
+	case cmd := <-dispatched:
+		assert.Equal(t, apis.TypeRunKubescape, cmd.CommandName)
+	case <-time.After(3 * time.Second):
+		t.Fatal("expected a rescan for an exception created after the watch started")
 	}
-	assert.Equal(t, map[string]bool{"a": true, "b": true}, names)
 }
 
 func TestHandleEventsDispatchesRescan(t *testing.T) {

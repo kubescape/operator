@@ -10,6 +10,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestRiskAcceptanceEnabled(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"enable", true},
+		{"disable", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			cfg := NewOperatorConfig(
+				CapabilitiesConfig{Capabilities: Capabilities{RiskAcceptance: tt.value}},
+				armometadata.ClusterConfig{},
+				&utils.Credentials{},
+				Config{},
+			)
+			assert.Equal(t, tt.want, cfg.RiskAcceptanceEnabled())
+		})
+	}
+}
+
 func TestLoadCapabilities(t *testing.T) {
 	type args struct {
 		path string

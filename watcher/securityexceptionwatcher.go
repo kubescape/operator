@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/pager"
 )
 
@@ -58,9 +60,11 @@ var (
 	// swept. Expiry is evaluated at scan time by the scanners; this loop only
 	// dispatches a rescan so previously-excepted findings resurface promptly.
 	securityExceptionExpirySweepInterval = 5 * time.Minute
-	// securityExceptionWatchRetryInterval backs off before re-establishing a
-	// dropped watch.
-	securityExceptionWatchRetryInterval = 5 * time.Second
+	// securityExceptionWatchFailureAlertThreshold is how many consecutive watch
+	// failures on a kind before the log escalates to an RBAC-misconfiguration
+	// hint — so a ClusterRole missing get/list/watch surfaces clearly instead of
+	// the informer silently retrying forever with no rescans.
+	securityExceptionWatchFailureAlertThreshold = 3
 )
 
 // SecurityExceptionWatchHandler watches SecurityException and
@@ -76,19 +80,21 @@ type SecurityExceptionWatchHandler struct {
 	// rescanSignal coalesces rescan requests: a buffered-by-one channel means
 	// many triggers collapse into at most one pending rescan.
 	rescanSignal chan struct{}
-	// mu guards expiredSeen, which is touched by both the event handler and the
-	// expiry sweep.
+	// mu guards expiredSeen and watchFailures, touched by both the event handlers
+	// and the expiry sweep.
 	mu sync.Mutex
 	// expiredSeen tracks exceptions we have already rescanned on expiry, keyed by
 	// GVR/namespace/name, so each expiry triggers exactly one rescan.
 	expiredSeen map[string]struct{}
-	clock       func() time.Time
+	// watchFailures counts consecutive informer watch failures per resource, so a
+	// persistently-broken watch (e.g. missing RBAC) can be escalated in the logs.
+	watchFailures map[string]int
+	clock         func() time.Time
 
 	// tunables captured at construction so a running handler is unaffected by
 	// later changes to the package globals (and so tests are race-free).
-	rescanThrottle     time.Duration
-	watchRetryInterval time.Duration
-	expirySweep        time.Duration
+	rescanThrottle time.Duration
+	expirySweep    time.Duration
 }
 
 // NewSecurityExceptionWatchHandler returns a handler that dispatches rescans onto
@@ -105,98 +111,113 @@ func NewSecurityExceptionWatchHandler(cfg config.IConfig, dynamicClient dynamic.
 // so tests can inject their own dispatchRescan.
 func newSecurityExceptionWatchHandler(cfg config.IConfig, dynamicClient dynamic.Interface) *SecurityExceptionWatchHandler {
 	return &SecurityExceptionWatchHandler{
-		dynamicClient:      dynamicClient,
-		cfg:                cfg,
-		eventQueue:         NewCooldownQueueWithParams(securityExceptionCooldown, securityExceptionEvictionInterval),
-		rescanSignal:       make(chan struct{}, 1),
-		expiredSeen:        map[string]struct{}{},
-		clock:              time.Now,
-		rescanThrottle:     securityExceptionRescanThrottle,
-		watchRetryInterval: securityExceptionWatchRetryInterval,
-		expirySweep:        securityExceptionExpirySweepInterval,
+		dynamicClient:  dynamicClient,
+		cfg:            cfg,
+		eventQueue:     NewCooldownQueueWithParams(securityExceptionCooldown, securityExceptionEvictionInterval),
+		rescanSignal:   make(chan struct{}, 1),
+		expiredSeen:    map[string]struct{}{},
+		watchFailures:  map[string]int{},
+		clock:          time.Now,
+		rescanThrottle: securityExceptionRescanThrottle,
+		expirySweep:    securityExceptionExpirySweepInterval,
 	}
 }
 
-// SecurityExceptionWatch starts the watchers, the expiry sweep and the rescan
+// SecurityExceptionWatch starts the informers, the expiry sweep and the rescan
 // dispatcher. It blocks until ctx is cancelled.
 func (wh *SecurityExceptionWatchHandler) SecurityExceptionWatch(ctx context.Context) {
-	go wh.watchKind(ctx, securityExceptionGVR)
-	go wh.watchKind(ctx, clusterSecurityExceptionGVR)
+	defer wh.eventQueue.Stop()
+	wh.startInformers(ctx)
 	go wh.expiryLoop(ctx)
 	go wh.rescanLoop(ctx)
 	wh.handleEvents(ctx)
 }
 
-// watchKind lists the existing objects of a kind (so exceptions present before
-// the operator started are honored) and then follows changes, forwarding every
-// event to the cooldown queue.
-func (wh *SecurityExceptionWatchHandler) watchKind(ctx context.Context, gvr schema.GroupVersionResource) {
-	if err := wh.listExisting(ctx, gvr); err != nil {
-		logger.L().Ctx(ctx).Error("failed to list existing security exceptions",
-			helpers.String("resource", gvr.Resource), helpers.Error(err))
-	}
-
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		w, err := wh.dynamicClient.Resource(gvr).Namespace(metav1.NamespaceAll).Watch(ctx, metav1.ListOptions{})
-		if err != nil {
-			logger.L().Ctx(ctx).Error("failed to watch security exceptions, retrying",
+// startInformers builds a resilient dynamic informer for each exception kind.
+//
+// The shared informer machinery tracks resourceVersion and relists on watch
+// errors (reconnects, "resource version too old"), so no create/update/delete is
+// missed across the watch rotations the apiserver performs periodically — the gap
+// a hand-rolled list-once + bare re-watch would leak through. The initial cache
+// sync also replays every pre-existing exception as an Add, so exceptions present
+// before the operator started are honored (replacing an explicit list step).
+func (wh *SecurityExceptionWatchHandler) startInformers(ctx context.Context) {
+	factory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(wh.dynamicClient, 0, metav1.NamespaceAll, nil)
+	for _, gvr := range []schema.GroupVersionResource{securityExceptionGVR, clusterSecurityExceptionGVR} {
+		informer := factory.ForResource(gvr).Informer()
+		// Must be set before the informer starts (below, via factory.Start).
+		if err := informer.SetWatchErrorHandler(wh.newWatchErrorHandler(ctx, gvr)); err != nil {
+			logger.L().Ctx(ctx).Error("failed to set security exception watch error handler",
 				helpers.String("resource", gvr.Resource), helpers.Error(err))
-			if !sleepCtx(ctx, wh.watchRetryInterval) {
-				return
-			}
-			continue
 		}
-		wh.consumeWatch(ctx, gvr, w)
+		if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { wh.enqueueInformerEvent(gvr, watch.Added, obj) },
+			UpdateFunc: func(_, obj interface{}) { wh.enqueueInformerEvent(gvr, watch.Modified, obj) },
+			DeleteFunc: func(obj interface{}) { wh.enqueueInformerEvent(gvr, watch.Deleted, obj) },
+		}); err != nil {
+			logger.L().Ctx(ctx).Error("failed to register security exception event handler",
+				helpers.String("resource", gvr.Resource), helpers.Error(err))
+		}
 	}
+	factory.Start(ctx.Done())
 }
 
-// consumeWatch forwards events from a single watch until it closes or ctx ends.
-func (wh *SecurityExceptionWatchHandler) consumeWatch(ctx context.Context, gvr schema.GroupVersionResource, w watch.Interface) {
-	defer w.Stop()
-	for {
-		select {
-		case <-ctx.Done():
+// enqueueInformerEvent normalizes an informer callback object to Unstructured
+// (unwrapping delete tombstones) and forwards it to the cooldown queue. A
+// delivered event also proves the watch is healthy, so it clears the consecutive
+// failure counter used by the watch-error handler.
+func (wh *SecurityExceptionWatchHandler) enqueueInformerEvent(gvr schema.GroupVersionResource, eventType watch.EventType, obj interface{}) {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		// On delete the informer may deliver a DeletedFinalStateUnknown tombstone
+		// when the final state was missed; unwrap the last-known object.
+		tombstone, isTombstone := obj.(cache.DeletedFinalStateUnknown)
+		if !isTombstone {
 			return
-		case event, ok := <-w.ResultChan():
-			if !ok {
-				// watch closed; back off before the caller re-establishes it
-				sleepCtx(ctx, wh.watchRetryInterval)
-				return
-			}
-			if event.Type == watch.Bookmark {
-				continue
-			}
-			if event.Type == watch.Error {
-				// carries a *metav1.Status with the reason the watch failed
-				// (e.g. "resource version too old") — worth surfacing before
-				// the watch is re-established.
-				logger.L().Ctx(ctx).Error("security exception watch error event",
-					helpers.String("resource", gvr.Resource),
-					helpers.Interface("status", event.Object))
-				continue
-			}
-			if _, ok := event.Object.(*unstructured.Unstructured); !ok {
-				continue
-			}
-			logger.L().Debug("security exception event",
-				helpers.String("resource", gvr.Resource),
-				helpers.String("type", string(event.Type)))
-			wh.eventQueue.Enqueue(event)
 		}
+		if u, ok = tombstone.Obj.(*unstructured.Unstructured); !ok {
+			return
+		}
+	}
+	wh.resetWatchFailures(gvr)
+	logger.L().Debug("security exception event",
+		helpers.String("resource", gvr.Resource),
+		helpers.String("type", string(eventType)))
+	wh.eventQueue.Enqueue(watch.Event{Type: eventType, Object: u})
+}
+
+// newWatchErrorHandler returns a reflector error handler that makes a
+// persistently-failing watch non-silent: it counts consecutive failures per
+// resource and, past a threshold, escalates the log to an RBAC hint. The
+// reflector already backs off between retries, so this does not spam.
+func (wh *SecurityExceptionWatchHandler) newWatchErrorHandler(ctx context.Context, gvr schema.GroupVersionResource) cache.WatchErrorHandler {
+	return func(_ *cache.Reflector, err error) {
+		wh.mu.Lock()
+		wh.watchFailures[gvr.Resource]++
+		n := wh.watchFailures[gvr.Resource]
+		wh.mu.Unlock()
+
+		if n >= securityExceptionWatchFailureAlertThreshold {
+			logger.L().Ctx(ctx).Error(
+				"security exception watch is failing repeatedly; verify the operator ClusterRole grants get/list/watch on this resource under kubescape.io — rescans will not fire until the watch recovers",
+				helpers.String("resource", gvr.Resource),
+				helpers.Int("consecutiveFailures", n),
+				helpers.Error(err))
+			return
+		}
+		logger.L().Ctx(ctx).Error("security exception watch failed, retrying",
+			helpers.String("resource", gvr.Resource),
+			helpers.Int("consecutiveFailures", n),
+			helpers.Error(err))
 	}
 }
 
-// listExisting enqueues an Added event for every currently-present object.
-func (wh *SecurityExceptionWatchHandler) listExisting(ctx context.Context, gvr schema.GroupVersionResource) error {
-	return pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return wh.dynamicClient.Resource(gvr).Namespace(metav1.NamespaceAll).List(ctx, opts)
-	}).EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-		wh.eventQueue.Enqueue(watch.Event{Type: watch.Added, Object: obj})
-		return nil
-	})
+// resetWatchFailures clears the consecutive-failure counter for a resource once
+// a watch event is successfully delivered.
+func (wh *SecurityExceptionWatchHandler) resetWatchFailures(gvr schema.GroupVersionResource) {
+	wh.mu.Lock()
+	delete(wh.watchFailures, gvr.Resource)
+	wh.mu.Unlock()
 }
 
 // handleEvents consumes debounced events and requests a rescan for each.
@@ -247,7 +268,12 @@ func (wh *SecurityExceptionWatchHandler) rescanLoop(ctx context.Context) {
 		case <-wh.rescanSignal:
 			cmd := buildRescanCommand(wh.cfg.ClusterName())
 			if err := wh.dispatchRescan(ctx, cmd); err != nil {
-				logger.L().Ctx(ctx).Error("failed to dispatch security exception rescan", helpers.Error(err))
+				// Re-arm so a transient failure (e.g. the shared worker pool is
+				// overloaded and Invoke returns ErrPoolOverload) is retried after
+				// the throttle instead of being dropped until the next unrelated
+				// change. The throttle sleep below prevents a tight retry loop.
+				logger.L().Ctx(ctx).Error("failed to dispatch security exception rescan, will retry after throttle", helpers.Error(err))
+				wh.requestRescan()
 			} else {
 				logger.L().Info("dispatched cluster posture rescan for security exception change")
 			}
@@ -290,14 +316,15 @@ func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 	}
 	var entries []entry
 	for _, gvr := range []schema.GroupVersionResource{securityExceptionGVR, clusterSecurityExceptionGVR} {
-		list, err := wh.dynamicClient.Resource(gvr).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			logger.L().Ctx(ctx).Error("failed to list security exceptions for expiry sweep",
-				helpers.String("resource", gvr.Resource), helpers.Error(err))
-			continue
-		}
-		for i := range list.Items {
-			item := &list.Items[i]
+		// Paginate the list (matching the informer's list behavior) so the sweep
+		// stays bounded if the exception count grows large.
+		err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return wh.dynamicClient.Resource(gvr).Namespace(metav1.NamespaceAll).List(ctx, opts)
+		}).EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			item, ok := obj.(*unstructured.Unstructured)
+			if !ok {
+				return nil
+			}
 			expiresAt, ok := parseExpiresAt(item)
 			entries = append(entries, entry{
 				key:       expiredKey(gvr, item),
@@ -306,6 +333,12 @@ func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 				name:      item.GetName(),
 				namespace: item.GetNamespace(),
 			})
+			return nil
+		})
+		if err != nil {
+			logger.L().Ctx(ctx).Error("failed to list security exceptions for expiry sweep",
+				helpers.String("resource", gvr.Resource), helpers.Error(err))
+			continue
 		}
 	}
 
