@@ -54,7 +54,7 @@ type Autoscaler struct {
 
 // NewAutoscaler creates a new Autoscaler instance
 func NewAutoscaler(client kubernetes.Interface, cfg config.NodeAgentAutoscalerConfig, namespace string, operatorDeploymentName string) (*Autoscaler, error) {
-	templateRenderer, err := NewTemplateRenderer(cfg.TemplatePath, cfg.GoMemLimitPercentage, cfg.NodeGroupLabel)
+	templateRenderer, err := NewTemplateRenderer(cfg.TemplatePath, cfg.GoMemLimitPercentage, cfg.NodeGroupLabel, cfg.SELinuxType)
 	if err != nil {
 		return nil, err
 	}

@@ -29,7 +29,7 @@ func TestIntegration_HelmGeneratedTemplate(t *testing.T) {
 	}
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
 	require.NoError(t, err)
 
 	// Test data simulating a node group
@@ -89,7 +89,7 @@ func TestIntegration_HelmGeneratedTemplate_DefaultGroup(t *testing.T) {
 		t.Skip("Integration test requires template file. Run Helm extraction first. See test comments for instructions.")
 	}
 
-	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
 	require.NoError(t, err)
 
 	group := NodeGroup{
