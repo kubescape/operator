@@ -129,3 +129,30 @@ func TestIntegration_HelmGeneratedTemplate_DefaultGroup(t *testing.T) {
 	}
 	assert.True(t, foundDoesNotExist, "expected a DoesNotExist match expression on the grouping label")
 }
+
+// TestIntegration_HelmGeneratedTemplate_Bottlerocket verifies the Helm-generated
+// autoscaler template renders super_t for a Bottlerocket group and the default for others.
+func TestIntegration_HelmGeneratedTemplate_Bottlerocket(t *testing.T) {
+	templatePath := "/tmp/test-daemonset-template.yaml"
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		t.Skip("Integration test requires template file. Run Helm extraction first. See test comments for instructions.")
+	}
+
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
+	require.NoError(t, err)
+
+	resources := CalculatedResources{
+		Requests: ResourcePair{CPU: resource.MustParse("100m"), Memory: resource.MustParse("200Mi")},
+		Limits:   ResourcePair{CPU: resource.MustParse("500m"), Memory: resource.MustParse("1Gi")},
+	}
+
+	brDS, err := renderer.RenderDaemonSet(NodeGroup{LabelValue: "m5.large", SanitizedName: "m5-large", HasBottlerocket: true}, resources)
+	require.NoError(t, err)
+	require.NotNil(t, brDS.Spec.Template.Spec.Containers[0].SecurityContext.SELinuxOptions)
+	assert.Equal(t, "super_t", brDS.Spec.Template.Spec.Containers[0].SecurityContext.SELinuxOptions.Type)
+
+	stdDS, err := renderer.RenderDaemonSet(NodeGroup{LabelValue: "m5.large", SanitizedName: "m5-large", HasBottlerocket: false}, resources)
+	require.NoError(t, err)
+	require.NotNil(t, stdDS.Spec.Template.Spec.Containers[0].SecurityContext.SELinuxOptions)
+	assert.Equal(t, "spc_t", stdDS.Spec.Template.Spec.Containers[0].SecurityContext.SELinuxOptions.Type)
+}

@@ -126,6 +126,36 @@ default group.
 > pod adoption across them — but `kubectl get pods -l kubescape.io/node-group=…`
 > will list both groups' pods together.
 
+### AWS Bottlerocket auto-detection
+
+When running on Bottlerocket OS nodes, the `node-agent` container requires the
+`super_t` SELinux type instead of the default `spc_t` (Bottlerocket enforces
+SELinux and does not grant `spc_t` the permissions the agent needs). The
+autoscaler detects this automatically so operators no longer have to configure
+it by hand.
+
+- **Detection**: the `NodeGrouper` inspects each ready node's
+  `node.Status.NodeInfo.OSImage` (case-insensitively) for `bottlerocket`. If
+  *any* node in a group matches, the whole group is flagged
+  `HasBottlerocket = true` — mixed groups (some Bottlerocket, some not) get
+  `super_t` applied to **every** node in that group, since a DaemonSet template
+  is rendered once per group, not per node.
+- **Rendering**: `TemplateRenderer.RenderDaemonSet` uses `super_t` for
+  Bottlerocket groups and falls back to the configured default (`spc_t`) for
+  everyone else. The Helm chart emits the `{{ .SELinuxType }}` placeholder in
+  the DaemonSet template only when the autoscaler is enabled; in non-autoscaler
+  (static DaemonSet / `multipleDaemonSets`) modes the chart still bakes in the
+  literal `nodeAgent.seLinuxType` value at template time, since there per-group
+  detection doesn't apply.
+- **Toggle**: the behavior is controlled by
+  `nodeAgent.autoscaler.bottlerocketAutoDetect`, which defaults to `true`. Set
+  it to `false` to disable detection and always use the configured default
+  SELinux type.
+- **Migration**: customers no longer need to manually pass
+  `--set nodeAgent.seLinuxType=super_t` when running Bottlerocket node groups
+  under the autoscaler — the correct type is now selected per node group
+  automatically.
+
 ### NodeGrouper (`nodegrouper.go`)
 
 Handles node discovery and resource calculation.
