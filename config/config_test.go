@@ -146,6 +146,8 @@ func TestLoadConfig(t *testing.T) {
 					TemplatePath:           "/etc/templates/daemonset-template.yaml",
 					OperatorDeploymentName: "operator",
 					GoMemLimitPercentage:   0.8,
+					SELinuxType:            "spc_t",
+					BottlerocketAutoDetect: true,
 				},
 			},
 		},
