@@ -132,7 +132,7 @@ require (
 	github.com/briandowns/spinner v1.23.2 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cilium/cilium v1.17.15 // indirect
+	github.com/cilium/cilium v1.17.16 // indirect
 	github.com/cilium/ebpf v0.20.0 // indirect
 	github.com/containerd/cgroups/v3 v3.1.2 // indirect
 	github.com/containerd/containerd v1.7.33 // indirect
