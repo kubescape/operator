@@ -3,12 +3,18 @@ package mainhandler
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/identifiers"
+	beUtils "github.com/kubescape/backend/pkg/utils"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/operator/config"
@@ -146,15 +152,61 @@ func getContainerProfileActionNames(t *testing.T, storageClient interface{ Actio
 	return names
 }
 
+// scannerStub stands in for kubevuln. HandleSingleRequest only reaches it if the dispatch
+// switch in runCommand actually routes the command to actionHandler.scanContainerProfile
+// (i.e. GetContainerProfileScanCommand set the right CommandName) and that handler completes
+// successfully (which is also the only way slugs[s] = true gets set in
+// HandleImageScanningScopedRequest). Counting requests therefore lets tests detect both the
+// CommandName regression and the per-workload dedup regression, neither of which a bare
+// "get containerprofiles" assertion on the storage client can distinguish from a correct fix.
+type scannerStub struct {
+	server *httptest.Server
+	mu     sync.Mutex
+	count  int
+}
+
+func newScannerStub(t *testing.T) *scannerStub {
+	t.Helper()
+	s := &scannerStub{}
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		s.mu.Lock()
+		s.count++
+		s.mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(s.server.Close)
+	return s
+}
+
+func (s *scannerStub) requestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.count
+}
+
+func (s *scannerStub) hostPort() string {
+	return strings.TrimPrefix(s.server.URL, "http://")
+}
+
 // newMainHandlerForTest builds a MainHandler wired to fake Kubernetes and storage clientsets,
-// with Kubevuln disabled (so any container-profile-found path that reaches
-// actionHandler.scanContainerProfile returns a harmless error immediately, with no further
-// network calls).
-func newMainHandlerForTest(k8sClient *k8sfake.Clientset, storageClient *kssfake.Clientset) *MainHandler {
+// with Kubevuln enabled and pointed at scanner. This lets a found ContainerProfile's scan
+// command actually complete end-to-end through actionHandler.scanContainerProfile, instead of
+// short-circuiting on a "kubevuln is not enabled" error before slugs[s] = true is ever reached.
+func newMainHandlerForTest(k8sClient *k8sfake.Clientset, storageClient *kssfake.Clientset, scanner *scannerStub) *MainHandler {
+	capabilities := config.CapabilitiesConfig{
+		Components: config.Components{
+			Kubevuln: config.Component{Enabled: true},
+		},
+	}
+	clusterConfig := utilsmetadata.ClusterConfig{KubevulnURL: scanner.hostPort()}
+	// VulnScanHttpClient is normally set once at startup (see main.go); scanContainerProfile
+	// uses it directly (not via config), so tests that expect a real POST to reach the
+	// scanner stub must set it explicitly too.
+	VulnScanHttpClient = utils.InitHttpClient(clusterConfig.KubevulnURL)
 	return &MainHandler{
 		k8sAPI:          utils.NewK8sInterfaceFake(k8sClient),
 		ksStorageClient: storageClient,
-		config:          newTestConfig(config.Config{}),
+		config:          config.NewOperatorConfig(capabilities, clusterConfig, &beUtils.Credentials{}, config.Config{}),
 	}
 }
 
@@ -179,16 +231,20 @@ func TestHandleImageScanningScopedRequest_LooksUpWithContainerSlug(t *testing.T)
 	slugs := withContainerSlugsForHandler(t, pod)
 	require.Len(t, slugs, 1)
 
-	k8sClient := k8sfake.NewSimpleClientset(pod)
+	k8sClient := k8sfake.NewClientset(pod)
 	storageClient := kssfake.NewSimpleClientset(containerProfileForHandler(ns, slugs[0]))
+	scanner := newScannerStub(t)
 
-	mainHandler := newMainHandlerForTest(k8sClient, storageClient)
+	mainHandler := newMainHandlerForTest(k8sClient, storageClient, scanner)
 	sessionObj := sessionObjForNamespaceForHandler(ns)
 
 	mainHandler.HandleImageScanningScopedRequest(context.Background(), sessionObj)
 
 	gotNames := getContainerProfileActionNames(t, storageClient)
 	assert.Equal(t, slugs, gotNames, "expected a single 'get containerprofiles' call using the with-container slug")
+	// Only reachable if GetContainerProfileScanCommand's CommandName correctly routes through
+	// runCommand's dispatch switch into actionHandler.scanContainerProfile.
+	assert.Equal(t, 1, scanner.requestCount(), "expected the container-profile scan to actually dispatch to the scanner")
 }
 
 // TestHandleImageScanningScopedRequest_MultiContainerDoesNotDedupeAcrossContainers is a
@@ -207,14 +263,20 @@ func TestHandleImageScanningScopedRequest_MultiContainerDoesNotDedupeAcrossConta
 		profiles = append(profiles, containerProfileForHandler(ns, slug))
 	}
 
-	k8sClient := k8sfake.NewSimpleClientset(pod)
+	k8sClient := k8sfake.NewClientset(pod)
 	storageClient := kssfake.NewSimpleClientset(profiles...)
+	scanner := newScannerStub(t)
 
-	mainHandler := newMainHandlerForTest(k8sClient, storageClient)
+	mainHandler := newMainHandlerForTest(k8sClient, storageClient, scanner)
 	sessionObj := sessionObjForNamespaceForHandler(ns)
 
 	mainHandler.HandleImageScanningScopedRequest(context.Background(), sessionObj)
 
 	gotNames := getContainerProfileActionNames(t, storageClient)
 	assert.ElementsMatch(t, slugs, gotNames, "expected one 'get containerprofiles' call per container, each with its own with-container slug")
+	// Each container's scan must independently reach the scanner: with Kubevuln enabled,
+	// a reintroduced per-workload dedup (keyed by the no-container slug, identical across
+	// containers) would mark the workload "done" after the first successful dispatch and
+	// skip the rest, so this count would drop below len(slugs) if that regression returned.
+	assert.Equal(t, len(slugs), scanner.requestCount(), "expected one dispatched scan per container, none dropped by dedup")
 }
