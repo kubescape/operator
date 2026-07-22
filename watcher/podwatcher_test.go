@@ -13,8 +13,10 @@ import (
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
+	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
@@ -417,6 +419,130 @@ func Test_handlePodWatcher(t *testing.T) {
 			assert.Equal(t, len(actualCommands), found, "expected commands length don’t match")
 		})
 	}
+}
+
+func newTestContainerProfile(name, namespace, wlid string) *v1beta1.ContainerProfile {
+	return &v1beta1.ContainerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Annotations: map[string]string{
+				helpersv1.StatusMetadataKey:     helpersv1.Learning,
+				helpersv1.InstanceIDMetadataKey: "some-instance-id",
+				helpersv1.WlidMetadataKey:       wlid,
+			},
+		},
+	}
+}
+
+// Test_handlePodWatcher_ContainerProfile is a regression test for the bug where handlePodWatcher looked up
+// ContainerProfile objects using the wrong ("no-container") slug, which always missed, and deduped container
+// profile scans per-workload instead of per-container, which dropped scans for every container after the first.
+func Test_handlePodWatcher_ContainerProfile(t *testing.T) {
+	ctx := context.Background()
+	clusterConfig := utilsmetadata.ClusterConfig{
+		ClusterName: "gke_armo-test-clusters_us-central1-c_dwertent-syft",
+	}
+	cfg, err := config.LoadConfig("../configuration")
+	assert.NoError(t, err)
+
+	t.Run("single container - container profile exists", func(t *testing.T) {
+		pod := bytesToPod(readFileToBytes(podKubeProxy))
+		wlid := "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-kube-system/pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf"
+		slug := "pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf-kube-proxy-ebb6-8b3d"
+		profile := newTestContainerProfile(slug, pod.GetNamespace(), wlid)
+
+		operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+		k8sClient := k8sfake.NewSimpleClientset()
+		dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+		k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+		k8sAPI.DynamicClient = dynClient
+		storageClient := kssfake.NewSimpleClientset(profile)
+
+		eventQueue := NewCooldownQueue()
+		wh := NewWatchHandler(operatorConfig, k8sAPI, storageClient, eventQueue)
+
+		var mu sync.Mutex
+		actualCommands := []apis.Command{}
+		wg := &sync.WaitGroup{}
+		wg.Add(1)
+		pool, _ := ants.NewPoolWithFunc(1, func(i interface{}) {
+			j := i.(utils.Job)
+			command := j.Obj().Command
+			mu.Lock()
+			actualCommands = append(actualCommands, *command)
+			mu.Unlock()
+			wg.Done()
+		})
+
+		wh.handlePodWatcher(ctx, pod, pool)
+		wg.Wait()
+
+		assert.Len(t, actualCommands, 1)
+		assert.EqualValues(t, utils.CommandScanContainerProfile, actualCommands[0].CommandName)
+		assert.Equal(t, profile.Name, actualCommands[0].Args[utils.ArgsName])
+		assert.Equal(t, profile.Namespace, actualCommands[0].Args[utils.ArgsNamespace])
+	})
+
+	t.Run("multi container - container profile exists for every container", func(t *testing.T) {
+		pod := bytesToPod(readFileToBytes(podCollection))
+		wlid := "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-default/deployment-collection"
+		// with-container slugs (GetSlug(false)) for each of the pod's 5 containers, per Test_mapSlugToInstanceID.
+		slugs := []string{
+			"replicaset-collection-69c659f8cb-alpine-container-9858-6638",
+			"replicaset-collection-69c659f8cb-redis-beb0-de8a",
+			"replicaset-collection-69c659f8cb-wordpress-05df-a39f",
+			"replicaset-collection-69c659f8cb-busybox-b1d9-e8c6",
+			"replicaset-collection-69c659f8cb-alpine-3ac2-aecc",
+		}
+		var storageObjects []runtime.Object
+		for _, slug := range slugs {
+			storageObjects = append(storageObjects, newTestContainerProfile(slug, pod.GetNamespace(), wlid))
+		}
+
+		operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+		parentObjects := []runtime.Object{
+			bytesToRuntimeObj(readFileToBytes(deploymentCollection)),
+			bytesToRuntimeObj(readFileToBytes(replicaSetCollection)),
+		}
+		k8sClient := k8sfake.NewSimpleClientset(parentObjects...)
+		dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), parentObjects...)
+		k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
+		k8sAPI.DynamicClient = dynClient
+		storageClient := kssfake.NewSimpleClientset(storageObjects...)
+
+		eventQueue := NewCooldownQueue()
+		wh := NewWatchHandler(operatorConfig, k8sAPI, storageClient, eventQueue)
+
+		var mu sync.Mutex
+		actualCommands := []apis.Command{}
+		wg := &sync.WaitGroup{}
+		wg.Add(len(slugs))
+		pool, _ := ants.NewPoolWithFunc(1, func(i interface{}) {
+			j := i.(utils.Job)
+			command := j.Obj().Command
+			mu.Lock()
+			actualCommands = append(actualCommands, *command)
+			mu.Unlock()
+			wg.Done()
+		})
+
+		wh.handlePodWatcher(ctx, pod, pool)
+		wg.Wait()
+
+		// none of the 5 containers should be dropped by dedup logic.
+		assert.Len(t, actualCommands, len(slugs))
+		seenNames := map[string]bool{}
+		for _, cmd := range actualCommands {
+			assert.EqualValues(t, utils.CommandScanContainerProfile, cmd.CommandName)
+			name, _ := cmd.Args[utils.ArgsName].(string)
+			seenNames[name] = true
+			assert.Equal(t, pod.GetNamespace(), cmd.Args[utils.ArgsNamespace])
+		}
+		for _, slug := range slugs {
+			assert.True(t, seenNames[slug], "expected a scan command for container profile %s", slug)
+		}
+	})
 }
 
 func Test_listPods(t *testing.T) {
