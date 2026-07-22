@@ -64,7 +64,7 @@ func GetContainerProfileForRelevancyScan(ctx context.Context, storageClient kssc
 func GetContainerProfileScanCommand(profile *v1beta1.ContainerProfile, pod *corev1.Pod) *apis.Command {
 	return &apis.Command{
 		Wlid:        profile.Annotations[helpersv1.WlidMetadataKey],
-		CommandName: apis.TypeScanApplicationProfile,
+		CommandName: CommandScanContainerProfile,
 		Args: map[string]interface{}{
 			ArgsName:      profile.Name,
 			ArgsNamespace: profile.Namespace,

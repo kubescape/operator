@@ -84,8 +84,6 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 		return
 	}
 
-	noContainerSlugs := map[string]bool{}
-
 	// there are a few use-cases:
 	// 1. new workload, new image - new wlid, new slug, new image // scan
 	// 2. new workload, existing image - new wlid, new slug, existing image // scan
@@ -110,17 +108,8 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 					continue
 				}
 
-				noContainerSlug, _ := slugToInstanceID[slug].GetSlug(true)
-				if _, ok := noContainerSlugs[noContainerSlug]; ok {
-					// already scanned the container profile
-					wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
-					wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
-					continue
-				}
-
-				if profile := utils.GetContainerProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); profile != nil {
+				if profile := utils.GetContainerProfileForRelevancyScan(ctx, wh.storageClient, slug, pod.GetNamespace()); profile != nil {
 					wh.scanContainerProfile(ctx, profile, pod, workerPool)
-					noContainerSlugs[noContainerSlug] = true
 				} else {
 					wh.scanImage(ctx, pod, containerData, workerPool)
 				}
@@ -147,17 +136,9 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 				continue
 			}
 
-			noContainerSlug, _ := slugToInstanceID[slug].GetSlug(true)
-			if _, ok := noContainerSlugs[noContainerSlug]; ok {
-				// already scanned the container profile
-				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
-				continue
-			}
-
 			// use-case 1, 2, 3
-			if profile := utils.GetContainerProfileForRelevancyScan(ctx, wh.storageClient, noContainerSlug, pod.GetNamespace()); profile != nil {
+			if profile := utils.GetContainerProfileForRelevancyScan(ctx, wh.storageClient, slug, pod.GetNamespace()); profile != nil {
 				wh.scanContainerProfile(ctx, profile, pod, workerPool)
-				noContainerSlugs[noContainerSlug] = true
 			} else {
 				wh.scanImage(ctx, pod, containerData, workerPool)
 			}
