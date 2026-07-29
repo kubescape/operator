@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/operator/admission/rulesupdate"
@@ -245,3 +246,33 @@ func TestValidateConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultFrameworks(t *testing.T) {
+	tests := []struct {
+		name        string
+		frameworks  []string
+		want        []string
+	}{
+		{"empty", nil, nil},
+		{"empty slice", []string{}, nil},
+		{"custom", []string{"cis-aks-t1.2.0", "nsa"}, []string{"cis-aks-t1.2.0", "nsa"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := NewOperatorConfig(
+				CapabilitiesConfig{},
+				armometadata.ClusterConfig{InstallationData: armotypes.InstallationData{DefaultFrameworks: tt.frameworks}},
+				&utils.Credentials{},
+				Config{},
+			)
+			got := cfg.DefaultFrameworks()
+			assert.Equal(t, tt.want, got)
+			// returned slice must be a copy
+			if len(got) > 0 {
+				got[0] = "mutated"
+				assert.Equal(t, tt.want, cfg.DefaultFrameworks())
+			}
+		})
+	}
+}
+

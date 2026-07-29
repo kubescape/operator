@@ -26,7 +26,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, 0, req)
 	}
@@ -36,7 +36,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "json", req.Format)
 	}
@@ -46,7 +46,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
@@ -57,9 +57,20 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
+	}
+	{
+		actionHandler := ActionHandler{
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
+			},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-aks-t1.2.0"})
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"cis-aks-t1.2.0"}, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
 }

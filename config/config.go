@@ -165,6 +165,9 @@ type IConfig interface {
 	SkipProfilesWithoutInstances() bool
 	RulesUpdateEnabled() bool
 	NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig
+	// DefaultFrameworks returns install-time posture frameworks from clusterData.
+	// Empty means callers should keep their legacy fallback (e.g. "all" or the native trio).
+	DefaultFrameworks() []string
 }
 
 // OperatorConfig implements IConfig
@@ -255,6 +258,15 @@ func (c *OperatorConfig) AccessKey() string {
 
 func (c *OperatorConfig) ClusterName() string {
 	return c.clusterConfig.ClusterName
+}
+
+func (c *OperatorConfig) DefaultFrameworks() []string {
+	if len(c.clusterConfig.DefaultFrameworks) == 0 {
+		return nil
+	}
+	out := make([]string, len(c.clusterConfig.DefaultFrameworks))
+	copy(out, c.clusterConfig.DefaultFrameworks)
+	return out
 }
 
 func (c *OperatorConfig) SkipNamespace(ns string) bool {

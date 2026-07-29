@@ -98,7 +98,7 @@ func recordingHandler(t *testing.T, objs ...runtime.Object) (*SecurityExceptionW
 }
 
 func TestBuildRescanCommand(t *testing.T) {
-	cmd := buildRescanCommand(testClusterName)
+	cmd := buildRescanCommand(testClusterName, nil)
 
 	assert.Equal(t, apis.TypeRunKubescape, cmd.CommandName)
 	assert.Equal(t, pkgwlid.GetK8sWLID(testClusterName, "", "", ""), cmd.WildWlid)
@@ -110,6 +110,16 @@ func TestBuildRescanCommand(t *testing.T) {
 	assert.ElementsMatch(t, []string{"allcontrols", "nsa", "mitre"}, psr.TargetNames)
 	require.NotNil(t, psr.HostScanner)
 	assert.False(t, *psr.HostScanner)
+}
+
+func TestBuildRescanCommandCustomFrameworks(t *testing.T) {
+	cmd := buildRescanCommand(testClusterName, []string{"cis-aks-t1.2.0"})
+
+	raw, ok := cmd.Args[utils.KubescapeScanV1]
+	require.True(t, ok)
+	psr, ok := raw.(utilsmetav1.PostScanRequest)
+	require.True(t, ok)
+	assert.Equal(t, []string{"cis-aks-t1.2.0"}, psr.TargetNames)
 }
 
 func TestParseExpiresAt(t *testing.T) {
