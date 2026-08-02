@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -261,11 +262,15 @@ func (c *OperatorConfig) ClusterName() string {
 }
 
 func (c *OperatorConfig) DefaultFrameworks() []string {
-	if len(c.clusterConfig.DefaultFrameworks) == 0 {
+	out := make([]string, 0, len(c.clusterConfig.DefaultFrameworks))
+	for _, f := range c.clusterConfig.DefaultFrameworks {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	if len(out) == 0 {
 		return nil
 	}
-	out := make([]string, len(c.clusterConfig.DefaultFrameworks))
-	copy(out, c.clusterConfig.DefaultFrameworks)
 	return out
 }
 

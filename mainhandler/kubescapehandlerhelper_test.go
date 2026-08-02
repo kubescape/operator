@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/boolutils"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
 	beUtils "github.com/kubescape/backend/pkg/utils"
@@ -52,6 +53,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
 	{
+		// blank targetNames with no defaults → legacy "all"
 		actionHandler := ActionHandler{
 			sessionObj: &utils.SessionObj{
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
@@ -60,6 +62,21 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
+	}
+	{
+		// blank targetNames with defaults → defaultFrameworks (blocker 1)
+		actionHandler := ActionHandler{
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{
+					"targetType":  utilsapisv1.KindFramework,
+					"targetNames": []string{""},
+				}}},
+			},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0", "nsa"})
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"cis-eks-t1.2.0", "nsa"}, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
 	{
@@ -73,6 +90,89 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 		assert.Equal(t, []string{"cis-aks-t1.2.0"}, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
 	}
+	{
+		// continuous-scan shape: no TargetType/TargetNames → inherits defaultFrameworks (blocker 2)
+		actionHandler := ActionHandler{
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{
+					"hostScanner": false,
+				}}},
+			},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"})
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"cis-eks-t1.2.0"}, req.TargetNames)
+		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
+	}
+	{
+		// explicit frameworks win over defaults
+		actionHandler := ActionHandler{
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{
+					"targetType":  utilsapisv1.KindFramework,
+					"targetNames": []string{"nsa"},
+				}}},
+			},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"})
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"nsa"}, req.TargetNames)
+	}
+	{
+		// Control + empty names must not be clobbered into Framework defaults
+		actionHandler := ActionHandler{
+			sessionObj: &utils.SessionObj{
+				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{
+					"targetType":  utilsapisv1.KindControl,
+					"targetNames": []string{},
+				}}},
+			},
+		}
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"})
+		assert.NoError(t, err)
+		assert.Empty(t, req.TargetNames)
+		assert.Equal(t, utilsapisv1.KindControl, req.TargetType)
+	}
+}
+
+func TestGetKubescapeRequestWithDefaults(t *testing.T) {
+	args := map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}
+	req, err := getKubescapeRequest(args, []string{"nsa", "mitre"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"nsa", "mitre"}, req.TargetNames)
+	assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
+
+	// cron path must also respect the Control targetType gate
+	argsControl := map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{
+		"targetType":  utilsapisv1.KindControl,
+		"targetNames": []string{},
+	}}
+	reqControl, err := getKubescapeRequest(argsControl, []string{"cis-eks-t1.2.0"})
+	assert.NoError(t, err)
+	assert.Empty(t, reqControl.TargetNames)
+	assert.Equal(t, utilsapisv1.KindControl, reqControl.TargetType)
+}
+
+func TestGetStartupActions(t *testing.T) {
+	cfg := config.NewOperatorConfig(
+		config.CapabilitiesConfig{},
+		utilsmetadata.ClusterConfig{ClusterName: "c1", InstallationData: armotypes.InstallationData{DefaultFrameworks: []string{"nsa"}}},
+		&beUtils.Credentials{},
+		config.Config{},
+	)
+	cmds := GetStartupActions(cfg)
+	assert.Len(t, cmds, 1)
+	psr := cmds[0].Args[utils.KubescapeScanV1].(utilsmetav1.PostScanRequest)
+	assert.Equal(t, []string{"nsa"}, psr.TargetNames)
+
+	cfgEmpty := config.NewOperatorConfig(
+		config.CapabilitiesConfig{},
+		utilsmetadata.ClusterConfig{ClusterName: "c1"},
+		&beUtils.Credentials{},
+		config.Config{},
+	)
+	psrEmpty := GetStartupActions(cfgEmpty)[0].Args[utils.KubescapeScanV1].(utilsmetav1.PostScanRequest)
+	assert.Equal(t, utils.NativeDefaultFrameworks, psrEmpty.TargetNames)
 }
 
 func TestUpdateCronJobTemplate(t *testing.T) {

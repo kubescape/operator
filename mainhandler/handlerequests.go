@@ -557,7 +557,7 @@ func GetStartupActions(config config.IConfig) []apis.Command {
 				utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
 					HostScanner: boolutils.BoolPointer(false),
 					TargetType:  v1.KindFramework,
-					TargetNames: frameworksForFullClusterScan(config.DefaultFrameworks()),
+					TargetNames: utils.FrameworksOrDefault(config.DefaultFrameworks(), utils.NativeDefaultFrameworks),
 				},
 			},
 		},

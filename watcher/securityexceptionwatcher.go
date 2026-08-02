@@ -378,16 +378,6 @@ func (wh *SecurityExceptionWatchHandler) forgetExpired(obj *unstructured.Unstruc
 	wh.mu.Unlock()
 }
 
-// nativeDefaultFrameworks matches mainhandler when clusterData has no defaultFrameworks.
-var nativeDefaultFrameworks = []string{"allcontrols", "nsa", "mitre"}
-
-func frameworksOrNativeDefaults(defaultFrameworks []string) []string {
-	if len(defaultFrameworks) > 0 {
-		return append([]string(nil), defaultFrameworks...)
-	}
-	return append([]string(nil), nativeDefaultFrameworks...)
-}
-
 // buildRescanCommand returns the cluster-wide posture rescan command, matching
 // the operator's startup full scan.
 func buildRescanCommand(clusterName string, defaultFrameworks []string) *apis.Command {
@@ -398,7 +388,7 @@ func buildRescanCommand(clusterName string, defaultFrameworks []string) *apis.Co
 			utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
 				HostScanner: boolutils.BoolPointer(false),
 				TargetType:  v1.KindFramework,
-				TargetNames: frameworksOrNativeDefaults(defaultFrameworks),
+				TargetNames: utils.FrameworksOrDefault(defaultFrameworks, utils.NativeDefaultFrameworks),
 			},
 		},
 	}

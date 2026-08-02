@@ -69,16 +69,17 @@ func getKubescapeV1ScanRequest(args map[string]interface{}, defaultFrameworks []
 	if err := json.Unmarshal(scanV1Bytes, postScanRequest); err != nil {
 		return nil, fmt.Errorf("failed to convert request to v1/scan object, reason: %s", err.Error())
 	}
-	// Explicit targetNames from the API / scanV1 payload take precedence over install-time defaults.
-	if len(postScanRequest.TargetNames) == 0 || postScanRequest.TargetType == "" {
-		setDefaultsKubescapeScanRequest(postScanRequest, defaultFrameworks)
-	}
 
-	for i := range postScanRequest.TargetNames {
-		if postScanRequest.TargetNames[i] == "" {
-			postScanRequest.TargetNames[i] = "all"
+	// Drop blank entries so targetNames: [""] is treated as "no explicit target".
+	names := make([]string, 0, len(postScanRequest.TargetNames))
+	for _, n := range postScanRequest.TargetNames {
+		if strings.TrimSpace(n) != "" {
+			names = append(names, n)
 		}
 	}
+	postScanRequest.TargetNames = names
+
+	setDefaultsKubescapeScanRequest(postScanRequest, defaultFrameworks)
 
 	return postScanRequest, nil
 }
@@ -219,26 +220,16 @@ func validateKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest) 
 }
 
 func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest, defaultFrameworks []string) {
-	if len(postScanRequest.TargetNames) == 0 {
-		if len(defaultFrameworks) > 0 {
-			postScanRequest.TargetNames = append([]string(nil), defaultFrameworks...)
-		} else {
-			// Legacy fallback when clusterData has no defaultFrameworks.
-			postScanRequest.TargetNames = []string{"all"}
-		}
-		postScanRequest.TargetType = utilsapisv1.KindFramework
+	if len(postScanRequest.TargetNames) != 0 {
+		return
 	}
-}
-
-// nativeDefaultFrameworks is used for startup / exception rescans when
-// defaultFrameworks is not configured in clusterData.
-var nativeDefaultFrameworks = []string{"allcontrols", "nsa", "mitre"}
-
-func frameworksForFullClusterScan(defaultFrameworks []string) []string {
-	if len(defaultFrameworks) > 0 {
-		return append([]string(nil), defaultFrameworks...)
+	// Do not clobber non-framework target kinds (e.g. Control with empty names).
+	if postScanRequest.TargetType != "" && postScanRequest.TargetType != utilsapisv1.KindFramework {
+		return
 	}
-	return append([]string(nil), nativeDefaultFrameworks...)
+	// Legacy fallback when clusterData has no defaultFrameworks: empty scanV1 / continuous scan → "all".
+	postScanRequest.TargetNames = utils.FrameworksOrDefault(defaultFrameworks, []string{"all"})
+	postScanRequest.TargetType = utilsapisv1.KindFramework
 }
 
 // appendSecurityFramework - append "security" framework to the request if targetType is "Framework"

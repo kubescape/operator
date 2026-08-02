@@ -249,13 +249,15 @@ func TestValidateConfig(t *testing.T) {
 
 func TestDefaultFrameworks(t *testing.T) {
 	tests := []struct {
-		name        string
-		frameworks  []string
-		want        []string
+		name       string
+		frameworks []string
+		want       []string
 	}{
 		{"empty", nil, nil},
 		{"empty slice", []string{}, nil},
+		{"blanks only", []string{"", "  "}, nil},
 		{"custom", []string{"cis-aks-t1.2.0", "nsa"}, []string{"cis-aks-t1.2.0", "nsa"}},
+		{"strips blanks", []string{"", "nsa", " "}, []string{"nsa"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -275,4 +277,3 @@ func TestDefaultFrameworks(t *testing.T) {
 		})
 	}
 }
-
