@@ -37,6 +37,10 @@ type NodeGroup struct {
 	// NodeGroupLabel. Such a group cannot be targeted by a nodeSelector on the
 	// (absent) label, so its DaemonSet uses a "DoesNotExist" node affinity instead.
 	IsDefault bool
+	// HasBottlerocket is true when at least one ready node in this group runs AWS
+	// Bottlerocket OS. Such groups get the "super_t" SELinux type. Detection is
+	// gated by config.BottlerocketAutoDetect.
+	HasBottlerocket bool
 }
 
 // CalculatedResources represents the calculated resource requests and limits
@@ -83,6 +87,8 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 			continue
 		}
 
+		nodeIsBottlerocket := ng.config.BottlerocketAutoDetect && isBottlerocketNode(&node)
+
 		labelValue, ok := node.Labels[ng.config.NodeGroupLabel]
 		isDefault := false
 		// groupKey buckets nodes. For labelled nodes it is the label value. For
@@ -112,6 +118,9 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 
 		if group, exists := groupMap[groupKey]; exists {
 			group.NodeCount++
+			if nodeIsBottlerocket {
+				group.HasBottlerocket = true
+			}
 			if group.IsDefault {
 				// Instance-type groups are homogeneous, so the first node is
 				// representative. The default group is the opposite: label-less nodes
@@ -133,6 +142,7 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 				AllocatableMemory: *node.Status.Allocatable.Memory(),
 				NodeCount:         1,
 				IsDefault:         isDefault,
+				HasBottlerocket:   nodeIsBottlerocket,
 			}
 		}
 	}
@@ -292,6 +302,13 @@ func resolveNameCollisions(groups []NodeGroup) []NodeGroup {
 func shortHash(input string) string {
 	hash := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(hash[:])[:6]
+}
+
+// isBottlerocketNode reports whether a node runs AWS Bottlerocket OS. It matches
+// case-insensitively against the reported OS image, e.g.
+// "Bottlerocket OS 1.19.2 (aws-k8s-1.29)".
+func isBottlerocketNode(node *corev1.Node) bool {
+	return strings.Contains(strings.ToLower(node.Status.NodeInfo.OSImage), "bottlerocket")
 }
 
 // isNodeReady checks if a node is in Ready condition

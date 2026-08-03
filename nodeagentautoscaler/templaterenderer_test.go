@@ -123,7 +123,7 @@ spec:
 	require.NoError(t, err)
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
 	require.NoError(t, err)
 
 	// Test data
@@ -215,7 +215,7 @@ spec:
 	templatePath := filepath.Join(tmpDir, "daemonset-template.yaml")
 	require.NoError(t, os.WriteFile(templatePath, []byte(templateContent), 0644))
 
-	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
 	require.NoError(t, err)
 
 	group := NodeGroup{
@@ -257,7 +257,7 @@ func TestTemplateRenderer_RenderDaemonSet_InvalidTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should fail to create renderer
-	_, err = NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
+	_, err = NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse template")
 }
@@ -279,14 +279,14 @@ func TestTemplateRenderer_NewTemplateRenderer_InvalidPercentage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewTemplateRenderer(templatePath, tt.percentage, "node.kubernetes.io/instance-type")
+			_, err := NewTemplateRenderer(templatePath, tt.percentage, "node.kubernetes.io/instance-type", "spc_t")
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "out of valid range")
 		})
 	}
 
 	// Boundary: exactly 1.0 should be valid
-	_, err = NewTemplateRenderer(templatePath, 1.0, "node.kubernetes.io/instance-type")
+	_, err = NewTemplateRenderer(templatePath, 1.0, "node.kubernetes.io/instance-type", "spc_t")
 	assert.NoError(t, err)
 }
 
@@ -350,7 +350,7 @@ spec:
 	require.NoError(t, err)
 
 	// Create renderer
-	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type")
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
 	require.NoError(t, err)
 
 	group := NodeGroup{
@@ -456,7 +456,7 @@ spec:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			renderer, err := NewTemplateRenderer(templatePath, tt.percentage, "node.kubernetes.io/instance-type")
+			renderer, err := NewTemplateRenderer(templatePath, tt.percentage, "node.kubernetes.io/instance-type", "spc_t")
 			require.NoError(t, err)
 
 			group := NodeGroup{LabelValue: "m5.large", SanitizedName: "m5-large"}
@@ -484,4 +484,44 @@ spec:
 			assert.Equal(t, tt.expectedGoMemLimit, goMemLimitValue)
 		})
 	}
+}
+
+func TestTemplateRenderer_RenderDaemonSet_SELinuxType(t *testing.T) {
+	templateContent := `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: "{{ .Name }}"
+  namespace: kubescape
+spec:
+  template:
+    spec:
+      containers:
+      - name: node-agent
+        securityContext:
+          seLinuxOptions:
+            type: {{ .SELinuxType }}
+`
+	dir := t.TempDir()
+	templatePath := filepath.Join(dir, "daemonset-template.yaml")
+	require.NoError(t, os.WriteFile(templatePath, []byte(templateContent), 0644))
+
+	renderer, err := NewTemplateRenderer(templatePath, 0.8, "node.kubernetes.io/instance-type", "spc_t")
+	require.NoError(t, err)
+
+	resources := CalculatedResources{
+		Requests: ResourcePair{CPU: resource.MustParse("100m"), Memory: resource.MustParse("200Mi")},
+		Limits:   ResourcePair{CPU: resource.MustParse("500m"), Memory: resource.MustParse("1Gi")},
+	}
+
+	t.Run("bottlerocket group gets super_t", func(t *testing.T) {
+		ds, err := renderer.RenderDaemonSet(NodeGroup{LabelValue: "m5.large", SanitizedName: "m5-large", HasBottlerocket: true}, resources)
+		require.NoError(t, err)
+		assert.Equal(t, "super_t", ds.Spec.Template.Spec.Containers[0].SecurityContext.SELinuxOptions.Type)
+	})
+
+	t.Run("non-bottlerocket group gets configured default", func(t *testing.T) {
+		ds, err := renderer.RenderDaemonSet(NodeGroup{LabelValue: "m5.large", SanitizedName: "m5-large", HasBottlerocket: false}, resources)
+		require.NoError(t, err)
+		assert.Equal(t, "spc_t", ds.Spec.Template.Spec.Containers[0].SecurityContext.SELinuxOptions.Type)
+	})
 }

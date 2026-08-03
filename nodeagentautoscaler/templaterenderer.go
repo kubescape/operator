@@ -17,6 +17,10 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// bottlerocketSELinuxType is the SELinux type node-agent needs on AWS Bottlerocket
+// nodes so its eBPF gadgets get the required privileges.
+const bottlerocketSELinuxType = "super_t"
+
 // TemplateData holds the data used to render the DaemonSet template
 type TemplateData struct {
 	// Name is the DaemonSet name (e.g., "node-agent-m5-large")
@@ -36,6 +40,9 @@ type TemplateData struct {
 	Resources TemplateResources
 	// GoMemLimit is the GOMEMLIMIT value derived from the memory limit and percentage (e.g., "360MiB")
 	GoMemLimit string
+	// SELinuxType is the SELinux type rendered into the node-agent container's
+	// securityContext ("super_t" for Bottlerocket groups, otherwise the configured default).
+	SELinuxType string
 }
 
 // TemplateResources holds the resource values for template rendering
@@ -59,10 +66,11 @@ type TemplateRenderer struct {
 	stopCh               chan struct{}
 	goMemLimitPercentage float64
 	nodeGroupLabelKey    string // configured grouping label key, exposed to the template
+	defaultSELinuxType   string // SELinux type for non-Bottlerocket groups (e.g. "spc_t")
 }
 
 // NewTemplateRenderer creates a new TemplateRenderer
-func NewTemplateRenderer(templatePath string, goMemLimitPercentage float64, nodeGroupLabelKey string) (*TemplateRenderer, error) {
+func NewTemplateRenderer(templatePath string, goMemLimitPercentage float64, nodeGroupLabelKey string, defaultSELinuxType string) (*TemplateRenderer, error) {
 	if goMemLimitPercentage <= 0 || goMemLimitPercentage > 1.0 {
 		return nil, fmt.Errorf("goMemLimitPercentage %v is out of valid range (0, 1.0]", goMemLimitPercentage)
 	}
@@ -71,6 +79,7 @@ func NewTemplateRenderer(templatePath string, goMemLimitPercentage float64, node
 		templatePath:         templatePath,
 		goMemLimitPercentage: goMemLimitPercentage,
 		nodeGroupLabelKey:    nodeGroupLabelKey,
+		defaultSELinuxType:   defaultSELinuxType,
 	}
 
 	if err := tr.loadTemplate(); err != nil {
@@ -222,6 +231,11 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 	limitBytes := resources.Limits.Memory.Value()
 	goMemLimitMiB := int64(float64(limitBytes) * tr.goMemLimitPercentage / (1024 * 1024))
 
+	seLinuxType := tr.defaultSELinuxType
+	if group.HasBottlerocket {
+		seLinuxType = bottlerocketSELinuxType
+	}
+
 	data := TemplateData{
 		Name:              fmt.Sprintf("node-agent-%s", group.SanitizedName),
 		NodeGroupLabel:    group.LabelValue,
@@ -237,7 +251,8 @@ func (tr *TemplateRenderer) RenderDaemonSet(group NodeGroup, resources Calculate
 				Memory: formatMemory(resources.Limits.Memory),
 			},
 		},
-		GoMemLimit: fmt.Sprintf("%dMiB", goMemLimitMiB),
+		GoMemLimit:  fmt.Sprintf("%dMiB", goMemLimitMiB),
+		SELinuxType: seLinuxType,
 	}
 
 	tr.mu.RLock()

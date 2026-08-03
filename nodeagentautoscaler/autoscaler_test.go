@@ -738,3 +738,64 @@ func TestAutoscaler_Reconcile_CreatesPerGroupAndDeletesOrphans(t *testing.T) {
 	assert.True(t, names["node-agent-default"], "default group DaemonSet should exist")
 	assert.False(t, names["node-agent-gone"], "orphaned DaemonSet should be deleted")
 }
+
+func TestNodeGrouper_GetNodeGroups_BottlerocketDetection(t *testing.T) {
+	ctx := context.Background()
+
+	newNode := func(name, instanceType, osImage string) *corev1.Node {
+		return &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   name,
+				Labels: map[string]string{"node.kubernetes.io/instance-type": instanceType},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
+				Allocatable: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+				NodeInfo: corev1.NodeSystemInfo{OSImage: osImage},
+			},
+		}
+	}
+
+	findGroup := func(groups []NodeGroup, label string) *NodeGroup {
+		for i := range groups {
+			if groups[i].LabelValue == label {
+				return &groups[i]
+			}
+		}
+		return nil
+	}
+
+	t.Run("group with a bottlerocket node is flagged (case-insensitive)", func(t *testing.T) {
+		client := fake.NewClientset(
+			newNode("n1", "m5.large", "Bottlerocket OS 1.19.2 (aws-k8s-1.29)"),
+			newNode("n2", "m5.xlarge", "Amazon Linux 2"),
+		)
+		cfg := config.NodeAgentAutoscalerConfig{Enabled: true, NodeGroupLabel: "node.kubernetes.io/instance-type", BottlerocketAutoDetect: true}
+		groups, err := NewNodeGrouper(client, cfg, "kubescape").GetNodeGroups(ctx)
+		require.NoError(t, err)
+		assert.True(t, findGroup(groups, "m5.large").HasBottlerocket)
+		assert.False(t, findGroup(groups, "m5.xlarge").HasBottlerocket)
+	})
+
+	t.Run("mixed group with any bottlerocket node is flagged", func(t *testing.T) {
+		client := fake.NewClientset(
+			newNode("n1", "m5.large", "Amazon Linux 2"),
+			newNode("n2", "m5.large", "bottlerocket os 1.20.0"),
+		)
+		cfg := config.NodeAgentAutoscalerConfig{Enabled: true, NodeGroupLabel: "node.kubernetes.io/instance-type", BottlerocketAutoDetect: true}
+		groups, err := NewNodeGrouper(client, cfg, "kubescape").GetNodeGroups(ctx)
+		require.NoError(t, err)
+		assert.True(t, findGroup(groups, "m5.large").HasBottlerocket)
+	})
+
+	t.Run("toggle off never flags", func(t *testing.T) {
+		client := fake.NewClientset(newNode("n1", "m5.large", "Bottlerocket OS 1.19.2"))
+		cfg := config.NodeAgentAutoscalerConfig{Enabled: true, NodeGroupLabel: "node.kubernetes.io/instance-type", BottlerocketAutoDetect: false}
+		groups, err := NewNodeGrouper(client, cfg, "kubescape").GetNodeGroups(ctx)
+		require.NoError(t, err)
+		assert.False(t, findGroup(groups, "m5.large").HasBottlerocket)
+	})
+}

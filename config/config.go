@@ -82,6 +82,15 @@ type NodeAgentAutoscalerConfig struct {
 	TemplatePath           string                                 `json:"templatePath" mapstructure:"templatePath"`
 	OperatorDeploymentName string                                 `json:"operatorDeploymentName" mapstructure:"operatorDeploymentName"`
 	GoMemLimitPercentage   float64                                `json:"goMemLimitPercentage" mapstructure:"goMemLimitPercentage"`
+	// SELinuxType is the SELinux type applied to node-agent DaemonSets the
+	// autoscaler renders for node groups that are NOT Bottlerocket. Sourced from
+	// the chart's nodeAgent.seLinuxType (default "spc_t"). Bottlerocket groups
+	// always override this with "super_t" when BottlerocketAutoDetect is enabled.
+	SELinuxType string `json:"seLinuxType" mapstructure:"seLinuxType"`
+	// BottlerocketAutoDetect, when true, makes the autoscaler detect AWS
+	// Bottlerocket nodes and render their node group's DaemonSet with the
+	// "super_t" SELinux type automatically. Set false to disable detection.
+	BottlerocketAutoDetect bool `json:"bottlerocketAutoDetect" mapstructure:"bottlerocketAutoDetect"`
 }
 
 type Server struct {
@@ -352,6 +361,8 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("nodeAgentAutoscaler.templatePath", "/etc/templates/daemonset-template.yaml")
 	viper.SetDefault("nodeAgentAutoscaler.operatorDeploymentName", "operator")
 	viper.SetDefault("nodeAgentAutoscaler.goMemLimitPercentage", 0.8)
+	viper.SetDefault("nodeAgentAutoscaler.seLinuxType", "spc_t")
+	viper.SetDefault("nodeAgentAutoscaler.bottlerocketAutoDetect", true)
 
 	viper.AutomaticEnv()
 
