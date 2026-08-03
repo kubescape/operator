@@ -4,10 +4,26 @@ import (
 	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 	"github.com/kubescape/node-agent/pkg/utils"
 	"github.com/kubescape/node-agent/pkg/watcher"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 )
+
+// namespaceListHasName reports whether name is an exact member of list.Items.
+// Do not use strings.Contains(list.String(), name): NamespaceList.String() is a
+// debug dump, so substrings (e.g. "dev" in "devel") falsely match.
+func namespaceListHasName(list *corev1.NamespaceList, name string) bool {
+	if list == nil {
+		return false
+	}
+	for i := range list.Items {
+		if list.Items[i].Name == name {
+			return true
+		}
+	}
+	return false
+}
 
 // ruleBindingKind is the Kind value the CRD reports for RuntimeAlertRuleBinding
 // objects. The dynamic watcher dispatches events from all watched GVRs to every
