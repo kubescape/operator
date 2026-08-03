@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"strings"
 
 	"github.com/goradd/maps"
 	"github.com/kubescape/go-logger"
@@ -96,14 +95,22 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 		}
 
 		// check pod selectors
-		podSelector, _ := metav1.LabelSelectorAsSelector(&rb.Spec.PodSelector)
+		podSelector, err := metav1.LabelSelectorAsSelector(&rb.Spec.PodSelector)
+		if err != nil {
+			logger.L().Error("failed to parse pod selector", helpers.String("ruleBiding", uniqueName(&rb)), helpers.Error(err))
+			continue
+		}
 		if !podSelector.Matches(labels.Set(object.GetLabels())) {
 			// pod selectors doesnt match
 			continue
 		}
 
 		// check namespace selectors
-		nsSelector, _ := metav1.LabelSelectorAsSelector(&rb.Spec.NamespaceSelector)
+		nsSelector, err := metav1.LabelSelectorAsSelector(&rb.Spec.NamespaceSelector)
+		if err != nil {
+			logger.L().Error("failed to parse namespace selector", helpers.String("ruleBiding", uniqueName(&rb)), helpers.Error(err))
+			continue
+		}
 		nsSelectorStr := nsSelector.String()
 		if len(nsSelectorStr) != 0 {
 			// get related namespaces
@@ -112,7 +119,7 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 				logger.L().Error("failed to list namespaces", helpers.String("ruleBiding", uniqueName(&rb)), helpers.String("nsSelector", nsSelectorStr), helpers.Error(err))
 				continue
 			}
-			if !strings.Contains(namespaces.String(), object.GetNamespace()) {
+			if !namespaceListHasName(namespaces, object.GetNamespace()) {
 				// namespace selectors dont match
 				continue
 			}
