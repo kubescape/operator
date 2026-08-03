@@ -21,12 +21,12 @@ import (
 	"github.com/kubescape/node-agent/pkg/cloudmetadata"
 	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
 	"github.com/kubescape/node-agent/pkg/watcher/dynamicwatcher"
-	exporters "github.com/kubescape/operator/admission/exporter"
 	admissioncel "github.com/kubescape/operator/admission/cel"
-	celrules "github.com/kubescape/operator/admission/rules/cel"
+	exporters "github.com/kubescape/operator/admission/exporter"
 	rulebindingcachev1 "github.com/kubescape/operator/admission/rulebinding/cache"
-	"github.com/kubescape/operator/admission/ruleswatcher"
+	celrules "github.com/kubescape/operator/admission/rules/cel"
 	"github.com/kubescape/operator/admission/rulesupdate"
+	"github.com/kubescape/operator/admission/ruleswatcher"
 	"github.com/kubescape/operator/admission/webhook"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/mainhandler"
@@ -151,7 +151,10 @@ func main() {
 	}()
 
 	if components.Components.ServiceDiscovery.Enabled {
-		logger.L().Debug("triggering a full kubescapeScan on startup")
+		logger.L().Info("triggering a full kubescapeScan on startup",
+			helpers.Interface("defaultFrameworks", operatorConfig.DefaultFrameworks()),
+			helpers.Interface("effectiveFrameworks", utils.FrameworksOrDefault(operatorConfig.DefaultFrameworks(), utils.NativeDefaultFrameworks)),
+		)
 		go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions(operatorConfig))
 	}
 

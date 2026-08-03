@@ -53,7 +53,7 @@ func getKubescapeV1ScanStatusURL(config config.IConfig, scanID string) *url.URL 
 	return &ksURL
 }
 
-func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
+func getKubescapeV1ScanRequest(args map[string]interface{}, defaultFrameworks []string) (*utilsmetav1.PostScanRequest, error) {
 
 	scanV1, ok := args[utils.KubescapeScanV1]
 	if !ok {
@@ -69,15 +69,17 @@ func getKubescapeV1ScanRequest(args map[string]interface{}) (*utilsmetav1.PostSc
 	if err := json.Unmarshal(scanV1Bytes, postScanRequest); err != nil {
 		return nil, fmt.Errorf("failed to convert request to v1/scan object, reason: %s", err.Error())
 	}
-	if len(postScanRequest.TargetNames) == 0 || postScanRequest.TargetType == "" {
-		setDefaultsKubescapeScanRequest(postScanRequest)
-	}
 
-	for i := range postScanRequest.TargetNames {
-		if postScanRequest.TargetNames[i] == "" {
-			postScanRequest.TargetNames[i] = "all"
+	// Drop blank entries so targetNames: [""] is treated as "no explicit target".
+	names := make([]string, 0, len(postScanRequest.TargetNames))
+	for _, n := range postScanRequest.TargetNames {
+		if strings.TrimSpace(n) != "" {
+			names = append(names, n)
 		}
 	}
+	postScanRequest.TargetNames = names
+
+	setDefaultsKubescapeScanRequest(postScanRequest, defaultFrameworks)
 
 	return postScanRequest, nil
 }
@@ -104,8 +106,8 @@ func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, er
 	return response, nil
 }
 
-func getKubescapeRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequest, error) {
-	postScanRequest, err := getKubescapeV1ScanRequest(args)
+func getKubescapeRequest(args map[string]interface{}, defaultFrameworks []string) (*utilsmetav1.PostScanRequest, error) {
+	postScanRequest, err := getKubescapeV1ScanRequest(args, defaultFrameworks)
 	if err != nil {
 		return postScanRequest, err
 	}
@@ -114,7 +116,7 @@ func getKubescapeRequest(args map[string]interface{}) (*utilsmetav1.PostScanRequ
 	if err := validateKubescapeScanRequest(postScanRequest); err != nil {
 		return postScanRequest, err
 	}
-	setDefaultsKubescapeScanRequest(postScanRequest)
+	setDefaultsKubescapeScanRequest(postScanRequest, defaultFrameworks)
 
 	return postScanRequest, nil
 }
@@ -217,12 +219,17 @@ func validateKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest) 
 	return nil
 }
 
-func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest) {
-	// set default scan to all
-	if len(postScanRequest.TargetNames) == 0 {
-		postScanRequest.TargetNames = []string{"all"}
-		postScanRequest.TargetType = utilsapisv1.KindFramework
+func setDefaultsKubescapeScanRequest(postScanRequest *utilsmetav1.PostScanRequest, defaultFrameworks []string) {
+	if len(postScanRequest.TargetNames) != 0 {
+		return
 	}
+	// Do not clobber non-framework target kinds (e.g. Control with empty names).
+	if postScanRequest.TargetType != "" && postScanRequest.TargetType != utilsapisv1.KindFramework {
+		return
+	}
+	// Legacy fallback when clusterData has no defaultFrameworks: empty scanV1 / continuous scan → "all".
+	postScanRequest.TargetNames = utils.FrameworksOrDefault(defaultFrameworks, []string{"all"})
+	postScanRequest.TargetType = utilsapisv1.KindFramework
 }
 
 // appendSecurityFramework - append "security" framework to the request if targetType is "Framework"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -165,6 +166,9 @@ type IConfig interface {
 	SkipProfilesWithoutInstances() bool
 	RulesUpdateEnabled() bool
 	NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig
+	// DefaultFrameworks returns install-time posture frameworks from clusterData.
+	// Empty means callers should keep their legacy fallback (e.g. "all" or the native trio).
+	DefaultFrameworks() []string
 }
 
 // OperatorConfig implements IConfig
@@ -255,6 +259,19 @@ func (c *OperatorConfig) AccessKey() string {
 
 func (c *OperatorConfig) ClusterName() string {
 	return c.clusterConfig.ClusterName
+}
+
+func (c *OperatorConfig) DefaultFrameworks() []string {
+	out := make([]string, 0, len(c.clusterConfig.DefaultFrameworks))
+	for _, f := range c.clusterConfig.DefaultFrameworks {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (c *OperatorConfig) SkipNamespace(ns string) bool {

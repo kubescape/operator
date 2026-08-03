@@ -93,7 +93,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 		return errors.New("KubescapeScheduler is not enabled")
 	}
 
-	req, err := getKubescapeRequest(actionHandler.sessionObj.Command.Args)
+	req, err := getKubescapeRequest(actionHandler.sessionObj.Command.Args, actionHandler.config.DefaultFrameworks())
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 		return errors.New("kubescape is not enabled")
 	}
 
-	request, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args)
+	request, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, actionHandler.config.DefaultFrameworks())
 	if err != nil {
 		return err
 	}

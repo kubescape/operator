@@ -266,7 +266,7 @@ func (wh *SecurityExceptionWatchHandler) rescanLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-wh.rescanSignal:
-			cmd := buildRescanCommand(wh.cfg.ClusterName())
+			cmd := buildRescanCommand(wh.cfg.ClusterName(), wh.cfg.DefaultFrameworks())
 			if err := wh.dispatchRescan(ctx, cmd); err != nil {
 				// Re-arm so a transient failure (e.g. the shared worker pool is
 				// overloaded and Invoke returns ErrPoolOverload) is retried after
@@ -380,7 +380,7 @@ func (wh *SecurityExceptionWatchHandler) forgetExpired(obj *unstructured.Unstruc
 
 // buildRescanCommand returns the cluster-wide posture rescan command, matching
 // the operator's startup full scan.
-func buildRescanCommand(clusterName string) *apis.Command {
+func buildRescanCommand(clusterName string, defaultFrameworks []string) *apis.Command {
 	return &apis.Command{
 		CommandName: apis.TypeRunKubescape,
 		WildWlid:    pkgwlid.GetK8sWLID(clusterName, "", "", ""),
@@ -388,7 +388,7 @@ func buildRescanCommand(clusterName string) *apis.Command {
 			utils.KubescapeScanV1: utilsmetav1.PostScanRequest{
 				HostScanner: boolutils.BoolPointer(false),
 				TargetType:  v1.KindFramework,
-				TargetNames: []string{"allcontrols", "nsa", "mitre"},
+				TargetNames: utils.FrameworksOrDefault(defaultFrameworks, utils.NativeDefaultFrameworks),
 			},
 		},
 	}
