@@ -169,9 +169,9 @@ func summaryHasFailingSeverityAtLeast(summary *spdxv1beta1.WorkloadConfiguration
 // produced for from its kubescape.io/workload-* labels. It reports false when
 // the identifying labels are missing so an unidentifiable summary is skipped.
 func targetFromSummaryLabels(labels map[string]string) (remediators.Target, bool) {
-	kind := labels[helpers.KindMetadataKey]
-	name := labels[helpers.NameMetadataKey]
-	namespace := labels[helpers.NamespaceMetadataKey]
+	kind := labels[helpers.RelatedKindMetadataKey]
+	name := labels[helpers.RelatedNameMetadataKey]
+	namespace := labels[helpers.RelatedNamespaceMetadataKey]
 	if kind == "" || name == "" {
 		return remediators.Target{}, false
 	}
