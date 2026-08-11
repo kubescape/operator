@@ -92,8 +92,8 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 							Labels: map[string]string{
-								helpersv1.KindMetadataKey: "Pod",
-								helpersv1.NameMetadataKey: "foo-1747274700",
+								helpersv1.RelatedKindMetadataKey: "Pod",
+								helpersv1.RelatedNameMetadataKey: "foo-1747274700",
 							},
 						},
 						Spec: spdxv1beta1.ContainerProfileSpec{
@@ -115,8 +115,8 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 								helpersv1.StatusMetadataKey:     helpersv1.Learning,
 							},
 							Labels: map[string]string{
-								helpersv1.KindMetadataKey: "Pod",
-								helpersv1.NameMetadataKey: "foo2-2747274700",
+								helpersv1.RelatedKindMetadataKey: "Pod",
+								helpersv1.RelatedNameMetadataKey: "foo2-2747274700",
 							},
 						},
 						Spec: spdxv1beta1.ContainerProfileSpec{
@@ -366,9 +366,9 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 			labels: map[string]string{
 				helpersv1.ApiGroupMetadataKey:   "apps",
 				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.KindMetadataKey:       "Deployment",
-				helpersv1.NameMetadataKey:       "nginx-deployment",
-				helpersv1.NamespaceMetadataKey:  "web",
+				helpersv1.RelatedKindMetadataKey:       "Deployment",
+				helpersv1.RelatedNameMetadataKey:       "nginx-deployment",
+				helpersv1.RelatedNamespaceMetadataKey:  "web",
 			},
 			want: true,
 		},
@@ -377,9 +377,9 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 			labels: map[string]string{
 				helpersv1.ApiGroupMetadataKey:   "apps",
 				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.KindMetadataKey:       "Deployment",
-				helpersv1.NameMetadataKey:       "nginx-deployment",
-				helpersv1.NamespaceMetadataKey:  "other",
+				helpersv1.RelatedKindMetadataKey:       "Deployment",
+				helpersv1.RelatedNameMetadataKey:       "nginx-deployment",
+				helpersv1.RelatedNamespaceMetadataKey:  "other",
 			},
 			want: false,
 		},
@@ -388,9 +388,9 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 			labels: map[string]string{
 				helpersv1.ApiGroupMetadataKey:   "apps",
 				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.KindMetadataKey:       "Deployment",
-				helpersv1.NameMetadataKey:       "empty-deployment",
-				helpersv1.NamespaceMetadataKey:  "web",
+				helpersv1.RelatedKindMetadataKey:       "Deployment",
+				helpersv1.RelatedNameMetadataKey:       "empty-deployment",
+				helpersv1.RelatedNamespaceMetadataKey:  "web",
 			},
 			want: false,
 		},

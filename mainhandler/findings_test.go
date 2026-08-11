@@ -24,9 +24,9 @@ func scanSummary(ns, kind, name string, controls map[string]spdxv1beta1.ScannedC
 			Namespace: ns,
 			Name:      kind + "-" + name,
 			Labels: map[string]string{
-				helpers.KindMetadataKey:      kind,
-				helpers.NameMetadataKey:      name,
-				helpers.NamespaceMetadataKey: ns,
+				helpers.RelatedKindMetadataKey:      kind,
+				helpers.RelatedNameMetadataKey:      name,
+				helpers.RelatedNamespaceMetadataKey: ns,
 			},
 		},
 		Spec: spdxv1beta1.WorkloadConfigurationScanSummarySpec{

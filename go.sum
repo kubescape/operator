@@ -702,8 +702,8 @@ github.com/kubescape/backend v0.0.37 h1:aAMd5M0Ih4h+enD0LdKzVIDXYVFqEuFBkSyjiGto
 github.com/kubescape/backend v0.0.37/go.mod h1:4TjTNf9GSD2XxrnW6doB3ANSFzFEkXKYZHGFQX0BiKM=
 github.com/kubescape/go-logger v0.0.28 h1:xulKTp9kOg3rD98sopFELQ6yZCHQoQXMDzteoSHDFKI=
 github.com/kubescape/go-logger v0.0.28/go.mod h1:YZHFjwGCDar1hP9OyBLE46oR7a0Y/Z/0FperDo8+9D0=
-github.com/kubescape/k8s-interface v0.0.202 h1:yu9x+07crFQAgrBatFFU2WuuxMJfHUMHVuCzuHE9Q4M=
-github.com/kubescape/k8s-interface v0.0.202/go.mod h1:d4NVhL81bVXe8yEXlkT4ZHrt3iEppEIN39b8N1oXm5s=
+github.com/kubescape/k8s-interface v0.0.214 h1:j7KP0/5VvYOoQdBGV2+gRM3qnR8PWLAGF8RM/k/DmJ0=
+github.com/kubescape/k8s-interface v0.0.214/go.mod h1:WNYUG93aZ5kDmuaRKFLtVhp18Yc6EfaHdD1gLYtVTN4=
 github.com/kubescape/kubescape-network-scanner v0.0.15 h1:LsaVCQzj0PbA30BeFdzxchW2bkg6nn5quwllWmm/2/s=
 github.com/kubescape/kubescape-network-scanner v0.0.15/go.mod h1:fqTzRCWsuniGEEZHtOEdITxnqx+i5ICdOVuenSQJd3U=
 github.com/kubescape/kubescape/v3 v3.0.4 h1:gZ5d8QMxLYZQ6Yz9wRvGcDQlBUIV+v/Y/41g56/YDy8=
@@ -716,8 +716,8 @@ github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 h1:SqlwF8G
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520/go.mod h1:wuxMUSDzGUyWd25IJfBzEJ/Udmw2Vy7npj+MV3u3GrU=
 github.com/kubescape/regolibrary v1.0.317-0.20240320124840-1d84ac7186ea h1:hLUe+1bdhiBD7xM/jliQozVd1NLYn1afQLxl5trQdPk=
 github.com/kubescape/regolibrary v1.0.317-0.20240320124840-1d84ac7186ea/go.mod h1:RK9dHjllKFnISDmVExQlI1B1z93TlQsAu/Kq9c0mt2U=
-github.com/kubescape/storage v0.0.239 h1:hfuq1+CuEAKE7zCg9bB8gfU9vZoGMrJBgNh5tAD1rak=
-github.com/kubescape/storage v0.0.239/go.mod h1:f6u/Lt3SjUTBrmzOStb33IkKTtaqKM4pyfV5d1lUMiY=
+github.com/kubescape/storage v0.0.301 h1:SsyS1Xdq8ClIOqCB5gNg7X82lGfrSpWLI+J+VenHr6k=
+github.com/kubescape/storage v0.0.301/go.mod h1:d/1hqWPda2clsjx2wmQgysnB5dThIo3rDKP7RWx+v+M=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
@@ -1126,8 +1126,8 @@ go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0 h1:w1K
 go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0/go.mod h1:HBy4BjzgVE8139ieRI75oXm3EcDN+6GhD88JT1Kjvxg=
 go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 h1:88Y4s2C8oTui1LGM6bTWkw0ICGcOLCAI5l6zsD1j20k=
 go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0/go.mod h1:Vl1/iaggsuRlrHf/hfPJPvVag77kKyvrLeD10kpMl+A=
-go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.35.0 h1:m639+BofXTvcY1q8CGs4ItwQarYtJPOWmVobfM1HpVI=
-go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.35.0/go.mod h1:LjReUci/F4BUyv+y4dwnq3h/26iNOeC3wAIqgvTIZVo=
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 h1:RAE+JPfvEmvy+0LzyUA25/SGawPwIUbZ6u0Wug54sLc=
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0/go.mod h1:AGmbycVGEsRx9mXMZ75CsOyhSP6MFIcj/6dnG+vhVjk=
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 h1:3iZJKlCZufyRzPzlQhUIWVmfltrXuGyfjREgGP3UUjc=
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0/go.mod h1:/G+nUPfhq2e+qiXMGxMwumDrP5jtzU+mWN7/sjT2rak=
 go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.43.0 h1:mS47AX77OtFfKG4vtp+84kuGSFZHTyxtXIN269vChY0=
