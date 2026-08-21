@@ -90,13 +90,14 @@ func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, er
 		return response, nil
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return response, fmt.Errorf("received status code '%d' from kubescape, body: %s", resp.StatusCode, resp.Body)
-	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return response, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return response, fmt.Errorf("received status code '%d' from kubescape, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	if err := json.Unmarshal(bodyBytes, response); err != nil {
