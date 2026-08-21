@@ -50,7 +50,8 @@ func severityRank(severity string) (int, bool) {
 // No re-scan happens: it acts on findings already in the cluster.
 //
 // A summary matches when it fails the requested Control and/or carries a failing
-// finding at or above MinSeverity (see summaryMatchesSelector). Targets in
+// finding at or above MinSeverity (see summaryMatchesSelector), and, when the
+// selector names a Namespace, when it resolves to a workload in it. Targets in
 // excluded/protected namespaces and non-remediable kinds are dropped here so
 // they never reach a remediator, and duplicates are collapsed.
 func (actionHandler *ActionHandler) resolveSelectorTargets(ctx context.Context, selector *apis.OperatorActionSelector) ([]remediators.Target, error) {
@@ -73,8 +74,11 @@ func (actionHandler *ActionHandler) resolveSelectorTargets(ctx context.Context, 
 		return nil, fmt.Errorf("operatorAction: findings-driven targeting requires the storage client, which is not configured")
 	}
 
-	// namespace "" lists configuration-scan summaries across all namespaces.
-	summaries, err := actionHandler.ksStorageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries("").List(ctx, metav1.ListOptions{})
+	// Scope the listing to the requested namespace. An empty Namespace lists
+	// across all of them, which stays the default for a cluster-wide selector.
+	// Without this the selector always resolved cluster-wide, so a caller asking
+	// for one namespace silently got every matching workload in the cluster.
+	summaries, err := actionHandler.ksStorageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(selector.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("operatorAction: failed to list configuration scan summaries: %w", err)
 	}
@@ -93,6 +97,13 @@ func (actionHandler *ActionHandler) resolveSelectorTargets(ctx context.Context, 
 		// The remediators only act on namespaced workload kinds; skip anything
 		// else (e.g. CronJob) rather than failing the whole batch later.
 		if !remediators.IsNamespacedKind(target.Kind) {
+			continue
+		}
+		// The target namespace comes from the summary's labels, which is what the
+		// remediator actually acts on. Check it against the requested namespace
+		// too, so a summary whose labels disagree with the object's own namespace
+		// can never escape the requested scope.
+		if selector.Namespace != "" && target.Namespace != selector.Namespace {
 			continue
 		}
 		// Protected/excluded namespaces are never remediated, even by a selector.
