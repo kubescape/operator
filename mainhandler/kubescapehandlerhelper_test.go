@@ -1,6 +1,8 @@
 package mainhandler
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -255,4 +257,22 @@ func TestAppendSecurityFramework(t *testing.T) {
 		})
 	}
 
+}
+
+func TestReadKubescapeV1ScanResponseIncludesBodyOnError(t *testing.T) {
+	// A real *http.Response is required here, not a hand-built one: resp.Body's
+	// concrete type behind the io.ReadCloser interface matters for what %s used
+	// to print, and only a genuine transport-produced body reproduces that.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("scan queue is full"))
+	}))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	assert.NoError(t, err)
+
+	_, err = readKubescapeV1ScanResponse(resp)
+
+	assert.ErrorContains(t, err, "scan queue is full")
 }
