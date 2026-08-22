@@ -225,3 +225,86 @@ func scanSummaryNamed(ns, kind, name, crName string, controls map[string]spdxv1b
 	s.Name = crName
 	return s
 }
+
+// multiNamespaceStore holds the same failing control in three namespaces, so a
+// scoped selector can be told apart from a cluster-wide one.
+func multiNamespaceStore() *kssfake.Clientset {
+	return kssfake.NewSimpleClientset(
+		scanSummary("payments", "Deployment", "api", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": failedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{High: 1}),
+		scanSummary("billing", "Deployment", "invoices", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": failedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{High: 1}),
+		scanSummary("shipping", "Deployment", "tracker", map[string]spdxv1beta1.ScannedControlSummary{
+			"C-0016": failedControl("C-0016", "High"),
+		}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{High: 1}),
+	)
+}
+
+func TestResolveSelectorTargets_ScopedToNamespace(t *testing.T) {
+	ah := newResolver(multiNamespaceStore(), newTestConfig(config.Config{Namespace: "kubescape"}))
+
+	targets, err := ah.resolveSelectorTargets(context.Background(), &apis.OperatorActionSelector{
+		Control:   "C-0016",
+		Namespace: "payments",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []remediators.Target{{Kind: "Deployment", Namespace: "payments", Name: "api"}}, targets,
+		"a namespaced selector must not reach workloads in other namespaces")
+}
+
+func TestResolveSelectorTargets_EmptyNamespaceStaysClusterWide(t *testing.T) {
+	ah := newResolver(multiNamespaceStore(), newTestConfig(config.Config{Namespace: "kubescape"}))
+
+	targets, err := ah.resolveSelectorTargets(context.Background(), &apis.OperatorActionSelector{Control: "C-0016"})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []remediators.Target{
+		{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		{Kind: "Deployment", Namespace: "billing", Name: "invoices"},
+		{Kind: "Deployment", Namespace: "shipping", Name: "tracker"},
+	}, targets, "an unset namespace must keep the previous cluster-wide behaviour")
+}
+
+func TestResolveSelectorTargets_NamespaceScopeWithMinSeverity(t *testing.T) {
+	ah := newResolver(multiNamespaceStore(), newTestConfig(config.Config{Namespace: "kubescape"}))
+
+	targets, err := ah.resolveSelectorTargets(context.Background(), &apis.OperatorActionSelector{
+		MinSeverity: "High",
+		Namespace:   "billing",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []remediators.Target{{Kind: "Deployment", Namespace: "billing", Name: "invoices"}}, targets,
+		"namespace scoping must apply to a severity-only selector too")
+}
+
+func TestResolveSelectorTargets_NamespaceWithNoFindings(t *testing.T) {
+	ah := newResolver(multiNamespaceStore(), newTestConfig(config.Config{Namespace: "kubescape"}))
+
+	targets, err := ah.resolveSelectorTargets(context.Background(), &apis.OperatorActionSelector{
+		Control:   "C-0016",
+		Namespace: "empty-ns",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, targets, "a namespace with no matching findings resolves to nothing, and the caller reports it")
+}
+
+func TestResolveSelectorTargets_MislabelledSummaryCannotEscapeScope(t *testing.T) {
+	// A summary stored in "payments" whose labels point at a workload in
+	// "billing". Listing is scoped server-side, but the remediator acts on the
+	// label-derived namespace, so the resolver must drop it rather than let a
+	// payments-scoped request mutate a billing workload.
+	mislabelled := scanSummary("payments", "Deployment", "api", map[string]spdxv1beta1.ScannedControlSummary{
+		"C-0016": failedControl("C-0016", "High"),
+	}, spdxv1beta1.WorkloadConfigurationScanSeveritiesSummary{High: 1})
+	mislabelled.Labels[helpers.RelatedNamespaceMetadataKey] = "billing"
+
+	ah := newResolver(kssfake.NewSimpleClientset(mislabelled), newTestConfig(config.Config{Namespace: "kubescape"}))
+
+	targets, err := ah.resolveSelectorTargets(context.Background(), &apis.OperatorActionSelector{
+		Control:   "C-0016",
+		Namespace: "payments",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, targets, "a summary whose labels leave the requested namespace must not be selected")
+}
