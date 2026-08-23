@@ -116,7 +116,11 @@ func (wp *WatchPool) Run(ctx context.Context, out chan<- watch.Event) {
 	logger.L().Info("Watch pool: started ok")
 }
 
-// NewWatchPool builds one watch per GVR per namespace.
+// NewWatchPool builds one watch per namespaced GVR per namespace.
+//
+// A cluster-scoped GVR gets exactly one watch whatever the namespace list
+// says, because its watch covers the cluster already: fanning it out would
+// create identical watches all feeding the same channel.
 //
 // An empty namespaces slice keeps the previous behaviour of a single watch
 // per GVR across the whole cluster.
@@ -125,11 +129,19 @@ func NewWatchPool(_ context.Context, client dynamic.Interface, gvrs []schema.Gro
 		namespaces = []string{""}
 	}
 
+	clusterScoped := []string{""}
+
 	watches := make([]*SelfHealingWatch, 0, len(gvrs)*len(namespaces))
 
 	for idx := range gvrs {
 		gvr := gvrs[idx]
-		for _, namespace := range namespaces {
+
+		watchNamespaces := namespaces
+		if !k8sinterface.IsNamespaceScope(&gvr) {
+			watchNamespaces = clusterScoped
+		}
+
+		for _, namespace := range watchNamespaces {
 			watches = append(watches, NewSelfHealingWatch(client, gvr, namespace, opts))
 		}
 	}

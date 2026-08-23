@@ -122,3 +122,60 @@ func TestNewWatchPoolNamespaces(t *testing.T) {
 		})
 	}
 }
+
+func TestNewWatchPoolClusterScopedGVRs(t *testing.T) {
+	clusterRoles := schema.GroupVersionResource{
+		Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles",
+	}
+	nodes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
+	deployments := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+
+	tt := []struct {
+		name            string
+		inputGVRs       []schema.GroupVersionResource
+		inputNamespaces []string
+		wantWatches     int
+		wantNamespaces  map[string]int
+	}{
+		{
+			name:            "a cluster scoped gvr gets one watch whatever the namespaces say",
+			inputGVRs:       []schema.GroupVersionResource{clusterRoles, nodes},
+			inputNamespaces: []string{"default", "kube-system", "kubescape"},
+			wantWatches:     2,
+			wantNamespaces:  map[string]int{"": 2},
+		},
+		{
+			name:            "a mixed rule set fans out only the namespaced gvr",
+			inputGVRs:       []schema.GroupVersionResource{clusterRoles, deployments},
+			inputNamespaces: []string{"default", "kube-system"},
+			// one for clusterroles, two for deployments
+			wantWatches:    3,
+			wantNamespaces: map[string]int{"": 1, "default": 1, "kube-system": 1},
+		},
+		{
+			name:            "a cluster scoped gvr with no namespaces is unchanged",
+			inputGVRs:       []schema.GroupVersionResource{clusterRoles},
+			inputNamespaces: nil,
+			wantWatches:     1,
+			wantNamespaces:  map[string]int{"": 1},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+
+			pool, err := NewWatchPool(ctx, dynClient, tc.inputGVRs, tc.inputNamespaces, metav1.ListOptions{})
+
+			assert.NoError(t, err)
+			assert.Len(t, pool.pool, tc.wantWatches)
+
+			gotNamespaces := map[string]int{}
+			for _, w := range pool.pool {
+				gotNamespaces[w.namespace]++
+			}
+			assert.Equal(t, tc.wantNamespaces, gotNamespaces)
+		})
+	}
+}
