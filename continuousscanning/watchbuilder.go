@@ -13,11 +13,16 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-func NewDynamicWatch(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, opts metav1.ListOptions) (watch.Interface, error) {
+// NewDynamicWatch starts a watch for the given GVR.
+//
+// namespace restricts a namespace-scoped resource to that namespace. An
+// empty namespace watches all of them. A cluster-scoped resource ignores
+// it, since there is nothing to scope.
+func NewDynamicWatch(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, namespace string, opts metav1.ListOptions) (watch.Interface, error) {
 	var w watch.Interface
 	var err error
 	if k8sinterface.IsNamespaceScope(&gvr) {
-		w, err = client.Resource(gvr).Namespace("").Watch(ctx, opts)
+		w, err = client.Resource(gvr).Namespace(namespace).Watch(ctx, opts)
 	} else {
 		w, err = client.Resource(gvr).Watch(ctx, opts)
 	}
@@ -28,14 +33,16 @@ type SelfHealingWatch struct {
 	opts          metav1.ListOptions
 	client        dynamic.Interface
 	currWatch     watch.Interface
-	makeWatchFunc func(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, opts metav1.ListOptions) (watch.Interface, error)
+	makeWatchFunc func(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, namespace string, opts metav1.ListOptions) (watch.Interface, error)
 	gvr           schema.GroupVersionResource
+	namespace     string
 }
 
-func NewSelfHealingWatch(client dynamic.Interface, gvr schema.GroupVersionResource, opts metav1.ListOptions) *SelfHealingWatch {
+func NewSelfHealingWatch(client dynamic.Interface, gvr schema.GroupVersionResource, namespace string, opts metav1.ListOptions) *SelfHealingWatch {
 	return &SelfHealingWatch{
 		client:        client,
 		gvr:           gvr,
+		namespace:     namespace,
 		opts:          opts,
 		makeWatchFunc: NewDynamicWatch,
 	}
@@ -67,7 +74,7 @@ func (w *SelfHealingWatch) Run(ctx context.Context, readyWg *sync.WaitGroup, out
 		default:
 			gvr := helpers.String("gvr", w.gvr.String())
 			logger.L().Debug("creating watch for GVR", gvr)
-			watchFunc, err := w.makeWatchFunc(ctx, w.client, w.gvr, w.opts)
+			watchFunc, err := w.makeWatchFunc(ctx, w.client, w.gvr, w.namespace, w.opts)
 			if err != nil {
 				logger.L().Ctx(ctx).Warning(
 					"got error when creating a watch for gvr",
@@ -109,14 +116,34 @@ func (wp *WatchPool) Run(ctx context.Context, out chan<- watch.Event) {
 	logger.L().Info("Watch pool: started ok")
 }
 
-func NewWatchPool(_ context.Context, client dynamic.Interface, gvrs []schema.GroupVersionResource, opts metav1.ListOptions) (*WatchPool, error) {
-	watches := make([]*SelfHealingWatch, len(gvrs))
+// NewWatchPool builds one watch per namespaced GVR per namespace.
+//
+// A cluster-scoped GVR gets exactly one watch whatever the namespace list
+// says, because its watch covers the cluster already: fanning it out would
+// create identical watches all feeding the same channel.
+//
+// An empty namespaces slice keeps the previous behaviour of a single watch
+// per GVR across the whole cluster.
+func NewWatchPool(_ context.Context, client dynamic.Interface, gvrs []schema.GroupVersionResource, namespaces []string, opts metav1.ListOptions) (*WatchPool, error) {
+	if len(namespaces) == 0 {
+		namespaces = []string{""}
+	}
+
+	clusterScoped := []string{""}
+
+	watches := make([]*SelfHealingWatch, 0, len(gvrs)*len(namespaces))
 
 	for idx := range gvrs {
 		gvr := gvrs[idx]
-		selfHealingWatch := NewSelfHealingWatch(client, gvr, opts)
 
-		watches[idx] = selfHealingWatch
+		watchNamespaces := namespaces
+		if !k8sinterface.IsNamespaceScope(&gvr) {
+			watchNamespaces = clusterScoped
+		}
+
+		for _, namespace := range watchNamespaces {
+			watches = append(watches, NewSelfHealingWatch(client, gvr, namespace, opts))
+		}
 	}
 
 	pool := &WatchPool{pool: watches}

@@ -30,8 +30,9 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 	resourceEventsCh := make(chan watch.Event, 100)
 
 	gvrs := s.tl.LoadGVRs(ctx)
-	logger.L().Info("fetched gvrs", helpers.Interface("gvrs", gvrs))
-	wp, _ := NewWatchPool(ctx, s.k8sdynamic, gvrs, listOpts)
+	namespaces := s.tl.LoadNamespaces(ctx)
+	logger.L().Info("fetched gvrs", helpers.Interface("gvrs", gvrs), helpers.Interface("namespaces", namespaces))
+	wp, _ := NewWatchPool(ctx, s.k8sdynamic, gvrs, namespaces, listOpts)
 	wp.Run(ctx, resourceEventsCh)
 	logger.L().Info("ran watch pool")
 

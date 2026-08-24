@@ -189,3 +189,48 @@ func TestTargetLoader(t *testing.T) {
 	}
 
 }
+
+func TestTargetLoaderLoadNamespaces(t *testing.T) {
+	tt := []struct {
+		name               string
+		inputMatchingRules *MatchingRules
+		wantNamespaces     []string
+	}{
+		{
+			name: "the configured namespaces are returned",
+			inputMatchingRules: &MatchingRules{
+				APIResources: []APIResourceMatch{
+					{
+						Groups:    []string{"apps"},
+						Versions:  []string{"v1"},
+						Resources: []string{"deployments"},
+					},
+				},
+				Namespaces: []string{"default", "kube-system"},
+			},
+			wantNamespaces: []string{"default", "kube-system"},
+		},
+		{
+			name: "no namespaces means every namespace",
+			inputMatchingRules: &MatchingRules{
+				APIResources: []APIResourceMatch{
+					{
+						Groups:    []string{"apps"},
+						Versions:  []string{"v1"},
+						Resources: []string{"deployments"},
+					},
+				},
+			},
+			wantNamespaces: nil,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			l := NewTargetLoader(&stubFetcher{tc.inputMatchingRules})
+
+			assert.Equal(t, tc.wantNamespaces, l.LoadNamespaces(ctx))
+		})
+	}
+}

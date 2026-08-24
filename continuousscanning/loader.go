@@ -36,6 +36,7 @@ type targetLoader struct {
 
 type TargetLoader interface {
 	LoadGVRs(ctx context.Context) []schema.GroupVersionResource
+	LoadNamespaces(ctx context.Context) []string
 }
 
 // NewTargetLoader returns a new Target Loader
@@ -74,6 +75,19 @@ func (l *targetLoader) LoadGVRs(ctx context.Context) []schema.GroupVersionResour
 	}
 
 	return gvrs
+}
+
+// LoadNamespaces loads the namespaces the matching rules restrict watches to.
+//
+// An empty result means every namespace, which is what a rule set that
+// omits the field asks for.
+func (l *targetLoader) LoadNamespaces(ctx context.Context) []string {
+	rules, err := l.fetcher.Fetch(ctx)
+	if err != nil || rules == nil {
+		return nil
+	}
+
+	return rules.Namespaces
 }
 
 type fileFetcher struct {
