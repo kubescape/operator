@@ -39,7 +39,6 @@ func (resthandler *HTTPHandler) SetupHTTPListener(port string) error {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
 	}
 	rtr := http.NewServeMux()
-	
 	rtr.Handle("/v1/triggerAction", otelhttp.NewHandler(http.HandlerFunc(resthandler.ActionRequest), "triggerAction"))
 
 	openAPIUIHandler := docs.NewOpenAPIUIHandler()
