@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/docs"
 	"github.com/panjf2000/ants/v2"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type HTTPHandler struct {
@@ -39,12 +38,11 @@ func (resthandler *HTTPHandler) SetupHTTPListener(port string) error {
 	if resthandler.keyPair != nil {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
 	}
-	rtr := mux.NewRouter()
-	rtr.Use(otelmux.Middleware("operator-http"))
-	rtr.HandleFunc("/v1/triggerAction", resthandler.ActionRequest)
+	rtr := http.NewServeMux()
+	rtr.Handle("/v1/triggerAction", otelhttp.NewHandler(http.HandlerFunc(resthandler.ActionRequest), "triggerAction"))
 
 	openAPIUIHandler := docs.NewOpenAPIUIHandler()
-	rtr.PathPrefix(docs.OpenAPIV2Prefix).Methods("GET").Handler(openAPIUIHandler)
+	rtr.Handle("GET "+docs.OpenAPIV2Prefix, otelhttp.NewHandler(openAPIUIHandler, "openapi"))
 
 	server.Handler = rtr
 
