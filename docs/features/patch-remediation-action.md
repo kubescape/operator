@@ -65,20 +65,44 @@ A confirmed (`dryRun: false`) patch's body and patch type are recorded on
 `OperatorCommand` status payload and the `KubescapeRemediation` Kubernetes
 event — so an applied change can be reconstructed after the fact.
 
-## Known gap: endpoint authorization
+## patch is only deliverable via the OperatorCommand CRD path
 
-`patch` is dispatched the same way as every other `operatorAction`, including
-via the operator's `/v1/triggerAction` HTTP endpoint
-(`restapihandler/triggeraction.go`), which currently has **no
-authentication or authorization** in front of it. That gap predates this
-action, but `patch` raises its stakes materially: previously a caller
-reaching that endpoint could only trigger hardcoded, low-blast-radius writes
-(an annotation key, a deny-all NetworkPolicy). With `patch`, the same
-unauthenticated reachability lets a caller direct the operator's cluster-wide
-patch RBAC at arbitrary (denylist-permitting) workload fields.
+Every other `operatorAction` (`annotate`, `quarantine`, `revert`, and
+`cordon` once implemented) is reachable via **two** ingress points that both
+funnel into the same `handleRequest`/`handleOperatorAction` dispatch:
 
-**Authenticating and authorizing `/v1/triggerAction`** (e.g. via
-`TokenReview` + `SubjectAccessReview` per caller) should be treated as a
-prerequisite before enabling this action in any environment where that
-endpoint is reachable by untrusted callers. This is tracked as a follow-up,
-not addressed by this change.
+1. The `OperatorCommand` CRD, watched by `watcher/commandshandler.go`. In the
+   commercial/connected deployment this is written by the `synchronizer`
+   component, whose own K8s ServiceAccount and `ClusterRole` are the actual
+   authorization boundary — reachable only through synchronizer's own
+   authenticated connection to the backend. In the standalone/GitOps case a
+   user or CI pipeline `kubectl apply`s the CR directly, authorized by their
+   own RBAC on that resource.
+2. The `/v1/triggerAction` HTTP endpoint (`restapihandler/triggeraction.go`).
+   This is the **documented, intended transport** for the `kubescape` CLI's
+   `operator remediate annotate|quarantine|revert` subcommand (see
+   [`designs-and-proposals/cli-cluster-operations.md`](https://github.com/kubescape/designs-and-proposals/blob/main/proposals/cli-cluster-operations.md)),
+   which reaches it via `kubectl port-forward` — itself RBAC-gated (`pods/portforward`
+   create permission on the operator's namespace). However, the endpoint
+   itself has **no application-level caller authentication**, and its
+   `Service` carries no `NetworkPolicy`: any pod on the cluster network can
+   reach `operator:4002/v1/triggerAction` directly, bypassing the
+   port-forward/RBAC boundary the CLI relies on entirely (verified live —
+   see [operator#411](https://github.com/kubescape/operator/pull/411),
+   closed in favor of this narrower fix once it was clear the endpoint's
+   `operatorAction` dispatch is itself a required, documented feature, not
+   an oversight).
+
+`patch` was **not** part of that design (the design's action set is
+`annotate`/`quarantine`/`cordon`/`revert`) and has no CLI subcommand or other
+legitimate use of the `/v1/triggerAction` transport. So rather than closing
+the endpoint's general reachability gap (a NetworkPolicy-level fix, tracked
+separately against `kubescape/helm-charts`, since `kubectl port-forward`
+traffic never crosses the pod network a `NetworkPolicy` governs and so isn't
+blocked by one), `handleOperatorAction` rejects `patch` outright unless
+`sessionObj.ParentCommandDetails` is set — the signal, already used
+elsewhere in this codebase, that a command was delivered via the CRD watcher
+rather than `/v1/triggerAction`. This keeps every design-documented action
+working exactly as before while giving `patch` — the one action with no
+legitimate use for the unauthenticated HTTP path — the RBAC-backed CRD path
+as its only way in.

@@ -4,10 +4,13 @@ import (
 	"context"
 	"maps"
 	"testing"
+	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
 	beUtils "github.com/kubescape/backend/pkg/utils"
+	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/mainhandler/remediators"
 	"github.com/kubescape/operator/utils"
@@ -21,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -70,6 +74,25 @@ func newActionHandlerForTestWithExtraArgs(t *testing.T, client kubernetes.Interf
 			Command: &apis.Command{CommandName: apis.TypeOperatorAction, Args: argsMap},
 		},
 	}
+}
+
+// newActionHandlerForCRDOriginTest builds an ActionHandler whose sessionObj
+// carries ParentCommandDetails — i.e. simulates a command delivered via the
+// OperatorCommand CRD watcher (watcher/commandshandler.go), the only path
+// patch is allowed to arrive on. Without this, sessionObj.ParentCommandDetails
+// is nil, simulating a command that arrived via /v1/triggerAction instead.
+func newActionHandlerForCRDOriginTest(t *testing.T, client kubernetes.Interface, cfg config.IConfig, args apis.OperatorActionArgs, extra map[string]any) *ActionHandler {
+	t.Helper()
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), cfg, args, extra)
+	ah.sessionObj.SetOperatorCommandDetails(&utils.OperatorCommandDetails{
+		Command:   &v1alpha1.OperatorCommand{ObjectMeta: metav1.ObjectMeta{Namespace: "kubescape", Name: "test-command"}},
+		StartedAt: time.Now(),
+		Client: &k8sinterface.KubernetesApi{
+			KubernetesClient: client,
+			DynamicClient:    dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		},
+	})
+	return ah
 }
 
 func capturePatchDryRun(client *k8sfake.Clientset, resource string, out *[]string) {
@@ -415,7 +438,7 @@ func TestHandleOperatorAction_PatchDefaultsToDryRun(t *testing.T) {
 	var dryRun []string
 	capturePatchDryRun(client, "deployments", &dryRun)
 
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		// DryRun intentionally nil
@@ -434,7 +457,7 @@ func TestHandleOperatorAction_PatchConfirmWritesStrategicMergePatch(t *testing.T
 	var patchType types.PatchType
 	capturePatchType(client, "deployments", &patchType)
 
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		DryRun: boolPtr(false),
@@ -457,7 +480,7 @@ func TestHandleOperatorAction_PatchConfirmWritesJSONMergePatch(t *testing.T) {
 	var patchType types.PatchType
 	capturePatchType(client, "deployments", &patchType)
 
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		DryRun: boolPtr(false),
@@ -480,7 +503,7 @@ func TestHandleOperatorAction_PatchExcludedNamespace(t *testing.T) {
 	client := k8sfake.NewClientset()
 	cfg := newTestConfig(config.Config{Namespace: "kubescape", ExcludeNamespaces: []string{"kube-system"}})
 
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), cfg, apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, cfg, apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "kube-system", Name: "api"},
 		DryRun: boolPtr(false),
@@ -498,11 +521,11 @@ func TestHandleOperatorAction_PatchExcludedNamespace(t *testing.T) {
 func TestHandleOperatorAction_PatchMissingPayload(t *testing.T) {
 	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
 
-	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		DryRun: boolPtr(false),
-	})
+	}, nil)
 
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
@@ -514,7 +537,7 @@ func TestHandleOperatorAction_PatchMissingPayload(t *testing.T) {
 func TestHandleOperatorAction_PatchInvalidPayload(t *testing.T) {
 	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
 
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		DryRun: boolPtr(false),
@@ -531,7 +554,7 @@ func TestHandleOperatorAction_PatchInvalidPayload(t *testing.T) {
 func TestHandleOperatorAction_PatchUnsupportedPatchType(t *testing.T) {
 	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
 
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
 		Action: remediators.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		DryRun: boolPtr(false),
@@ -543,4 +566,53 @@ func TestHandleOperatorAction_PatchUnsupportedPatchType(t *testing.T) {
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported patchType")
+}
+
+// The core regression test for this gate: a patch action that arrives without
+// ParentCommandDetails set — i.e. delivered via /v1/triggerAction rather than
+// the RBAC-gated OperatorCommand CRD watcher — must be rejected before any
+// payload parsing or cluster write, unlike annotate/quarantine/revert which
+// are legitimately deliverable via triggerAction (the CLI's `operator
+// remediate` subcommand's only transport).
+func TestHandleOperatorAction_PatchRejectedWithoutCRDOrigin(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	var dryRun []string
+	capturePatchDryRun(client, "deployments", &dryRun)
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		DryRun: boolPtr(false),
+	}, map[string]any{
+		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+	})
+
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OperatorCommand CRD delivery path")
+	assert.Empty(t, dryRun, "a rejected patch must never reach the client, dry-run or not")
+
+	got, getErr := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, getErr)
+	assert.NotContains(t, got.Labels, "seccomp", "a rejected patch must not touch the target at all")
+}
+
+// annotate/quarantine/revert must remain reachable without CRD origin: they
+// are the CLI's `operator remediate` subcommand's only transport
+// (/v1/triggerAction over kubectl port-forward), and this gate is specific to
+// patch, not a blanket requirement on every operatorAction.
+func TestHandleOperatorAction_AnnotateAllowedWithoutCRDOrigin(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionAnnotate,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Reason: "C-0016",
+		DryRun: boolPtr(false),
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	got, err := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "true", got.Annotations[remediators.AnnotationRemediated])
 }

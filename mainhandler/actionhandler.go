@@ -54,6 +54,17 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 	var patch string
 	var patchType types.PatchType
 	if args.Action == remediators.OperatorActionPatch {
+		// Unlike annotate/quarantine/revert (and cordon, once implemented), patch
+		// was never part of the CLI-cluster-operations design and has no
+		// legitimate /v1/triggerAction delivery path (that HTTP endpoint has no
+		// caller auth beyond "reached it somehow" — see kubescape/operator#411).
+		// ParentCommandDetails is set only by the OperatorCommand CRD watcher
+		// (watcher/commandshandler.go), which is reachable solely through the
+		// RBAC-gated synchronizer/CRD-apply channel, so its absence here means
+		// this command arrived over triggerAction instead.
+		if actionHandler.sessionObj.ParentCommandDetails == nil {
+			return fmt.Errorf("operatorAction: patch is only supported via the OperatorCommand CRD delivery path, not triggerAction")
+		}
 		patch, patchType, err = extractPatchArgs(cmd.Args)
 		if err != nil {
 			return err
