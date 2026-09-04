@@ -2,6 +2,7 @@ package continuousscanning
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -153,7 +155,7 @@ func TestAddEventHandler(t *testing.T) {
 			spyH := &spyHandler{called: false, wg: resourcesCreatedWg, mx: &sync.RWMutex{}}
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
 			css := NewContinuousScanningService(operatorConfig, dynClient, tl, spyH)
-			css.Launch(ctx)
+			require.NoError(t, css.Launch(ctx))
 
 			// Create Pods to be listened
 			podsGvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "Pods"}
@@ -263,10 +265,10 @@ func TestContinuousScanningService(t *testing.T) {
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, &beUtils.Credentials{}, config.Config{})
 			triggeringHandler := NewTriggeringHandler(wp, operatorConfig)
-			stubFetcher := &stubFetcher{podMatchRules}
+			stubFetcher := &stubFetcher{data: podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
 			css := NewContinuousScanningService(operatorConfig, dynClient, loader, triggeringHandler)
-			css.Launch(ctx)
+			require.NoError(t, css.Launch(ctx))
 
 			// Create Pods to be listened
 			createOpts := metav1.CreateOptions{}
@@ -284,6 +286,36 @@ func TestContinuousScanningService(t *testing.T) {
 			css.Stop()
 
 			assert.ElementsMatch(t, tc.want, gotCommands.Commands())
+		})
+	}
+}
+
+func TestLaunch_InvalidMatchingRules(t *testing.T) {
+	tt := []struct {
+		name  string
+		input string
+	}{
+		{name: "null", input: "null"},
+		{name: "malformed JSON", input: "{not json"},
+		{name: "empty file", input: ""},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("Launch panicked: %v", r)
+				}
+			}()
+
+			ctx := context.Background()
+			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+			loader := NewTargetLoader(NewFileFetcher(strings.NewReader(tc.input)))
+			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+			css := NewContinuousScanningService(operatorConfig, dynClient, loader)
+
+			err := css.Launch(ctx)
+			require.Error(t, err)
 		})
 	}
 }

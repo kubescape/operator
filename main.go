@@ -167,10 +167,10 @@ func main() {
 	if operatorConfig.ContinuousScanEnabled() {
 		go func(mh *mainhandler.MainHandler) {
 			err := mh.SetupContinuousScanning(ctx)
-			logger.L().Info("set up cont scanning service")
 			if err != nil {
 				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 			}
+			logger.L().Info("set up cont scanning service")
 		}(mainHandler)
 	}
 

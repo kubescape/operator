@@ -2,8 +2,8 @@ package continuousscanning
 
 import (
 	"context"
+	"fmt"
 
-	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
@@ -23,16 +23,19 @@ type ContinuousScanningService struct {
 	eventQueue        *watcher.CooldownQueue
 }
 
-func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.Command {
-	producedCommands := make(chan armoapi.Command)
-
+func (s *ContinuousScanningService) listen(ctx context.Context) error {
 	listOpts := metav1.ListOptions{}
 	resourceEventsCh := make(chan watch.Event, 100)
 
-	gvrs := s.tl.LoadGVRs(ctx)
-	namespaces := s.tl.LoadNamespaces(ctx)
+	gvrs, namespaces, err := s.tl.Load(ctx)
+	if err != nil {
+		return err
+	}
 	logger.L().Info("fetched gvrs", helpers.Interface("gvrs", gvrs), helpers.Interface("namespaces", namespaces))
-	wp, _ := NewWatchPool(ctx, s.k8sdynamic, gvrs, namespaces, listOpts)
+	wp, err := NewWatchPool(ctx, s.k8sdynamic, gvrs, namespaces, listOpts)
+	if err != nil {
+		return fmt.Errorf("failed to create watch pool: %w", err)
+	}
 	wp.Run(ctx, resourceEventsCh)
 	logger.L().Info("ran watch pool")
 
@@ -57,7 +60,7 @@ func (s *ContinuousScanningService) listen(ctx context.Context) <-chan armoapi.C
 
 	}(s.shutdownRequested, resourceEventsCh, s.eventQueue)
 
-	return producedCommands
+	return nil
 }
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
@@ -87,13 +90,12 @@ func (s *ContinuousScanningService) work(ctx context.Context) {
 // It sets up the provided watches, listens for events they deliver in the
 // background and dispatches them to registered event handlers.
 // Launch blocks until all the underlying watches are ready to accept events.
-func (s *ContinuousScanningService) Launch(ctx context.Context) <-chan armoapi.Command {
-	out := make(chan armoapi.Command)
-
-	s.listen(ctx)
+func (s *ContinuousScanningService) Launch(ctx context.Context) error {
+	if err := s.listen(ctx); err != nil {
+		return err
+	}
 	go s.work(ctx)
-
-	return out
+	return nil
 }
 
 func (s *ContinuousScanningService) AddEventHandler(fn EventHandler) {

@@ -123,13 +123,16 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) err
 	if err != nil {
 		return err
 	}
+	defer rulesReader.Close()
 
 	fetcher := cs.NewFileFetcher(rulesReader)
 	loader := cs.NewTargetLoader(fetcher)
 
 	dynClient := mainHandler.k8sAPI.DynamicClient
 	svc := cs.NewContinuousScanningService(mainHandler.config, dynClient, loader, triggeringHandler, deletingHandler)
-	svc.Launch(ctx)
+	if err := svc.Launch(ctx); err != nil {
+		return fmt.Errorf("failed to load matching rules from %q: %w", rulesFilename, err)
+	}
 
 	return nil
 }
