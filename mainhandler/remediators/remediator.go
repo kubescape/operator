@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/armosec/armoapi-go/apis"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -37,6 +38,11 @@ type Request struct {
 	Target     Target
 	Reason     string
 	FindingRef string
+	// Patch and PatchType are used by the patch action only: Patch is the raw
+	// (JSON or YAML) patch body, and PatchType selects Strategic Merge Patch
+	// (the default, when empty) or JSON Merge Patch.
+	Patch     string
+	PatchType types.PatchType
 }
 
 // Plan is the computed, not-yet-applied effect of a remediation. It is returned
@@ -49,6 +55,9 @@ type Plan struct {
 	// Patch is the exact patch body Apply would send, included for transparency
 	// in the dry-run preview.
 	Patch string `json:"patch,omitempty"`
+	// PatchType is the patch action's patch type (Strategic Merge Patch or
+	// JSON Merge Patch), empty for actions other than patch.
+	PatchType string `json:"patchType,omitempty"`
 }
 
 // Result is the outcome of Apply or Revert.
@@ -58,6 +67,12 @@ type Result struct {
 	DryRun      bool   `json:"dryRun"`
 	Applied     bool   `json:"applied"`
 	Description string `json:"description"`
+	// Patch and PatchType record the exact bytes and patch type a confirmed
+	// (non-dry-run) patch action sent to the API server, so the audit trail
+	// (OperatorCommand status + KubescapeRemediation event) can reconstruct
+	// what changed. Empty for actions other than patch.
+	Patch     string `json:"patch,omitempty"`
+	PatchType string `json:"patchType,omitempty"`
 }
 
 // Remediator computes and performs a single class of cluster operation.
@@ -80,5 +95,6 @@ func NewRegistry(client kubernetes.Interface) map[apis.OperatorActionType]Remedi
 	return map[apis.OperatorActionType]Remediator{
 		apis.OperatorActionAnnotate:   NewAnnotateRemediator(client),
 		apis.OperatorActionQuarantine: NewQuarantineRemediator(client),
+		OperatorActionPatch:           NewPatchRemediator(client),
 	}
 }

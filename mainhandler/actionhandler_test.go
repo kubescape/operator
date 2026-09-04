@@ -2,6 +2,7 @@ package mainhandler
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -19,6 +20,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -48,8 +50,18 @@ func newActionHandlerForTest(t *testing.T, client kubernetes.Interface, cfg conf
 
 func newActionHandlerForTestWithStorage(t *testing.T, client kubernetes.Interface, storageClient kssc.Interface, cfg config.IConfig, args apis.OperatorActionArgs) *ActionHandler {
 	t.Helper()
+	return newActionHandlerForTestWithExtraArgs(t, client, storageClient, cfg, args, nil)
+}
+
+// newActionHandlerForTestWithExtraArgs builds an ActionHandler whose
+// Command.Args merges args (the typed schema) with extra raw keys — needed for
+// fields like "patch"/"patchType" that are not (yet) part of armoapi-go's typed
+// OperatorActionArgs and are read directly off the raw map (see extractPatchArgs).
+func newActionHandlerForTestWithExtraArgs(t *testing.T, client kubernetes.Interface, storageClient kssc.Interface, cfg config.IConfig, args apis.OperatorActionArgs, extra map[string]any) *ActionHandler {
+	t.Helper()
 	argsMap, err := args.ToArgs()
 	require.NoError(t, err)
+	maps.Copy(argsMap, extra)
 	return &ActionHandler{
 		k8sAPI:          utils.NewK8sInterfaceFake(client),
 		ksStorageClient: storageClient,
@@ -63,6 +75,17 @@ func newActionHandlerForTestWithStorage(t *testing.T, client kubernetes.Interfac
 func capturePatchDryRun(client *k8sfake.Clientset, resource string, out *[]string) {
 	client.PrependReactor("patch", resource, func(action clienttesting.Action) (bool, runtime.Object, error) {
 		*out = action.(clienttesting.PatchActionImpl).PatchOptions.DryRun
+		return false, nil, nil
+	})
+}
+
+// capturePatchType records the k8s.io/apimachinery/pkg/types.PatchType of the
+// next patch on the given resource, so a test can prove which patch type was
+// actually sent to the client rather than only asserting on the resulting
+// object state (which is identical for a labels-only body regardless of type).
+func capturePatchType(client *k8sfake.Clientset, resource string, out *types.PatchType) {
+	client.PrependReactor("patch", resource, func(action clienttesting.Action) (bool, runtime.Object, error) {
+		*out = action.(clienttesting.PatchActionImpl).PatchType
 		return false, nil, nil
 	})
 }
@@ -383,4 +406,141 @@ func TestHandleOperatorAction_ValidTTLNotYetSupported(t *testing.T) {
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ttl/auto-revert is not supported yet")
+}
+
+// patch without --confirm must default to a server-side dry-run, never a real
+// write — same safe-by-default contract as every other action.
+func TestHandleOperatorAction_PatchDefaultsToDryRun(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	var dryRun []string
+	capturePatchDryRun(client, "deployments", &dryRun)
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		// DryRun intentionally nil
+	}, map[string]any{
+		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	assert.Equal(t, []string{metav1.DryRunAll}, dryRun, "a patch action without dryRun must default to server-side dry-run")
+}
+
+// patch --confirm applies the caller-supplied Strategic Merge Patch (the
+// default patchType) to the target.
+func TestHandleOperatorAction_PatchConfirmWritesStrategicMergePatch(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	var patchType types.PatchType
+	capturePatchType(client, "deployments", &patchType)
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		DryRun: boolPtr(false),
+	}, map[string]any{
+		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	assert.Equal(t, types.StrategicMergePatchType, patchType, "omitting patchType must default to Strategic Merge Patch")
+
+	got, err := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "applied", got.Labels["seccomp"])
+}
+
+// patch --confirm with patchType=merge sends a JSON Merge Patch rather than the
+// default Strategic Merge Patch.
+func TestHandleOperatorAction_PatchConfirmWritesJSONMergePatch(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	var patchType types.PatchType
+	capturePatchType(client, "deployments", &patchType)
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		DryRun: boolPtr(false),
+	}, map[string]any{
+		"patch":     `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+		"patchType": "merge",
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	assert.Equal(t, types.MergePatchType, patchType, "patchType=merge must send a JSON Merge Patch, not the default Strategic Merge Patch")
+
+	got, err := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "applied", got.Labels["seccomp"])
+}
+
+// A patch action in an excluded namespace must be rejected before any write,
+// same as every other action.
+func TestHandleOperatorAction_PatchExcludedNamespace(t *testing.T) {
+	client := k8sfake.NewClientset()
+	cfg := newTestConfig(config.Config{Namespace: "kubescape", ExcludeNamespaces: []string{"kube-system"}})
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), cfg, apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "kube-system", Name: "api"},
+		DryRun: boolPtr(false),
+	}, map[string]any{
+		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+	})
+
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "excluded from remediation")
+}
+
+// A patch action with no 'patch' payload in Command.Args is rejected before
+// any cluster write is attempted.
+func TestHandleOperatorAction_PatchMissingPayload(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		DryRun: boolPtr(false),
+	})
+
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a 'patch' payload")
+}
+
+// An invalid JSON/YAML 'patch' payload is rejected at Plan time, before any
+// cluster write is attempted.
+func TestHandleOperatorAction_PatchInvalidPayload(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		DryRun: boolPtr(false),
+	}, map[string]any{
+		"patch": `{not valid: [`,
+	})
+
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid patch payload")
+}
+
+// An unsupported patchType is rejected before any cluster write is attempted.
+func TestHandleOperatorAction_PatchUnsupportedPatchType(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: remediators.OperatorActionPatch,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		DryRun: boolPtr(false),
+	}, map[string]any{
+		"patch":     `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+		"patchType": "json-patch",
+	})
+
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported patchType")
 }

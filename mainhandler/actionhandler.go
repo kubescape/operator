@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // handleOperatorAction handles a TypeOperatorAction command. It parses the typed
@@ -47,6 +48,18 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 		return fmt.Errorf("operatorAction: ttl/auto-revert is not supported yet (later phase); omit ttl")
 	}
 
+	// 'patch' and 'patchType' are not part of armoapi-go's typed OperatorActionArgs
+	// yet (see extractPatchArgs), so they're parsed once here — target-independent
+	// — rather than once per resolved target.
+	var patch string
+	var patchType types.PatchType
+	if args.Action == remediators.OperatorActionPatch {
+		patch, patchType, err = extractPatchArgs(cmd.Args)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Resolve the target set: an explicit Target, or a findings-driven Selector
 	// that reads the stored configuration-scan summaries (no re-scan). Exactly
 	// one of the two must be provided.
@@ -62,11 +75,11 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 	// error verbatim. A multi-target selector runs every target and aggregates
 	// failures so one bad workload does not abandon the rest.
 	if len(targets) == 1 {
-		return actionHandler.handleActionOnTarget(ctx, args, targets[0], registry, dryRun)
+		return actionHandler.handleActionOnTarget(ctx, args, targets[0], registry, dryRun, patch, patchType)
 	}
 	var errs []error
 	for _, target := range targets {
-		if err := actionHandler.handleActionOnTarget(ctx, args, target, registry, dryRun); err != nil {
+		if err := actionHandler.handleActionOnTarget(ctx, args, target, registry, dryRun, patch, patchType); err != nil {
 			errs = append(errs, fmt.Errorf("target %s: %w", target, err))
 		}
 	}
@@ -99,8 +112,11 @@ func (actionHandler *ActionHandler) resolveTargets(ctx context.Context, args api
 }
 
 // handleActionOnTarget enforces the per-target safety rails and dispatches the
-// action to the matching remediator. It runs once per resolved target.
-func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, args apis.OperatorActionArgs, target remediators.Target, registry map[apis.OperatorActionType]remediators.Remediator, dryRun bool) error {
+// action to the matching remediator. It runs once per resolved target. patch
+// and patchType are the patch action's payload, parsed once in
+// handleOperatorAction (see extractPatchArgs) since they are target-independent;
+// they are unused for every other action.
+func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, args apis.OperatorActionArgs, target remediators.Target, registry map[apis.OperatorActionType]remediators.Remediator, dryRun bool, patch string, patchType types.PatchType) error {
 	// All current target kinds are namespaced. Require the namespace up front so
 	// the excluded-namespace rail below is actually enforced, instead of an empty
 	// namespace slipping past it and failing late at the API server.
@@ -123,6 +139,10 @@ func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, ar
 		req := remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef}
 		return actionHandler.applyRemediation(ctx, registry[args.Action], req, dryRun)
 
+	case remediators.OperatorActionPatch:
+		req := remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef, Patch: patch, PatchType: patchType}
+		return actionHandler.applyRemediation(ctx, registry[args.Action], req, dryRun)
+
 	case apis.OperatorActionRevert:
 		// Pass dryRun so a default (no --confirm) revert previews instead of writing.
 		return actionHandler.revertTarget(ctx, registry, target, dryRun)
@@ -133,6 +153,49 @@ func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, ar
 	default:
 		return fmt.Errorf("operatorAction: unknown action %q", args.Action)
 	}
+}
+
+// extractPatchArgs pulls the generic patch payload out of the raw Command.Args
+// map. 'patch' and 'patchType' are not (yet) part of armoapi-go's typed
+// OperatorActionArgs schema, so — unlike the other action fields — they are
+// read directly from the map rather than off the parsed apis.OperatorActionArgs:
+//   - "patch" (required) may be a JSON/YAML string or a raw JSON object.
+//   - "patchType" (optional) is "strategic" (default) or "merge".
+func extractPatchArgs(rawArgs map[string]any) (string, types.PatchType, error) {
+	v, ok := rawArgs["patch"]
+	if !ok || v == nil {
+		return "", "", fmt.Errorf("operatorAction: patch action requires a 'patch' payload")
+	}
+
+	var patch string
+	switch p := v.(type) {
+	case string:
+		patch = p
+	default:
+		b, err := json.Marshal(p)
+		if err != nil {
+			return "", "", fmt.Errorf("operatorAction: failed to encode 'patch' payload: %w", err)
+		}
+		patch = string(b)
+	}
+
+	patchType := types.StrategicMergePatchType
+	if raw, ok := rawArgs["patchType"]; ok && raw != nil {
+		pt, ok := raw.(string)
+		if !ok {
+			return "", "", fmt.Errorf("operatorAction: 'patchType' must be a string")
+		}
+		switch pt {
+		case remediators.PatchTypeStrategic:
+			patchType = types.StrategicMergePatchType
+		case remediators.PatchTypeMerge:
+			patchType = types.MergePatchType
+		default:
+			return "", "", fmt.Errorf("operatorAction: unsupported patchType %q (supported: %s, %s)", pt, remediators.PatchTypeStrategic, remediators.PatchTypeMerge)
+		}
+	}
+
+	return patch, patchType, nil
 }
 
 // applyRemediation runs a remediator's Plan -> Apply and records the result.
@@ -154,9 +217,20 @@ func (actionHandler *ActionHandler) applyRemediation(ctx context.Context, r reme
 // object that no longer exists (NotFound) is skipped, not treated as an error,
 // so a leftover artifact (e.g. a NetworkPolicy whose workload was deleted) is
 // still cleaned up.
+//
+// remediators.OperatorActionPatch is deliberately absent from reversible:
+// PatchRemediator.Revert always returns an error (arbitrary patches carry no
+// recorded prior state), and this loop treats any non-NotFound error as fatal
+// — including it here would abort revert for every target, even ones only
+// annotated or quarantined. Because a patch is silently left unreverted, the
+// caveat below is appended to the recorded result so the audit trail does not
+// claim more than actually happened.
 func (actionHandler *ActionHandler) revertTarget(ctx context.Context, registry map[apis.OperatorActionType]remediators.Remediator, target remediators.Target, dryRun bool) error {
 	reversible := []apis.OperatorActionType{apis.OperatorActionAnnotate, apis.OperatorActionQuarantine}
 	var descriptions []string
+	if _, ok := registry[remediators.OperatorActionPatch]; ok {
+		descriptions = append(descriptions, "any generic patch previously applied to this target was NOT reverted (no prior state is recorded)")
+	}
 	applied := false
 	for _, action := range reversible {
 		r, ok := registry[action]
