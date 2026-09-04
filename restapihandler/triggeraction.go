@@ -13,6 +13,29 @@ import (
 	"github.com/kubescape/operator/utils"
 )
 
+// triggerActionAllowedCommands is the exact set of CommandNames
+// /v1/triggerAction is permitted to dispatch.
+//
+// This endpoint has no caller authentication: unlike the OperatorCommand CRD
+// path (only reachable through the synchronizer ServiceAccount's own K8s
+// RBAC, itself gated behind an authenticated connection to the backend),
+// anything on the pod network that can reach the operator's Service on this
+// port can call it. Its only legitimate callers are the operator's own
+// scan-scheduling CronJobs — kubescape-scheduler (kubescapeScan),
+// kubevuln-scheduler (scan), and the dynamically created registry-scan
+// CronJob (scanRegistryV2, see watcher/registryhandler.go) — none of which
+// ever send anything else.
+//
+// apis.TypeOperatorAction is deliberately excluded: it drives remediation
+// actions (annotate/quarantine/revert/patch) that can mutate arbitrary
+// cluster workloads, and must only ever be dispatched via the RBAC-gated
+// OperatorCommand CRD path, never through this unauthenticated endpoint.
+var triggerActionAllowedCommands = map[apis.NotificationPolicyType]bool{
+	apis.TypeRunKubescape:   true,
+	apis.TypeScanImages:     true,
+	apis.TypeScanRegistryV2: true,
+}
+
 /*args may contain credentials*/
 func displayReceivedCommand(receivedCommands []byte) {
 
@@ -47,6 +70,12 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 		sessionObj := utils.NewSessionObj(ctx, resthandler.config, &c, c.JobTracking.ParentID, c.JobTracking.JobID)
 		if c.CommandName == "" {
 			err := fmt.Errorf("command not found. id: %s", c.GetID())
+			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
+			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
+			continue
+		}
+		if !triggerActionAllowedCommands[c.CommandName] {
+			err := fmt.Errorf("command %q is not allowed via triggerAction. id: %s", c.CommandName, c.GetID())
 			logger.L().Ctx(ctx).Error(err.Error(), helpers.Error(err))
 			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 			continue
