@@ -158,20 +158,24 @@ func main() {
 		go mainHandler.StartupTriggerActions(ctx, mainhandler.GetStartupActions(operatorConfig))
 	}
 
-	isReadinessReady = true
+	// When continuous scanning is disabled, publish readiness now. When it is
+	// enabled, delay readiness until SetupContinuousScanning succeeds so a pod
+	// with invalid matching rules cannot report ready while terminating.
+	if !operatorConfig.ContinuousScanEnabled() {
+		isReadinessReady = true
+	}
 
 	// wait for requests to come from the websocket or from the REST API
 	go mainHandler.HandleCommandResponse(ctx)
 	mainHandler.HandleWatchers(ctx)
 
 	if operatorConfig.ContinuousScanEnabled() {
-		go func(mh *mainhandler.MainHandler) {
-			err := mh.SetupContinuousScanning(ctx)
-			if err != nil {
-				logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
-			}
-			logger.L().Info("set up cont scanning service")
-		}(mainHandler)
+		err := mainHandler.SetupContinuousScanning(ctx)
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
+		}
+		logger.L().Info("set up cont scanning service")
+		isReadinessReady = true
 	}
 
 	// Start node agent autoscaler if enabled
