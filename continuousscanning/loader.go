@@ -1,8 +1,11 @@
 package continuousscanning
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -34,9 +37,11 @@ type targetLoader struct {
 	fetcher MatchingRuleFetcher
 }
 
+// TargetLoader loads matching-rule targets used to establish watches.
 type TargetLoader interface {
-	LoadGVRs(ctx context.Context) []schema.GroupVersionResource
-	LoadNamespaces(ctx context.Context) []string
+	// Load returns the GVRs to watch and the namespaces to restrict them to.
+	// An empty namespaces slice means every namespace.
+	Load(ctx context.Context) ([]schema.GroupVersionResource, []string, error)
 }
 
 // NewTargetLoader returns a new Target Loader
@@ -62,32 +67,22 @@ func matchRuleToGVR(apiMatch APIResourceMatch) []schema.GroupVersionResource {
 	return gvrs
 }
 
-// LoadGVRs loads GroupVersionResource definitions
-func (l *targetLoader) LoadGVRs(ctx context.Context) []schema.GroupVersionResource {
-	gvrs := []schema.GroupVersionResource{}
-
-	rules, _ := l.fetcher.Fetch(ctx)
-
-	apiResourceMatches := rules.APIResources
-	for idx := range apiResourceMatches {
-		ruleGvrs := matchRuleToGVR(apiResourceMatches[idx])
-		gvrs = append(gvrs, ruleGvrs...)
-	}
-
-	return gvrs
-}
-
-// LoadNamespaces loads the namespaces the matching rules restrict watches to.
-//
-// An empty result means every namespace, which is what a rule set that
-// omits the field asks for.
-func (l *targetLoader) LoadNamespaces(ctx context.Context) []string {
+// Load fetches matching rules once and returns the GVRs and namespaces to watch.
+func (l *targetLoader) Load(ctx context.Context) ([]schema.GroupVersionResource, []string, error) {
 	rules, err := l.fetcher.Fetch(ctx)
-	if err != nil || rules == nil {
-		return nil
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch matching rules: %w", err)
+	}
+	if rules == nil {
+		return nil, nil, errors.New("matching rules are null")
 	}
 
-	return rules.Namespaces
+	gvrs := []schema.GroupVersionResource{}
+	for idx := range rules.APIResources {
+		gvrs = append(gvrs, matchRuleToGVR(rules.APIResources[idx])...)
+	}
+
+	return gvrs, rules.Namespaces, nil
 }
 
 type fileFetcher struct {
@@ -110,7 +105,17 @@ func parseMatchingRules(r io.Reader) (*MatchingRules, error) {
 		return nil, err
 	}
 
-	var matches *MatchingRules
-	err = json.Unmarshal(data, &matches)
-	return matches, err
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, errors.New("matching rules are empty")
+	}
+	if bytes.Equal(trimmed, []byte("null")) {
+		return nil, errors.New("matching rules are null")
+	}
+
+	var matches MatchingRules
+	if err := json.Unmarshal(trimmed, &matches); err != nil {
+		return nil, fmt.Errorf("failed to parse matching rules: %w", err)
+	}
+	return &matches, nil
 }
