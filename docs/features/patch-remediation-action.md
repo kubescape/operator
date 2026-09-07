@@ -24,10 +24,11 @@ registered in `remediators.NewRegistry`.
 - `dryRun` — same safe-by-default semantics as every other action: omitted or
   `true` means a server-side dry-run; only an explicit `false` writes.
 
-`patch`/`patchType` are not yet part of armoapi-go's typed
-`OperatorActionArgs` schema, so they are read directly off the raw
-`Command.Args` map (see `extractPatchArgs` in `actionhandler.go`) rather than
-the parsed struct used for the other fields.
+`patch`/`patchType` are typed fields on `apis.OperatorActionArgs` as of
+armoapi-go `v0.0.761` (`Patch apis.OperatorActionPatchBody`, `PatchType
+string`). `OperatorActionPatchBody.UnmarshalJSON` accepts either a JSON
+string or a raw JSON object on the wire, matching what this action has
+always tolerated.
 
 ## Safety rails
 

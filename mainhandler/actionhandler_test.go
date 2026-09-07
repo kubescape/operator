@@ -58,9 +58,10 @@ func newActionHandlerForTestWithStorage(t *testing.T, client kubernetes.Interfac
 }
 
 // newActionHandlerForTestWithExtraArgs builds an ActionHandler whose
-// Command.Args merges args (the typed schema) with extra raw keys — needed for
-// fields like "patch"/"patchType" that are not (yet) part of armoapi-go's typed
-// OperatorActionArgs and are read directly off the raw map (see extractPatchArgs).
+// Command.Args merges args (the typed schema) with extra raw keys — for
+// exercising fields not (yet) part of armoapi-go's typed OperatorActionArgs.
+// Patch/PatchType no longer need this (they're typed fields as of
+// armoapi-go v0.0.761); extra is nil at every current call site.
 func newActionHandlerForTestWithExtraArgs(t *testing.T, client kubernetes.Interface, storageClient kssc.Interface, cfg config.IConfig, args apis.OperatorActionArgs, extra map[string]any) *ActionHandler {
 	t.Helper()
 	argsMap, err := args.ToArgs()
@@ -439,12 +440,11 @@ func TestHandleOperatorAction_PatchDefaultsToDryRun(t *testing.T) {
 	capturePatchDryRun(client, "deployments", &dryRun)
 
 	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
+		Action: apis.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"metadata":{"labels":{"seccomp":"applied"}}}`,
 		// DryRun intentionally nil
-	}, map[string]any{
-		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
-	})
+	}, nil)
 
 	require.NoError(t, ah.handleOperatorAction(context.Background()))
 	assert.Equal(t, []string{metav1.DryRunAll}, dryRun, "a patch action without dryRun must default to server-side dry-run")
@@ -458,12 +458,11 @@ func TestHandleOperatorAction_PatchConfirmWritesStrategicMergePatch(t *testing.T
 	capturePatchType(client, "deployments", &patchType)
 
 	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
+		Action: apis.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"metadata":{"labels":{"seccomp":"applied"}}}`,
 		DryRun: boolPtr(false),
-	}, map[string]any{
-		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
-	})
+	}, nil)
 
 	require.NoError(t, ah.handleOperatorAction(context.Background()))
 	assert.Equal(t, types.StrategicMergePatchType, patchType, "omitting patchType must default to Strategic Merge Patch")
@@ -481,13 +480,12 @@ func TestHandleOperatorAction_PatchConfirmWritesJSONMergePatch(t *testing.T) {
 	capturePatchType(client, "deployments", &patchType)
 
 	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
-		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
-		DryRun: boolPtr(false),
-	}, map[string]any{
-		"patch":     `{"metadata":{"labels":{"seccomp":"applied"}}}`,
-		"patchType": "merge",
-	})
+		Action:    apis.OperatorActionPatch,
+		Target:    &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:     `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+		PatchType: "merge",
+		DryRun:    boolPtr(false),
+	}, nil)
 
 	require.NoError(t, ah.handleOperatorAction(context.Background()))
 	assert.Equal(t, types.MergePatchType, patchType, "patchType=merge must send a JSON Merge Patch, not the default Strategic Merge Patch")
@@ -504,12 +502,11 @@ func TestHandleOperatorAction_PatchExcludedNamespace(t *testing.T) {
 	cfg := newTestConfig(config.Config{Namespace: "kubescape", ExcludeNamespaces: []string{"kube-system"}})
 
 	ah := newActionHandlerForCRDOriginTest(t, client, cfg, apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
+		Action: apis.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "kube-system", Name: "api"},
+		Patch:  `{"metadata":{"labels":{"seccomp":"applied"}}}`,
 		DryRun: boolPtr(false),
-	}, map[string]any{
-		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
-	})
+	}, nil)
 
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
@@ -522,7 +519,7 @@ func TestHandleOperatorAction_PatchMissingPayload(t *testing.T) {
 	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
 
 	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
+		Action: apis.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		DryRun: boolPtr(false),
 	}, nil)
@@ -538,12 +535,11 @@ func TestHandleOperatorAction_PatchInvalidPayload(t *testing.T) {
 	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
 
 	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
+		Action: apis.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{not valid: [`,
 		DryRun: boolPtr(false),
-	}, map[string]any{
-		"patch": `{not valid: [`,
-	})
+	}, nil)
 
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
@@ -555,13 +551,12 @@ func TestHandleOperatorAction_PatchUnsupportedPatchType(t *testing.T) {
 	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
 
 	ah := newActionHandlerForCRDOriginTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
-		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
-		DryRun: boolPtr(false),
-	}, map[string]any{
-		"patch":     `{"metadata":{"labels":{"seccomp":"applied"}}}`,
-		"patchType": "json-patch",
-	})
+		Action:    apis.OperatorActionPatch,
+		Target:    &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:     `{"metadata":{"labels":{"seccomp":"applied"}}}`,
+		PatchType: "json-patch",
+		DryRun:    boolPtr(false),
+	}, nil)
 
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)
@@ -580,12 +575,11 @@ func TestHandleOperatorAction_PatchRejectedWithoutCRDOrigin(t *testing.T) {
 	capturePatchDryRun(client, "deployments", &dryRun)
 
 	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
-		Action: remediators.OperatorActionPatch,
+		Action: apis.OperatorActionPatch,
 		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"metadata":{"labels":{"seccomp":"applied"}}}`,
 		DryRun: boolPtr(false),
-	}, map[string]any{
-		"patch": `{"metadata":{"labels":{"seccomp":"applied"}}}`,
-	})
+	}, nil)
 
 	err := ah.handleOperatorAction(context.Background())
 	require.Error(t, err)

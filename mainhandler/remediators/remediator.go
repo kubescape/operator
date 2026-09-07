@@ -95,6 +95,6 @@ func NewRegistry(client kubernetes.Interface) map[apis.OperatorActionType]Remedi
 	return map[apis.OperatorActionType]Remediator{
 		apis.OperatorActionAnnotate:   NewAnnotateRemediator(client),
 		apis.OperatorActionQuarantine: NewQuarantineRemediator(client),
-		OperatorActionPatch:           NewPatchRemediator(client),
+		apis.OperatorActionPatch:      NewPatchRemediator(client),
 	}
 }

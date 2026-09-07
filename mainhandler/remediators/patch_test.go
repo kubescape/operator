@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,7 +26,7 @@ func TestPatchPlan_ValidStrategicMergePatch(t *testing.T) {
 		Patch:  `{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":{"type":"RuntimeDefault"}}}}}}`,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, string(OperatorActionPatch), plan.Action)
+	assert.Equal(t, string(apis.OperatorActionPatch), plan.Action)
 	assert.Equal(t, "Deployment/payments/api", plan.Target.String())
 	assert.Equal(t, string(types.StrategicMergePatchType), plan.PatchType)
 	assert.JSONEq(t, `{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":{"type":"RuntimeDefault"}}}}}}`, plan.Patch)
@@ -279,7 +280,7 @@ func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T)
 	// A Plan built out of band (bypassing Plan()) must still be rejected by
 	// Apply — validation belongs at the boundary that performs the write.
 	_, err := r.Apply(context.Background(), Plan{
-		Action: string(OperatorActionPatch),
+		Action: string(apis.OperatorActionPatch),
 		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
 		Patch:  `{"spec":{"template":{"spec":{"hostNetwork":true}}}}`,
 	}, false)

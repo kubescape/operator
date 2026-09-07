@@ -13,13 +13,6 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// OperatorActionPatch is a generic Strategic Merge Patch / JSON Merge Patch
-// action: the backend sends a targeted patch body instead of the full desired
-// object. It is not yet part of armoapi-go's OperatorActionType enum, so it is
-// defined locally as a plain string constant of that type — comparisons and
-// map lookups against apis.OperatorActionType work the same either way.
-const OperatorActionPatch apis.OperatorActionType = "patch"
-
 // Patch type names accepted in Command.Args' "patchType" field. Strategic is
 // the default when patchType is omitted.
 const (
@@ -125,7 +118,7 @@ func (r *PatchRemediator) Plan(ctx context.Context, req Request) (Plan, error) {
 	}
 
 	return Plan{
-		Action:      string(OperatorActionPatch),
+		Action:      string(apis.OperatorActionPatch),
 		Target:      req.Target,
 		Description: fmt.Sprintf("patch %s (%s); %s", req.Target, patchTypeName(patchType), patchCaveat),
 		Patch:       canonical,
