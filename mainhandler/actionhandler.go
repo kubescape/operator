@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // handleOperatorAction handles a TypeOperatorAction command. It parses the typed
@@ -45,6 +46,18 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 			return fmt.Errorf("operatorAction: invalid ttl %q: %w", args.TTL, err)
 		}
 		return fmt.Errorf("operatorAction: ttl/auto-revert is not supported yet (later phase); omit ttl")
+	}
+
+	// Unlike annotate/quarantine/revert (and cordon, once implemented), patch
+	// was never part of the CLI-cluster-operations design and has no
+	// legitimate /v1/triggerAction delivery path (that HTTP endpoint has no
+	// caller auth beyond "reached it somehow" — see kubescape/operator#411).
+	// ParentCommandDetails is set only by the OperatorCommand CRD watcher
+	// (watcher/commandshandler.go), which is reachable solely through the
+	// RBAC-gated synchronizer/CRD-apply channel, so its absence here means
+	// this command arrived over triggerAction instead.
+	if args.Action == apis.OperatorActionPatch && actionHandler.sessionObj.ParentCommandDetails == nil {
+		return fmt.Errorf("operatorAction: patch is only supported via the OperatorCommand CRD delivery path, not triggerAction")
 	}
 
 	// Resolve the target set: an explicit Target, or a findings-driven Selector
@@ -123,6 +136,17 @@ func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, ar
 		req := remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef}
 		return actionHandler.applyRemediation(ctx, registry[args.Action], req, dryRun)
 
+	case apis.OperatorActionPatch:
+		if args.Patch == "" {
+			return fmt.Errorf("operatorAction: patch action requires a 'patch' payload")
+		}
+		patchType, err := patchTypeFromArgs(args.PatchType)
+		if err != nil {
+			return err
+		}
+		req := remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef, Patch: string(args.Patch), PatchType: patchType}
+		return actionHandler.applyRemediation(ctx, registry[args.Action], req, dryRun)
+
 	case apis.OperatorActionRevert:
 		// Pass dryRun so a default (no --confirm) revert previews instead of writing.
 		return actionHandler.revertTarget(ctx, registry, target, dryRun)
@@ -132,6 +156,20 @@ func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, ar
 
 	default:
 		return fmt.Errorf("operatorAction: unknown action %q", args.Action)
+	}
+}
+
+// patchTypeFromArgs maps the wire vocabulary used in OperatorActionArgs.PatchType
+// ("strategic"/"merge") to the k8s.io/apimachinery patch media type, defaulting
+// to Strategic Merge Patch when empty.
+func patchTypeFromArgs(patchType string) (types.PatchType, error) {
+	switch patchType {
+	case "", remediators.PatchTypeStrategic:
+		return types.StrategicMergePatchType, nil
+	case remediators.PatchTypeMerge:
+		return types.MergePatchType, nil
+	default:
+		return "", fmt.Errorf("operatorAction: unsupported patchType %q (supported: %s, %s)", patchType, remediators.PatchTypeStrategic, remediators.PatchTypeMerge)
 	}
 }
 
@@ -154,9 +192,20 @@ func (actionHandler *ActionHandler) applyRemediation(ctx context.Context, r reme
 // object that no longer exists (NotFound) is skipped, not treated as an error,
 // so a leftover artifact (e.g. a NetworkPolicy whose workload was deleted) is
 // still cleaned up.
+//
+// apis.OperatorActionPatch is deliberately absent from reversible:
+// PatchRemediator.Revert always returns an error (arbitrary patches carry no
+// recorded prior state), and this loop treats any non-NotFound error as fatal
+// — including it here would abort revert for every target, even ones only
+// annotated or quarantined. Because a patch is silently left unreverted, the
+// caveat below is appended to the recorded result so the audit trail does not
+// claim more than actually happened.
 func (actionHandler *ActionHandler) revertTarget(ctx context.Context, registry map[apis.OperatorActionType]remediators.Remediator, target remediators.Target, dryRun bool) error {
 	reversible := []apis.OperatorActionType{apis.OperatorActionAnnotate, apis.OperatorActionQuarantine}
 	var descriptions []string
+	if _, ok := registry[apis.OperatorActionPatch]; ok {
+		descriptions = append(descriptions, "any generic patch previously applied to this target was NOT reverted (no prior state is recorded)")
+	}
 	applied := false
 	for _, action := range reversible {
 		r, ok := registry[action]
