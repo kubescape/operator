@@ -84,7 +84,7 @@ func newActionHandlerForTestWithExtraArgs(t *testing.T, client kubernetes.Interf
 // is nil, simulating a command that arrived via /v1/triggerAction instead.
 func newActionHandlerForCRDOriginTest(t *testing.T, client kubernetes.Interface, cfg config.IConfig, args apis.OperatorActionArgs, extra map[string]any) *ActionHandler {
 	t.Helper()
-	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewSimpleClientset(), cfg, args, extra)
+	ah := newActionHandlerForTestWithExtraArgs(t, client, kssfake.NewClientset(), cfg, args, extra)
 	ah.sessionObj.SetOperatorCommandDetails(&utils.OperatorCommandDetails{
 		Command:   &v1alpha1.OperatorCommand{ObjectMeta: metav1.ObjectMeta{Namespace: "kubescape", Name: "test-command"}},
 		StartedAt: time.Now(),
