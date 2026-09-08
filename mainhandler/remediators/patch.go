@@ -275,23 +275,50 @@ func rejectEscalation(kind string, obj map[string]any) error {
 // fixes configuration, not workload content) and container-level
 // securityContext escalations (privileged, added capabilities, or explicitly
 // enabling privilege escalation).
+//
+// Under a JSON Merge Patch, a field set to null deletes that field from the
+// live object rather than setting it to null — so nulling out an explicit
+// allowPrivilegeEscalation: false (or the whole securityContext) reverts the
+// container to its unset/permissive default just as effectively as setting
+// the field to true would. A plain `sc["x"].(bool)` type assertion silently
+// lets that through (a JSON null decodes to a Go nil, which fails the
+// assertion with ok=false), so presence-with-null is checked explicitly for
+// every field this function protects, not just its value.
 func rejectContainerEscalation(container map[string]any) error {
 	if _, ok := container["image"]; ok {
 		return fmt.Errorf("patch: field \"image\" is not allowed in a remediation patch")
 	}
-	sc, ok := container["securityContext"].(map[string]any)
+
+	scVal, scPresent := container["securityContext"]
+	if !scPresent {
+		return nil
+	}
+	if scVal == nil {
+		return fmt.Errorf("patch: securityContext=null is not allowed in a remediation patch")
+	}
+	sc, ok := scVal.(map[string]any)
 	if !ok {
 		return nil
 	}
 	if privileged, ok := sc["privileged"].(bool); ok && privileged {
 		return fmt.Errorf("patch: securityContext.privileged=true is not allowed in a remediation patch")
 	}
-	if allowEscalation, ok := sc["allowPrivilegeEscalation"].(bool); ok && allowEscalation {
-		return fmt.Errorf("patch: securityContext.allowPrivilegeEscalation=true is not allowed in a remediation patch")
+	if v, present := sc["allowPrivilegeEscalation"]; present {
+		if v == nil {
+			return fmt.Errorf("patch: securityContext.allowPrivilegeEscalation=null is not allowed in a remediation patch")
+		}
+		if b, ok := v.(bool); ok && b {
+			return fmt.Errorf("patch: securityContext.allowPrivilegeEscalation=true is not allowed in a remediation patch")
+		}
 	}
-	if capabilities, ok := sc["capabilities"].(map[string]any); ok {
-		if _, ok := capabilities["add"]; ok {
-			return fmt.Errorf("patch: securityContext.capabilities.add is not allowed in a remediation patch")
+	if v, present := sc["capabilities"]; present {
+		if v == nil {
+			return fmt.Errorf("patch: securityContext.capabilities=null is not allowed in a remediation patch")
+		}
+		if capabilities, ok := v.(map[string]any); ok {
+			if _, ok := capabilities["add"]; ok {
+				return fmt.Errorf("patch: securityContext.capabilities.add is not allowed in a remediation patch")
+			}
 		}
 	}
 	return nil

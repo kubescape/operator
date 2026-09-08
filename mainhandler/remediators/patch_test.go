@@ -248,6 +248,13 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"container allowPrivilegeEscalation", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"allowPrivilegeEscalation":true}}]}}}}`},
 		{"container added capabilities", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"add":["SYS_ADMIN"]}}}]}}}}`},
 		{"container image change", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","image":"attacker/img"}]}}}}`},
+		// Under a JSON Merge Patch, null deletes the field rather than setting
+		// it to null — so these null the entire securityContext (or a single
+		// protected field within it) instead of setting a dangerous value, to
+		// prove that route is rejected too, not just the "=true" route.
+		{"container securityContext nulled entirely", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":null}]}}}}`},
+		{"container allowPrivilegeEscalation nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"allowPrivilegeEscalation":null}}]}}}}`},
+		{"container capabilities nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":null}}]}}}}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
