@@ -2,8 +2,8 @@ package cache
 
 import (
 	"context"
+	"sync"
 
-	"github.com/goradd/maps"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/node-agent/pkg/k8sclient"
@@ -27,8 +27,9 @@ var _ watcher.Adaptor = (*RBCache)(nil)
 
 type RBCache struct {
 	k8sClient      k8sclient.K8sClientInterface
-	rbNameToRB     maps.SafeMap[string, typesv1.RuntimeAlertRuleBinding] // rule binding name -> rule binding
-	rbNameToRules  maps.SafeMap[string, []rules.RuleEvaluator]           // rule binding name -> []created rules
+	mu             sync.RWMutex                               // protects rbNameToRB and rbNameToRules
+	rbNameToRB     map[string]typesv1.RuntimeAlertRuleBinding // rule binding name -> rule binding
+	rbNameToRules  map[string][]rules.RuleEvaluator           // rule binding name -> []created rules
 	ruleCreator    rules.RuleCreator
 	watchResources []watcher.WatchResource
 	notifiers      []*chan rulebindingmanager.RuleBindingNotify
@@ -40,17 +41,35 @@ func NewCache(k8sClient k8sclient.K8sClientInterface, ruleCreator rules.RuleCrea
 	return &RBCache{
 		k8sClient:          k8sClient,
 		ruleCreator:        ruleCreator,
-		rbNameToRB:         maps.SafeMap[string, typesv1.RuntimeAlertRuleBinding]{},
+		rbNameToRB:         make(map[string]typesv1.RuntimeAlertRuleBinding),
+		rbNameToRules:      make(map[string][]rules.RuleEvaluator),
 		watchResources:     resourcesToWatch(),
 		ignoreRuleBindings: ignoreRuleBindings,
 	}
 }
 
 func (c *RBCache) RefreshRules() {
-	for _, rb := range c.rbNameToRB.Values() {
+	for _, rb := range c.ruleBindings() {
 		rbName := uniqueName(&rb)
-		c.rbNameToRules.Set(rbName, c.createRules(rb.Spec.Rules))
+		createdRules := c.createRules(rb.Spec.Rules)
+		c.mu.Lock()
+		if c.rbNameToRules == nil {
+			c.rbNameToRules = make(map[string][]rules.RuleEvaluator)
+		}
+		c.rbNameToRules[rbName] = createdRules
+		c.mu.Unlock()
 	}
+}
+
+// ruleBindings returns a shallow snapshot so callers can process bindings without holding the lock.
+func (c *RBCache) ruleBindings() []typesv1.RuntimeAlertRuleBinding {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	bindings := make([]typesv1.RuntimeAlertRuleBinding, 0, len(c.rbNameToRB))
+	for _, binding := range c.rbNameToRB {
+		bindings = append(bindings, binding)
+	}
+	return bindings
 }
 
 // ----------------- watcher.WatchResources methods -----------------
@@ -77,7 +96,7 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 	var rulesSlice []rules.RuleEvaluator
 	var rbNames []string
 
-	for _, rb := range c.rbNameToRB.Values() {
+	for _, rb := range c.ruleBindings() {
 		rbName := uniqueName(&rb)
 		// check if the object is cluster object
 		if object.GetNamespace() == "" {
@@ -128,11 +147,11 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 		rbNames = append(rbNames, rbName)
 	}
 
+	c.mu.RLock()
 	for _, ruleName := range rbNames {
-		if c.rbNameToRules.Has(ruleName) {
-			rulesSlice = append(rulesSlice, c.rbNameToRules.Get(ruleName)...)
-		}
+		rulesSlice = append(rulesSlice, c.rbNameToRules[ruleName]...)
 	}
+	c.mu.RUnlock()
 
 	return rulesSlice
 }
@@ -201,8 +220,20 @@ func (c *RBCache) addRuleBinding(ruleBinding *typesv1.RuntimeAlertRuleBinding) [
 	logger.L().Info("RuleBinding added/modified", helpers.String("name", rbName))
 
 	// add the rule binding to the cache
-	c.rbNameToRB.Set(rbName, *ruleBinding)
-	c.rbNameToRules.Set(rbName, c.createRules(ruleBinding.Spec.Rules))
+	c.mu.Lock()
+	if c.rbNameToRB == nil {
+		c.rbNameToRB = make(map[string]typesv1.RuntimeAlertRuleBinding)
+	}
+	c.rbNameToRB[rbName] = *ruleBinding
+	c.mu.Unlock()
+
+	createdRules := c.createRules(ruleBinding.Spec.Rules)
+	c.mu.Lock()
+	if c.rbNameToRules == nil {
+		c.rbNameToRules = make(map[string][]rules.RuleEvaluator)
+	}
+	c.rbNameToRules[rbName] = createdRules
+	c.mu.Unlock()
 
 	return rbs
 }
@@ -211,8 +242,10 @@ func (c *RBCache) deleteRuleBinding(uniqueName string) []rulebindingmanager.Rule
 	var rbs []rulebindingmanager.RuleBindingNotify
 
 	// remove the rule binding from the cache
-	c.rbNameToRB.Delete(uniqueName)
-	c.rbNameToRules.Delete(uniqueName)
+	c.mu.Lock()
+	delete(c.rbNameToRB, uniqueName)
+	delete(c.rbNameToRules, uniqueName)
+	c.mu.Unlock()
 
 	logger.L().Info("DeleteRuleBinding", helpers.String("name", uniqueName))
 	return rbs

@@ -103,7 +103,7 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			containerStatuses := slices.Concat(pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses, pod.Status.EphemeralContainerStatuses)
 			for _, containerStatus := range containerStatuses {
 				hash := hashFromImageID(containerStatus.ImageID)
-				wh.ImageToContainerData.Set(hash, utils.ContainerData{
+				wh.ImageToContainerData.Store(hash, utils.ContainerData{
 					ContainerName: containerStatus.Name,
 					Wlid:          wlid,
 				})
@@ -169,7 +169,10 @@ func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedComm
 		}
 
 		imageID := obj.ObjectMeta.Annotations[helpersv1.ImageIDMetadataKey]
-		imageContainerData := wh.ImageToContainerData.Get(hashFromImageID(imageID))
+		var imageContainerData utils.ContainerData
+		if cached, ok := wh.ImageToContainerData.Load(hashFromImageID(imageID)); ok {
+			imageContainerData = cached.(utils.ContainerData)
+		}
 		containerData := &utils.ContainerData{
 			ContainerName: imageContainerData.ContainerName,
 			ImageID:       imageID,
@@ -185,7 +188,10 @@ func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedComm
 				// command with an empty Wlid — kubevuln silently drops those
 				// from the platform submission path.
 				key := obj.ObjectMeta.Namespace + "/" + obj.ObjectMeta.Name
-				attempt := wh.sbomRetryAttempts.Get(key)
+				var attempt int
+				if cached, ok := wh.sbomRetryAttempts.Load(key); ok {
+					attempt = cached.(int)
+				}
 				if attempt >= sbomRetryMaxAttempts {
 					wh.sbomRetryAttempts.Delete(key)
 					logger.L().Warning("dropping SBOM scan after exhausting retries waiting for Wlid",
@@ -196,7 +202,7 @@ func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedComm
 					errorCh <- err
 					continue
 				}
-				wh.sbomRetryAttempts.Set(key, attempt+1)
+				wh.sbomRetryAttempts.Store(key, attempt+1)
 				delay := sbomRetryBackoff(attempt)
 				logger.L().Debug("Wlid not yet known for SBOM, re-enqueueing",
 					helpers.String("name", obj.ObjectMeta.Name),

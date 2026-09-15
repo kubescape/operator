@@ -20,7 +20,6 @@ require (
 	github.com/go-openapi/runtime v0.28.0
 	github.com/google/cel-go v0.29.0
 	github.com/google/uuid v1.6.0
-	github.com/goradd/maps v1.3.0
 	github.com/kubescape/backend v0.0.37
 	github.com/kubescape/go-logger v0.0.28
 	github.com/kubescape/k8s-interface v0.0.214
@@ -197,6 +196,7 @@ require (
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
+	github.com/goradd/maps v1.3.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect

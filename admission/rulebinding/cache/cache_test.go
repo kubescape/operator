@@ -2,9 +2,9 @@ package cache
 
 import (
 	"context"
+	"sync"
 	"testing"
 
-	"github.com/goradd/maps"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 	"github.com/kubescape/operator/admission/rules"
@@ -18,7 +18,6 @@ func NewCacheMock() *RBCache {
 	return &RBCache{
 		k8sClient:          k8sinterface.NewKubernetesApiMock(),
 		ruleCreator:        &rules.RuleCreatorMock{},
-		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{}, // rule binding name -> []created rules
 		ignoreRuleBindings: false,
 	}
 }
@@ -41,6 +40,66 @@ func TestNewCache(t *testing.T) {
 			assert.Equal(t, k8sAPI, cache.k8sClient)
 			assert.NotNil(t, cache.ruleCreator)
 			assert.NotNil(t, cache.watchResources)
+		})
+	}
+}
+
+func TestCacheConcurrentAccess(t *testing.T) {
+	for _, newCache := range []struct {
+		name string
+		new  func() *RBCache
+	}{
+		{name: "constructor", new: func() *RBCache {
+			return NewCache(nil, &rules.RuleCreatorMock{}, false)
+		}},
+		{name: "partial literal", new: func() *RBCache {
+			return &RBCache{ruleCreator: &rules.RuleCreatorMock{}}
+		}},
+	} {
+		t.Run(newCache.name, func(t *testing.T) {
+			c := newCache.new()
+			binding := &typesv1.RuntimeAlertRuleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "binding", Namespace: "test"},
+				Spec: typesv1.RuntimeAlertRuleBindingSpec{
+					Rules: []typesv1.RuntimeAlertRuleBindingRule{{RuleID: "R2000"}},
+				},
+			}
+			object := &unstructured.Unstructured{}
+			object.SetNamespace("test")
+			ctx := t.Context()
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			for _, operation := range []func(){
+				func() { c.addRuleBinding(binding) },
+				func() { c.deleteRuleBinding(uniqueName(binding)) },
+				func() { c.ListRulesForObject(ctx, object) },
+				c.RefreshRules,
+			} {
+				wg.Go(func() {
+					<-start
+					for range 64 {
+						operation()
+					}
+				})
+			}
+			close(start)
+			wg.Wait()
+
+			// Assert final behavior after the concurrent operations have finished.
+			c.addRuleBinding(binding)
+			beforeRefresh := c.ListRulesForObject(ctx, object)
+			if !assert.Len(t, beforeRefresh, 1) {
+				return
+			}
+			assert.Equal(t, "R2000", beforeRefresh[0].ID())
+			c.RefreshRules()
+			afterRefresh := c.ListRulesForObject(ctx, object)
+			if assert.Len(t, afterRefresh, 1) {
+				assert.Equal(t, "R2000", afterRefresh[0].ID())
+				assert.NotSame(t, beforeRefresh[0], afterRefresh[0], "refresh should recreate the rule")
+			}
+			c.deleteRuleBinding(uniqueName(binding))
+			assert.Empty(t, c.ListRulesForObject(ctx, object))
 		})
 	}
 }
@@ -232,21 +291,21 @@ func TestHandlersIgnoreNonRuleBindingKinds(t *testing.T) {
 	t.Run("AddHandler ignores Rules CRD", func(t *testing.T) {
 		c := NewCacheMock()
 		c.AddHandler(context.Background(), rulesEvent)
-		assert.Equal(t, 0, c.rbNameToRB.Len(), "no rule binding should be stored")
+		assert.Len(t, c.rbNameToRB, 0, "no rule binding should be stored")
 	})
 
 	t.Run("ModifyHandler ignores Rules CRD", func(t *testing.T) {
 		c := NewCacheMock()
 		c.ModifyHandler(context.Background(), rulesEvent)
-		assert.Equal(t, 0, c.rbNameToRB.Len())
+		assert.Len(t, c.rbNameToRB, 0)
 	})
 
 	t.Run("DeleteHandler ignores Rules CRD", func(t *testing.T) {
 		c := NewCacheMock()
 		// Seed a binding so we can detect spurious deletes.
-		c.rbNameToRB.Set("kubescape/admission-test-rules", typesv1.RuntimeAlertRuleBinding{})
+		c.rbNameToRB = map[string]typesv1.RuntimeAlertRuleBinding{"kubescape/admission-test-rules": {}}
 		c.DeleteHandler(context.Background(), rulesEvent)
-		assert.Equal(t, 1, c.rbNameToRB.Len(), "the seeded binding must not be deleted by a Rules CRD event")
+		assert.Len(t, c.rbNameToRB, 1, "the seeded binding must not be deleted by a Rules CRD event")
 	})
 }
 
@@ -254,7 +313,6 @@ func TestListRulesForObjectIgnoreBindings(t *testing.T) {
 	c := &RBCache{
 		k8sClient:          k8sinterface.NewKubernetesApiMock(),
 		ruleCreator:        &rules.RuleCreatorMock{},
-		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{},
 		ignoreRuleBindings: true,
 	}
 
