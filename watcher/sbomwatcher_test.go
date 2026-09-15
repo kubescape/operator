@@ -156,7 +156,7 @@ func TestHandleSBOMEvents(t *testing.T) {
 			ctx := context.Background()
 			wh := newTestHandler(t, startingObjects...)
 			if tc.seedContainerData {
-				wh.ImageToContainerData.Store(testImageHashOnly, utils.ContainerData{
+				wh.ImageToContainerData.Set(testImageHashOnly, utils.ContainerData{
 					ContainerName: testContainerName,
 					Wlid:          testWlid,
 				})
@@ -314,7 +314,7 @@ func TestHandleSBOMEvents_WlidArrivesLate(t *testing.T) {
 
 	// After a couple of retry cycles, simulate the pod informer populating the map.
 	time.AfterFunc(350*time.Millisecond, func() {
-		wh.ImageToContainerData.Store(testImageHashOnly, utils.ContainerData{
+		wh.ImageToContainerData.Set(testImageHashOnly, utils.ContainerData{
 			ContainerName: testContainerName,
 			Wlid:          testWlid,
 		})

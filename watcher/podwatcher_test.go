@@ -390,12 +390,10 @@ func Test_handlePodWatcher(t *testing.T) {
 			resourcesCreatedWg.Wait()
 
 			// test slug to image ID map
-			actualSlugToImageIDMap := make(map[string]string)
-			wh.SlugToImageID.Range(func(key, value any) bool {
-				actualSlugToImageIDMap[key.(string)] = value.(string)
-				return true
-			})
-			assert.Equal(t, tc.expectedSlugToImageIDMap, actualSlugToImageIDMap, "Slug to image ID map doesn’t match")
+			assert.Equal(t, len(tc.expectedSlugToImageIDMap), wh.SlugToImageID.Len(), "Slug to image ID map doesn’t match")
+			for k, v := range tc.expectedSlugToImageIDMap {
+				assert.Equal(t, v, wh.SlugToImageID.Get(k), "Slug '%s' to image ID map doesn’t match", k)
+			}
 
 			// test expectedWlidAndImageIDMap
 			assert.Equal(t, len(tc.expectedWlidAndImageIDMap), wh.WlidAndImageID.Cardinality(), "Wlid and image ID map doesn’t match")

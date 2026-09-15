@@ -20,6 +20,7 @@ require (
 	github.com/go-openapi/runtime v0.28.0
 	github.com/google/cel-go v0.29.0
 	github.com/google/uuid v1.6.0
+	github.com/goradd/maps v1.3.0
 	github.com/kubescape/backend v0.0.37
 	github.com/kubescape/go-logger v0.0.28
 	github.com/kubescape/k8s-interface v0.0.214
@@ -196,7 +197,6 @@ require (
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
-	github.com/goradd/maps v1.3.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
@@ -361,3 +361,7 @@ replace github.com/project-copacetic/copacetic => github.com/anubhav06/copacetic
 // runtime-spec v1.3.0 changed LinuxPids.Limit from int64 to *int64, which breaks
 // containerd v1.7.32 under Go 1.25.8+.
 replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.1
+
+// Temporary concurrency fix: https://github.com/goradd/maps/pull/22
+// Remove this replacement when an upstream release includes the fix.
+replace github.com/goradd/maps => github.com/matthyx/maps v0.0.0-20260915111345-e9181ad40421

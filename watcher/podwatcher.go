@@ -114,7 +114,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 					wh.scanImage(ctx, pod, containerData, workerPool)
 				}
 
-				wh.SlugToImageID.Store(containerData.Slug, containerData.ImageID)
+				wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
 				wh.WlidAndImageID.Add(getWlidAndImageID(containerData))
 			}
 		} else {
@@ -127,7 +127,7 @@ func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, w
 			}
 
 			// cache the new slug
-			wh.SlugToImageID.Store(containerData.Slug, containerData.ImageID)
+			wh.SlugToImageID.Set(containerData.Slug, containerData.ImageID)
 
 			if wh.WlidAndImageID.Contains(getWlidAndImageID(containerData)) {
 				// wlid+imageID already exists, ignoring event

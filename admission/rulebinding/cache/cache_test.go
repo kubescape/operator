@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/goradd/maps"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	typesv1 "github.com/kubescape/node-agent/pkg/rulebindingmanager/types/v1"
 	"github.com/kubescape/operator/admission/rules"
@@ -18,6 +19,7 @@ func NewCacheMock() *RBCache {
 	return &RBCache{
 		k8sClient:          k8sinterface.NewKubernetesApiMock(),
 		ruleCreator:        &rules.RuleCreatorMock{},
+		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{}, // rule binding name -> []created rules
 		ignoreRuleBindings: false,
 	}
 }
@@ -291,21 +293,21 @@ func TestHandlersIgnoreNonRuleBindingKinds(t *testing.T) {
 	t.Run("AddHandler ignores Rules CRD", func(t *testing.T) {
 		c := NewCacheMock()
 		c.AddHandler(context.Background(), rulesEvent)
-		assert.Len(t, c.rbNameToRB, 0, "no rule binding should be stored")
+		assert.Equal(t, 0, c.rbNameToRB.Len(), "no rule binding should be stored")
 	})
 
 	t.Run("ModifyHandler ignores Rules CRD", func(t *testing.T) {
 		c := NewCacheMock()
 		c.ModifyHandler(context.Background(), rulesEvent)
-		assert.Len(t, c.rbNameToRB, 0)
+		assert.Equal(t, 0, c.rbNameToRB.Len())
 	})
 
 	t.Run("DeleteHandler ignores Rules CRD", func(t *testing.T) {
 		c := NewCacheMock()
 		// Seed a binding so we can detect spurious deletes.
-		c.rbNameToRB = map[string]typesv1.RuntimeAlertRuleBinding{"kubescape/admission-test-rules": {}}
+		c.rbNameToRB.Set("kubescape/admission-test-rules", typesv1.RuntimeAlertRuleBinding{})
 		c.DeleteHandler(context.Background(), rulesEvent)
-		assert.Len(t, c.rbNameToRB, 1, "the seeded binding must not be deleted by a Rules CRD event")
+		assert.Equal(t, 1, c.rbNameToRB.Len(), "the seeded binding must not be deleted by a Rules CRD event")
 	})
 }
 
@@ -313,6 +315,7 @@ func TestListRulesForObjectIgnoreBindings(t *testing.T) {
 	c := &RBCache{
 		k8sClient:          k8sinterface.NewKubernetesApiMock(),
 		ruleCreator:        &rules.RuleCreatorMock{},
+		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{},
 		ignoreRuleBindings: true,
 	}
 

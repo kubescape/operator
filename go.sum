@@ -145,8 +145,6 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-metrics v0.3.10/go.mod h1:4O98XIr/9W0sxpJ8UaYkvjk10Iff7SnFrb4QAOwNTFc=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/armosec/armoapi-go v0.0.720 h1:mtxUw2wWPRSQWcUf89Eoc9J81SBIC0YaK66XqAXuhCQ=
-github.com/armosec/armoapi-go v0.0.720/go.mod h1:9jAH0g8ZsryhiBDd/aNMX4+n10bGwTx/doWCyyjSxts=
 github.com/armosec/armoapi-go v0.0.761 h1:/idEh/lGFLGUIF64/ecuusCYHPzs7F6T/VQ9zFHEaxA=
 github.com/armosec/armoapi-go v0.0.761/go.mod h1:1l+70fBK09F7zI2jArrPUWVHaLkijg+sQutFTmE6HRs=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
@@ -587,8 +585,6 @@ github.com/gookit/color v1.2.5/go.mod h1:AhIE+pS6D4Ql0SQWbBeXPHw7gY0/sjHoA4s/n1K
 github.com/gookit/color v1.6.0 h1:JjJXBTk1ETNyqyilJhkTXJYYigHG24TM9Xa2M1xAhRA=
 github.com/gookit/color v1.6.0/go.mod h1:9ACFc7/1IpHGBW8RwuDm/0YEnhg3dwwXpoMsmtyHfjs=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
-github.com/goradd/maps v1.3.0 h1:toF7ALsgbjQBmmmRSACTAEO+9g2rApW8dU1WirFQyrE=
-github.com/goradd/maps v1.3.0/go.mod h1:O3i5k17BAjHa9h5dzGWWfRJizF03umiBDZsNSqFdbVA=
 github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
 github.com/gorilla/securecookie v1.1.1/go.mod h1:ra0sb63/xPlUeL+yeDciTfxMRAA+MP+HVt/4epWDjd4=
@@ -740,6 +736,8 @@ github.com/mailru/easyjson v0.9.0 h1:PrnmzHw7262yW8sTBwxi1PdJA3Iw/EKBa8psRf7d9a4
 github.com/mailru/easyjson v0.9.0/go.mod h1:1+xMtQp2MRNVL/V1bOzuP3aP8VNwRW55fQUto+XFtTU=
 github.com/matthyx/inspektor-gadget v0.0.0-20260203101533-6ef87216d3dd h1:n8zR1L5t5UWzmQ/DgQ98DF/NrYJL7gUI57GkiDlyu9Y=
 github.com/matthyx/inspektor-gadget v0.0.0-20260203101533-6ef87216d3dd/go.mod h1:V4TgEmWo37K72pQvC7XuRQssysrxIIkrNX4TtEkgiE0=
+github.com/matthyx/maps v0.0.0-20260915111345-e9181ad40421 h1:9XVp2iZdJ7AVWvlNb7e9AOgGzXUyZmX79GzNJDNOCLM=
+github.com/matthyx/maps v0.0.0-20260915111345-e9181ad40421/go.mod h1:O3i5k17BAjHa9h5dzGWWfRJizF03umiBDZsNSqFdbVA=
 github.com/mattn/go-colorable v0.0.9/go.mod h1:9vuHe8Xs5qXnSaW/c/ABM9alt+Vo+STaOChaDxuIBZU=
 github.com/mattn/go-colorable v0.1.4/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
 github.com/mattn/go-colorable v0.1.6/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=

@@ -3,12 +3,13 @@ package watcher
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/goradd/maps"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/utils"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 )
 
@@ -26,10 +27,10 @@ var (
 )
 
 type WatchHandler struct {
-	ImageToContainerData sync.Map           // string image hash -> utils.ContainerData
-	SlugToImageID        sync.Map           // string slug -> string image ID
-	WlidAndImageID       mapset.Set[string] // set of <wlid+imageID>
-	sbomRetryAttempts    sync.Map           // string SBOM key -> int retry attempts so far
+	ImageToContainerData maps.SafeMap[string, utils.ContainerData] // map of <hash> : <container data>
+	SlugToImageID        maps.SafeMap[string, string]              // map of <Slug> : string <image ID>
+	WlidAndImageID       mapset.Set[string]                        // set of <wlid+imageID>
+	sbomRetryAttempts    maps.SafeMap[string, int]                 // map of <SBOM key> : retry attempts so far
 	storageClient        kssc.Interface
 	cfg                  config.IConfig
 	k8sAPI               *k8sinterface.KubernetesApi
