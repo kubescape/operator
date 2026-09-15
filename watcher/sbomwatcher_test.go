@@ -299,7 +299,15 @@ func TestHandleSBOMEvents_WlidArrivesLate(t *testing.T) {
 	cmdCh := make(chan *apis.Command, 4)
 	errorCh := make(chan error, 4)
 
-	go wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
+	handlerDone := make(chan struct{})
+	go func() {
+		defer close(handlerDone)
+		wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
+	}()
+	t.Cleanup(func() {
+		eventQueue.Stop()
+		<-handlerDone
+	})
 
 	// Enqueue the SBOM while ImageToContainerData is empty.
 	eventQueue.Enqueue(watch.Event{Type: watch.Added, Object: sbom})
@@ -332,9 +340,8 @@ func TestHandleSBOMEvents_WlidArrivesLate(t *testing.T) {
 
 	// Bookkeeping should be cleared after success.
 	key := sbom.Namespace + "/" + sbom.Name
-	assert.Equal(t, 0, wh.sbomRetryAttempts.Get(key), "retry counter must be cleared on success")
-
-	eventQueue.Stop()
+	_, exists := wh.sbomRetryAttempts.Load(key)
+	assert.False(t, exists, "retry counter must be cleared on success")
 }
 
 // TestHandleSBOMEvents_WlidNeverArrives_ExhaustsRetries verifies the
@@ -381,7 +388,17 @@ func TestHandleSBOMEvents_WlidNeverArrives_ExhaustsRetries(t *testing.T) {
 		}
 	}()
 
-	go wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
+	handlerDone := make(chan struct{})
+	go func() {
+		defer close(handlerDone)
+		wh.HandleSBOMEvents(eventQueue, cmdCh, errorCh)
+	}()
+	t.Cleanup(func() {
+		eventQueue.Stop()
+		<-handlerDone
+		close(cmdCh)
+		<-cmdDone
+	})
 
 	eventQueue.Enqueue(watch.Event{Type: watch.Added, Object: sbom})
 
@@ -400,11 +417,6 @@ func TestHandleSBOMEvents_WlidNeverArrives_ExhaustsRetries(t *testing.T) {
 	// Bookkeeping must be cleared on exhaustion to avoid leaking memory if the
 	// SBOM is later re-observed.
 	key := sbom.Namespace + "/" + sbom.Name
-	assert.Equal(t, 0, wh.sbomRetryAttempts.Get(key), "retry counter must be cleared on exhaustion")
-
-	eventQueue.Stop()
-	// HandleSBOMEvents closes cmdCh implicitly? No - it only closes errorCh.
-	// Close cmdCh manually so the drain goroutine exits, then wait.
-	close(cmdCh)
-	<-cmdDone
+	_, exists := wh.sbomRetryAttempts.Load(key)
+	assert.False(t, exists, "retry counter must be cleared on exhaustion")
 }

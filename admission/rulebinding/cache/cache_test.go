@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/goradd/maps"
@@ -41,6 +42,66 @@ func TestNewCache(t *testing.T) {
 			assert.Equal(t, k8sAPI, cache.k8sClient)
 			assert.NotNil(t, cache.ruleCreator)
 			assert.NotNil(t, cache.watchResources)
+		})
+	}
+}
+
+func TestCacheConcurrentAccess(t *testing.T) {
+	for _, newCache := range []struct {
+		name string
+		new  func() *RBCache
+	}{
+		{name: "constructor", new: func() *RBCache {
+			return NewCache(nil, &rules.RuleCreatorMock{}, false)
+		}},
+		{name: "partial literal", new: func() *RBCache {
+			return &RBCache{ruleCreator: &rules.RuleCreatorMock{}}
+		}},
+	} {
+		t.Run(newCache.name, func(t *testing.T) {
+			c := newCache.new()
+			binding := &typesv1.RuntimeAlertRuleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: "binding", Namespace: "test"},
+				Spec: typesv1.RuntimeAlertRuleBindingSpec{
+					Rules: []typesv1.RuntimeAlertRuleBindingRule{{RuleID: "R2000"}},
+				},
+			}
+			object := &unstructured.Unstructured{}
+			object.SetNamespace("test")
+			ctx := t.Context()
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			for _, operation := range []func(){
+				func() { c.addRuleBinding(binding) },
+				func() { c.deleteRuleBinding(uniqueName(binding)) },
+				func() { c.ListRulesForObject(ctx, object) },
+				c.RefreshRules,
+			} {
+				wg.Go(func() {
+					<-start
+					for range 64 {
+						operation()
+					}
+				})
+			}
+			close(start)
+			wg.Wait()
+
+			// Assert final behavior after the concurrent operations have finished.
+			c.addRuleBinding(binding)
+			beforeRefresh := c.ListRulesForObject(ctx, object)
+			if !assert.Len(t, beforeRefresh, 1) {
+				return
+			}
+			assert.Equal(t, "R2000", beforeRefresh[0].ID())
+			c.RefreshRules()
+			afterRefresh := c.ListRulesForObject(ctx, object)
+			if assert.Len(t, afterRefresh, 1) {
+				assert.Equal(t, "R2000", afterRefresh[0].ID())
+				assert.NotSame(t, beforeRefresh[0], afterRefresh[0], "refresh should recreate the rule")
+			}
+			c.deleteRuleBinding(uniqueName(binding))
+			assert.Empty(t, c.ListRulesForObject(ctx, object))
 		})
 	}
 }

@@ -361,3 +361,7 @@ replace github.com/project-copacetic/copacetic => github.com/anubhav06/copacetic
 // runtime-spec v1.3.0 changed LinuxPids.Limit from int64 to *int64, which breaks
 // containerd v1.7.32 under Go 1.25.8+.
 replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.1
+
+// Temporary concurrency fix: https://github.com/goradd/maps/pull/22
+// Remove this replacement when an upstream release includes the fix.
+replace github.com/goradd/maps => github.com/matthyx/maps v0.0.0-20260915111345-e9181ad40421
