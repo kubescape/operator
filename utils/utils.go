@@ -11,11 +11,9 @@ import (
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/utils-go/httputils"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/k8s-interface/instanceidhandler"
 	instanceidhandlerv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -23,6 +21,8 @@ import (
 	"github.com/kubescape/operator/config"
 	"github.com/panjf2000/ants/v2"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const KubescapeScanV1 = "scanV1"
@@ -88,6 +88,13 @@ func ExtractContainersToImageIDsFromPod(pod *corev1.Pod) map[string]string {
 		}
 	}
 
+	for _, containerStatus := range pod.Status.EphemeralContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := ExtractImageID(containerStatus.ImageID)
+			containersToImageIDs[containerStatus.Name] = imageID
+		}
+	}
+
 	return containersToImageIDs
 }
 
@@ -147,7 +154,9 @@ func getImage(pod *corev1.Pod, instanceID instanceidhandler.IInstanceID) (string
 		imageTag = getImageFromSpec(instanceID, pod.Spec.InitContainers)
 		// consider getting imageTag from status
 		_, imageID = getImageFromStatus(instanceID, pod.Status.InitContainerStatuses)
-		// FIXME add ephemeralContainer
+	case instanceidhandlerv1.EphemeralContainer:
+		imageTag = getImageFromEphemeralSpec(instanceID, pod.Spec.EphemeralContainers)
+		_, imageID = getImageFromStatus(instanceID, pod.Status.EphemeralContainerStatuses)
 	}
 
 	if imageTag == "" || imageID == "" {
@@ -167,6 +176,15 @@ func getImageFromStatus(instanceID instanceidhandler.IInstanceID, containerStatu
 }
 
 func getImageFromSpec(instanceID instanceidhandler.IInstanceID, containers []corev1.Container) string {
+	for _, container := range containers {
+		if instanceID.GetContainerName() == container.Name {
+			return container.Image
+		}
+	}
+	return ""
+}
+
+func getImageFromEphemeralSpec(instanceID instanceidhandler.IInstanceID, containers []corev1.EphemeralContainer) string {
 	for _, container := range containers {
 		if instanceID.GetContainerName() == container.Name {
 			return container.Image
