@@ -125,7 +125,7 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 		}
 
 		// eventually skip processing if there is no matching pod
-		if wh.cfg.SkipProfilesWithoutInstances() && !wh.hasMatchingPod(obj.Labels) {
+		if wh.cfg.SkipProfilesWithoutInstances() && !wh.hasMatchingPod(obj) {
 			continue
 		}
 
@@ -139,6 +139,7 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
 		if err != nil {
 			logger.L().Error("failed loading pod spec", helpers.String("wlid", obj.Annotations[helpersv1.WlidMetadataKey]), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace), helpers.Error(err))
+			continue
 		} else if pod != nil {
 			args[utils.ArgsPod] = pod
 		}
@@ -174,7 +175,13 @@ func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*co
 	return pod, err
 }
 
-func (wh *WatchHandler) hasMatchingPod(labels map[string]string) bool {
+func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
+	labels := obj.Labels
+	if labels[helpersv1.RelatedKindMetadataKey] == "Pod" {
+		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
+		return err == nil && podIsActive(pod)
+	}
+
 	// construct the GroupVersionResource for the workload
 	gvr := schema.GroupVersionResource{
 		Group:    labels[helpersv1.ApiGroupMetadataKey],
@@ -215,9 +222,23 @@ func (wh *WatchHandler) hasMatchingPod(labels map[string]string) bool {
 		logger.L().Debug("hasMatchingPod - failed to list pods matching selector", helpers.String("selector", labelsStr.String()), helpers.String("namespace", namespace), helpers.Error(err))
 		return false
 	}
-	if len(podList.Items) > 0 {
-		return true
+	for _, pod := range podList.Items {
+		if !podIsActive(&pod) {
+			continue
+		}
+		if labels[helpersv1.RelatedKindMetadataKey] != "ReplicaSet" {
+			return true
+		}
+		for _, owner := range pod.OwnerReferences {
+			if owner.Kind == "ReplicaSet" && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
+				return true
+			}
+		}
 	}
 	// no matching pods found
 	return false
+}
+
+func podIsActive(pod *corev1.Pod) bool {
+	return pod != nil && pod.DeletionTimestamp == nil && pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed
 }

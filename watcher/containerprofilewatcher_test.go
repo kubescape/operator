@@ -153,14 +153,6 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 				},
 				{
 					CommandName: utils.CommandScanContainerProfile,
-					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
-					Args: map[string]interface{}{
-						utils.ArgsName:      "workflow-foo-1747274700",
-						utils.ArgsNamespace: "systest-ns-rarz",
-					},
-				},
-				{
-					CommandName: utils.CommandScanContainerProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
 					Args: map[string]interface{}{
 						utils.ArgsName:      "workflow-foo2-2747274700",
@@ -216,6 +208,8 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
+			// This fixture exercises the legacy opt-out behavior.
+			cfg.SkipProfilesWithoutInstances = false
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
 
 			k8sClient := k8sfake.NewClientset(tc.objects...)
@@ -364,40 +358,105 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 		{
 			name: "Matching labels",
 			labels: map[string]string{
-				helpersv1.ApiGroupMetadataKey:   "apps",
-				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.RelatedKindMetadataKey:       "Deployment",
-				helpersv1.RelatedNameMetadataKey:       "nginx-deployment",
-				helpersv1.RelatedNamespaceMetadataKey:  "web",
+				helpersv1.ApiGroupMetadataKey:         "apps",
+				helpersv1.ApiVersionMetadataKey:       "v1",
+				helpersv1.RelatedKindMetadataKey:      "Deployment",
+				helpersv1.RelatedNameMetadataKey:      "nginx-deployment",
+				helpersv1.RelatedNamespaceMetadataKey: "web",
 			},
 			want: true,
 		},
 		{
 			name: "Non-matching labels",
 			labels: map[string]string{
-				helpersv1.ApiGroupMetadataKey:   "apps",
-				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.RelatedKindMetadataKey:       "Deployment",
-				helpersv1.RelatedNameMetadataKey:       "nginx-deployment",
-				helpersv1.RelatedNamespaceMetadataKey:  "other",
+				helpersv1.ApiGroupMetadataKey:         "apps",
+				helpersv1.ApiVersionMetadataKey:       "v1",
+				helpersv1.RelatedKindMetadataKey:      "Deployment",
+				helpersv1.RelatedNameMetadataKey:      "nginx-deployment",
+				helpersv1.RelatedNamespaceMetadataKey: "other",
 			},
 			want: false,
 		},
 		{
 			name: "No pods",
 			labels: map[string]string{
-				helpersv1.ApiGroupMetadataKey:   "apps",
-				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.RelatedKindMetadataKey:       "Deployment",
-				helpersv1.RelatedNameMetadataKey:       "empty-deployment",
-				helpersv1.RelatedNamespaceMetadataKey:  "web",
+				helpersv1.ApiGroupMetadataKey:         "apps",
+				helpersv1.ApiVersionMetadataKey:       "v1",
+				helpersv1.RelatedKindMetadataKey:      "Deployment",
+				helpersv1.RelatedNameMetadataKey:      "empty-deployment",
+				helpersv1.RelatedNamespaceMetadataKey: "web",
 			},
 			want: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, wh.hasMatchingPod(tt.labels), "hasMatchingPod(%v)", tt.labels)
+			profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Namespace: tt.labels[helpersv1.RelatedNamespaceMetadataKey], Labels: tt.labels}}
+			assert.Equalf(t, tt.want, wh.hasMatchingPod(profile), "hasMatchingPod(%v)", tt.labels)
 		})
+	}
+}
+
+func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
+	const namespace = "web"
+	current := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-new", Namespace: namespace, UID: "new-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	wrongOwner := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-old", Namespace: namespace, UID: "old-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "app-new-pod", Namespace: namespace, Labels: map[string]string{"app": "web"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: current.Name, UID: current.UID}}}}
+	directPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "direct-pod", Namespace: namespace}}
+	completedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
+
+	sch := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(sch))
+	k8sClient := k8sfake.NewClientset(pod, directPod, completedPod)
+	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, current, wrongOwner)}
+	cfg, err := config.LoadConfig("../configuration")
+	require.NoError(t, err)
+	require.True(t, cfg.SkipProfilesWithoutInstances)
+	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+	wh := NewWatchHandler(operatorConfig, k8sAPI, nil, nil)
+
+	replicaSetProfile := func(name, workload string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "ReplicaSet", helpersv1.RelatedNameMetadataKey: workload, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}}
+	}
+	podProfile := func(name, podName string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.RelatedKindMetadataKey: "Pod", helpersv1.RelatedNameMetadataKey: podName,
+		}}}
+	}
+	profiles := []*spdxv1beta1.ContainerProfile{
+		replicaSetProfile("deleted-generation", "app-deleted"),
+		replicaSetProfile("wrong-generation", wrongOwner.Name),
+		replicaSetProfile("current-generation", current.Name),
+		podProfile("deleted-pod", "gone"),
+		podProfile("completed-pod", completedPod.Name),
+		podProfile("current-pod", directPod.Name),
+	}
+	require.True(t, wh.hasMatchingPod(profiles[2]), "current ReplicaSet must have a matching Pod")
+	require.True(t, wh.hasMatchingPod(profiles[5]), "current Pod must exist")
+	events := make(chan watch.Event, len(profiles))
+	queue := &CooldownQueue{ResultChan: events}
+	commands := make(chan *apis.Command)
+	errors := make(chan error)
+	go wh.HandleContainerProfileEvents(queue, commands, errors)
+	for _, profile := range profiles {
+		events <- watch.Event{Type: watch.Added, Object: profile}
+	}
+	close(events)
+	var names []string
+	for {
+		select {
+		case cmd := <-commands:
+			names = append(names, cmd.Args[utils.ArgsName].(string))
+		case err, ok := <-errors:
+			if !ok {
+				assert.ElementsMatch(t, []string{"current-generation", "current-pod"}, names)
+				return
+			}
+			t.Errorf("unexpected event error: %v", err)
+		case <-time.After(8 * time.Second):
+			t.Fatal("timed out waiting for profile events")
+		}
 	}
 }

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -8,7 +10,9 @@ import (
 	"github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/operator/admission/rulesupdate"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRiskAcceptanceEnabled(t *testing.T) {
@@ -31,6 +35,16 @@ func TestRiskAcceptanceEnabled(t *testing.T) {
 			assert.Equal(t, tt.want, cfg.RiskAcceptanceEnabled())
 		})
 	}
+}
+
+func TestLoadConfigSkipProfilesOverride(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"skipProfilesWithoutInstances":false}`), 0600))
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.False(t, cfg.SkipProfilesWithoutInstances)
 }
 
 func TestLoadCapabilities(t *testing.T) {
@@ -110,16 +124,17 @@ func TestLoadConfig(t *testing.T) {
 				path: "../configuration",
 			},
 			want: Config{
-				Namespace:                  "kubescape",
-				RestAPIPort:                "4002",
-				CleanUpRoutineInterval:     10 * time.Minute,
-				ConcurrencyWorkers:         3,
-				TriggerSecurityFramework:   false,
-				MatchingRulesFilename:      "/etc/config/matchingRules.json",
-				EventDeduplicationInterval: 2 * time.Minute,
-				ExcludeNamespaces:          []string{"kube-system", "kubescape"},
-				IncludeNamespaces:          []string{},
-				PodScanGuardTime:           time.Hour,
+				Namespace:                    "kubescape",
+				RestAPIPort:                  "4002",
+				CleanUpRoutineInterval:       10 * time.Minute,
+				ConcurrencyWorkers:           3,
+				TriggerSecurityFramework:     false,
+				MatchingRulesFilename:        "/etc/config/matchingRules.json",
+				EventDeduplicationInterval:   2 * time.Minute,
+				ExcludeNamespaces:            []string{"kube-system", "kubescape"},
+				IncludeNamespaces:            []string{},
+				PodScanGuardTime:             time.Hour,
+				SkipProfilesWithoutInstances: true,
 				RulesUpdateConfig: rulesupdate.RulesUpdaterConfig{
 					Enabled:   false,
 					Interval:  5 * time.Minute,
