@@ -9,10 +9,12 @@ import (
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/k8s-interface/instanceidhandler/v1/containerinstance"
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/panjf2000/ants/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -179,7 +181,7 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 	labels := obj.Labels
 	if labels[helpersv1.RelatedKindMetadataKey] == "Pod" {
 		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
-		return err == nil && podIsActive(pod)
+		return err == nil && podIsPresent(pod)
 	}
 
 	// construct the GroupVersionResource for the workload
@@ -212,6 +214,14 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 		logger.L().Debug("hasMatchingPod - empty pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name))
 		return false
 	}
+	var statefulSetRevision string
+	if labels[helpersv1.RelatedKindMetadataKey] == "StatefulSet" {
+		instanceID, err := containerinstance.GenerateInstanceIDFromString(obj.Annotations[helpersv1.InstanceIDMetadataKey])
+		if err != nil || instanceID.Kind != "StatefulSet" || instanceID.Namespace != namespace {
+			return false
+		}
+		statefulSetRevision = instanceID.Name
+	}
 	// list pods matching the selector
 	podList, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labelSelector.String(),
@@ -221,7 +231,18 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 		return false
 	}
 	for _, pod := range podList.Items {
-		if !podIsActive(&pod) {
+		if !podIsPresent(&pod) {
+			continue
+		}
+		if labels[helpersv1.RelatedKindMetadataKey] == "StatefulSet" {
+			if pod.Labels[appsv1.StatefulSetRevisionLabel] != statefulSetRevision {
+				continue
+			}
+			for _, owner := range pod.OwnerReferences {
+				if owner.Kind == "StatefulSet" && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
+					return true
+				}
+			}
 			continue
 		}
 		if labels[helpersv1.RelatedKindMetadataKey] != "ReplicaSet" {
@@ -237,6 +258,6 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 	return false
 }
 
-func podIsActive(pod *corev1.Pod) bool {
-	return pod != nil && pod.DeletionTimestamp == nil && pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed
+func podIsPresent(pod *corev1.Pod) bool {
+	return pod != nil && pod.DeletionTimestamp == nil
 }
