@@ -401,14 +401,16 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 	const namespace = "web"
 	current := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-new", Namespace: namespace, UID: "new-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
 	wrongOwner := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-old", Namespace: namespace, UID: "old-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	expressionWorkload := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "expression-workload", Namespace: namespace}, Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "tier", Operator: metav1.LabelSelectorOpIn, Values: []string{"backend"}}}}}}
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "app-new-pod", Namespace: namespace, Labels: map[string]string{"app": "web"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: current.Name, UID: current.UID}}}}
+	expressionPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "expression-pod", Namespace: namespace, Labels: map[string]string{"tier": "backend"}}}
 	directPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "direct-pod", Namespace: namespace}}
 	completedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
 
 	sch := runtime.NewScheme()
 	require.NoError(t, scheme.AddToScheme(sch))
-	k8sClient := k8sfake.NewClientset(pod, directPod, completedPod)
-	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, current, wrongOwner)}
+	k8sClient := k8sfake.NewClientset(pod, expressionPod, directPod, completedPod)
+	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, current, wrongOwner, expressionWorkload)}
 	cfg, err := config.LoadConfig("../configuration")
 	require.NoError(t, err)
 	require.True(t, cfg.SkipProfilesWithoutInstances)
@@ -429,12 +431,16 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 		replicaSetProfile("deleted-generation", "app-deleted"),
 		replicaSetProfile("wrong-generation", wrongOwner.Name),
 		replicaSetProfile("current-generation", current.Name),
+		{ObjectMeta: metav1.ObjectMeta{Name: "expression-generation", Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "Deployment", helpersv1.RelatedNameMetadataKey: expressionWorkload.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}},
 		podProfile("deleted-pod", "gone"),
 		podProfile("completed-pod", completedPod.Name),
 		podProfile("current-pod", directPod.Name),
 	}
 	require.True(t, wh.hasMatchingPod(profiles[2]), "current ReplicaSet must have a matching Pod")
-	require.True(t, wh.hasMatchingPod(profiles[5]), "current Pod must exist")
+	require.True(t, wh.hasMatchingPod(profiles[3]), "matchExpressions-only workload must have a matching Pod")
+	require.True(t, wh.hasMatchingPod(profiles[6]), "current Pod must exist")
 	events := make(chan watch.Event, len(profiles))
 	queue := &CooldownQueue{ResultChan: events}
 	commands := make(chan *apis.Command)
@@ -451,7 +457,7 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 			names = append(names, cmd.Args[utils.ArgsName].(string))
 		case err, ok := <-errors:
 			if !ok {
-				assert.ElementsMatch(t, []string{"current-generation", "current-pod"}, names)
+				assert.ElementsMatch(t, []string{"current-generation", "expression-generation", "current-pod"}, names)
 				return
 			}
 			t.Errorf("unexpected event error: %v", err)

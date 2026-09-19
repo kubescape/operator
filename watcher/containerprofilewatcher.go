@@ -196,30 +196,28 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 		logger.L().Debug("hasMatchingPod - failed to get workload matching labels", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
 		return false
 	}
-	// extract the pod selector labels
-	selector, found, err := unstructured.NestedMap(workloadObj.Object, "spec", "selector", "matchLabels")
+	// extract the workload's complete pod selector
+	selectorMap, found, err := unstructured.NestedMap(workloadObj.Object, "spec", "selector")
 	if err != nil || !found {
 		logger.L().Debug("hasMatchingPod - failed to get pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
 		return false
 	}
-	// convert the map of labels to a label selector string
-	labelsStr := strings.Builder{}
-	for key, val := range selector {
-		if labelsStr.Len() > 0 {
-			labelsStr.WriteString(",")
-		}
-		fmt.Fprintf(&labelsStr, "%s=%s", key, val)
+	var selector metav1.LabelSelector
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(selectorMap, &selector); err != nil {
+		logger.L().Debug("hasMatchingPod - invalid pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
+		return false
 	}
-	if labelsStr.Len() == 0 {
+	labelSelector, err := metav1.LabelSelectorAsSelector(&selector)
+	if err != nil || labelSelector.Empty() {
 		logger.L().Debug("hasMatchingPod - empty pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name))
 		return false
 	}
 	// list pods matching the selector
 	podList, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: labelsStr.String(),
+		LabelSelector: labelSelector.String(),
 	})
 	if err != nil {
-		logger.L().Debug("hasMatchingPod - failed to list pods matching selector", helpers.String("selector", labelsStr.String()), helpers.String("namespace", namespace), helpers.Error(err))
+		logger.L().Debug("hasMatchingPod - failed to list pods matching selector", helpers.String("selector", labelSelector.String()), helpers.String("namespace", namespace), helpers.Error(err))
 		return false
 	}
 	for _, pod := range podList.Items {
