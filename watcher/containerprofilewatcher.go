@@ -214,13 +214,21 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 		logger.L().Debug("hasMatchingPod - empty pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name))
 		return false
 	}
-	var statefulSetRevision string
-	if labels[helpersv1.RelatedKindMetadataKey] == "StatefulSet" {
+	var revisionConstraint string
+	workloadKind := labels[helpersv1.RelatedKindMetadataKey]
+	switch workloadKind {
+	case "StatefulSet", "DaemonSet":
 		instanceID, err := containerinstance.GenerateInstanceIDFromString(obj.Annotations[helpersv1.InstanceIDMetadataKey])
-		if err != nil || instanceID.Kind != "StatefulSet" || instanceID.Namespace != namespace {
+		if err != nil || instanceID.Kind != workloadKind || instanceID.Namespace != namespace {
 			return false
 		}
-		statefulSetRevision = instanceID.Name
+		// StatefulSet: AlternateName is the full controller-revision-hash label value.
+		// DaemonSet: AlternateName is <daemonset-name>-<hash>, while the pod label
+		// is only the hash — strip the name prefix before comparing.
+		revisionConstraint = instanceID.Name
+		if workloadKind == "DaemonSet" {
+			revisionConstraint = strings.TrimPrefix(instanceID.Name, name+"-")
+		}
 	}
 	// list pods matching the selector
 	podList, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
@@ -234,18 +242,18 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 		if !podIsPresent(&pod) {
 			continue
 		}
-		if labels[helpersv1.RelatedKindMetadataKey] == "StatefulSet" {
-			if pod.Labels[appsv1.StatefulSetRevisionLabel] != statefulSetRevision {
+		if workloadKind == "StatefulSet" || workloadKind == "DaemonSet" {
+			if pod.Labels[appsv1.StatefulSetRevisionLabel] != revisionConstraint {
 				continue
 			}
 			for _, owner := range pod.OwnerReferences {
-				if owner.Kind == "StatefulSet" && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
+				if owner.Kind == workloadKind && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
 					return true
 				}
 			}
 			continue
 		}
-		if labels[helpersv1.RelatedKindMetadataKey] != "ReplicaSet" {
+		if workloadKind != "ReplicaSet" {
 			return true
 		}
 		for _, owner := range pod.OwnerReferences {
