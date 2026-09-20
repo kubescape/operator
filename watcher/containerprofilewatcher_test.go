@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -153,14 +154,6 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 				},
 				{
 					CommandName: utils.CommandScanContainerProfile,
-					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
-					Args: map[string]interface{}{
-						utils.ArgsName:      "workflow-foo-1747274700",
-						utils.ArgsNamespace: "systest-ns-rarz",
-					},
-				},
-				{
-					CommandName: utils.CommandScanContainerProfile,
 					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
 					Args: map[string]interface{}{
 						utils.ArgsName:      "workflow-foo2-2747274700",
@@ -216,6 +209,8 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 			clusterConfig := utilsmetadata.ClusterConfig{}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
+			// This fixture exercises the legacy opt-out behavior.
+			cfg.SkipProfilesWithoutInstances = false
 			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
 
 			k8sClient := k8sfake.NewClientset(tc.objects...)
@@ -364,40 +359,151 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 		{
 			name: "Matching labels",
 			labels: map[string]string{
-				helpersv1.ApiGroupMetadataKey:   "apps",
-				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.RelatedKindMetadataKey:       "Deployment",
-				helpersv1.RelatedNameMetadataKey:       "nginx-deployment",
-				helpersv1.RelatedNamespaceMetadataKey:  "web",
+				helpersv1.ApiGroupMetadataKey:         "apps",
+				helpersv1.ApiVersionMetadataKey:       "v1",
+				helpersv1.RelatedKindMetadataKey:      "Deployment",
+				helpersv1.RelatedNameMetadataKey:      "nginx-deployment",
+				helpersv1.RelatedNamespaceMetadataKey: "web",
 			},
 			want: true,
 		},
 		{
 			name: "Non-matching labels",
 			labels: map[string]string{
-				helpersv1.ApiGroupMetadataKey:   "apps",
-				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.RelatedKindMetadataKey:       "Deployment",
-				helpersv1.RelatedNameMetadataKey:       "nginx-deployment",
-				helpersv1.RelatedNamespaceMetadataKey:  "other",
+				helpersv1.ApiGroupMetadataKey:         "apps",
+				helpersv1.ApiVersionMetadataKey:       "v1",
+				helpersv1.RelatedKindMetadataKey:      "Deployment",
+				helpersv1.RelatedNameMetadataKey:      "nginx-deployment",
+				helpersv1.RelatedNamespaceMetadataKey: "other",
 			},
 			want: false,
 		},
 		{
 			name: "No pods",
 			labels: map[string]string{
-				helpersv1.ApiGroupMetadataKey:   "apps",
-				helpersv1.ApiVersionMetadataKey: "v1",
-				helpersv1.RelatedKindMetadataKey:       "Deployment",
-				helpersv1.RelatedNameMetadataKey:       "empty-deployment",
-				helpersv1.RelatedNamespaceMetadataKey:  "web",
+				helpersv1.ApiGroupMetadataKey:         "apps",
+				helpersv1.ApiVersionMetadataKey:       "v1",
+				helpersv1.RelatedKindMetadataKey:      "Deployment",
+				helpersv1.RelatedNameMetadataKey:      "empty-deployment",
+				helpersv1.RelatedNamespaceMetadataKey: "web",
 			},
 			want: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, wh.hasMatchingPod(tt.labels), "hasMatchingPod(%v)", tt.labels)
+			profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Namespace: tt.labels[helpersv1.RelatedNamespaceMetadataKey], Labels: tt.labels}}
+			assert.Equalf(t, tt.want, wh.hasMatchingPod(profile), "hasMatchingPod(%v)", tt.labels)
 		})
+	}
+}
+
+func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
+	const namespace = "web"
+	current := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-new", Namespace: namespace, UID: "new-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	wrongOwner := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-old", Namespace: namespace, UID: "old-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "database", Namespace: namespace, UID: "stateful-uid"}, Spec: appsv1.StatefulSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "database"}}}}
+	daemonSet := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "node-agent", Namespace: namespace, UID: "daemon-uid"}, Spec: appsv1.DaemonSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "node-agent"}}}}
+	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-job", Namespace: namespace, UID: "job-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "scheduled-job", UID: "cron-uid"}}}, Spec: batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"job-name": "batch-job"}}}}
+	failedJob := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "failed-job", Namespace: namespace, UID: "failed-job-uid"}, Spec: batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"job-name": "failed-job"}}}}
+	expressionWorkload := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "expression-workload", Namespace: namespace}, Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "tier", Operator: metav1.LabelSelectorOpIn, Values: []string{"backend"}}}}}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "app-new-pod", Namespace: namespace, Labels: map[string]string{"app": "web"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: current.Name, UID: current.UID}}}}
+	statefulPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "database-0", Namespace: namespace, Labels: map[string]string{"app": "database", appsv1.StatefulSetRevisionLabel: "database-new"}, OwnerReferences: []metav1.OwnerReference{{Kind: "StatefulSet", Name: statefulSet.Name, UID: statefulSet.UID}}}}
+	daemonPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "node-agent-xyz", Namespace: namespace, Labels: map[string]string{"app": "node-agent", appsv1.StatefulSetRevisionLabel: "f9dd7596f"}, OwnerReferences: []metav1.OwnerReference{{Kind: "DaemonSet", Name: daemonSet.Name, UID: daemonSet.UID}}}}
+	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "batch-job-pod", Namespace: namespace, Labels: map[string]string{"job-name": "batch-job"}, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: job.Name, UID: job.UID}}}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
+	failedJobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "failed-job-pod", Namespace: namespace, Labels: map[string]string{"job-name": "failed-job"}, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: failedJob.Name, UID: failedJob.UID}}}, Status: corev1.PodStatus{Phase: corev1.PodFailed}}
+	expressionPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "expression-pod", Namespace: namespace, Labels: map[string]string{"tier": "backend"}}}
+	directPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "direct-pod", Namespace: namespace}}
+	completedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
+	failedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodFailed}}
+
+	sch := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(sch))
+	k8sClient := k8sfake.NewClientset(pod, statefulPod, daemonPod, jobPod, failedJobPod, expressionPod, directPod, completedPod, failedPod)
+	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, current, wrongOwner, statefulSet, daemonSet, job, failedJob, expressionWorkload)}
+	cfg, err := config.LoadConfig("../configuration")
+	require.NoError(t, err)
+	require.True(t, cfg.SkipProfilesWithoutInstances)
+	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+	wh := NewWatchHandler(operatorConfig, k8sAPI, nil, nil)
+
+	replicaSetProfile := func(name, workload string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "ReplicaSet", helpersv1.RelatedNameMetadataKey: workload, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}}
+	}
+	statefulSetProfile := func(name, revision string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-" + namespace + "/kind-StatefulSet/name-" + revision, helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "StatefulSet", helpersv1.RelatedNameMetadataKey: statefulSet.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}}
+	}
+	// DaemonSet AlternateName is <daemonset-name>-<controller-revision-hash>
+	daemonSetProfile := func(name, revisionHash string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-" + namespace + "/kind-DaemonSet/name-" + daemonSet.Name + "-" + revisionHash, helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "DaemonSet", helpersv1.RelatedNameMetadataKey: daemonSet.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}}
+	}
+	jobProfile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: "completed-cronjob-run", Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+		helpersv1.ApiGroupMetadataKey: "batch", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "Job", helpersv1.RelatedNameMetadataKey: job.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+	}}}
+	podProfile := func(name, podName string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.RelatedKindMetadataKey: "Pod", helpersv1.RelatedNameMetadataKey: podName,
+		}}}
+	}
+	profiles := []*spdxv1beta1.ContainerProfile{
+		replicaSetProfile("deleted-generation", "app-deleted"),
+		replicaSetProfile("wrong-generation", wrongOwner.Name),
+		replicaSetProfile("current-generation", current.Name),
+		statefulSetProfile("old-stateful-generation", "database-old"),
+		statefulSetProfile("current-stateful-generation", "database-new"),
+		jobProfile,
+		{ObjectMeta: metav1.ObjectMeta{Name: "expression-generation", Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "Deployment", helpersv1.RelatedNameMetadataKey: expressionWorkload.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}},
+		podProfile("deleted-pod", "gone"),
+		podProfile("completed-pod", completedPod.Name),
+		podProfile("current-pod", directPod.Name),
+		podProfile("failed-pod", failedPod.Name),
+		statefulSetProfile("missing-stateful-revision", ""),
+		{ObjectMeta: metav1.ObjectMeta{Name: "failed-job-run", Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid"}, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: "batch", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "Job", helpersv1.RelatedNameMetadataKey: failedJob.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}},
+		daemonSetProfile("old-daemon-generation", "abc123old"),
+		daemonSetProfile("current-daemon-generation", "f9dd7596f"),
+	}
+	require.True(t, wh.hasMatchingPod(profiles[2]), "current ReplicaSet must have a matching Pod")
+	require.False(t, wh.hasMatchingPod(profiles[3]), "old StatefulSet revision must not match the current Pod")
+	require.True(t, wh.hasMatchingPod(profiles[4]), "current StatefulSet revision must match")
+	require.True(t, wh.hasMatchingPod(profiles[5]), "completed CronJob Pod must still match its Job")
+	require.True(t, wh.hasMatchingPod(profiles[6]), "matchExpressions-only workload must have a matching Pod")
+	require.True(t, wh.hasMatchingPod(profiles[9]), "current Pod must exist")
+	require.False(t, wh.hasMatchingPod(profiles[11]), "StatefulSet profile without a revision must not match")
+	require.True(t, wh.hasMatchingPod(profiles[12]), "failed Job Pod must still match its Job")
+	require.False(t, wh.hasMatchingPod(profiles[13]), "old DaemonSet revision must not match the current Pod")
+	require.True(t, wh.hasMatchingPod(profiles[14]), "current DaemonSet revision must match")
+	events := make(chan watch.Event, len(profiles))
+	queue := &CooldownQueue{ResultChan: events}
+	commands := make(chan *apis.Command)
+	errors := make(chan error)
+	go wh.HandleContainerProfileEvents(queue, commands, errors)
+	for _, profile := range profiles {
+		events <- watch.Event{Type: watch.Added, Object: profile}
+	}
+	close(events)
+	var names []string
+	for {
+		select {
+		case cmd := <-commands:
+			names = append(names, cmd.Args[utils.ArgsName].(string))
+		case err, ok := <-errors:
+			if !ok {
+				assert.ElementsMatch(t, []string{"current-generation", "current-stateful-generation", "current-daemon-generation", "completed-cronjob-run", "failed-job-run", "expression-generation", "completed-pod", "current-pod", "failed-pod"}, names)
+				return
+			}
+			t.Errorf("unexpected event error: %v", err)
+		case <-time.After(8 * time.Second):
+			t.Fatal("timed out waiting for profile events")
+		}
 	}
 }

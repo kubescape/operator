@@ -339,6 +339,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("matchingRulesFilename", "/etc/config/matchingRules.json")
 	viper.SetDefault("eventDeduplicationInterval", 2*time.Minute)
 	viper.SetDefault("podScanGuardTime", time.Hour)
+	viper.SetDefault("skipProfilesWithoutInstances", true)
 	viper.SetDefault("registryScanningSkipTlsVerify", false)
 	viper.SetDefault("registryScanningInsecure", false)
 	viper.SetDefault("rulesUpdateConfig.enabled", false)
