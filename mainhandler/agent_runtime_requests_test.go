@@ -95,11 +95,12 @@ func TestAgentRuntimeFrameworkRequestSurvivesScheduledTrigger(t *testing.T) {
 			previousClient := KubescapeHttpClient
 			KubescapeHttpClient = scanner.Client()
 			t.Cleanup(func() { KubescapeHttpClient = previousClient })
-			cfg := config.NewOperatorConfig(
+			cfg, err := config.NewOperatorConfig(
 				config.CapabilitiesConfig{Components: config.Components{Kubescape: config.Component{Enabled: true}, KubescapeScheduler: config.Component{Enabled: true}}},
 				utilsmetadata.ClusterConfig{KubescapeURL: strings.TrimPrefix(scanner.URL, "http://"), InstallationData: armotypes.InstallationData{DefaultFrameworks: defaults}},
 				&beUtils.Credentials{}, config.Config{Namespace: "kubescape"},
 			)
+			require.NoError(t, err)
 			args["jobParams"] = apis.CronJobParams{CronTabSchedule: "0 3 * * *"}
 			handler := &ActionHandler{config: cfg, k8sAPI: api, sessionObj: &utils.SessionObj{Command: &apis.Command{Args: args}}}
 			require.NoError(t, handler.kubescapeScan(context.Background()))

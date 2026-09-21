@@ -213,7 +213,11 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
   "cleanupDelay": 600000000000,
   "workerConcurrency": 3,
   "triggerSecurityFramework": false,
-  "matchingRulesFilename": "/etc/config/matchingRules.json"
+  "matchingRulesFilename": "/etc/config/matchingRules.json",
+  "excludeNamespaces": "kube-system,kubescape",
+  "excludeNamespacesRegex": "",
+  "includeNamespaces": "",
+  "includeNamespacesRegex": ""
 }
 ```
 </details>
@@ -304,6 +308,24 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `podScanGuardTime` | `1h` | Minimum pod age before scanning (for orphan pods) |
 | `registryScanningSkipTlsVerify` | `false` | Skip TLS verification for registry scanning |
 | `registryScanningInsecure` | `false` | Allow insecure registry connections |
+| `includeNamespaces` | `""` | Comma-separated string or array of exact namespaces to include |
+| `includeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to include |
+| `excludeNamespaces` | `"kube-system,kubescape"` | Comma-separated string or array of exact namespaces to exclude |
+| `excludeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to exclude |
+
+### Namespace Filtering (Exact & Regex)
+
+The Operator supports filtering namespaces using exact names (`includeNamespaces`, `excludeNamespaces`) and RE2 regular expressions (`includeNamespacesRegex`, `excludeNamespacesRegex`):
+
+- **Precedence (Allow-List)**: If either `includeNamespaces` or `includeNamespacesRegex` is configured, inclusion mode is active. Only namespaces matching an exact entry in `includeNamespaces` OR a regex in `includeNamespacesRegex` will be processed. All other namespaces are skipped, and `excludeNamespaces` / `excludeNamespacesRegex` are ignored.
+- **Exclusion (Deny-List)**: When no inclusion rules are set, any namespace matching an exact entry in `excludeNamespaces` OR a regex in `excludeNamespacesRegex` will be skipped.
+- **Anchoring & Blast Radius**:
+  > [!WARNING]
+  > Unanchored regex patterns match as substrings anywhere within the namespace name.
+  > For example, an unanchored pattern `team-` matches `team-prod`, `team-staging`, and `my-team-dev`.
+  > To match exact prefixes, suffixes, or full namespace names, anchor the patterns using `^` and `$`, such as `^team-.*-prod$`.
+- **RE2 Limitations**: Patterns use Go's standard `regexp` engine (RE2), which runs in guaranteed linear time (immune to ReDoS). Features like backreferences (`\1`), lookaheads (`(?=...)`), and lookbehinds (`(?<=...)`) are not supported. Invalid patterns fail fast with a clear error when configuration is loaded.
+- **Commas in Patterns**: If a regex pattern contains commas (for example, quantifiers like `{1,3}` or character classes like `[a,b]`), provide the configuration as a JSON array (`["^team-[a,b]-.*$"]`) rather than a comma-separated string to prevent splitting.
 
 ---
 

@@ -44,12 +44,16 @@ func shortenTunables(t *testing.T) {
 }
 
 func testConfig() config.IConfig {
-	return config.NewOperatorConfig(
+	cfg, err := config.NewOperatorConfig(
 		config.CapabilitiesConfig{},
 		utilsmetadata.ClusterConfig{ClusterName: testClusterName},
 		&beUtils.Credentials{},
 		config.Config{},
 	)
+	if err != nil {
+		panic(err)
+	}
+	return cfg
 }
 
 func fakeDynamicClient(objs ...runtime.Object) dynamic.Interface {

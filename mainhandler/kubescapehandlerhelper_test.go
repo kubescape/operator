@@ -156,23 +156,25 @@ func TestGetKubescapeRequestWithDefaults(t *testing.T) {
 }
 
 func TestGetStartupActions(t *testing.T) {
-	cfg := config.NewOperatorConfig(
+	cfg, err := config.NewOperatorConfig(
 		config.CapabilitiesConfig{},
 		utilsmetadata.ClusterConfig{ClusterName: "c1", InstallationData: armotypes.InstallationData{DefaultFrameworks: []string{"nsa"}}},
 		&beUtils.Credentials{},
 		config.Config{},
 	)
+	assert.NoError(t, err)
 	cmds := GetStartupActions(cfg)
 	assert.Len(t, cmds, 1)
 	psr := cmds[0].Args[utils.KubescapeScanV1].(utilsmetav1.PostScanRequest)
 	assert.Equal(t, []string{"nsa"}, psr.TargetNames)
 
-	cfgEmpty := config.NewOperatorConfig(
+	cfgEmpty, err := config.NewOperatorConfig(
 		config.CapabilitiesConfig{},
 		utilsmetadata.ClusterConfig{ClusterName: "c1"},
 		&beUtils.Credentials{},
 		config.Config{},
 	)
+	assert.NoError(t, err)
 	psrEmpty := GetStartupActions(cfgEmpty)[0].Args[utils.KubescapeScanV1].(utilsmetav1.PostScanRequest)
 	assert.Equal(t, utils.NativeDefaultFrameworks, psrEmpty.TargetNames)
 }
@@ -206,17 +208,19 @@ func TestFixK8sNameLimit(t *testing.T) {
 }
 
 func TestGetKubescapeV1ScanURL(t *testing.T) {
-	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "kubescape",
 	}, &beUtils.Credentials{}, config.Config{})
+	assert.NoError(t, err)
 	u := getKubescapeV1ScanURL(cfg)
 	assert.Equal(t, "http://kubescape/v1/scan?keep=false", u.String())
 }
 
 func TestGetKubescapeV1ScanStatusURL(t *testing.T) {
-	cfg := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{
 		KubescapeURL: "armo-kubescape:8080",
 	}, &beUtils.Credentials{}, config.Config{})
+	assert.NoError(t, err)
 
 	url := getKubescapeV1ScanStatusURL(cfg, "123").String()
 	assert.Equal(t, url, "http://armo-kubescape:8080/v1/status?ID=123", "getKubescapeV1ScanStatusURL failed")

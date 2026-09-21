@@ -44,7 +44,11 @@ func networkPolicyForHandler(ns, name string) *networkingv1.NetworkPolicy {
 }
 
 func newTestConfig(serviceConfig config.Config) config.IConfig {
-	return config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, serviceConfig)
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, serviceConfig)
+	if err != nil {
+		panic(err)
+	}
+	return cfg
 }
 
 func newActionHandlerForTest(t *testing.T, client kubernetes.Interface, cfg config.IConfig, args apis.OperatorActionArgs) *ActionHandler {

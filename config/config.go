@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -140,6 +141,8 @@ type Config struct {
 	HTTPExporterConfig         *exporters.HTTPExporterConfig `mapstructure:"httpExporterConfig"`
 	ExcludeNamespaces          []string                      `mapstructure:"excludeNamespaces"`
 	IncludeNamespaces          []string                      `mapstructure:"includeNamespaces"`
+	ExcludeNamespacesRegex     []string                      `mapstructure:"excludeNamespacesRegex"`
+	IncludeNamespacesRegex     []string                      `mapstructure:"includeNamespacesRegex"`
 	// PodScanGuardTime specifies the minimum age a pod without a parent must have before it is scanned
 	PodScanGuardTime              time.Duration                  `mapstructure:"podScanGuardTime"`
 	RegistryScanningSkipTlsVerify bool                           `mapstructure:"registryScanningSkipTlsVerify"`
@@ -182,23 +185,56 @@ type IConfig interface {
 
 // OperatorConfig implements IConfig
 type OperatorConfig struct {
-	serviceConfig Config
-	components    CapabilitiesConfig
-	clusterConfig utilsmetadata.ClusterConfig
-	accountId     string
-	accessKey     string
+	serviceConfig          Config
+	components             CapabilitiesConfig
+	clusterConfig          utilsmetadata.ClusterConfig
+	accountId              string
+	accessKey              string
+	includeNamespacesRegex []*regexp.Regexp
+	excludeNamespacesRegex []*regexp.Regexp
 }
 
 var _ IConfig = (*OperatorConfig)(nil)
 
-func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, serviceConfig Config) *OperatorConfig {
-	return &OperatorConfig{
-		components:    components,
-		serviceConfig: serviceConfig,
-		clusterConfig: clusterConfig,
-		accountId:     creds.Account,
-		accessKey:     creds.AccessKey,
+func compileRegexes(patterns []string) ([]*regexp.Regexp, error) {
+	var compiled []*regexp.Regexp
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		re, err := regexp.Compile(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex pattern %q: %w", p, err)
+		}
+		compiled = append(compiled, re)
 	}
+	return compiled, nil
+}
+
+func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, serviceConfig Config) (*OperatorConfig, error) {
+	incRegex, err := compileRegexes(serviceConfig.IncludeNamespacesRegex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid includeNamespacesRegex: %w", err)
+	}
+	excRegex, err := compileRegexes(serviceConfig.ExcludeNamespacesRegex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid excludeNamespacesRegex: %w", err)
+	}
+	var account, accessKey string
+	if creds != nil {
+		account = creds.Account
+		accessKey = creds.AccessKey
+	}
+	return &OperatorConfig{
+		components:             components,
+		serviceConfig:          serviceConfig,
+		clusterConfig:          clusterConfig,
+		accountId:              account,
+		accessKey:              accessKey,
+		includeNamespacesRegex: incRegex,
+		excludeNamespacesRegex: excRegex,
+	}, nil
 }
 
 func (c *OperatorConfig) ContinuousScanEnabled() bool {
@@ -284,18 +320,44 @@ func (c *OperatorConfig) DefaultFrameworks() []string {
 }
 
 func (c *OperatorConfig) SkipNamespace(ns string) bool {
-	if includeNamespaces := c.serviceConfig.IncludeNamespaces; len(includeNamespaces) > 0 {
-		if !slices.Contains(includeNamespaces, ns) {
-			// skip ns not in IncludeNamespaces
-			return true
+	hasInclude := len(c.serviceConfig.IncludeNamespaces) > 0 || len(c.includeNamespacesRegex) > 0
+	if hasInclude {
+		if slices.Contains(c.serviceConfig.IncludeNamespaces, ns) {
+			return false
 		}
-	} else if excludeNamespaces := c.serviceConfig.ExcludeNamespaces; len(excludeNamespaces) > 0 {
-		if slices.Contains(excludeNamespaces, ns) {
-			// skip ns in ExcludeNamespaces
+		for _, r := range c.includeNamespacesRegex {
+			if r.MatchString(ns) {
+				return false
+			}
+		}
+		return true
+	}
+
+	if slices.Contains(c.serviceConfig.ExcludeNamespaces, ns) {
+		return true
+	}
+	for _, r := range c.excludeNamespacesRegex {
+		if r.MatchString(ns) {
 			return true
 		}
 	}
 	return false
+}
+
+func (c *OperatorConfig) IncludeNamespaces() []string {
+	return c.serviceConfig.IncludeNamespaces
+}
+
+func (c *OperatorConfig) ExcludeNamespaces() []string {
+	return c.serviceConfig.ExcludeNamespaces
+}
+
+func (c *OperatorConfig) IncludeNamespacesRegex() []string {
+	return c.serviceConfig.IncludeNamespacesRegex
+}
+
+func (c *OperatorConfig) ExcludeNamespacesRegex() []string {
+	return c.serviceConfig.ExcludeNamespacesRegex
 }
 
 func (c *OperatorConfig) GuardTime() time.Duration {
@@ -374,7 +436,18 @@ func LoadConfig(path string) (Config, error) {
 
 	var c Config
 	err = viper.Unmarshal(&c)
-	return c, err
+	if err != nil {
+		return Config{}, err
+	}
+
+	if _, err := compileRegexes(c.IncludeNamespacesRegex); err != nil {
+		return Config{}, fmt.Errorf("invalid includeNamespacesRegex: %w", err)
+	}
+	if _, err := compileRegexes(c.ExcludeNamespacesRegex); err != nil {
+		return Config{}, fmt.Errorf("invalid excludeNamespacesRegex: %w", err)
+	}
+
+	return c, nil
 }
 
 func LoadClusterConfig() (utilsmetadata.ClusterConfig, error) {
