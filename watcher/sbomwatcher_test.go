@@ -35,7 +35,8 @@ func newTestHandler(t *testing.T, startingObjects ...runtime.Object) *WatchHandl
 	clusterConfig := utilsmetadata.ClusterConfig{}
 	cfg, err := config.LoadConfig("../configuration")
 	assert.NoError(t, err)
-	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+	operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+	assert.NoError(t, err)
 
 	k8sClient := k8sfake.NewClientset()
 	k8sAPI := utils.NewK8sInterfaceFake(k8sClient)

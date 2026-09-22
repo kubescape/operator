@@ -29,6 +29,147 @@ import (
 )
 
 func TestHandleContainerProfileEvents(t *testing.T) {
+	sampleEvents := []watch.Event{
+		{
+			Type: watch.Added,
+			Object: &spdxv1beta1.ContainerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "replicaset-nginx-6ccd565b7d",
+					Namespace: "systest-ns-rarz",
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d",
+						helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+						helpersv1.CompletionMetadataKey: helpersv1.Full,
+						helpersv1.StatusMetadataKey:     helpersv1.Learning,
+					},
+				},
+				Spec: spdxv1beta1.ContainerProfileSpec{
+					ImageID:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+					ImageTag: "nginx:1.14.0",
+				},
+			},
+		},
+		{
+			Type: watch.Modified,
+			Object: &spdxv1beta1.ContainerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "replicaset-nginx-7584b6f84c",
+					Namespace: "systest-ns-rarz",
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-7584b6f84c",
+						helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+						helpersv1.CompletionMetadataKey: helpersv1.Full,
+						helpersv1.StatusMetadataKey:     helpersv1.Learning,
+					},
+				},
+				Spec: spdxv1beta1.ContainerProfileSpec{
+					ImageID:  "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
+					ImageTag: "nginx:latest",
+				},
+			},
+		},
+		{
+			Type: watch.Added,
+			Object: &spdxv1beta1.ContainerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workflow-foo-1747274700",
+					Namespace: "systest-ns-rarz",
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo-1747274700",
+						helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
+						helpersv1.CompletionMetadataKey: helpersv1.Full,
+						helpersv1.StatusMetadataKey:     helpersv1.Learning,
+					},
+					Labels: map[string]string{
+						helpersv1.RelatedKindMetadataKey: "Pod",
+						helpersv1.RelatedNameMetadataKey: "foo-1747274700",
+					},
+				},
+				Spec: spdxv1beta1.ContainerProfileSpec{
+					ImageID:  "docker.io/library/nginx@sha256:91ec405acd96b4645695911d675f71897c6f57531265c7302c7e16088b9f37ab",
+					ImageTag: "nginx:1.28-otel",
+				},
+			},
+		},
+		{
+			Type: watch.Added,
+			Object: &spdxv1beta1.ContainerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workflow-foo2-2747274700",
+					Namespace: "systest-ns-rarz",
+					Annotations: map[string]string{
+						helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo2-2747274700",
+						helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
+						helpersv1.CompletionMetadataKey: helpersv1.Full,
+						helpersv1.StatusMetadataKey:     helpersv1.Learning,
+					},
+					Labels: map[string]string{
+						helpersv1.RelatedKindMetadataKey: "Pod",
+						helpersv1.RelatedNameMetadataKey: "foo2-2747274700",
+					},
+				},
+				Spec: spdxv1beta1.ContainerProfileSpec{
+					ImageID:  "docker.io/library/nginx@sha256:391f518c1133681a00217e77976665c056bcdbe185a22efbcd6e4ae67c450d1a",
+					ImageTag: "nginx:1.28-perl",
+				},
+			},
+		},
+	}
+	sampleObjects := []runtime.Object{
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo2-2747274700",
+				Namespace: "systest-ns-rarz",
+			},
+		},
+	}
+	sampleCommands := []*apis.Command{
+		{
+			CommandName: utils.CommandScanContainerProfile,
+			Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+			Args: map[string]interface{}{
+				utils.ArgsName:      "replicaset-nginx-6ccd565b7d",
+				utils.ArgsNamespace: "systest-ns-rarz",
+			},
+		},
+		{
+			CommandName: utils.CommandScanContainerProfile,
+			Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
+			Args: map[string]interface{}{
+				utils.ArgsName:      "replicaset-nginx-7584b6f84c",
+				utils.ArgsNamespace: "systest-ns-rarz",
+			},
+		},
+		{
+			CommandName: utils.CommandScanContainerProfile,
+			Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
+			Args: map[string]interface{}{
+				utils.ArgsName:      "workflow-foo2-2747274700",
+				utils.ArgsNamespace: "systest-ns-rarz",
+				utils.ArgsPod: &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "foo2-2747274700",
+						Namespace: "systest-ns-rarz",
+					},
+				},
+			},
+		},
+	}
+	sampleObjectNames := []string{
+		"replicaset-nginx-6ccd565b7d",
+		"replicaset-nginx-7584b6f84c",
+		"workflow-foo-1747274700",
+		"workflow-foo2-2747274700",
+	}
+	sampleSlugToImageIDMap := map[string]string{
+		"replicaset-nginx-6ccd565b7d-nginx-49d3-1861": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+		"replicaset-nginx-7584b6f84c-nginx-d01e-79cc": "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
+	}
+	sampleWlidAndImageIDMap := []string{
+		"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
+		"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
+	}
+
 	tt := []struct {
 		name                      string
 		inputEvents               []watch.Event
@@ -38,149 +179,16 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 		expectedErrors            []error
 		expectedSlugToImageIDMap  map[string]string
 		expectedWlidAndImageIDMap []string
+		cfgModifier               func(*config.Config)
 	}{
 		{
-			name: "Adding a new container profile should produce a matching scan command",
-			inputEvents: []watch.Event{
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.ContainerProfile{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "replicaset-nginx-6ccd565b7d",
-							Namespace: "systest-ns-rarz",
-							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-6ccd565b7d",
-								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.CompletionMetadataKey: helpersv1.Full,
-								helpersv1.StatusMetadataKey:     helpersv1.Learning,
-							},
-						},
-						Spec: spdxv1beta1.ContainerProfileSpec{
-							ImageID:  "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-							ImageTag: "nginx:1.14.0",
-						},
-					},
-				},
-				{
-					Type: watch.Modified,
-					Object: &spdxv1beta1.ContainerProfile{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "replicaset-nginx-7584b6f84c",
-							Namespace: "systest-ns-rarz",
-							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-systest-ns-rarz/kind-ReplicaSet/name-nginx-7584b6f84c",
-								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-								helpersv1.CompletionMetadataKey: helpersv1.Full,
-								helpersv1.StatusMetadataKey:     helpersv1.Learning,
-							},
-						},
-						Spec: spdxv1beta1.ContainerProfileSpec{
-							ImageID:  "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
-							ImageTag: "nginx:latest",
-						},
-					},
-				},
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.ContainerProfile{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "workflow-foo-1747274700",
-							Namespace: "systest-ns-rarz",
-							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo-1747274700",
-								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo-1747274700",
-								helpersv1.CompletionMetadataKey: helpersv1.Full,
-								helpersv1.StatusMetadataKey:     helpersv1.Learning,
-							},
-							Labels: map[string]string{
-								helpersv1.RelatedKindMetadataKey: "Pod",
-								helpersv1.RelatedNameMetadataKey: "foo-1747274700",
-							},
-						},
-						Spec: spdxv1beta1.ContainerProfileSpec{
-							ImageID:  "docker.io/library/nginx@sha256:91ec405acd96b4645695911d675f71897c6f57531265c7302c7e16088b9f37ab",
-							ImageTag: "nginx:1.28-otel",
-						},
-					},
-				},
-				{
-					Type: watch.Added,
-					Object: &spdxv1beta1.ContainerProfile{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "workflow-foo2-2747274700",
-							Namespace: "systest-ns-rarz",
-							Annotations: map[string]string{
-								helpersv1.InstanceIDMetadataKey: "apiVersion-aroproj.io/v1alpha/namespace-systest-ns-rarz/kind-Workflow/name-foo2-2747274700",
-								helpersv1.WlidMetadataKey:       "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
-								helpersv1.CompletionMetadataKey: helpersv1.Full,
-								helpersv1.StatusMetadataKey:     helpersv1.Learning,
-							},
-							Labels: map[string]string{
-								helpersv1.RelatedKindMetadataKey: "Pod",
-								helpersv1.RelatedNameMetadataKey: "foo2-2747274700",
-							},
-						},
-						Spec: spdxv1beta1.ContainerProfileSpec{
-							ImageID:  "docker.io/library/nginx@sha256:391f518c1133681a00217e77976665c056bcdbe185a22efbcd6e4ae67c450d1a",
-							ImageTag: "nginx:1.28-perl",
-						},
-					},
-				},
-			},
-			objects: []runtime.Object{
-				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo2-2747274700",
-						Namespace: "systest-ns-rarz",
-					},
-				},
-			},
-			expectedCommands: []*apis.Command{
-				{
-					CommandName: utils.CommandScanContainerProfile,
-					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-					Args: map[string]interface{}{
-						utils.ArgsName:      "replicaset-nginx-6ccd565b7d",
-						utils.ArgsNamespace: "systest-ns-rarz",
-					},
-				},
-				{
-					CommandName: utils.CommandScanContainerProfile,
-					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginx",
-					Args: map[string]interface{}{
-						utils.ArgsName:      "replicaset-nginx-7584b6f84c",
-						utils.ArgsNamespace: "systest-ns-rarz",
-					},
-				},
-				{
-					CommandName: utils.CommandScanContainerProfile,
-					Wlid:        "wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/pod-foo2-2747274700",
-					Args: map[string]interface{}{
-						utils.ArgsName:      "workflow-foo2-2747274700",
-						utils.ArgsNamespace: "systest-ns-rarz",
-						utils.ArgsPod: &corev1.Pod{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "foo2-2747274700",
-								Namespace: "systest-ns-rarz",
-							},
-						},
-					},
-				},
-			},
-			expectedObjectNames: []string{
-				"replicaset-nginx-6ccd565b7d",
-				"replicaset-nginx-7584b6f84c",
-				"workflow-foo-1747274700",
-				"workflow-foo2-2747274700",
-			},
-			expectedSlugToImageIDMap: map[string]string{
-				"replicaset-nginx-6ccd565b7d-nginx-49d3-1861": "docker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				"replicaset-nginx-7584b6f84c-nginx-d01e-79cc": "docker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
-			},
-			expectedWlidAndImageIDMap: []string{
-				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:aa0afebbb3cfa473099a62c4b32e9b3fb73ed23f2a75a65ce1d4b4f55a5c2ef2",
-				"wlid://cluster-gke_armo-test-clusters_us-central1-c_dwertent-syft/namespace-systest-ns-rarz/deployment-nginxnginxdocker.io/library/nginx@sha256:04ba374043ccd2fc5c593885c0eacddebabd5ca375f9323666f28dfd5a9710e3",
-			},
+			name:                      "Adding a new container profile should produce a matching scan command",
+			inputEvents:               sampleEvents,
+			objects:                   sampleObjects,
+			expectedCommands:          sampleCommands,
+			expectedObjectNames:       sampleObjectNames,
+			expectedSlugToImageIDMap:  sampleSlugToImageIDMap,
+			expectedWlidAndImageIDMap: sampleWlidAndImageIDMap,
 		},
 		{
 			name: "Delete event",
@@ -194,6 +202,54 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 			expectedObjectNames:       []string{""},
 			expectedSlugToImageIDMap:  map[string]string{},
 			expectedWlidAndImageIDMap: []string{},
+		},
+		{
+			name:                      "ContainerProfile in namespace matching excludeNamespacesRegex is skipped",
+			inputEvents:               sampleEvents,
+			objects:                   sampleObjects,
+			expectedCommands:          []*apis.Command{},
+			expectedObjectNames:       sampleObjectNames,
+			expectedSlugToImageIDMap:  sampleSlugToImageIDMap,
+			expectedWlidAndImageIDMap: sampleWlidAndImageIDMap,
+			cfgModifier: func(cfg *config.Config) {
+				cfg.ExcludeNamespacesRegex = []string{"^systest-ns-rarz$"}
+			},
+		},
+		{
+			name:                      "ContainerProfile in namespace not matching includeNamespacesRegex is skipped",
+			inputEvents:               sampleEvents,
+			objects:                   sampleObjects,
+			expectedCommands:          []*apis.Command{},
+			expectedObjectNames:       sampleObjectNames,
+			expectedSlugToImageIDMap:  sampleSlugToImageIDMap,
+			expectedWlidAndImageIDMap: sampleWlidAndImageIDMap,
+			cfgModifier: func(cfg *config.Config) {
+				cfg.IncludeNamespacesRegex = []string{"^prod-.*$"}
+			},
+		},
+		{
+			name:                      "Allowed control case - ContainerProfile in namespace matching includeNamespacesRegex is scanned",
+			inputEvents:               sampleEvents,
+			objects:                   sampleObjects,
+			expectedCommands:          sampleCommands,
+			expectedObjectNames:       sampleObjectNames,
+			expectedSlugToImageIDMap:  sampleSlugToImageIDMap,
+			expectedWlidAndImageIDMap: sampleWlidAndImageIDMap,
+			cfgModifier: func(cfg *config.Config) {
+				cfg.IncludeNamespacesRegex = []string{"^systest-.*$"}
+			},
+		},
+		{
+			name:                      "Allowed control case - ContainerProfile in namespace not matching excludeNamespacesRegex is scanned",
+			inputEvents:               sampleEvents,
+			objects:                   sampleObjects,
+			expectedCommands:          sampleCommands,
+			expectedObjectNames:       sampleObjectNames,
+			expectedSlugToImageIDMap:  sampleSlugToImageIDMap,
+			expectedWlidAndImageIDMap: sampleWlidAndImageIDMap,
+			cfgModifier: func(cfg *config.Config) {
+				cfg.ExcludeNamespacesRegex = []string{"^dev-.*$", "^temp-.*$"}
+			},
 		},
 	}
 
@@ -211,13 +267,17 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 			assert.NoError(t, err)
 			// This fixture exercises the legacy opt-out behavior.
 			cfg.SkipProfilesWithoutInstances = false
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+			if tc.cfgModifier != nil {
+				tc.cfgModifier(&cfg)
+			}
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+			assert.NoError(t, err)
 
 			k8sClient := k8sfake.NewClientset(tc.objects...)
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
 			storageClient := kssfake.NewSimpleClientset(startingObjects...)
 
-			eventQueue := NewCooldownQueueWithParams(1*time.Second, 1*time.Second)
+			eventQueue := NewCooldownQueueWithParams(500*time.Millisecond, 100*time.Millisecond)
 			cmdCh := make(chan *apis.Command)
 			errorCh := make(chan error)
 
@@ -229,7 +289,7 @@ func TestHandleContainerProfileEvents(t *testing.T) {
 				for _, e := range tc.inputEvents {
 					eventQueue.Enqueue(e)
 				}
-				time.Sleep(5 * time.Second)
+				time.Sleep(2 * time.Second)
 				eventQueue.Stop()
 			}()
 
@@ -424,7 +484,8 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 	cfg, err := config.LoadConfig("../configuration")
 	require.NoError(t, err)
 	require.True(t, cfg.SkipProfilesWithoutInstances)
-	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+	operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+	require.NoError(t, err)
 	wh := NewWatchHandler(operatorConfig, k8sAPI, nil, nil)
 
 	replicaSetProfile := func(name, workload string) *spdxv1beta1.ContainerProfile {

@@ -126,6 +126,10 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			continue
 		}
 
+		if wh.cfg != nil && wh.cfg.SkipNamespace(obj.Namespace) {
+			continue
+		}
+
 		// eventually skip processing if there is no matching pod
 		if wh.cfg.SkipProfilesWithoutInstances() && !wh.hasMatchingPod(obj) {
 			continue

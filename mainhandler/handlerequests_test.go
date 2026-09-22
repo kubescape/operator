@@ -203,10 +203,14 @@ func newMainHandlerForTest(k8sClient *k8sfake.Clientset, storageClient *kssfake.
 	// uses it directly (not via config), so tests that expect a real POST to reach the
 	// scanner stub must set it explicitly too.
 	VulnScanHttpClient = utils.InitHttpClient(clusterConfig.KubevulnURL)
+	opCfg, err := config.NewOperatorConfig(capabilities, clusterConfig, &beUtils.Credentials{}, config.Config{})
+	if err != nil {
+		panic(err)
+	}
 	return &MainHandler{
 		k8sAPI:          utils.NewK8sInterfaceFake(k8sClient),
 		ksStorageClient: storageClient,
-		config:          config.NewOperatorConfig(capabilities, clusterConfig, &beUtils.Credentials{}, config.Config{}),
+		config:          opCfg,
 	}
 }
 

@@ -104,7 +104,8 @@ func TestPodWatch(t *testing.T) {
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
 
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+			assert.NoError(t, err)
 
 			k8sClient := k8sfake.NewSimpleClientset(tc.parentObjects...)
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), tc.parentObjects...)
@@ -362,7 +363,8 @@ func Test_handlePodWatcher(t *testing.T) {
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
 
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+			assert.NoError(t, err)
 
 			k8sClient := k8sfake.NewSimpleClientset(tc.parentObjects...)
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), tc.parentObjects...)
@@ -452,7 +454,8 @@ func Test_handlePodWatcher_ContainerProfile(t *testing.T) {
 		slug := "pod-kube-proxy-gke-cluster-pool-d4e9ae18-tgdf-kube-proxy-ebb6-8b3d"
 		profile := newTestContainerProfile(slug, pod.GetNamespace(), wlid)
 
-		operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+		operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+		assert.NoError(t, err)
 		k8sClient := k8sfake.NewSimpleClientset()
 		dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 		k8sAPI := utils.NewK8sInterfaceFake(k8sClient)
@@ -500,7 +503,8 @@ func Test_handlePodWatcher_ContainerProfile(t *testing.T) {
 			storageObjects = append(storageObjects, newTestContainerProfile(slug, pod.GetNamespace(), wlid))
 		}
 
-		operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+		operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
+		assert.NoError(t, err)
 		parentObjects := []runtime.Object{
 			bytesToRuntimeObj(readFileToBytes(deploymentCollection)),
 			bytesToRuntimeObj(readFileToBytes(replicaSetCollection)),
@@ -567,7 +571,8 @@ func Test_listPods(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare starting startingObjects for storage
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{})
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{})
+			assert.NoError(t, err)
 			ctx := context.Background()
 			k8sClient := k8sfake.NewSimpleClientset()
 			k8sAPI := utils.NewK8sInterfaceFake(k8sClient)

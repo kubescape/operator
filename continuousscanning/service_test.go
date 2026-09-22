@@ -153,7 +153,8 @@ func TestAddEventHandler(t *testing.T) {
 			tl := NewTargetLoader(f)
 			// We use the spy handler later to verify if it's been called
 			spyH := &spyHandler{called: false, wg: resourcesCreatedWg, mx: &sync.RWMutex{}}
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+			require.NoError(t, err)
 			css := NewContinuousScanningService(operatorConfig, dynClient, tl, spyH)
 			require.NoError(t, css.Launch(ctx))
 
@@ -263,7 +264,8 @@ func TestContinuousScanningService(t *testing.T) {
 				resourcesCreatedWg.Done()
 			}
 			wp, _ := ants.NewPoolWithFunc(1, processingFunc)
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, &beUtils.Credentials{}, config.Config{})
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{ClusterName: clusterNameStub}, &beUtils.Credentials{}, config.Config{})
+			require.NoError(t, err)
 			triggeringHandler := NewTriggeringHandler(wp, operatorConfig)
 			stubFetcher := &stubFetcher{data: podMatchRules}
 			loader := NewTargetLoader(stubFetcher)
@@ -311,10 +313,11 @@ func TestLaunch_InvalidMatchingRules(t *testing.T) {
 			ctx := context.Background()
 			dynClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 			loader := NewTargetLoader(NewFileFetcher(strings.NewReader(tc.input)))
-			operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+			require.NoError(t, err)
 			css := NewContinuousScanningService(operatorConfig, dynClient, loader)
 
-			err := css.Launch(ctx)
+			err = css.Launch(ctx)
 			require.Error(t, err)
 		})
 	}

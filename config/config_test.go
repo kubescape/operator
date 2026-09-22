@@ -26,12 +26,13 @@ func TestRiskAcceptanceEnabled(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.value, func(t *testing.T) {
-			cfg := NewOperatorConfig(
+			cfg, err := NewOperatorConfig(
 				CapabilitiesConfig{Capabilities: Capabilities{RiskAcceptance: tt.value}},
 				armometadata.ClusterConfig{},
 				&utils.Credentials{},
 				Config{},
 			)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, cfg.RiskAcceptanceEnabled())
 		})
 	}
@@ -132,7 +133,9 @@ func TestLoadConfig(t *testing.T) {
 				MatchingRulesFilename:        "/etc/config/matchingRules.json",
 				EventDeduplicationInterval:   2 * time.Minute,
 				ExcludeNamespaces:            []string{"kube-system", "kubescape"},
+				ExcludeNamespacesRegex:       []string{},
 				IncludeNamespaces:            []string{},
+				IncludeNamespacesRegex:       []string{},
 				PodScanGuardTime:             time.Hour,
 				SkipProfilesWithoutInstances: true,
 				RulesUpdateConfig: rulesupdate.RulesUpdaterConfig{
@@ -254,8 +257,9 @@ func TestValidateConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			operatorConfig := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.credentials, Config{})
-			err := ValidateConfig(operatorConfig)
+			operatorConfig, err := NewOperatorConfig(tt.args.components, tt.args.clusterConfig, tt.args.credentials, Config{})
+			require.NoError(t, err)
+			err = ValidateConfig(operatorConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -278,12 +282,13 @@ func TestDefaultFrameworks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := NewOperatorConfig(
+			cfg, err := NewOperatorConfig(
 				CapabilitiesConfig{},
 				armometadata.ClusterConfig{InstallationData: armotypes.InstallationData{DefaultFrameworks: tt.frameworks}},
 				&utils.Credentials{},
 				Config{},
 			)
+			require.NoError(t, err)
 			got := cfg.DefaultFrameworks()
 			assert.Equal(t, tt.want, got)
 			// returned slice must be a copy
@@ -293,4 +298,313 @@ func TestDefaultFrameworks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadConfig_Regex(t *testing.T) {
+	t.Run("valid comma string and json array", func(t *testing.T) {
+		viper.Reset()
+		defer viper.Reset()
+		dir := t.TempDir()
+		jsonContent := `{
+			"includeNamespacesRegex": ["^team-[a,b]-.*$", "^prod-.*"],
+			"excludeNamespacesRegex": "^temp-.*,^test-.*"
+		}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(jsonContent), 0600))
+		cfg, err := LoadConfig(dir)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"^team-[a,b]-.*$", "^prod-.*"}, cfg.IncludeNamespacesRegex)
+		assert.Equal(t, []string{"^temp-.*", "^test-.*"}, cfg.ExcludeNamespacesRegex)
+	})
+
+	t.Run("invalid include regex fails fast", func(t *testing.T) {
+		viper.Reset()
+		defer viper.Reset()
+		dir := t.TempDir()
+		jsonContent := `{"includeNamespacesRegex": "[a-"}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(jsonContent), 0600))
+		_, err := LoadConfig(dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid includeNamespacesRegex")
+		assert.Contains(t, err.Error(), "invalid regex pattern \"[a-\"")
+	})
+
+	t.Run("invalid exclude regex fails fast", func(t *testing.T) {
+		viper.Reset()
+		defer viper.Reset()
+		dir := t.TempDir()
+		jsonContent := `{"excludeNamespacesRegex": "(?P<"}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(jsonContent), 0600))
+		_, err := LoadConfig(dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid excludeNamespacesRegex")
+		assert.Contains(t, err.Error(), "invalid regex pattern \"(?P<\"")
+	})
+}
+
+func TestOperatorConfig_SkipNamespace(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       Config
+		namespace string
+		wantSkip  bool
+	}{
+		{
+			name:      "default config - nothing skipped",
+			cfg:       Config{},
+			namespace: "default",
+			wantSkip:  false,
+		},
+		{
+			name: "exact include - matching",
+			cfg: Config{
+				IncludeNamespaces: []string{"production"},
+			},
+			namespace: "production",
+			wantSkip:  false,
+		},
+		{
+			name: "exact include - not matching skipped",
+			cfg: Config{
+				IncludeNamespaces: []string{"production"},
+			},
+			namespace: "staging",
+			wantSkip:  true,
+		},
+		{
+			name: "regex include - matching",
+			cfg: Config{
+				IncludeNamespacesRegex: []string{"^team-.*-prod$"},
+			},
+			namespace: "team-auth-prod",
+			wantSkip:  false,
+		},
+		{
+			name: "regex include - not matching skipped",
+			cfg: Config{
+				IncludeNamespacesRegex: []string{"^team-.*-prod$"},
+			},
+			namespace: "team-auth-dev",
+			wantSkip:  true,
+		},
+		{
+			name: "mixed include - matches exact",
+			cfg: Config{
+				IncludeNamespaces:      []string{"kube-system"},
+				IncludeNamespacesRegex: []string{"^team-.*-prod$"},
+			},
+			namespace: "kube-system",
+			wantSkip:  false,
+		},
+		{
+			name: "mixed include - matches regex",
+			cfg: Config{
+				IncludeNamespaces:      []string{"kube-system"},
+				IncludeNamespacesRegex: []string{"^team-.*-prod$"},
+			},
+			namespace: "team-billing-prod",
+			wantSkip:  false,
+		},
+		{
+			name: "mixed include - matches neither skipped",
+			cfg: Config{
+				IncludeNamespaces:      []string{"kube-system"},
+				IncludeNamespacesRegex: []string{"^team-.*-prod$"},
+			},
+			namespace: "team-billing-dev",
+			wantSkip:  true,
+		},
+		{
+			name: "exact exclude - matching skipped",
+			cfg: Config{
+				ExcludeNamespaces: []string{"kube-system"},
+			},
+			namespace: "kube-system",
+			wantSkip:  true,
+		},
+		{
+			name: "exact exclude - not matching allowed",
+			cfg: Config{
+				ExcludeNamespaces: []string{"kube-system"},
+			},
+			namespace: "default",
+			wantSkip:  false,
+		},
+		{
+			name: "regex exclude - matching skipped",
+			cfg: Config{
+				ExcludeNamespacesRegex: []string{"^dev-.*", "^temp-.*"},
+			},
+			namespace: "dev-feature-1",
+			wantSkip:  true,
+		},
+		{
+			name: "regex exclude - not matching allowed",
+			cfg: Config{
+				ExcludeNamespacesRegex: []string{"^dev-.*", "^temp-.*"},
+			},
+			namespace: "prod-service",
+			wantSkip:  false,
+		},
+		{
+			name: "mixed exclude - matches exact skipped",
+			cfg: Config{
+				ExcludeNamespaces:      []string{"kube-system"},
+				ExcludeNamespacesRegex: []string{"^temp-.*"},
+			},
+			namespace: "kube-system",
+			wantSkip:  true,
+		},
+		{
+			name: "mixed exclude - matches regex skipped",
+			cfg: Config{
+				ExcludeNamespaces:      []string{"kube-system"},
+				ExcludeNamespacesRegex: []string{"^temp-.*"},
+			},
+			namespace: "temp-sandbox",
+			wantSkip:  true,
+		},
+		{
+			name: "mixed exclude - matches neither allowed",
+			cfg: Config{
+				ExcludeNamespaces:      []string{"kube-system"},
+				ExcludeNamespacesRegex: []string{"^temp-.*"},
+			},
+			namespace: "default",
+			wantSkip:  false,
+		},
+		{
+			name: "include precedence over exclude - matching include is allowed even if in exclude",
+			cfg: Config{
+				IncludeNamespaces: []string{"payments"},
+				ExcludeNamespaces: []string{"payments", "kube-system"},
+			},
+			namespace: "payments",
+			wantSkip:  false,
+		},
+		{
+			name: "include precedence over exclude - non-matching include is skipped",
+			cfg: Config{
+				IncludeNamespaces:      []string{"payments"},
+				ExcludeNamespaces:      []string{"kube-system"},
+				ExcludeNamespacesRegex: []string{".*"},
+			},
+			namespace: "default",
+			wantSkip:  true,
+		},
+		{
+			name: "include regex precedence over exclude regex",
+			cfg: Config{
+				IncludeNamespacesRegex: []string{"^team-.*"},
+				ExcludeNamespacesRegex: []string{"^team-.*-staging$"},
+			},
+			namespace: "team-auth-staging",
+			wantSkip:  false,
+		},
+		{
+			name: "unanchored regex matches substring anywhere",
+			cfg: Config{
+				ExcludeNamespacesRegex: []string{"team-"},
+			},
+			namespace: "my-team-staging",
+			wantSkip:  true,
+		},
+		{
+			name: "anchored regex does not match substring",
+			cfg: Config{
+				ExcludeNamespacesRegex: []string{"^team-.*$"},
+			},
+			namespace: "my-team-staging",
+			wantSkip:  false,
+		},
+		{
+			name: "empty and whitespace regex patterns are ignored",
+			cfg: Config{
+				IncludeNamespacesRegex: []string{"", "  ", "\t"},
+			},
+			namespace: "default",
+			wantSkip:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opCfg, err := NewOperatorConfig(
+				CapabilitiesConfig{},
+				armometadata.ClusterConfig{},
+				&utils.Credentials{},
+				tt.cfg,
+			)
+			require.NoError(t, err)
+			got := opCfg.SkipNamespace(tt.namespace)
+			assert.Equal(t, tt.wantSkip, got)
+		})
+	}
+}
+
+func TestOperatorConfig_Getters(t *testing.T) {
+	cfg := Config{
+		IncludeNamespaces:      []string{"inc1"},
+		ExcludeNamespaces:      []string{"exc1"},
+		IncludeNamespacesRegex: []string{"^inc-.*$"},
+		ExcludeNamespacesRegex: []string{"^exc-.*$"},
+	}
+	opCfg, err := NewOperatorConfig(
+		CapabilitiesConfig{},
+		armometadata.ClusterConfig{},
+		&utils.Credentials{},
+		cfg,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"inc1"}, opCfg.IncludeNamespaces())
+	assert.Equal(t, []string{"exc1"}, opCfg.ExcludeNamespaces())
+	assert.Equal(t, []string{"^inc-.*$"}, opCfg.IncludeNamespacesRegex())
+	assert.Equal(t, []string{"^exc-.*$"}, opCfg.ExcludeNamespacesRegex())
+}
+
+func TestNewOperatorConfig_RegexValidation(t *testing.T) {
+	t.Run("valid include and exclude regexes succeed", func(t *testing.T) {
+		cfg := Config{
+			IncludeNamespacesRegex: []string{"^team-[a,b]-.*$", "^prod-.*"},
+			ExcludeNamespacesRegex: []string{"^temp-.*", "^test-.*"},
+		}
+		opCfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, &utils.Credentials{}, cfg)
+		require.NoError(t, err)
+		require.NotNil(t, opCfg)
+		assert.Equal(t, []string{"^team-[a,b]-.*$", "^prod-.*"}, opCfg.IncludeNamespacesRegex())
+		assert.Equal(t, []string{"^temp-.*", "^test-.*"}, opCfg.ExcludeNamespacesRegex())
+	})
+
+	t.Run("mixed valid and invalid include regex fails fast", func(t *testing.T) {
+		cfg := Config{
+			IncludeNamespacesRegex: []string{"^prod$", "["},
+		}
+		opCfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, &utils.Credentials{}, cfg)
+		require.Error(t, err)
+		assert.Nil(t, opCfg)
+		assert.Contains(t, err.Error(), "invalid includeNamespacesRegex")
+		assert.Contains(t, err.Error(), "invalid regex pattern \"[\"")
+	})
+
+	t.Run("mixed valid and invalid exclude regex fails fast", func(t *testing.T) {
+		cfg := Config{
+			ExcludeNamespacesRegex: []string{"^dev-.*", "(?P<"},
+		}
+		opCfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, &utils.Credentials{}, cfg)
+		require.Error(t, err)
+		assert.Nil(t, opCfg)
+		assert.Contains(t, err.Error(), "invalid excludeNamespacesRegex")
+		assert.Contains(t, err.Error(), "invalid regex pattern \"(?P<\"")
+	})
+
+	t.Run("empty and whitespace regexes succeed and are ignored", func(t *testing.T) {
+		cfg := Config{
+			IncludeNamespacesRegex: []string{"", "  ", "\t"},
+			ExcludeNamespacesRegex: []string{" ", ""},
+		}
+		opCfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, &utils.Credentials{}, cfg)
+		require.NoError(t, err)
+		require.NotNil(t, opCfg)
+		assert.False(t, opCfg.SkipNamespace("default"))
+	})
 }

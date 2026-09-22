@@ -121,7 +121,8 @@ func setupEnvAndWatchers(t *testing.T, ctx context.Context, k8sAPI *k8sinterface
 	require.NoError(t, err)
 
 	// start watcher
-	operatorConfig := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+	operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+	require.NoError(t, err)
 	commandWatchHandler := NewCommandWatchHandler(k8sAPI, operatorConfig)
 	registryCommandsHandler := NewRegistryCommandsHandler(ctx, k8sAPI, commandWatchHandler, operatorConfig)
 	go registryCommandsHandler.Start()

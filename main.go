@@ -77,7 +77,10 @@ func main() {
 	}
 
 	// wrapper for all configs
-	operatorConfig := config.NewOperatorConfig(components, clusterConfig, credentials, cfg)
+	operatorConfig, err := config.NewOperatorConfig(components, clusterConfig, credentials, cfg)
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal("initialize operator config error", helpers.Error(err))
+	}
 	if err := config.ValidateConfig(operatorConfig); err != nil {
 		logger.L().Ctx(ctx).Error("validate config error", helpers.Error(err))
 	}
