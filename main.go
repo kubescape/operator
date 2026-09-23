@@ -35,6 +35,7 @@ import (
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/servicehandler"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/operator/watcher"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"k8s.io/apimachinery/pkg/runtime"
 	restclient "k8s.io/client-go/rest"
@@ -42,7 +43,8 @@ import (
 
 //go:generate swagger generate spec -o ./docs/swagger.yaml
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	flag.Parse()
 
 	isReadinessReady := false
@@ -87,17 +89,29 @@ func main() {
 
 	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
 	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present && components.Components.OtelCollector.Enabled {
-		ctx = logger.InitOtel("operator",
+		otelCtx := logger.InitOtel("operator",
 			os.Getenv("RELEASE"),
 			operatorConfig.AccountID(),
 			operatorConfig.ClusterName(),
 			url.URL{Host: otelHost})
-		defer logger.ShutdownOtel(ctx)
+		defer logger.ShutdownOtel(otelCtx)
 	}
 
 	initHttpHandlers(operatorConfig)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
+	if cfg.NamespaceFilterConfigMapName != "" {
+		filterWatcher, err := watcher.NewNamespaceFilterWatcher(k8sApi.KubernetesClient, operatorConfig, cfg.NamespaceFilterConfigMapName)
+		if err != nil {
+			logger.L().Ctx(ctx).Fatal("initialize namespace filter watcher", helpers.Error(err))
+		}
+		watcherDone := make(chan struct{})
+		go func() { defer close(watcherDone); filterWatcher.Run(ctx) }()
+		defer func() { stop(); <-watcherDone }()
+		if err := filterWatcher.WaitForReady(ctx); err != nil {
+			return
+		}
+	}
 	k8sConfig := k8sApi.K8SConfig
 	// force GRPC
 	k8sConfig.AcceptContentTypes = "application/vnd.kubernetes.protobuf"
@@ -257,9 +271,6 @@ func main() {
 	go mainHandler.SendReports(ctx, 24*time.Hour)
 
 	// Wait for shutdown signal
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
-	<-shutdown
 	<-ctx.Done()
 }
 

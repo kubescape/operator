@@ -65,6 +65,9 @@ func (s *ContinuousScanningService) listen(ctx context.Context) error {
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
 	for e := range s.eventQueue.ResultChan {
+		if s.cfg.SkipNamespace(e.Object.(metav1.Object).GetNamespace()) {
+			continue
+		}
 		logger.L().Debug(
 			"got an event to process",
 			helpers.Interface("event", e),

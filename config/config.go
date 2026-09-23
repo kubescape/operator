@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -130,12 +131,13 @@ func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
 }
 
 type Config struct {
-	Namespace                string        `mapstructure:"namespace"`
-	RestAPIPort              string        `mapstructure:"port"`
-	CleanUpRoutineInterval   time.Duration `mapstructure:"cleanupDelay"`
-	ConcurrencyWorkers       int           `mapstructure:"workerConcurrency"`
-	TriggerSecurityFramework bool          `mapstructure:"triggerSecurityFramework"`
-	MatchingRulesFilename    string        `mapstructure:"matchingRulesFilename"`
+	NamespaceFilterConfigMapName string        `mapstructure:"namespaceFilterConfigMapName"`
+	Namespace                    string        `mapstructure:"namespace"`
+	RestAPIPort                  string        `mapstructure:"port"`
+	CleanUpRoutineInterval       time.Duration `mapstructure:"cleanupDelay"`
+	ConcurrencyWorkers           int           `mapstructure:"workerConcurrency"`
+	TriggerSecurityFramework     bool          `mapstructure:"triggerSecurityFramework"`
+	MatchingRulesFilename        string        `mapstructure:"matchingRulesFilename"`
 	// EventDeduplicationInterval is the interval during which duplicate events will be silently dropped from processing via continuous scanning
 	EventDeduplicationInterval time.Duration                 `mapstructure:"eventDeduplicationInterval"`
 	HTTPExporterConfig         *exporters.HTTPExporterConfig `mapstructure:"httpExporterConfig"`
@@ -185,13 +187,12 @@ type IConfig interface {
 
 // OperatorConfig implements IConfig
 type OperatorConfig struct {
-	serviceConfig          Config
-	components             CapabilitiesConfig
-	clusterConfig          utilsmetadata.ClusterConfig
-	accountId              string
-	accessKey              string
-	includeNamespacesRegex []*regexp.Regexp
-	excludeNamespacesRegex []*regexp.Regexp
+	serviceConfig   Config
+	components      CapabilitiesConfig
+	clusterConfig   utilsmetadata.ClusterConfig
+	accountId       string
+	accessKey       string
+	namespaceFilter atomic.Pointer[namespaceFilter]
 }
 
 var _ IConfig = (*OperatorConfig)(nil)
@@ -213,28 +214,24 @@ func compileRegexes(patterns []string) ([]*regexp.Regexp, error) {
 }
 
 func NewOperatorConfig(components CapabilitiesConfig, clusterConfig utilsmetadata.ClusterConfig, creds *utils.Credentials, serviceConfig Config) (*OperatorConfig, error) {
-	incRegex, err := compileRegexes(serviceConfig.IncludeNamespacesRegex)
+	filter, err := newNamespaceFilter(serviceConfig)
 	if err != nil {
-		return nil, fmt.Errorf("invalid includeNamespacesRegex: %w", err)
-	}
-	excRegex, err := compileRegexes(serviceConfig.ExcludeNamespacesRegex)
-	if err != nil {
-		return nil, fmt.Errorf("invalid excludeNamespacesRegex: %w", err)
+		return nil, err
 	}
 	var account, accessKey string
 	if creds != nil {
 		account = creds.Account
 		accessKey = creds.AccessKey
 	}
-	return &OperatorConfig{
-		components:             components,
-		serviceConfig:          serviceConfig,
-		clusterConfig:          clusterConfig,
-		accountId:              account,
-		accessKey:              accessKey,
-		includeNamespacesRegex: incRegex,
-		excludeNamespacesRegex: excRegex,
-	}, nil
+	c := &OperatorConfig{
+		components:    components,
+		serviceConfig: serviceConfig,
+		clusterConfig: clusterConfig,
+		accountId:     account,
+		accessKey:     accessKey,
+	}
+	c.namespaceFilter.Store(filter)
+	return c, nil
 }
 
 func (c *OperatorConfig) ContinuousScanEnabled() bool {
@@ -320,12 +317,13 @@ func (c *OperatorConfig) DefaultFrameworks() []string {
 }
 
 func (c *OperatorConfig) SkipNamespace(ns string) bool {
-	hasInclude := len(c.serviceConfig.IncludeNamespaces) > 0 || len(c.includeNamespacesRegex) > 0
+	filter := c.namespaceFilter.Load()
+	hasInclude := len(filter.include) > 0 || len(filter.includeRegex) > 0
 	if hasInclude {
-		if slices.Contains(c.serviceConfig.IncludeNamespaces, ns) {
+		if slices.Contains(filter.include, ns) {
 			return false
 		}
-		for _, r := range c.includeNamespacesRegex {
+		for _, r := range filter.includeRegex {
 			if r.MatchString(ns) {
 				return false
 			}
@@ -333,10 +331,10 @@ func (c *OperatorConfig) SkipNamespace(ns string) bool {
 		return true
 	}
 
-	if slices.Contains(c.serviceConfig.ExcludeNamespaces, ns) {
+	if slices.Contains(filter.exclude, ns) {
 		return true
 	}
-	for _, r := range c.excludeNamespacesRegex {
+	for _, r := range filter.excludeRegex {
 		if r.MatchString(ns) {
 			return true
 		}
@@ -345,19 +343,16 @@ func (c *OperatorConfig) SkipNamespace(ns string) bool {
 }
 
 func (c *OperatorConfig) IncludeNamespaces() []string {
-	return c.serviceConfig.IncludeNamespaces
+	return slices.Clone(c.namespaceFilter.Load().include)
 }
-
 func (c *OperatorConfig) ExcludeNamespaces() []string {
-	return c.serviceConfig.ExcludeNamespaces
+	return slices.Clone(c.namespaceFilter.Load().exclude)
 }
-
 func (c *OperatorConfig) IncludeNamespacesRegex() []string {
-	return c.serviceConfig.IncludeNamespacesRegex
+	return slices.Clone(c.namespaceFilter.Load().includePatterns)
 }
-
 func (c *OperatorConfig) ExcludeNamespacesRegex() []string {
-	return c.serviceConfig.ExcludeNamespacesRegex
+	return slices.Clone(c.namespaceFilter.Load().excludePatterns)
 }
 
 func (c *OperatorConfig) GuardTime() time.Duration {
@@ -394,6 +389,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetConfigType("json")
 
 	viper.SetDefault("namespace", "kubescape")
+	viper.SetDefault("namespaceFilterConfigMapName", "")
 	viper.SetDefault("port", "4002")
 	viper.SetDefault("cleanupDelay", 10*time.Minute)
 	viper.SetDefault("workerConcurrency", 3)
