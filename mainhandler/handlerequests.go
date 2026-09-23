@@ -536,20 +536,20 @@ func (mainHandler *MainHandler) SendReports(ctx context.Context, period time.Dur
 	if ctx.Err() != nil {
 		return
 	}
+	// Match the backend's skip semantics before collecting any report metadata.
+	if boolutils.StringToBool(os.Getenv(versioncheck.SKIP_VERSION_CHECK_ENV)) ||
+		boolutils.StringToBool(os.Getenv(versioncheck.SKIP_VERSION_CHECK_DEPRECATED_ENV)) {
+		return
+	}
 	buildNumber := versioncheck.BuildNumber
-	v := versioncheck.NewIVersionCheckHandler(ctx)
-	// Clear the package-level BuildNumber so CheckLatestVersion does not emit a
-	// version-mismatch warning — the operator version is not comparable to the
-	// kubescape release track. The real build number is still sent in the request body.
-	versioncheck.BuildNumber = ""
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		versionCheckRequest := versioncheck.NewVersionCheckRequest(
-			mainHandler.config.AccountID(), buildNumber, "", "",
-			"daily-report", mainHandler.k8sAPI.KubernetesClient)
-		err := v.CheckLatestVersion(ctx, versionCheckRequest)
+		err := mainHandler.sendDailyReport(ctx, buildNumber)
+		if ctx.Err() != nil {
+			return
+		}
 		if err != nil {
 			logger.L().Ctx(ctx).Error("failed to send daily report", helpers.Error(err))
 		}

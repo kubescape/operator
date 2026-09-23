@@ -16,7 +16,9 @@ import (
 	"github.com/kubescape/operator/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
 )
 
 type dailyReportConfig struct {
@@ -59,17 +61,17 @@ func TestSendReports(t *testing.T) {
 			}
 			t.Setenv(versioncheck.CLIENT_ENV, "operator-test")
 			originalBuild, originalClient, originalLatest := versioncheck.BuildNumber, versioncheck.Client, versioncheck.LatestReleaseVersion
-			originalHTTPClient := http.DefaultClient
+			originalTransport := http.DefaultTransport
 			t.Cleanup(func() {
 				versioncheck.BuildNumber, versioncheck.Client, versioncheck.LatestReleaseVersion = originalBuild, originalClient, originalLatest
-				http.DefaultClient = originalHTTPClient
+				http.DefaultTransport = originalTransport
 			})
 			versioncheck.BuildNumber = "v0.2.172"
 			var reports []versioncheck.VersionCheckRequest
-			http.DefaultClient = &http.Client{Transport: dailyReportTransport(func(r *http.Request) (*http.Response, error) {
+			http.DefaultTransport = dailyReportTransport(func(r *http.Request) (*http.Response, error) {
 				assert.Equal(t, http.MethodPost, r.Method)
 				assert.Equal(t, "https://version-check.ks-services.co", r.URL.String())
-				defer r.Body.Close()
+				defer func() { assert.NoError(t, r.Body.Close()) }()
 				var report versioncheck.VersionCheckRequest
 				if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
 					t.Errorf("decode daily report: %v", err)
@@ -81,8 +83,8 @@ func TestSendReports(t *testing.T) {
 					body = "invalid JSON"
 				}
 				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
-			})}
-			client := k8sfake.NewSimpleClientset()
+			})
+			client := k8sfake.NewClientset()
 			handler := &MainHandler{config: dailyReportConfig{}, k8sAPI: &k8sinterface.KubernetesApi{KubernetesClient: client}}
 			synctest.Test(t, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -97,12 +99,13 @@ func TestSendReports(t *testing.T) {
 				}()
 				for iteration := 1; iteration <= 3; iteration++ {
 					synctest.Wait()
-					// Request construction proves the loop ran even when HTTP is suppressed.
-					assert.Len(t, client.Actions(), 2*iteration)
+					// Skipping reports also skips Kubernetes metadata collection.
 					if tc.skip {
 						assert.Empty(t, reports)
+						assert.Empty(t, client.Actions())
 					} else {
 						assert.Len(t, reports, iteration)
+						assert.Len(t, client.Actions(), 2*iteration)
 					}
 					if iteration < 3 {
 						time.Sleep(24 * time.Hour)
@@ -112,8 +115,9 @@ func TestSendReports(t *testing.T) {
 					assert.Equal(t, "test-account", report.AccountID)
 					assert.Equal(t, "v0.2.172", report.ClientVersion)
 					assert.Equal(t, "daily-report", report.ScanningContext)
+					assert.Equal(t, "operator-test", report.ClientBuild)
 				}
-				assert.Empty(t, versioncheck.BuildNumber)
+				assert.Equal(t, "v0.2.172", versioncheck.BuildNumber)
 				cancel()
 				synctest.Wait()
 				select {
@@ -133,4 +137,82 @@ func TestSendReportsAlreadyCanceled(t *testing.T) {
 	// A canceled call must return before accessing the handler or changing globals.
 	(&MainHandler{}).SendReports(ctx, 24*time.Hour)
 	assert.Equal(t, buildNumber, versioncheck.BuildNumber)
+}
+
+func TestSendReportsInFlight(t *testing.T) {
+	for _, operation := range []string{"service", "nodes", "report"} {
+		for _, stop := range []string{"cancel", "deadline"} {
+			t.Run(operation+"/"+stop, func(t *testing.T) {
+				t.Setenv(versioncheck.SKIP_VERSION_CHECK_ENV, "false")
+				t.Setenv(versioncheck.SKIP_VERSION_CHECK_DEPRECATED_ENV, "false")
+				originalTransport, originalClient := http.DefaultTransport, versioncheck.Client
+				t.Cleanup(func() {
+					http.DefaultTransport, versioncheck.Client = originalTransport, originalClient
+				})
+				synctest.Test(t, func(t *testing.T) {
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					started := make(chan struct{})
+					var operationErr error
+					var calls []string
+					transport := dailyReportTransport(func(r *http.Request) (*http.Response, error) {
+						current, body := "report", `{}`
+						switch r.URL.Path {
+						case "/api/v1/namespaces/default/services/kubernetes":
+							current, body = "service", `{"apiVersion":"v1","kind":"Service","metadata":{"uid":"cluster-uid"}}`
+						case "/api/v1/nodes":
+							current, body = "nodes", `{"apiVersion":"v1","kind":"NodeList","items":[{"metadata":{"name":"node-1"}}]}`
+						}
+						calls = append(calls, current)
+						if current == "report" {
+							defer func() { assert.NoError(t, r.Body.Close()) }()
+							var report versioncheck.VersionCheckRequest
+							assert.NoError(t, json.NewDecoder(r.Body).Decode(&report))
+							assert.Equal(t, "cluster-uid", report.ClusterID)
+							assert.Equal(t, 1, report.Nodes)
+						}
+						if current == operation {
+							close(started)
+							<-r.Context().Done()
+							operationErr = r.Context().Err()
+							return nil, operationErr
+						}
+						return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+					})
+					http.DefaultTransport = transport
+					client, err := kubernetes.NewForConfig(&rest.Config{Host: "https://kubernetes.invalid", Transport: transport})
+					require.NoError(t, err)
+					handler := &MainHandler{config: dailyReportConfig{}, k8sAPI: &k8sinterface.KubernetesApi{KubernetesClient: client}}
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						handler.SendReports(ctx, 24*time.Hour)
+					}()
+					defer func() { cancel(); <-done }()
+					<-started
+					if stop == "cancel" {
+						cancel()
+					} else {
+						time.Sleep(dailyReportTimeout)
+					}
+					synctest.Wait()
+					if stop == "cancel" {
+						assert.ErrorIs(t, operationErr, context.Canceled)
+					} else {
+						assert.ErrorIs(t, operationErr, context.DeadlineExceeded)
+					}
+					// Cancellation/deadline must prevent later report operations.
+					expected := map[string][]string{"service": {"service"}, "nodes": {"service", "nodes"}, "report": {"service", "nodes", "report"}}
+					assert.Equal(t, expected[operation], calls)
+					cancel()
+					synctest.Wait()
+					select {
+					case <-done:
+					default:
+						t.Fatal("SendReports did not stop after canceling an in-flight operation")
+					}
+				})
+			})
+		}
+	}
 }
