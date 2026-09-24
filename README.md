@@ -294,6 +294,7 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `OTEL_COLLECTOR_SVC` | OpenTelemetry collector address (e.g., `otel-collector:4317`) | *not set* |
 | `RELEASE` | Image version for logging | *set at build time* |
 | `NODE_NAME` | Kubernetes node name (from downward API) | *set by Kubernetes* |
+| `KS_SKIP_UPDATE_CHECK` | Set to `true` on the Operator container to suppress its daily report | *not set* |
 
 ### Configuration Defaults
 
