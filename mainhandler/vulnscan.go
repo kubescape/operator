@@ -19,6 +19,7 @@ import (
 	"github.com/armosec/registryx/registryclients"
 	"github.com/armosec/utils-go/httputils"
 	"github.com/armosec/utils-k8s-go/armometadata"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/distribution/reference"
 	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/google/uuid"
@@ -480,6 +481,17 @@ func sendWorkloadToCVEScan(ctx context.Context, config config.IConfig, websocket
 }
 
 func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketScanCommand *apis.WebsocketScanCommand, command apis.NotificationPolicyType) error {
+	// Check at dispatch as a request may have waited in a worker queue while
+	// the namespace filters changed. SBOM storage namespaces are not workload namespaces.
+	namespace := pkgwlid.GetNamespaceFromWlid(webSocketScanCommand.Wlid)
+	if command == apis.TypeScanApplicationProfile {
+		if targetNamespace, ok := webSocketScanCommand.Args[utils.ArgsNamespace].(string); ok && targetNamespace != "" {
+			namespace = targetNamespace
+		}
+	}
+	if namespace != "" && config.SkipNamespace(namespace) {
+		return nil
+	}
 	var err error
 	switch command {
 	case apis.TypeScanApplicationProfile:

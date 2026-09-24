@@ -362,6 +362,8 @@ func Test_handlePodWatcher(t *testing.T) {
 			}
 			cfg, err := config.LoadConfig("../configuration")
 			assert.NoError(t, err)
+			// These fixtures exercise scanning, including workloads in kube-system.
+			cfg.ExcludeNamespaces = nil
 
 			operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterConfig, &beUtils.Credentials{}, cfg)
 			assert.NoError(t, err)
@@ -447,6 +449,8 @@ func Test_handlePodWatcher_ContainerProfile(t *testing.T) {
 	}
 	cfg, err := config.LoadConfig("../configuration")
 	assert.NoError(t, err)
+	// These fixtures exercise scanning, including workloads in kube-system.
+	cfg.ExcludeNamespaces = nil
 
 	t.Run("single container - container profile exists", func(t *testing.T) {
 		pod := bytesToPod(readFileToBytes(podKubeProxy))

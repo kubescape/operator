@@ -247,6 +247,25 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context) error {
 		actionHandler.wlid = c.GetID()
 	}
 
+	// Namespace-specific work may have been queued before a filter update.
+	switch c.CommandName {
+	case apis.TypeScanImages, utils.CommandScanContainerProfile, apis.TypeRunKubescape, apis.TypeRunKubescapeJob:
+		namespace := pkgwlid.GetNamespaceFromWlid(actionHandler.wlid)
+		if namespace == "" {
+			if pod, ok := c.Args[utils.ArgsPod].(*corev1.Pod); ok && pod != nil {
+				namespace = pod.Namespace
+			}
+		}
+		if c.CommandName == utils.CommandScanContainerProfile {
+			if targetNamespace, ok := c.Args[utils.ArgsNamespace].(string); ok && targetNamespace != "" {
+				namespace = targetNamespace
+			}
+		}
+		if namespace != "" && actionHandler.config.SkipNamespace(namespace) {
+			return nil
+		}
+	}
+
 	switch c.CommandName {
 	case apis.TypeScanImages:
 		return actionHandler.scanImage(ctx)

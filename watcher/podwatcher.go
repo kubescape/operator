@@ -67,6 +67,9 @@ func (wh *WatchHandler) PodWatch(ctx context.Context, workerPool *ants.PoolWithF
 
 // handlePodWatcher handles the pod watch events
 func (wh *WatchHandler) handlePodWatcher(ctx context.Context, pod *corev1.Pod, workerPool *ants.PoolWithFunc) {
+	if wh.cfg.SkipNamespace(pod.Namespace) {
+		return
+	}
 
 	// get pod instanceIDs
 	instanceIDs, err := instanceidhandlerv1.GenerateInstanceIDFromRuntimeObj(pod, wh.cfg.ExcludeJsonPaths())

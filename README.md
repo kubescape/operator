@@ -313,6 +313,7 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `includeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to include |
 | `excludeNamespaces` | `"kube-system,kubescape"` | Comma-separated string or array of exact namespaces to exclude |
 | `excludeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to exclude |
+| `namespaceFilterConfigMapName` | `""` | Optional ConfigMap name in the operator namespace for live namespace filtering |
 
 ### Namespace Filtering (Exact & Regex)
 
@@ -327,6 +328,111 @@ The Operator supports filtering namespaces using exact names (`includeNamespaces
   > To match exact prefixes, suffixes, or full namespace names, anchor the patterns using `^` and `$`, such as `^team-.*-prod$`.
 - **RE2 Limitations**: Patterns use Go's standard `regexp` engine (RE2), which runs in guaranteed linear time (immune to ReDoS). Features like backreferences (`\1`), lookaheads (`(?=...)`), and lookbehinds (`(?<=...)`) are not supported. Invalid patterns fail fast with a clear error when configuration is loaded.
 - **Commas in Patterns**: If a regex pattern contains commas (for example, quantifiers like `{1,3}` or character classes like `[a,b]`), provide the configuration as a JSON array (`["^team-[a,b]-.*$"]`) rather than a comma-separated string to prevent splitting.
+
+### Live namespace filtering
+
+To enable live updates, set `"namespaceFilterConfigMapName": "namespace-filters"`
+in the operator's startup `config.json`. An empty name keeps startup-only filtering
+and requires no additional permissions. Enabling this option initially requires
+deploying the updated operator configuration; subsequent filter edits do not.
+
+Create the ConfigMap in the same namespace as the operator (`kubescape` below):
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: namespace-filters
+  namespace: kubescape
+data:
+  namespaceFilters.json: |
+    {
+      "includeNamespaces": [],
+      "excludeNamespaces": ["kube-system", "kubescape"],
+      "includeNamespacesRegex": [],
+      "excludeNamespacesRegex": []
+    }
+```
+
+Grant the operator service account permission to list and watch this ConfigMap.
+The watcher includes a `metadata.name` field selector, allowing a Role restricted
+to this resource name. Replace the service account name below with the one used
+by your operator Deployment.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: operator-namespace-filters
+  namespace: kubescape
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["namespace-filters"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: operator-namespace-filters
+  namespace: kubescape
+subjects:
+  - kind: ServiceAccount
+    name: operator
+    namespace: kubescape
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: operator-namespace-filters
+```
+
+Edit `namespaceFilters.json` with `kubectl -n kubescape edit configmap namespace-filters`.
+Each valid document replaces all namespace filters together. `includeNamespaces`
+and `excludeNamespaces` are required; omitted regex fields become empty lists.
+Values accept comma-separated strings or arrays of strings. Empty lists allow
+all namespaces, and inclusion rules still take precedence over exclusions.
+Malformed JSON, unknown fields, wrong value types (including `null`), and invalid
+regex are rejected without changing the active rules. Other operator settings
+remain startup-only.
+
+When enabled, the operator waits for the first valid document before starting
+scan processing or reporting ready. Missing data and API/RBAC failures leave it
+waiting; correct the ConfigMap or permissions to let startup continue. After a
+valid document has loaded, invalid updates, ConfigMap deletion, or API outages
+retain the last valid rules. The informer reconnects automatically and accepts
+valid updates or a recreated ConfigMap. Applied changes are logged as
+`namespace filters updated`.
+
+Updates affect subsequent namespace checks and queued work when it is processed.
+They do not cancel dispatched scans, trigger rescans of existing workloads, clear
+deduplication state, or delete existing results. Newly allowed namespaces become
+eligible on their next event or request, subject to existing deduplication.
+Findings and remediation paths that already use the operator's namespace filter
+also see the new rules. SBOM scan dispatch checks the resolved workload namespace,
+not the namespace where an SBOM is stored.
+
+This uses the Kubernetes API directly, so it does not depend on ConfigMap volume
+refresh or the chart's existing `subPath` mounts. Helm wiring and live filtering
+inside other components are separate changes: this feature only partially
+addresses [helm-charts#664](https://github.com/kubescape/helm-charts/issues/664).
+Cluster-wide requests forwarded to downstream scanners and registry-only scans
+retain their existing behavior.
+
+#### Smoke test in a test cluster
+
+1. Create the ConfigMap and RBAC above, and start an operator built with this
+   feature and `namespaceFilterConfigMapName` configured. Record its pod UID and
+   restart count with `kubectl -n kubescape get pod <operator-pod> -o json`.
+2. Create a workload in `payments` and trigger the relevant scan event/request.
+   Confirm the operator dispatches the scan.
+3. Add `payments` to `excludeNamespaces`, leaving inclusion lists empty. Wait for
+   the applied-update log, then generate a new workload event/request and confirm
+   no scan is dispatched for it.
+4. Remove `payments` and generate a fresh event/request (use a new workload to
+   avoid deduplication). Confirm scanning resumes.
+5. Submit an invalid regex and confirm the rejection log and unchanged filtering.
+   Restore valid JSON. Check that the operator pod UID and restart count match
+   step 1 throughout these edits.
 
 ---
 
