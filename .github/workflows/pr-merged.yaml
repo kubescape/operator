@@ -23,7 +23,7 @@ jobs:
     steps:
     - name: Get build number
       id: get-build
-      uses: mlilback/build-number@v1
+      uses: mlilback/build-number@81a5eb0abae9b77d036138284ba1094d49acbc32 # v1.0.1
       with:
         base: -73
         run-id: ${{ github.run_number }}
@@ -38,7 +38,7 @@ jobs:
       contents: write
       pull-requests: read
       attestations: write  # required by actions/attest-build-provenance in the shared workflow
-    uses: kubescape/workflows/.github/workflows/incluster-comp-pr-merged.yaml@main
+    uses: kubescape/workflows/.github/workflows/incluster-comp-pr-merged.yaml@547a98f361e0713832308e3f34165bb89fd9b08c # main
     with:
       IMAGE_NAME: quay.io/${{ github.repository_owner }}/operator
       IMAGE_TAG: v0.2.${{ needs.reset-run-number.outputs.run-number }}

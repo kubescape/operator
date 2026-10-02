@@ -16,7 +16,7 @@ jobs:
     permissions:
       pull-requests: write
       security-events: write
-    uses: kubescape/workflows/.github/workflows/incluster-comp-pr-created.yaml@main
+    uses: kubescape/workflows/.github/workflows/incluster-comp-pr-created.yaml@547a98f361e0713832308e3f34165bb89fd9b08c # main
     with:
       CGO_ENABLED: 0
       GO_VERSION: "1.25"
@@ -25,10 +25,10 @@ jobs:
   integration-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: operator
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: "1.25"
       # The node-agent autoscaler integration tests render the actual DaemonSet
@@ -36,12 +36,12 @@ jobs:
       # template so the tests run for real instead of skipping (see
       # nodeagentautoscaler/integration_test.go).
       - name: Checkout helm-charts
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: kubescape/helm-charts
           ref: main
           path: helm-charts
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
       - name: Extract node-agent daemonset template
         run: |
           # The chart has local (file://) subchart dependencies that must be
