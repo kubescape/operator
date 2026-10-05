@@ -1,7 +1,12 @@
 package exporters
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/kubescape/operator/admission/rules"
@@ -62,3 +67,46 @@ func TestSendAdmissionAlert_ClusterUIDPropagated(t *testing.T) {
 
 // Verify RuleFailure interface used in tests
 var _ rules.RuleFailure = (*rulesv1.GenericRuleFailure)(nil)
+
+// TestSendAdmissionAlert_SetsK8sAgentPlatform verifies the wire payload of an
+// admission alert carries an explicit AlertSourcePlatform. The backend infers
+// the platform from PodName when it is unset and would classify a pod-less
+// admission alert as a Linux host alert.
+func TestSendAdmissionAlert_SetsK8sAgentPlatform(t *testing.T) {
+	var got HTTPAlertsList
+	received := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &got)
+		w.WriteHeader(http.StatusOK)
+		received <- struct{}{}
+	}))
+	defer srv.Close()
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{URL: srv.URL, Method: "POST"}, "test-cluster", nil, "test-cluster-uid")
+	assert.NoError(t, err)
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "Privileged pod", UniqueID: "ns/pod"},
+		RuntimeAlertK8sDetails: apitypes.RuntimeAlertK8sDetails{
+			PodName:      "pod",
+			PodNamespace: "ns",
+		},
+		RuleID: "R2003",
+	})
+
+	select {
+	case <-received:
+	case <-time.After(2 * time.Second):
+		t.Fatal("exporter did not POST the alert")
+	}
+
+	if assert.Len(t, got.Spec.Alerts, 1) {
+		alert := got.Spec.Alerts[0]
+		assert.Equal(t, apitypes.AlertSourcePlatformK8sAgent, alert.AlertSourcePlatform)
+		assert.Equal(t, apitypes.AlertTypeAdmission, alert.AlertType)
+		assert.Equal(t, "R2003", alert.RuleID)
+		assert.Equal(t, "ns/pod", alert.BaseRuntimeAlert.UniqueID)
+		assert.Equal(t, "test-cluster-uid", alert.RuntimeAlertK8sDetails.ClusterUID)
+	}
+}
