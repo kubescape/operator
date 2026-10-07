@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -131,6 +132,7 @@ func LoadCapabilitiesConfig(path string) (CapabilitiesConfig, error) {
 }
 
 type Config struct {
+	ExcludeControls              []string      `mapstructure:"excludeControls"`
 	NamespaceFilterConfigMapName string        `mapstructure:"namespaceFilterConfigMapName"`
 	Namespace                    string        `mapstructure:"namespace"`
 	RestAPIPort                  string        `mapstructure:"port"`
@@ -183,6 +185,7 @@ type IConfig interface {
 	// DefaultFrameworks returns install-time posture frameworks from clusterData.
 	// Empty means callers should keep their legacy fallback (e.g. "all" or the native trio).
 	DefaultFrameworks() []string
+	ExcludeControls() []string
 }
 
 // OperatorConfig implements IConfig
@@ -301,6 +304,10 @@ func (c *OperatorConfig) AccessKey() string {
 
 func (c *OperatorConfig) ClusterName() string {
 	return c.clusterConfig.ClusterName
+}
+
+func (c *OperatorConfig) ExcludeControls() []string {
+	return slices.Clone(c.serviceConfig.ExcludeControls)
 }
 
 func (c *OperatorConfig) DefaultFrameworks() []string {
@@ -434,6 +441,22 @@ func LoadConfig(path string) (Config, error) {
 	err = viper.Unmarshal(&c)
 	if err != nil {
 		return Config{}, err
+	}
+
+	// Viper weakly converts scalars and numbers; decode this list strictly.
+	if raw := viper.Get("excludeControls"); raw != nil {
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid excludeControls: %w", err)
+		}
+		if err := json.Unmarshal(data, &c.ExcludeControls); err != nil {
+			return Config{}, fmt.Errorf("invalid excludeControls: %w", err)
+		}
+	}
+	for _, control := range c.ExcludeControls {
+		if strings.TrimSpace(control) == "" {
+			return Config{}, fmt.Errorf("excludeControls contains an empty control identifier")
+		}
 	}
 
 	if _, err := compileRegexes(c.IncludeNamespacesRegex); err != nil {

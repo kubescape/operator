@@ -312,8 +312,32 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `includeNamespaces` | `""` | Comma-separated string or array of exact namespaces to include |
 | `includeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to include |
 | `excludeNamespaces` | `"kube-system,kubescape"` | Comma-separated string or array of exact namespaces to exclude |
+| `excludeControls` | `[]` | Control IDs or legacy CIS section numbers omitted from operator posture scans |
 | `excludeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to exclude |
 | `namespaceFilterConfigMapName` | `""` | Optional ConfigMap name in the operator namespace for live namespace filtering |
+
+### Exclude controls from posture scans
+
+Set `excludeControls` in the operator's `config.json` to a list of control IDs
+(or legacy CIS section numbers):
+
+```json
+{"excludeControls": ["C-0069", "C-0070"]}
+```
+
+The operator forwards these settings for explicit, scheduled, and continuous
+scans, including resource deletion scans. Individual `scanV1` requests can add
+`excludeControls`; the installation and request lists are combined. An empty
+request list does not clear installation settings. Whitespace is trimmed and
+duplicates are removed without regard to case, including scheduled replays.
+Stored jobs retain only request-specific exclusions; installation settings are
+applied when they run. Restart the operator after changing its config file.
+Blank identifiers and values other than a list of strings are rejected.
+
+A scanner supporting this field applies the existing `--exclude-controls`
+filter before evaluating controls and computing compliance scores. Excluding a
+control narrows the assessment scope; it does not assert that the check passed.
+Omitting the installation setting leaves existing behavior unchanged.
 
 ### Namespace Filtering (Exact & Regex)
 
