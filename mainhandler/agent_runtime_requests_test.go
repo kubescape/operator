@@ -36,6 +36,7 @@ func TestAgentRuntimeFrameworkRequestSurvivesScheduledTrigger(t *testing.T) {
 				"includeNamespaces":  []string{"agents"},
 				"excludedNamespaces": []string{"kube-system"},
 				"hostScanner":        false,
+				"excludeControls":    []string{"C-0070"},
 				"keepLocal":          true,
 				"useCachedArtifacts": true,
 				"exceptions":         []interface{}{map[string]interface{}{"name": "agent-runtime-exception"}},
@@ -47,11 +48,12 @@ func TestAgentRuntimeFrameworkRequestSurvivesScheduledTrigger(t *testing.T) {
 				defaults = []string{"nsa"}
 			}
 			args := map[string]interface{}{utils.KubescapeScanV1: payload}
-			requested, err := getKubescapeV1ScanRequest(args, defaults)
+			requested, err := getKubescapeV1ScanRequest(args, defaults, []string{"C-0069"})
 			require.NoError(t, err)
 			scheduled, err := getKubescapeRequest(args, defaults)
 			require.NoError(t, err)
-			require.Equal(t, requested, scheduled)
+			require.Equal(t, []string{"C-0069", "C-0070"}, requested.ExcludeControls)
+			require.Equal(t, []string{"C-0070"}, scheduled.ExcludeControls)
 			assert.Equal(t, []string{"AgentRuntimeHardening"}, scheduled.TargetNames)
 			assert.Equal(t, utilsapisv1.KindFramework, scheduled.TargetType)
 			assert.Equal(t, []string{"agents"}, scheduled.IncludeNamespaces)
@@ -98,7 +100,7 @@ func TestAgentRuntimeFrameworkRequestSurvivesScheduledTrigger(t *testing.T) {
 			cfg, err := config.NewOperatorConfig(
 				config.CapabilitiesConfig{Components: config.Components{Kubescape: config.Component{Enabled: true}, KubescapeScheduler: config.Component{Enabled: true}}},
 				utilsmetadata.ClusterConfig{KubescapeURL: strings.TrimPrefix(scanner.URL, "http://"), InstallationData: armotypes.InstallationData{DefaultFrameworks: defaults}},
-				&beUtils.Credentials{}, config.Config{Namespace: "kubescape"},
+				&beUtils.Credentials{}, config.Config{Namespace: "kubescape", ExcludeControls: []string{"C-0069"}},
 			)
 			require.NoError(t, err)
 			args["jobParams"] = apis.CronJobParams{CronTabSchedule: "0 3 * * *"}
@@ -124,9 +126,12 @@ func TestAgentRuntimeFrameworkRequestSurvivesScheduledTrigger(t *testing.T) {
 			require.NoError(t, json.Unmarshal([]byte(configMap.Data["request-body.json"]), &commands))
 			require.Len(t, commands.Commands, 1)
 			assert.Equal(t, apis.TypeRunKubescape, commands.Commands[0].CommandName)
-			replayed, err := getKubescapeV1ScanRequest(commands.Commands[0].Args, []string{"mitre"})
+			replayed, err := getKubescapeV1ScanRequest(commands.Commands[0].Args, []string{"mitre"}, []string{"C-0069"})
 			require.NoError(t, err)
-			assert.Equal(t, scheduled, replayed, "the stored trigger must preserve the complete supported request")
+			assert.Equal(t, requested, replayed, "scheduled execution must reapply installation settings")
+			changed, err := getKubescapeV1ScanRequest(commands.Commands[0].Args, defaults, nil)
+			require.NoError(t, err)
+			assert.Equal(t, scheduled, changed, "removing installation exclusions must take effect on existing jobs")
 
 			assert.Equal(t, "0 3 * * *", job.Spec.Schedule)
 			assert.Equal(t, "AgentRuntimeHardening", job.Spec.JobTemplate.Spec.Template.Annotations["armo.framework"])

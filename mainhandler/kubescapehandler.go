@@ -162,7 +162,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 		return errors.New("kubescape is not enabled")
 	}
 
-	request, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, actionHandler.config.DefaultFrameworks())
+	request, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, actionHandler.config.DefaultFrameworks(), actionHandler.config.ExcludeControls())
 	if err != nil {
 		return err
 	}
