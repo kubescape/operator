@@ -4,12 +4,13 @@ import (
 	"time"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	admissioncel "github.com/kubescape/operator/admission/cel"
 	"github.com/kubescape/operator/admission/rules"
 	rulesv1 "github.com/kubescape/operator/admission/rules/v1"
 	"github.com/kubescape/operator/objectcache"
-	logger "github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -201,22 +202,70 @@ func buildAdmissionAlert(attrs admission.Attributes) apitypes.AdmissionAlert {
 // enrichK8sDetails populates RuntimeAlertK8sDetails on the failure using the
 // Kubernetes API. Errors are logged and silently skipped — enrichment is
 // best-effort and must never cause the rule to suppress a genuine match.
+//
+// Pod identity comes from one of two places:
+//   - For a Pod CREATE the object has not been persisted yet, so a GET by name
+//     would fail. The pod is decoded from the admission object itself and the
+//     owner chain is resolved from its ownerReferences.
+//   - For everything else (exec, portforward, attach, pod UPDATE/DELETE) the
+//     running pod is fetched by name. If that fails and the request carries a
+//     Pod object, the object is used as a fallback.
+//
+// The backend drops admission alerts without PodName and PodNamespace, so a
+// pod-scoped alert must never leave here without them.
 func enrichK8sDetails(failure *rulesv1.GenericRuleFailure, attrs admission.Attributes, access objectcache.KubernetesCache) {
 	clientset := access.GetClientset()
 
-	pod, workloadKind, workloadName, workloadNamespace, workloadUID, nodeName, err :=
-		rulesv1.GetControllerDetails(attrs, clientset)
-	if err != nil {
-		logger.L().Warning("CelRuleEvaluator: could not get controller details",
-			helpers.String("pod", attrs.GetName()),
-			helpers.Error(err))
-		return
+	var (
+		pod                                                        *corev1.Pod
+		workloadKind, workloadName, workloadNamespace, workloadUID string
+		nodeName                                                   string
+	)
+
+	if attrs.GetKind().Kind == "Pod" && attrs.GetOperation() == admission.Create {
+		pod = rulesv1.PodFromAdmissionObject(attrs)
+		if pod == nil {
+			logger.L().Warning("CelRuleEvaluator: could not decode pod from admission object",
+				helpers.String("pod", attrs.GetName()))
+			return
+		}
+		workloadKind, workloadName, workloadNamespace, workloadUID = rulesv1.ExtractPodOwner(pod, clientset)
+		nodeName = pod.Spec.NodeName
+	} else {
+		var err error
+		pod, workloadKind, workloadName, workloadNamespace, workloadUID, nodeName, err =
+			rulesv1.GetControllerDetails(attrs, clientset)
+		if err != nil {
+			pod = rulesv1.PodFromAdmissionObject(attrs)
+			if pod == nil {
+				logger.L().Warning("CelRuleEvaluator: could not get controller details",
+					helpers.String("pod", attrs.GetName()),
+					helpers.Error(err))
+				return
+			}
+			workloadKind, workloadName, workloadNamespace, workloadUID = rulesv1.ExtractPodOwner(pod, clientset)
+			nodeName = pod.Spec.NodeName
+		}
+	}
+
+	// The request name is empty for CREATE with generateName until the API
+	// server assigns one; fall back to the object's name, then its prefix.
+	podName := attrs.GetName()
+	if podName == "" {
+		podName = pod.Name
+	}
+	if podName == "" {
+		podName = pod.GenerateName
+	}
+	namespace := attrs.GetNamespace()
+	if namespace == "" {
+		namespace = pod.Namespace
 	}
 
 	k8sDetails := apitypes.RuntimeAlertK8sDetails{
-		PodName:           attrs.GetName(),
-		PodNamespace:      attrs.GetNamespace(),
-		Namespace:         attrs.GetNamespace(),
+		PodName:           podName,
+		PodNamespace:      namespace,
+		Namespace:         namespace,
 		NodeName:          nodeName,
 		WorkloadName:      workloadName,
 		WorkloadNamespace: workloadNamespace,
@@ -224,8 +273,10 @@ func enrichK8sDetails(failure *rulesv1.GenericRuleFailure, attrs admission.Attri
 		WorkloadUID:       workloadUID,
 	}
 
-	// Resolve container details for exec-to-pod events.
-	if attrs.GetKind().Kind == "PodExecOptions" {
+	// Resolve container details only when the request names a container
+	// (exec and attach). Pod CREATE alerts deliberately leave ContainerName
+	// empty rather than guessing a container.
+	if kind := attrs.GetKind().Kind; kind == "PodExecOptions" || kind == "PodAttachOptions" {
 		containerName, err := rulesv1.GetContainerNameFromExecToPodEvent(attrs)
 		if err != nil {
 			logger.L().Warning("CelRuleEvaluator: could not get container name from exec event",

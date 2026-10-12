@@ -413,3 +413,122 @@ func TestProcessEvent_WrongEventType(t *testing.T) {
 		t.Errorf("expected nil when no k8s-admission expressions exist, got %v", result)
 	}
 }
+
+// newPodRule returns a RuntimeRule that matches Pod CREATE admission events.
+func newPodRule() armotypes.RuntimeRule {
+	return armotypes.RuntimeRule{
+		ID:          "R3001",
+		Name:        "Privileged pod",
+		Description: "Detects privileged pod creation",
+		Severity:    armotypes.RuleSeverityHigh,
+		Expressions: armotypes.RuleExpressions{
+			Message:  `"Privileged pod: " + event.Namespace`,
+			UniqueID: `event.Namespace + "/" + event.Name`,
+			RuleExpression: []armotypes.RuleExpression{
+				{EventType: armotypes.EventTypeK8sAdmission, Expression: `event.Kind == "Pod" && event.Operation == "CREATE"`},
+			},
+		},
+	}
+}
+
+// TestProcessEvent_PodCreateEnrichment verifies that a Pod CREATE alert carries
+// pod identity and owner details taken from the admission object. The pod does
+// not exist in the API yet at admission time, so a GET by name cannot be used;
+// without this path the backend drops the alert for missing PodName.
+func TestProcessEvent_PodCreateEnrichment(t *testing.T) {
+	engine := newTestCelEngine(t)
+	ev := newCelRuleEvaluator(newPodRule(), engine)
+
+	// "brand-new-pod" is deliberately absent from KubernetesCacheMockImpl;
+	// only the ReplicaSet "test-workload" exists there.
+	attrs := newEvalTestAttributes("Pod", "brand-new-pod", "test-namespace", "CREATE", "",
+		map[string]interface{}{
+			"kind":       "Pod",
+			"apiVersion": "v1",
+			"metadata": map[string]interface{}{
+				"name":      "brand-new-pod",
+				"namespace": "test-namespace",
+				"ownerReferences": []interface{}{
+					map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "ReplicaSet",
+						"name":       "test-workload",
+						"uid":        "test-replicaset-uid-12345",
+					},
+				},
+			},
+			"spec": map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{
+						"name":            "app",
+						"image":           "nginx",
+						"securityContext": map[string]interface{}{"privileged": true},
+					},
+				},
+			},
+		})
+
+	result := ev.ProcessEvent(attrs, objectcache.KubernetesCacheMockImpl{})
+	if result == nil {
+		t.Fatal("expected non-nil RuleFailure")
+	}
+
+	k8s := result.GetRuntimeAlertK8sDetails()
+	if k8s.PodName != "brand-new-pod" {
+		t.Errorf("PodName = %q, want 'brand-new-pod'", k8s.PodName)
+	}
+	if k8s.PodNamespace != "test-namespace" || k8s.Namespace != "test-namespace" {
+		t.Errorf("PodNamespace/Namespace = %q/%q, want 'test-namespace'", k8s.PodNamespace, k8s.Namespace)
+	}
+	if k8s.WorkloadKind != "ReplicaSet" || k8s.WorkloadName != "test-workload" {
+		t.Errorf("Workload = %s/%s, want ReplicaSet/test-workload", k8s.WorkloadKind, k8s.WorkloadName)
+	}
+	if k8s.WorkloadNamespace != "test-namespace" {
+		t.Errorf("WorkloadNamespace = %q, want 'test-namespace'", k8s.WorkloadNamespace)
+	}
+	if k8s.WorkloadUID != "test-replicaset-uid-12345" {
+		t.Errorf("WorkloadUID = %q, want 'test-replicaset-uid-12345'", k8s.WorkloadUID)
+	}
+	if k8s.ContainerName != "" {
+		t.Errorf("ContainerName = %q, want empty for pod CREATE", k8s.ContainerName)
+	}
+	if result.GetBaseRuntimeAlert().UniqueID != "test-namespace/brand-new-pod" {
+		t.Errorf("UniqueID = %q, want 'test-namespace/brand-new-pod'", result.GetBaseRuntimeAlert().UniqueID)
+	}
+}
+
+// TestProcessEvent_PodCreateGenerateName verifies the generateName fallback:
+// when the request carries no name yet, the object's generateName prefix is
+// used so the alert still passes backend validation.
+func TestProcessEvent_PodCreateGenerateName(t *testing.T) {
+	engine := newTestCelEngine(t)
+	ev := newCelRuleEvaluator(newPodRule(), engine)
+
+	attrs := newEvalTestAttributes("Pod", "", "test-namespace", "CREATE", "",
+		map[string]interface{}{
+			"kind":       "Pod",
+			"apiVersion": "v1",
+			"metadata": map[string]interface{}{
+				"generateName": "debug-",
+				"namespace":    "test-namespace",
+			},
+			"spec": map[string]interface{}{
+				"containers": []interface{}{map[string]interface{}{"name": "app", "image": "busybox"}},
+			},
+		})
+
+	result := ev.ProcessEvent(attrs, objectcache.KubernetesCacheMockImpl{})
+	if result == nil {
+		t.Fatal("expected non-nil RuleFailure")
+	}
+	k8s := result.GetRuntimeAlertK8sDetails()
+	if k8s.PodName != "debug-" {
+		t.Errorf("PodName = %q, want 'debug-'", k8s.PodName)
+	}
+	if k8s.PodNamespace != "test-namespace" {
+		t.Errorf("PodNamespace = %q, want 'test-namespace'", k8s.PodNamespace)
+	}
+	if k8s.WorkloadKind != "" {
+		t.Errorf("WorkloadKind = %q, want empty for an unowned pod", k8s.WorkloadKind)
+	}
+}

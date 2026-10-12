@@ -81,6 +81,31 @@ spec:
       tags: ["security", "admission"]
 ```
 
+## Alert Enrichment
+
+After a rule matches, `CelRuleEvaluator` fills `RuntimeAlertK8sDetails` so the
+backend can attach the alert to a pod and workload. The backend drops admission
+alerts that lack `PodName` and `PodNamespace`, so this step decides whether an
+alert ever becomes an incident.
+
+| Request | Pod identity source | Fields populated |
+|---|---|---|
+| Pod CREATE | Decoded from the admission object (the pod is not persisted yet, a GET by name fails) | PodName, PodNamespace, Namespace, NodeName (if scheduled), Workload* from ownerReferences |
+| exec, attach, portforward, Pod UPDATE/DELETE | GET pod by name; falls back to the admission object when the GET fails and the object is a Pod | Same as above, plus ContainerName, ContainerID, Image, ImageDigest for exec and attach |
+| Non-pod kinds (RoleBinding, NetworkPolicy, ...) | None | None. These alerts have no pod identity and are dropped by the backend today |
+
+`PodName` falls back to `metadata.name`, then `metadata.generateName`, when the
+request carries no name yet. `ContainerName` is left empty unless the request
+names a container; a Pod CREATE never guesses one.
+
+`HTTPExporter.SendAdmissionAlert` sets `AlertSourcePlatform` to
+`AlertSourcePlatformK8sAgent` explicitly. Without it the backend infers the
+platform from `PodName` and classifies a pod-less alert as a Linux host alert.
+
+Rules that target cluster-scoped or non-pod resources need a backend change
+(an admission-request identity in incident correlation) before they can
+produce incidents.
+
 ## Event Type Constant
 
 `admission/cel/cel.go` defines:

@@ -81,10 +81,35 @@ func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kube
 	return "Job", ownerRef.Name, namespace, string(ownerRef.UID)
 }
 
-// GetContainerNameFromExecToPodEvent returns the container name from the admission event for exec operations.
+// PodFromAdmissionObject decodes the admission request's object into a Pod.
+// It returns nil when the request is not for a Pod kind or the object cannot
+// be decoded. This is the only source of pod identity for CREATE requests:
+// the API server has not persisted the pod yet, so a GET by name fails.
+func PodFromAdmissionObject(event admission.Attributes) *corev1.Pod {
+	if event == nil || event.GetKind().Kind != "Pod" {
+		return nil
+	}
+	obj := event.GetObject()
+	if obj == nil {
+		return nil
+	}
+	unstructuredObj, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return nil
+	}
+	pod := &corev1.Pod{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, pod); err != nil {
+		return nil
+	}
+	return pod
+}
+
+// GetContainerNameFromExecToPodEvent returns the container name named by an
+// exec or attach request. Both PodExecOptions and PodAttachOptions carry the
+// target container in a "container" field, so one decoder serves both.
 func GetContainerNameFromExecToPodEvent(event admission.Attributes) (string, error) {
-	if event.GetSubresource() != "exec" {
-		return "", fmt.Errorf("not an exec subresource")
+	if sub := event.GetSubresource(); sub != "exec" && sub != "attach" {
+		return "", fmt.Errorf("not an exec or attach subresource")
 	}
 
 	obj := event.GetObject()

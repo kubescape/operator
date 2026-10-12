@@ -128,8 +128,12 @@ func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) 
 	k8sDetails.ClusterUID = exporter.ClusterUID
 
 	httpAlert := apitypes.RuntimeAlert{
-		Message:                ruleFailure.GetRuleAlert().RuleDescription,
-		HostName:               exporter.Host,
+		Message:  ruleFailure.GetRuleAlert().RuleDescription,
+		HostName: exporter.Host,
+		// Admission alerts originate from the operator inside the cluster.
+		// Set the platform explicitly: the backend otherwise infers it from
+		// PodName and would classify a pod-less alert as a Linux host alert.
+		AlertSourcePlatform:    apitypes.AlertSourcePlatformK8sAgent,
 		AlertType:              apitypes.AlertTypeAdmission,
 		BaseRuntimeAlert:       ruleFailure.GetBaseRuntimeAlert(),
 		AdmissionAlert:         ruleFailure.GetAdmissionsAlert(),
