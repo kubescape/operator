@@ -26,7 +26,7 @@ require (
 	github.com/kubescape/k8s-interface v0.0.214
 	github.com/kubescape/kubescape-network-scanner v0.0.15
 	github.com/kubescape/node-agent v0.3.38
-	github.com/kubescape/opa-utils v0.0.285
+	github.com/kubescape/opa-utils v0.0.315
 	github.com/kubescape/storage v0.0.301
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/spf13/viper v1.21.0

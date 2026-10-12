@@ -339,6 +339,10 @@ filter before evaluating controls and computing compliance scores. Excluding a
 control narrows the assessment scope; it does not assert that the check passed.
 Omitting the installation setting leaves existing behavior unchanged.
 
+Compatibility: external implementations of `config.IConfig` must also provide
+`ExcludeControls() []string`. Returning `nil` or an empty slice keeps scans
+without installation-level exclusions.
+
 ### Namespace Filtering (Exact & Regex)
 
 The Operator supports filtering namespaces using exact names (`includeNamespaces`, `excludeNamespaces`) and RE2 regular expressions (`includeNamespacesRegex`, `excludeNamespacesRegex`):
