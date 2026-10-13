@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -20,7 +21,6 @@ import (
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/strings/slices"
 )
 
 const (
@@ -53,7 +53,7 @@ func getKubescapeV1ScanStatusURL(config config.IConfig, scanID string) *url.URL 
 	return &ksURL
 }
 
-func getKubescapeV1ScanRequest(args map[string]interface{}, defaultFrameworks []string) (*utilsmetav1.PostScanRequest, error) {
+func getKubescapeV1ScanRequest(args map[string]interface{}, defaultFrameworks, excludedControls []string) (*utilsmetav1.PostScanRequest, error) {
 
 	scanV1, ok := args[utils.KubescapeScanV1]
 	if !ok {
@@ -68,6 +68,23 @@ func getKubescapeV1ScanRequest(args map[string]interface{}, defaultFrameworks []
 	postScanRequest := &utilsmetav1.PostScanRequest{}
 	if err := json.Unmarshal(scanV1Bytes, postScanRequest); err != nil {
 		return nil, fmt.Errorf("failed to convert request to v1/scan object, reason: %s", err.Error())
+	}
+
+	// Merge installation and request settings without mutating config or growing scheduled requests.
+	controls := append(slices.Clone(excludedControls), postScanRequest.ExcludeControls...)
+	postScanRequest.ExcludeControls = nil
+	seen := make(map[string]struct{}, len(controls))
+	for _, control := range controls {
+		control = strings.TrimSpace(control)
+		if control == "" {
+			return nil, fmt.Errorf("excludeControls contains an empty control identifier")
+		}
+		key := strings.ToLower(control)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		postScanRequest.ExcludeControls = append(postScanRequest.ExcludeControls, control)
 	}
 
 	// Drop blank entries so targetNames: [""] is treated as "no explicit target".
@@ -108,7 +125,8 @@ func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, er
 }
 
 func getKubescapeRequest(args map[string]interface{}, defaultFrameworks []string) (*utilsmetav1.PostScanRequest, error) {
-	postScanRequest, err := getKubescapeV1ScanRequest(args, defaultFrameworks)
+	// Keep installation settings out of stored jobs; apply current settings at execution.
+	postScanRequest, err := getKubescapeV1ScanRequest(args, defaultFrameworks, nil)
 	if err != nil {
 		return postScanRequest, err
 	}

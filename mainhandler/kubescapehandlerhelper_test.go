@@ -29,7 +29,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil, nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, 0, req)
 	}
@@ -39,7 +39,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"format": "json"}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "json", req.Format)
 	}
@@ -49,7 +49,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
@@ -61,7 +61,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{"targetType": utilsapisv1.KindFramework, "targetNames": []string{""}}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil)
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "all", req.TargetNames[0])
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
@@ -76,7 +76,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0", "nsa"})
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0", "nsa"}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, []string{"cis-eks-t1.2.0", "nsa"}, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
@@ -87,7 +87,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				Command: &apis.Command{Args: map[string]interface{}{utils.KubescapeScanV1: map[string]interface{}{}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-aks-t1.2.0"})
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-aks-t1.2.0"}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, []string{"cis-aks-t1.2.0"}, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
@@ -101,7 +101,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"})
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, []string{"cis-eks-t1.2.0"}, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindFramework, req.TargetType)
@@ -116,7 +116,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"})
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, []string{"nsa"}, req.TargetNames)
 	}
@@ -130,7 +130,7 @@ func TestGetKubescapeV1ScanRequest(t *testing.T) {
 				}}},
 			},
 		}
-		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"})
+		req, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, []string{"cis-eks-t1.2.0"}, nil)
 		assert.NoError(t, err)
 		assert.Empty(t, req.TargetNames)
 		assert.Equal(t, utilsapisv1.KindControl, req.TargetType)

@@ -710,6 +710,8 @@ github.com/kubescape/node-agent v0.3.38 h1:eILySwFZ/jCzZH5sYvSu0oPmabJpth2yN3EJU
 github.com/kubescape/node-agent v0.3.38/go.mod h1:t2ufPpsMwuBKLWbTeLdHeJcjRUlr2WrBLHWQP5TafpI=
 github.com/kubescape/opa-utils v0.0.285 h1:iOCwwyqsIz++jqfZHD1WsvHpyNGcUzaLapzrG24aV64=
 github.com/kubescape/opa-utils v0.0.285/go.mod h1:fgL/Bykj2+HYQc81Mj2HkWrs5tBwIlb+/yEkKfA54fw=
+github.com/kubescape/opa-utils v0.0.315 h1:43b6beRDo74nMztOFUBLWV0Vr2T0Ugap7/goU3JPe0Q=
+github.com/kubescape/opa-utils v0.0.315/go.mod h1:dWNcjmiTwGYlNmclXvDvgH7UlLdpDvmEc9T7ACTqLo0=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 h1:SqlwF8G+oFazeYmZQKoPczLEflBQpwpHCU8DoLLyfj8=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520/go.mod h1:wuxMUSDzGUyWd25IJfBzEJ/Udmw2Vy7npj+MV3u3GrU=
 github.com/kubescape/regolibrary v1.0.317-0.20240320124840-1d84ac7186ea h1:hLUe+1bdhiBD7xM/jliQozVd1NLYn1afQLxl5trQdPk=
