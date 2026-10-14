@@ -210,6 +210,7 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 {
   "namespace": "kubescape",
   "port": "4002",
+  "bindAddress": "",
   "cleanupDelay": 600000000000,
   "workerConcurrency": 3,
   "triggerSecurityFramework": false,
@@ -302,6 +303,7 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 |---------|---------------|-------------|
 | `namespace` | `kubescape` | Namespace for Kubescape components |
 | `port` | `4002` | REST API port |
+| `bindAddress` | `""` | Address the REST API listens on; empty binds every interface. `127.0.0.1` keeps `kubescape operator` working, since the CLI port-forwards to the pod, while nothing on the pod network can reach `/v1/triggerAction` |
 | `cleanupDelay` | `10m` | Interval for cleanup routines |
 | `workerConcurrency` | `3` | Number of concurrent workers |
 | `triggerSecurityFramework` | `false` | Trigger security framework on startup |
