@@ -275,6 +275,7 @@ func main() {
 	<-ctx.Done()
 }
 
+// displayBuildTag logs the running image version from the RELEASE environment variable.
 func displayBuildTag() {
 	logger.L().Info(fmt.Sprintf("Image version: %s", os.Getenv("RELEASE")))
 }
