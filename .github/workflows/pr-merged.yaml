@@ -49,8 +49,8 @@ jobs:
       GO_VERSION: "1.26"
       REQUIRED_TESTS: '[
                         "vuln_v2_views", 
-                        "vuln_scan_triggering_with_cron_job", 
-                        "ks_microservice_on_demand", 
+                        "vuln_scan_triggering_with_cron_job",
+                        "ks_microservice_cronjob",
                         "test_registry_scanning",
                         "relevantCVEs",
                         "relevancy_enabled_stop_sniffing",
