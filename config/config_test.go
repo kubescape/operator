@@ -48,6 +48,17 @@ func TestLoadConfigSkipProfilesOverride(t *testing.T) {
 	assert.False(t, cfg.SkipProfilesWithoutInstances)
 }
 
+func TestLoadConfigBindAddress(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"bindAddress":"127.0.0.1"}`), 0600))
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", cfg.RestAPIBindAddress)
+	assert.Equal(t, "4002", cfg.RestAPIPort)
+}
+
 func TestLoadCapabilities(t *testing.T) {
 	type args struct {
 		path string

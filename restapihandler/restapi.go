@@ -2,7 +2,7 @@ package restapihandler
 
 import (
 	"crypto/tls"
-	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/kubescape/go-logger"
@@ -26,14 +26,19 @@ func NewHTTPHandler(pool *ants.PoolWithFunc, config config.IConfig) *HTTPHandler
 	}
 }
 
+// listenAddress joins the configured bind address and port; an empty address binds every interface.
+func listenAddress(bindAddress, port string) string {
+	return net.JoinHostPort(bindAddress, port)
+}
+
 // SetupHTTPListener set up listening http servers
-func (resthandler *HTTPHandler) SetupHTTPListener(port string) error {
+func (resthandler *HTTPHandler) SetupHTTPListener(bindAddress, port string) error {
 	err := resthandler.loadTLSKey()
 	if err != nil {
 		return err
 	}
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%v", port),
+		Addr: listenAddress(bindAddress, port),
 	}
 	if resthandler.keyPair != nil {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
@@ -46,7 +51,7 @@ func (resthandler *HTTPHandler) SetupHTTPListener(port string) error {
 
 	server.Handler = rtr
 
-	logger.L().Info("Waiting for REST API to receive notifications, port: " + port)
+	logger.L().Info("Waiting for REST API to receive notifications, address: " + server.Addr)
 
 	// listen
 	if resthandler.keyPair != nil {

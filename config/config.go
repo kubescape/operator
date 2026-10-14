@@ -136,6 +136,7 @@ type Config struct {
 	NamespaceFilterConfigMapName string        `mapstructure:"namespaceFilterConfigMapName"`
 	Namespace                    string        `mapstructure:"namespace"`
 	RestAPIPort                  string        `mapstructure:"port"`
+	RestAPIBindAddress           string        `mapstructure:"bindAddress"`
 	CleanUpRoutineInterval       time.Duration `mapstructure:"cleanupDelay"`
 	ConcurrencyWorkers           int           `mapstructure:"workerConcurrency"`
 	TriggerSecurityFramework     bool          `mapstructure:"triggerSecurityFramework"`
@@ -398,6 +399,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("namespace", "kubescape")
 	viper.SetDefault("namespaceFilterConfigMapName", "")
 	viper.SetDefault("port", "4002")
+	viper.SetDefault("bindAddress", "")
 	viper.SetDefault("cleanupDelay", 10*time.Minute)
 	viper.SetDefault("workerConcurrency", 3)
 	viper.SetDefault("triggerSecurityFramework", false)

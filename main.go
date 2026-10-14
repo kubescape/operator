@@ -162,7 +162,7 @@ func main() {
 
 	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), operatorConfig)
-		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIPort); err != nil {
+		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIBindAddress, cfg.RestAPIPort); err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 		}
 	}()
