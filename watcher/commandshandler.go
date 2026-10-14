@@ -74,6 +74,7 @@ func (ch *OperatorCommandsHandler) invokeCommand(ctx context.Context, opcmd v1al
 		sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 		return
 	}
+	sessionObj.ParentJobID = cmd.JobTracking.ParentID
 	l := utils.Job{}
 	l.SetContext(ctx)
 	l.SetObj(*sessionObj)
