@@ -236,6 +236,8 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 
 	// Track which DaemonSets we've processed (by name)
 	processedNames := make(map[string]bool)
+	provisionedNames := make(map[string]bool)
+	nameConflicts := make(map[string]NodeGroup)
 	var failures []error
 
 	// Create or update DaemonSets for each node group
@@ -305,11 +307,13 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 				for _, candidate := range nodeGroups {
 					if a.daemonSetTargetsGroup(existingDS, candidate) {
 						ownerPresent = true
+						nameConflicts[dsName] = candidate
 						break
 					}
 				}
 				if ownerPresent {
-					failures = append(failures, fmt.Errorf("DaemonSet name %s targets another present group", dsName))
+					// Resolve after all groups have had a chance to provision.
+					continue
 				} else if err := a.deleteDaemonSet(ctx, existingDS); err != nil {
 					failures = append(failures, fmt.Errorf("release DaemonSet name %s: %w", dsName, err))
 				} else {
@@ -323,6 +327,8 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 					helpers.String("name", desiredDS.Name),
 					helpers.Error(err))
 				failures = append(failures, fmt.Errorf("reconcile %s: %w", desiredDS.Name, err))
+			} else {
+				provisionedNames[dsName] = true
 			}
 		} else {
 			// Create new DaemonSet
@@ -331,7 +337,22 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 					helpers.String("name", desiredDS.Name),
 					helpers.Error(err))
 				failures = append(failures, fmt.Errorf("reconcile %s: %w", desiredDS.Name, err))
+			} else {
+				provisionedNames[dsName] = true
 			}
+		}
+	}
+
+	// A historical alias can occupy another present group's canonical name.
+	// Release it only after its owner's canonical replacement succeeded in this
+	// pass, regardless of group iteration order. Retain other aliases on retry.
+	for name, owner := range nameConflicts {
+		if !provisionedNames[GenerateDaemonSetName(owner)] {
+			failures = append(failures, fmt.Errorf("DaemonSet name %s targets another present group without replacement", name))
+		} else if err := a.deleteDaemonSet(ctx, existingByName[name]); err != nil {
+			failures = append(failures, fmt.Errorf("release historical DaemonSet name %s: %w", name, err))
+		} else {
+			failures = append(failures, fmt.Errorf("released historical DaemonSet name %s after owner replacement; retry provisioning", name))
 		}
 	}
 

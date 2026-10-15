@@ -61,7 +61,10 @@ The main orchestrator that runs the reconciliation loop.
    and retry without requiring another node event. A canonical name occupied by a
    departed group is the narrow exception: delete that UID-bound occupant and
    retry provisioning, retaining the surviving group's existing aliases until
-   replacement succeeds. Never update a different group's immutable selector.
+   replacement succeeds. If the occupant's group is still present, release its
+   historical alias only after its canonical replacement is successfully
+   provisioned; otherwise retain the alias and retry. Never update a different
+   group's immutable selector.
 
 The node informer triggers on creation/deletion, readiness changes, grouping-label
 changes (including presence/absence), allocatable CPU/memory changes, and changes

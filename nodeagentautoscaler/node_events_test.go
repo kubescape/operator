@@ -464,3 +464,53 @@ func TestRetainedHistoricalNameCanBeReusedBySurvivingGroup(t *testing.T) {
 		})
 	}
 }
+
+func TestHistoricalAliasReleasedOnlyAfterOwnerReplacement(t *testing.T) {
+	for _, ownerReady := range []bool{false, true} {
+		for _, failReplacement := range []bool{false, true} {
+			t.Run(fmt.Sprintf("ownerReady=%t/failReplacement=%t", ownerReady, failReplacement), func(t *testing.T) {
+				ctx := context.Background()
+				owner := coverageNode("owner", "m5.large", true)
+				other := coverageNode("other", "m5_large", true)
+				a, client := coverageAutoscaler(t, owner, other)
+				require.NoError(t, a.Reconcile(ctx))
+				owner.Status.Conditions[0].Status = corev1.ConditionFalse
+				_, err := client.CoreV1().Nodes().UpdateStatus(ctx, owner, metav1.UpdateOptions{})
+				require.NoError(t, err)
+				require.NoError(t, client.CoreV1().Nodes().Delete(ctx, other.Name, metav1.DeleteOptions{}))
+				require.NoError(t, a.Reconcile(ctx))
+				alias := "node-agent-m5-large-baa340"
+				_, err = client.AppsV1().DaemonSets("kubescape").Get(ctx, alias, metav1.GetOptions{})
+				require.NoError(t, err)
+				_, err = client.CoreV1().Nodes().Create(ctx, coverageNode("new", "m5-large-baa340", true), metav1.CreateOptions{})
+				require.NoError(t, err)
+				if ownerReady {
+					owner.Status.Conditions[0].Status = corev1.ConditionTrue
+					_, err = client.CoreV1().Nodes().UpdateStatus(ctx, owner, metav1.UpdateOptions{})
+					require.NoError(t, err)
+				}
+				client.PrependReactor("create", "daemonsets", func(action ktesting.Action) (bool, runtime.Object, error) {
+					if failReplacement && action.(ktesting.CreateAction).GetObject().(*appsv1.DaemonSet).Name == "node-agent-m5-large" {
+						return true, nil, apierrors.NewServiceUnavailable("replacement unavailable")
+					}
+					return false, nil, nil
+				})
+				require.Error(t, a.Reconcile(ctx), "retry after conflict or name release")
+				retained, err := client.AppsV1().DaemonSets("kubescape").Get(ctx, alias, metav1.GetOptions{})
+				if !ownerReady || failReplacement {
+					require.NoError(t, err, "retain alias without a successfully provisioned replacement")
+					require.Equal(t, "m5.large", retained.Labels[NodeGroupLabelKey])
+				} else {
+					require.True(t, apierrors.IsNotFound(err), "release alias after owner replacement succeeds")
+					require.NoError(t, a.Reconcile(ctx))
+					list, err := client.AppsV1().DaemonSets("kubescape").List(ctx, metav1.ListOptions{})
+					require.NoError(t, err)
+					require.Len(t, list.Items, 2)
+					newDS, err := client.AppsV1().DaemonSets("kubescape").Get(ctx, alias, metav1.GetOptions{})
+					require.NoError(t, err)
+					require.Equal(t, "m5-large-baa340", newDS.Labels[NodeGroupLabelKey])
+				}
+			})
+		}
+	}
+}
