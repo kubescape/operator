@@ -63,6 +63,7 @@ type TemplateRenderer struct {
 	template             *template.Template
 	mu                   sync.RWMutex // Protects template during reload
 	watcher              *fsnotify.Watcher
+	watchWG              sync.WaitGroup
 	stopCh               chan struct{}
 	goMemLimitPercentage float64
 	nodeGroupLabelKey    string // configured grouping label key, exposed to the template
@@ -129,7 +130,9 @@ func (tr *TemplateRenderer) StartWatching(ctx context.Context) error {
 	// Kubernetes ConfigMaps are mounted as symlinks, so we watch the directory
 	dir := filepath.Dir(tr.templatePath)
 	if err := watcher.Add(dir); err != nil {
-		watcher.Close()
+		if closeErr := watcher.Close(); closeErr != nil {
+			logger.L().Warning("failed to close template watcher after registration failure", helpers.Error(closeErr))
+		}
 		return fmt.Errorf("failed to watch directory %s: %w", dir, err)
 	}
 
@@ -137,21 +140,23 @@ func (tr *TemplateRenderer) StartWatching(ctx context.Context) error {
 		helpers.String("path", tr.templatePath),
 		helpers.String("directory", dir))
 
-	go tr.watchLoop(ctx)
+	tr.watchWG.Add(1)
+	go tr.watchLoop(ctx, watcher, tr.stopCh)
 	return nil
 }
 
 // watchLoop watches for file changes and reloads the template
-func (tr *TemplateRenderer) watchLoop(ctx context.Context) {
+func (tr *TemplateRenderer) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, stopCh <-chan struct{}) {
+	defer tr.watchWG.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			logger.L().Debug("template watcher stopped due to context cancellation")
 			return
-		case <-tr.stopCh:
+		case <-stopCh:
 			logger.L().Debug("template watcher stopped")
 			return
-		case event, ok := <-tr.watcher.Events:
+		case event, ok := <-watcher.Events:
 			if !ok {
 				return
 			}
@@ -173,7 +178,7 @@ func (tr *TemplateRenderer) watchLoop(ctx context.Context) {
 					}
 				}
 			}
-		case err, ok := <-tr.watcher.Errors:
+		case err, ok := <-watcher.Errors:
 			if !ok {
 				return
 			}
@@ -186,12 +191,15 @@ func (tr *TemplateRenderer) watchLoop(ctx context.Context) {
 func (tr *TemplateRenderer) StopWatching() {
 	if tr.stopCh != nil {
 		close(tr.stopCh)
-		tr.stopCh = nil
 	}
 	if tr.watcher != nil {
-		tr.watcher.Close()
-		tr.watcher = nil
+		if err := tr.watcher.Close(); err != nil {
+			logger.L().Warning("failed to close template watcher", helpers.Error(err))
+		}
 	}
+	tr.watchWG.Wait()
+	tr.stopCh = nil
+	tr.watcher = nil
 }
 
 // formatMemory formats a memory quantity to a human-readable string with proper units (Mi, Gi)

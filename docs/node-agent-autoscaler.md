@@ -25,6 +25,7 @@ The Node Agent Autoscaler is an operator component that dynamically creates and 
 nodeagentautoscaler/
 ├── autoscaler.go           # Main reconciliation loop and DaemonSet management
 ├── autoscaler_test.go      # Unit tests for autoscaler
+├── node_events_test.go     # Event, retry, cleanup, and shutdown regressions
 ├── nodegrouper.go          # Node discovery, grouping, and resource calculation
 ├── templaterenderer.go     # Template loading, rendering, and file watching
 ├── templaterenderer_test.go
@@ -39,32 +40,47 @@ The main orchestrator that runs the reconciliation loop.
 
 **Key Responsibilities:**
 - Initialize and coordinate other components
-- Run periodic reconciliation (default: every 5 minutes)
+- Reconcile node additions, removals, and relevant updates after a one-second coalescing window
+- Retain periodic recovery (default: every 5 minutes) and retry transient errors with exponential backoff
+- Keep DaemonSet mutations serial through one client-go workqueue key
 - Manage DaemonSet lifecycle (create, update, delete)
 - Set owner references for garbage collection
 - Emit Kubernetes events for observability
 
 **Reconciliation Flow:**
 
-```go
-func (a *Autoscaler) Reconcile(ctx context.Context) error {
-    // 1. Get current node groups from cluster
-    nodeGroups, _ := a.nodeGrouper.GetNodeGroups(ctx)
+1. Read a complete node inventory and the managed DaemonSets. A failed list aborts
+   reconciliation before mutations; the informer cache is only an event source.
+2. Group all present nodes for lifecycle decisions, preserving group names across
+   NotReady transitions. Size resources from ready members only.
+3. Create missing DaemonSets before updating existing groups. If a group has no
+   ready members, retain its existing DaemonSet without resizing or creating one
+   from incomplete allocatable resources.
+4. Delete managed DaemonSets whose groups no longer exist, after all desired
+   replacements have been provisioned. Failed writes remain visible to the queue
+   and retry without requiring another node event. A canonical name occupied by a
+   departed group is the narrow exception: delete that UID-bound occupant and
+   retry provisioning, retaining the surviving group's existing aliases until
+   replacement succeeds. If the occupant's group is still present, release its
+   historical alias only after its canonical replacement is successfully
+   provisioned; otherwise retain the alias and retry. Never update a different
+   group's immutable selector. Final canonical names are globally disambiguated,
+   including collisions between generated suffixes and literal label values.
 
-    // 2. Get existing managed DaemonSets
-    existingDaemonSets, _ := a.getManagedDaemonSets(ctx)
+The node informer triggers on creation/deletion, readiness changes, grouping-label
+changes (including presence/absence), allocatable CPU/memory changes, and changes
+in Bottlerocket detection when enabled. Heartbeat-only status changes and unrelated
+labels do not trigger API writes. Bursts coalesce into a single pending reconcile;
+callbacks never reconcile directly or overlap a running reconciliation. Failed
+reconciliations retry from one second up to the recovery interval (at least one
+second); successful reconciliation schedules the next periodic recovery. The
+informer reconnects/re-lists on watch failures; periodic reconciliation remains
+available when watch permissions or connectivity are unavailable.
 
-    // 3. For each node group: calculate resources, render, create/update
-    for _, group := range nodeGroups {
-        resources, _ := a.nodeGrouper.CalculateResources(group)
-        desiredDS, _ := a.templateRenderer.RenderDaemonSet(group, resources)
-        // ... create or update DaemonSet
-    }
-
-    // 4. Delete orphaned DaemonSets (node groups that no longer exist)
-    // ...
-}
-```
+Stop or parent-context cancellation stops the queue and joins the node informer
+and template-file watcher. Prompt DaemonSet creation does not guarantee pod
+readiness: image pulls, scheduling, node readiness and the node-agent's separately
+configured `initialDelay` still contribute to the observation window.
 
 **Labels and Annotations:**
 
@@ -164,7 +180,7 @@ Handles node discovery and resource calculation.
 
 | Function | Description |
 |----------|-------------|
-| `GetNodeGroups()` | Lists nodes, groups by label, returns `[]NodeGroup` |
+| `GetNodeGroups()` | Lists ready nodes and groups by label; reconciliation additionally includes NotReady members for group presence |
 | `CalculateResources()` | Computes resource requests/limits for a group |
 | `sanitizeName()` | Converts label values to DNS-safe names |
 | `resolveNameCollisions()` | Adds hash suffix when sanitized names collide |
@@ -191,7 +207,7 @@ func calculatePercentage(q resource.Quantity, percent int) resource.Quantity {
 Instance-type groups are homogeneous by definition, so a group's allocatable is
 taken from the first node seen. The **default group** is the exception: label-less
 nodes can be heterogeneous (mixed on-prem/bare-metal hardware), so it is sized off
-the **minimum** allocatable CPU/memory across its nodes. This guarantees the
+the **minimum** allocatable CPU/memory across its ready nodes. This guarantees the
 node-agent's requests fit every node in the group and makes the result independent
 of the (unstable) node list order.
 
@@ -296,7 +312,7 @@ type NodeAgentAutoscalerConfig struct {
         CPU    string  // e.g., "2000m"
         Memory string  // e.g., "4Gi"
     }
-    ReconcileInterval      time.Duration  // How often to reconcile
+    ReconcileInterval      time.Duration  // Periodic recovery / maximum retry interval
     TemplatePath           string         // Path to DaemonSet template
     OperatorDeploymentName string         // For owner references
 }
@@ -388,7 +404,7 @@ kubectl get events -n kubescape --field-selector reason=Created,reason=Deleted
 | Node missing group label (`DefaultNodeGroup` empty) | Log error, skip node (no DaemonSet for it) |
 | Template parse error | Fatal error on startup |
 | Template render error | Log error, skip node group |
-| API error (create/update/delete) | Log error, continue reconciliation |
+| API error (create/update/delete) | Return aggregated errors and retry with bounded exponential backoff; postpone cleanup after failed desired-state writes |
 | Owner reference lookup failure | Log warning, continue without GC support |
 
 ## Testing

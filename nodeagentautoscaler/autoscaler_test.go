@@ -640,10 +640,12 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: node-agent
+      kubescape.io/node-group: "{{ .NodeGroupLabel }}"
   template:
     metadata:
       labels:
         app.kubernetes.io/name: node-agent
+        kubescape.io/node-group: "{{ .NodeGroupLabel }}"
     spec:
       containers:
       - name: node-agent
