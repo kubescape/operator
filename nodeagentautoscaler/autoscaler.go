@@ -2,7 +2,10 @@ package nodeagentautoscaler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/kubescape/go-logger"
@@ -13,10 +16,13 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 )
 
 const (
@@ -47,6 +53,7 @@ type Autoscaler struct {
 	nodeGrouper        *NodeGrouper
 	templateRenderer   *TemplateRenderer
 	stopCh             chan struct{}
+	stopOnce           sync.Once
 	operatorDeployment string // Name of the operator deployment (for owner references)
 	ownerRef           *metav1.OwnerReference
 	eventRecorder      record.EventRecorder
@@ -110,63 +117,96 @@ func (a *Autoscaler) initOwnerReference(ctx context.Context) error {
 	return nil
 }
 
-// Start begins the autoscaler reconciliation loop
+// Start coalesces node events and periodic recovery into one reconciliation
+// queue. Only this goroutine mutates DaemonSets; informer callbacks never block
+// on API writes, and transient errors retry with bounded exponential backoff.
 func (a *Autoscaler) Start(ctx context.Context) {
-	logger.L().Info("starting node agent autoscaler",
-		helpers.String("namespace", a.namespace),
-		helpers.String("nodeGroupLabel", a.config.NodeGroupLabel),
-		helpers.String("reconcileInterval", a.config.ReconcileInterval.String()))
-
-	// Initialize owner reference for garbage collection
-	if err := a.initOwnerReference(ctx); err != nil {
-		logger.L().Error("failed to initialize owner reference, DaemonSets will not be garbage collected on helm uninstall",
-			helpers.Error(err))
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	interval := a.config.ReconcileInterval
+	if interval <= 0 {
+		interval = 5 * time.Minute
 	}
-
-	// Start watching template file for changes (auto-reload on ConfigMap update)
-	if err := a.templateRenderer.StartWatching(ctx); err != nil {
-		logger.L().Error("failed to start template file watcher, template changes will require operator restart",
-			helpers.Error(err))
-	}
-
-	// Run initial reconciliation
-	if err := a.Reconcile(ctx); err != nil {
-		logger.L().Error("initial reconciliation failed", helpers.Error(err))
-	}
-
-	// Start reconciliation loop
-	ticker := time.NewTicker(a.config.ReconcileInterval)
-	defer ticker.Stop()
-
-	for {
+	queue := workqueue.NewTypedRateLimitingQueue(workqueue.NewTypedItemExponentialFailureRateLimiter[string](time.Second, max(interval, time.Second)))
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
 		select {
-		case <-ctx.Done():
-			logger.L().Info("stopping node agent autoscaler")
-			a.templateRenderer.StopWatching()
-			return
 		case <-a.stopCh:
-			logger.L().Info("stopping node agent autoscaler")
-			a.templateRenderer.StopWatching()
-			return
-		case <-ticker.C:
-			if err := a.Reconcile(ctx); err != nil {
-				logger.L().Error("reconciliation failed", helpers.Error(err))
-			}
+			cancel()
+		case <-ctx.Done():
 		}
+		queue.ShutDown()
+	}()
+	defer func() { cancel(); queue.ShutDown(); <-stopped }()
+	logger.L().Info("starting node agent autoscaler", helpers.String("namespace", a.namespace), helpers.String("reconcileInterval", interval.String()))
+	if err := a.initOwnerReference(ctx); err != nil {
+		logger.L().Error("failed to initialize owner reference, DaemonSets will not be garbage collected on helm uninstall", helpers.Error(err))
+	}
+	if err := a.templateRenderer.StartWatching(ctx); err != nil {
+		logger.L().Error("failed to start template file watcher, template changes will require operator restart", helpers.Error(err))
+	} else {
+		defer a.templateRenderer.StopWatching()
+	}
+	informer := coreinformers.NewNodeInformer(a.client, 0, cache.Indexers{})
+	notify := func(_ interface{}) { queue.AddAfter("reconcile", time.Second) }
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: notify, DeleteFunc: notify,
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			oldNode, oldOK := oldObj.(*corev1.Node)
+			newNode, newOK := newObj.(*corev1.Node)
+			if oldOK && newOK && a.nodeChanged(oldNode, newNode) {
+				notify(newObj)
+			}
+		},
+	})
+	if err != nil {
+		logger.L().Error("failed to register node watcher, periodic reconciliation remains active", helpers.Error(err))
+	}
+	watcherDone := make(chan struct{})
+	go func() { defer close(watcherDone); informer.Run(ctx.Done()) }()
+	defer func() { cancel(); <-watcherDone }()
+	queue.Add("reconcile")
+	for {
+		key, shutdown := queue.Get()
+		if shutdown {
+			return
+		}
+		if ctx.Err() != nil {
+			queue.Done(key)
+			return
+		}
+		if err := a.Reconcile(ctx); err != nil {
+			logger.L().Error("reconciliation failed", helpers.Error(err))
+			queue.AddRateLimited(key)
+		} else {
+			queue.Forget(key)
+			queue.AddAfter(key, interval)
+		}
+		queue.Done(key)
 	}
 }
 
-// Stop stops the autoscaler
-func (a *Autoscaler) Stop() {
-	close(a.stopCh)
+// nodeChanged ignores readiness heartbeat timestamps and unrelated labels.
+func (a *Autoscaler) nodeChanged(oldNode, newNode *corev1.Node) bool {
+	oldLabel, oldPresent := oldNode.Labels[a.config.NodeGroupLabel]
+	newLabel, newPresent := newNode.Labels[a.config.NodeGroupLabel]
+	return oldPresent != newPresent || oldLabel != newLabel ||
+		isNodeReady(oldNode) != isNodeReady(newNode) ||
+		oldNode.Status.Allocatable.Cpu().Cmp(*newNode.Status.Allocatable.Cpu()) != 0 ||
+		oldNode.Status.Allocatable.Memory().Cmp(*newNode.Status.Allocatable.Memory()) != 0 ||
+		(a.config.BottlerocketAutoDetect && isBottlerocketNode(oldNode) != isBottlerocketNode(newNode))
 }
+
+// Stop is safe to call repeatedly and cancels an in-flight reconciliation.
+func (a *Autoscaler) Stop() { a.stopOnce.Do(func() { close(a.stopCh) }) }
 
 // Reconcile performs a single reconciliation cycle
 func (a *Autoscaler) Reconcile(ctx context.Context) error {
 	logger.L().Debug("starting reconciliation")
 
 	// Get current node groups
-	nodeGroups, err := a.nodeGrouper.GetNodeGroups(ctx)
+	nodeGroups, err := a.nodeGrouper.getNodeGroups(ctx, true)
 	if err != nil {
 		return err
 	}
@@ -187,12 +227,33 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 		existingByName[ds.Name] = ds
 	}
 
+	// Provision new groups before spending API calls updating existing groups.
+	sort.SliceStable(nodeGroups, func(i, j int) bool {
+		_, left := existingByName[GenerateDaemonSetName(nodeGroups[i])]
+		_, right := existingByName[GenerateDaemonSetName(nodeGroups[j])]
+		return !left && right
+	})
+
 	// Track which DaemonSets we've processed (by name)
 	processedNames := make(map[string]bool)
+	var failures []error
 
 	// Create or update DaemonSets for each node group
 	for _, group := range nodeGroups {
 		dsName := GenerateDaemonSetName(group)
+		// Presence, rather than readiness, determines whether a DS is orphaned.
+		// Keep its last valid template until a member is ready for sizing again.
+		if group.ReadyNodeCount == 0 {
+			// Canonical names can change when another colliding group appears
+			// or disappears. Retain old coverage by group identity, not name.
+			for name, ds := range existingByName {
+				if a.daemonSetTargetsGroup(ds, group) {
+					processedNames[name] = true
+				}
+			}
+			continue
+		}
+
 		processedNames[dsName] = true
 
 		// Calculate resources for this group
@@ -201,6 +262,7 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 			logger.L().Error("failed to calculate resources",
 				helpers.String("nodeGroup", group.LabelValue),
 				helpers.Error(err))
+			failures = append(failures, fmt.Errorf("calculate resources for %s: %w", dsName, err))
 			continue
 		}
 
@@ -210,6 +272,7 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 			logger.L().Error("failed to render DaemonSet",
 				helpers.String("nodeGroup", group.LabelValue),
 				helpers.Error(err))
+			failures = append(failures, fmt.Errorf("render %s: %w", dsName, err))
 			continue
 		}
 
@@ -234,11 +297,32 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 
 		// Check if DaemonSet exists
 		if existingDS, exists := existingByName[dsName]; exists {
+			if !a.daemonSetTargetsGroup(existingDS, group) {
+				// A retained historical name may now be canonical for another
+				// group. Its selector cannot be changed in place. Keep any
+				// surviving aliases until the next successful reconciliation.
+				ownerPresent := false
+				for _, candidate := range nodeGroups {
+					if a.daemonSetTargetsGroup(existingDS, candidate) {
+						ownerPresent = true
+						break
+					}
+				}
+				if ownerPresent {
+					failures = append(failures, fmt.Errorf("DaemonSet name %s targets another present group", dsName))
+				} else if err := a.deleteDaemonSet(ctx, existingDS); err != nil {
+					failures = append(failures, fmt.Errorf("release DaemonSet name %s: %w", dsName, err))
+				} else {
+					failures = append(failures, fmt.Errorf("released DaemonSet name %s from departed group; retry provisioning", dsName))
+				}
+				continue
+			}
 			// Update if needed
 			if err := a.updateDaemonSetIfNeeded(ctx, existingDS, desiredDS); err != nil {
 				logger.L().Error("failed to update DaemonSet",
 					helpers.String("name", desiredDS.Name),
 					helpers.Error(err))
+				failures = append(failures, fmt.Errorf("reconcile %s: %w", desiredDS.Name, err))
 			}
 		} else {
 			// Create new DaemonSet
@@ -246,8 +330,15 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 				logger.L().Error("failed to create DaemonSet",
 					helpers.String("name", desiredDS.Name),
 					helpers.Error(err))
+				failures = append(failures, fmt.Errorf("reconcile %s: %w", desiredDS.Name, err))
 			}
 		}
+	}
+
+	// A partial desired-state transition (for example a naming collision change)
+	// must not remove old coverage before its replacement was provisioned.
+	if len(failures) > 0 {
+		return errors.Join(failures...)
 	}
 
 	// Delete orphaned DaemonSets (node groups that no longer exist)
@@ -257,6 +348,7 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 				logger.L().Error("failed to delete orphaned DaemonSet",
 					helpers.String("name", ds.Name),
 					helpers.Error(err))
+				failures = append(failures, fmt.Errorf("delete %s: %w", ds.Name, err))
 			}
 		}
 	}
@@ -265,7 +357,20 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 		helpers.Int("nodeGroups", len(nodeGroups)),
 		helpers.Int("existingDaemonSets", len(existingDaemonSets)))
 
-	return nil
+	return errors.Join(failures...)
+}
+
+// daemonSetTargetsGroup distinguishes the synthetic label-less group from a
+// real group with the same label value using their mutually exclusive selectors.
+func (a *Autoscaler) daemonSetTargetsGroup(ds *appsv1.DaemonSet, group NodeGroup) bool {
+	if ds.Labels[NodeGroupLabelKey] != group.LabelValue {
+		return false
+	}
+	value, present := ds.Spec.Template.Spec.NodeSelector[a.config.NodeGroupLabel]
+	if group.IsDefault {
+		return !present
+	}
+	return present && value == group.LabelValue
 }
 
 // getManagedDaemonSets returns all DaemonSets managed by the autoscaler
@@ -366,7 +471,7 @@ func (a *Autoscaler) deleteDaemonSet(ctx context.Context, ds *appsv1.DaemonSet) 
 	a.recordEvent(ds, corev1.EventTypeNormal, EventReasonDeleted,
 		fmt.Sprintf("Deleting DaemonSet for removed node group %q", nodeGroup))
 
-	err := a.client.AppsV1().DaemonSets(a.namespace).Delete(ctx, ds.Name, metav1.DeleteOptions{})
+	err := a.client.AppsV1().DaemonSets(a.namespace).Delete(ctx, ds.Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &ds.UID}})
 	if err != nil {
 		a.recordEvent(ds, corev1.EventTypeWarning, EventReasonFailed,
 			fmt.Sprintf("Failed to delete DaemonSet: %v", err))

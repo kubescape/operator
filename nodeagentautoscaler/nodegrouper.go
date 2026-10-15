@@ -33,6 +33,9 @@ type NodeGroup struct {
 	AllocatableMemory resource.Quantity
 	// NodeCount is the number of nodes in this group
 	NodeCount int
+	// ReadyNodeCount counts members eligible for resource sizing. An inventory
+	// group with no ready member is retained without creating or updating its DS.
+	ReadyNodeCount int
 	// IsDefault is true when this group was formed from nodes missing the
 	// NodeGroupLabel. Such a group cannot be targeted by a nodeSelector on the
 	// (absent) label, so its DaemonSet uses a "DoesNotExist" node affinity instead.
@@ -73,6 +76,12 @@ func NewNodeGrouper(client kubernetes.Interface, cfg config.NodeAgentAutoscalerC
 
 // GetNodeGroups returns all node groups based on the configured label
 func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
+	return ng.getNodeGroups(ctx, false)
+}
+
+// getNodeGroups can retain NotReady members for lifecycle decisions. Resources
+// are always calculated from ready members of the same successful API snapshot.
+func (ng *NodeGrouper) getNodeGroups(ctx context.Context, includeNotReady bool) ([]NodeGroup, error) {
 	nodes, err := ng.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -82,8 +91,8 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 	groupMap := make(map[string]*NodeGroup)
 
 	for _, node := range nodes.Items {
-		// Skip nodes that are not ready
-		if !isNodeReady(&node) {
+		ready := isNodeReady(&node)
+		if !ready && !includeNotReady {
 			continue
 		}
 
@@ -116,35 +125,33 @@ func (ng *NodeGrouper) GetNodeGroups(ctx context.Context) ([]NodeGroup, error) {
 			isDefault = true
 		}
 
-		if group, exists := groupMap[groupKey]; exists {
-			group.NodeCount++
-			if nodeIsBottlerocket {
-				group.HasBottlerocket = true
+		group, exists := groupMap[groupKey]
+		if !exists {
+			group = &NodeGroup{LabelValue: labelValue, SanitizedName: sanitizeName(labelValue), IsDefault: isDefault}
+			groupMap[groupKey] = group
+		}
+		group.NodeCount++
+		if !ready {
+			continue
+		}
+		if nodeIsBottlerocket {
+			group.HasBottlerocket = true
+		}
+		cpu, memory := *node.Status.Allocatable.Cpu(), *node.Status.Allocatable.Memory()
+		if group.ReadyNodeCount == 0 {
+			group.AllocatableCPU = cpu
+			group.AllocatableMemory = memory
+		} else if group.IsDefault {
+			// Label-less nodes may be heterogeneous: requests must fit every
+			// ready member, independent of API list order.
+			if cpu.Cmp(group.AllocatableCPU) < 0 {
+				group.AllocatableCPU = cpu
 			}
-			if group.IsDefault {
-				// Instance-type groups are homogeneous, so the first node is
-				// representative. The default group is the opposite: label-less nodes
-				// can be wildly heterogeneous (on-prem mixed hardware). Size it off the
-				// minimum allocatable across its nodes so requests fit every node and
-				// the result is independent of (unstable) node list order.
-				if nodeCPU := *node.Status.Allocatable.Cpu(); nodeCPU.Cmp(group.AllocatableCPU) < 0 {
-					group.AllocatableCPU = nodeCPU
-				}
-				if nodeMem := *node.Status.Allocatable.Memory(); nodeMem.Cmp(group.AllocatableMemory) < 0 {
-					group.AllocatableMemory = nodeMem
-				}
-			}
-		} else {
-			groupMap[groupKey] = &NodeGroup{
-				LabelValue:        labelValue,
-				SanitizedName:     sanitizeName(labelValue),
-				AllocatableCPU:    *node.Status.Allocatable.Cpu(),
-				AllocatableMemory: *node.Status.Allocatable.Memory(),
-				NodeCount:         1,
-				IsDefault:         isDefault,
-				HasBottlerocket:   nodeIsBottlerocket,
+			if memory.Cmp(group.AllocatableMemory) < 0 {
+				group.AllocatableMemory = memory
 			}
 		}
+		group.ReadyNodeCount++
 	}
 
 	// Convert map to slice
