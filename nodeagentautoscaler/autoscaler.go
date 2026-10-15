@@ -347,7 +347,7 @@ func (a *Autoscaler) Reconcile(ctx context.Context) error {
 	// Release it only after its owner's canonical replacement succeeded in this
 	// pass, regardless of group iteration order. Retain other aliases on retry.
 	for name, owner := range nameConflicts {
-		if !provisionedNames[GenerateDaemonSetName(owner)] {
+		if replacement := GenerateDaemonSetName(owner); replacement == name || !provisionedNames[replacement] {
 			failures = append(failures, fmt.Errorf("DaemonSet name %s targets another present group without replacement", name))
 		} else if err := a.deleteDaemonSet(ctx, existingByName[name]); err != nil {
 			failures = append(failures, fmt.Errorf("release historical DaemonSet name %s: %w", name, err))

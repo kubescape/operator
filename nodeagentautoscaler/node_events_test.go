@@ -514,3 +514,51 @@ func TestHistoricalAliasReleasedOnlyAfterOwnerReplacement(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratedSuffixCollisionPreservesAllPresentGroups(t *testing.T) {
+	ctx := context.Background()
+	a, client := coverageAutoscaler(t, coverageNode("first", "m5.large", true), coverageNode("second", "m5_large", true))
+	require.NoError(t, a.Reconcile(ctx))
+	_, err := client.CoreV1().Nodes().Create(ctx, coverageNode("third", "m5-large-baa340", true), metav1.CreateOptions{})
+	require.NoError(t, err)
+	// A renamed owner can require one retry before its historical name is free.
+	_ = a.Reconcile(ctx)
+	require.NoError(t, a.Reconcile(ctx))
+	list, err := client.AppsV1().DaemonSets("kubescape").List(ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, list.Items, 3)
+	covered := make(map[string]bool)
+	for _, ds := range list.Items {
+		covered[ds.Spec.Template.Spec.NodeSelector[a.config.NodeGroupLabel]] = true
+	}
+	require.Equal(t, map[string]bool{"m5.large": true, "m5_large": true, "m5-large-baa340": true}, covered)
+	require.NoError(t, a.Reconcile(ctx), "names must converge without repeated coverage deletion")
+}
+
+func TestGroupNamesStayUniqueAcrossGeneratedAndLiteralSuffixes(t *testing.T) {
+	a, _ := coverageAutoscaler(t,
+		coverageNode("first", "m5.large", true),
+		coverageNode("second", "m5_large", true),
+		coverageNode("third", "m5-large-baa340", true),
+		coverageNode("fourth", "m5-large-baa340-1", true),
+	)
+	var original map[string]string
+	for i := 0; i < 20; i++ {
+		groups, err := a.nodeGrouper.getNodeGroups(context.Background(), true)
+		require.NoError(t, err)
+		names := make(map[string]bool)
+		byGroup := make(map[string]string)
+		for _, group := range groups {
+			name := GenerateDaemonSetName(group)
+			require.False(t, names[name], "every present group must have a distinct name")
+			names[name] = true
+			byGroup[group.LabelValue] = name
+		}
+		require.Len(t, byGroup, 4)
+		if original == nil {
+			original = byGroup
+		} else {
+			require.Equal(t, original, byGroup, "map iteration order must not change canonical names")
+		}
+	}
+}

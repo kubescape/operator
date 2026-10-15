@@ -64,7 +64,8 @@ The main orchestrator that runs the reconciliation loop.
    replacement succeeds. If the occupant's group is still present, release its
    historical alias only after its canonical replacement is successfully
    provisioned; otherwise retain the alias and retry. Never update a different
-   group's immutable selector.
+   group's immutable selector. Final canonical names are globally disambiguated,
+   including collisions between generated suffixes and literal label values.
 
 The node informer triggers on creation/deletion, readiness changes, grouping-label
 changes (including presence/absence), allocatable CPU/memory changes, and changes

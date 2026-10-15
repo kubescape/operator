@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/kubescape/go-logger"
@@ -300,6 +302,43 @@ func resolveNameCollisions(groups []NodeGroup) []NodeGroup {
 				groups[idx].SanitizedName = sanitized + "-" + shortHash(hashInput)
 			}
 		}
+	}
+
+	// Generated suffixes can collide with literal label values or other hashes.
+	// Reserve all candidate names, then allocate deterministic distinct names for
+	// duplicates without taking a name another group has already been assigned.
+	used := make(map[string]bool, len(groups))
+	indices := make([]int, len(groups))
+	for i := range groups {
+		used[groups[i].SanitizedName] = true
+		indices[i] = i
+	}
+	sort.Slice(indices, func(i, j int) bool {
+		left, right := groups[indices[i]], groups[indices[j]]
+		if left.IsDefault != right.IsDefault {
+			return left.IsDefault
+		}
+		return left.LabelValue < right.LabelValue
+	})
+	assigned := make(map[string]bool, len(groups))
+	for _, idx := range indices {
+		name := groups[idx].SanitizedName
+		if assigned[name] {
+			base := name
+			if len(base) > 50 {
+				base = base[:50]
+			}
+			for suffix := 1; ; suffix++ {
+				candidate := base + "-" + strconv.Itoa(suffix)
+				if !used[candidate] {
+					name = candidate
+					used[name] = true
+					break
+				}
+			}
+			groups[idx].SanitizedName = name
+		}
+		assigned[name] = true
 	}
 
 	return groups
