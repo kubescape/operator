@@ -23,6 +23,7 @@ import (
 	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
+	"github.com/kubescape/operator/telemetry"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
@@ -42,6 +43,7 @@ type MainHandler struct {
 	commandResponseChannel *commandResponseChannelData
 	config                 config.IConfig
 	exporter               exporters.Exporter
+	workTelemetry          *telemetry.Recorder
 }
 
 type ActionHandler struct {
@@ -92,6 +94,8 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, e
 		}
 		mainHandler.handleRequest(j)
 	})
+	mainHandler.workTelemetry = telemetry.NewRecorder()
+	_, _ = telemetry.ObservePool(pool.Running, pool.Waiting, pool.Cap)
 	mainHandler.eventWorkerPool = pool
 	return mainHandler
 }
@@ -194,7 +198,7 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 	ctx := j.Context()
 	sessionObj := j.Obj()
 
-	ctx, span := otel.Tracer("").Start(ctx, string(sessionObj.Command.CommandName))
+	ctx, span := otel.Tracer("").Start(ctx, "operator.request")
 
 	isToItemizeScopeCommand := sessionObj.Command.WildWlid != "" || sessionObj.Command.WildSid != "" || len(sessionObj.Command.Designators) > 0
 	switch sessionObj.Command.CommandName {
@@ -231,7 +235,13 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 	span.End()
 }
 
-func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) error {
+func (mainHandler *MainHandler) HandleSingleRequest(ctx context.Context, sessionObj *utils.SessionObj) (err error) {
+	recorder := mainHandler.workTelemetry
+	if recorder == nil {
+		recorder = telemetry.NewRecorder()
+	}
+	ctx, finish := recorder.Begin(ctx, string(sessionObj.Command.CommandName))
+	defer func() { finish(err) }()
 	ctx, span := otel.Tracer("").Start(ctx, "mainHandler.HandleSingleRequest")
 	defer span.End()
 

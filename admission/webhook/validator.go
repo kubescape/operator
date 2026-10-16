@@ -13,6 +13,7 @@ import (
 	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/admission/rulebinding"
 	"github.com/kubescape/operator/objectcache"
+	"github.com/kubescape/operator/telemetry"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -136,6 +137,10 @@ func (av *AdmissionValidator) Start(ctx context.Context) {
 	if !av.started.CompareAndSwap(false, true) {
 		return
 	}
+	registration, _ := telemetry.ObserveAdmission(func() int { return len(av.jobs) }, func() int { return cap(av.jobs) })
+	if registration != nil {
+		go func() { <-ctx.Done(); _ = registration.Unregister() }()
+	}
 	logger.L().Info("admission validator workers starting",
 		helpers.Int("workers", av.workerCount),
 		helpers.Int("queueSize", cap(av.jobs)))
@@ -185,20 +190,25 @@ func (av *AdmissionValidator) isSelfRequest(attrs admission.Attributes) bool {
 //   - Requests whose Kind no loaded rule could match (Kind pre-filter).
 //   - Requests that cannot be enqueued because the queue is full (drop with
 //     warning + counter, never block the API server).
-func (av *AdmissionValidator) Validate(_ context.Context, attrs admission.Attributes, _ admission.ObjectInterfaces) error {
+func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, _ admission.ObjectInterfaces) error {
 	if av.isSelfRequest(attrs) {
+		telemetry.Admission(ctx, "self", 0)
 		return nil
 	}
 	if av.kindAcceptor != nil && !av.kindAcceptor.Accepts(attrs.GetKind().Kind) {
+		telemetry.Admission(ctx, "unmatched_kind", 0)
 		return nil
 	}
 	if attrs.GetObject() == nil {
+		telemetry.Admission(ctx, "empty", 0)
 		return nil
 	}
 
 	select {
 	case av.jobs <- evalJob{attrs: attrs}:
+		telemetry.Admission(ctx, "queued", 0)
 	default:
+		telemetry.Admission(ctx, "dropped", 0)
 		n := av.dropCount.Add(1)
 		if n == 1 || n%dropLogInterval == 0 {
 			logger.L().Warning("admission queue full, dropping event",
@@ -256,6 +266,9 @@ func (av *AdmissionValidator) drainJobs() {
 // evaluate runs the full match + alert pipeline for a single admission event.
 // Errors are logged and swallowed — alert export is best-effort.
 func (av *AdmissionValidator) evaluate(ctx context.Context, attrs admission.Attributes) {
+	start := time.Now()
+	outcome := "error"
+	defer func() { telemetry.Admission(ctx, outcome, time.Since(start)) }()
 	var (
 		object *unstructured.Unstructured
 		err    error
@@ -279,6 +292,7 @@ func (av *AdmissionValidator) evaluate(ctx context.Context, attrs admission.Attr
 		object = un
 	}
 
+	outcome = "evaluated"
 	matchedRules := av.ruleBindingCache.ListRulesForObject(ctx, object)
 	for _, rule := range matchedRules {
 		failure := rule.ProcessEvent(attrs, av)

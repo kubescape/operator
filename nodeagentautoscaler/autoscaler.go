@@ -11,6 +11,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/telemetry"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -202,7 +203,9 @@ func (a *Autoscaler) nodeChanged(oldNode, newNode *corev1.Node) bool {
 func (a *Autoscaler) Stop() { a.stopOnce.Do(func() { close(a.stopCh) }) }
 
 // Reconcile performs a single reconciliation cycle
-func (a *Autoscaler) Reconcile(ctx context.Context) error {
+func (a *Autoscaler) Reconcile(ctx context.Context) (err error) {
+	ctx, finish := telemetry.Reconcile(ctx)
+	defer func() { finish(err) }()
 	logger.L().Debug("starting reconciliation")
 
 	// Get current node groups

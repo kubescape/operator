@@ -80,7 +80,7 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 	if err == nil {
 		switch r.Method {
 		case http.MethodPost:
-			err = resthandler.HandleActionRequest(context.Background(), readBuffer)
+			err = resthandler.HandleActionRequest(context.WithoutCancel(r.Context()), readBuffer)
 		default:
 			httpStatus = http.StatusMethodNotAllowed
 			err = fmt.Errorf("method '%s' not allowed", r.Method)
