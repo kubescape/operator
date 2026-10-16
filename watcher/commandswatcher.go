@@ -87,9 +87,7 @@ func (cwh *CommandWatchHandler) watchRetry(ctx context.Context) {
 		}
 		for {
 			event, chanActive := <-watcher.ResultChan()
-			if metaObject, ok := event.Object.(resourceVersionGetter); ok {
-				watchOpts.ResourceVersion = metaObject.GetResourceVersion()
-			}
+			resumeFrom(&watchOpts, event)
 			if cwh.eventQueue.Closed() {
 				watcher.Stop()
 				return backoff.Permanent(errors.New("event queue closed"))

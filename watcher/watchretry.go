@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -28,11 +30,7 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts metav1.ListOpt
 		}
 		for {
 			event, chanActive := <-watcher.ResultChan()
-			// set resource version to resume watch from
-			// inspired by https://github.com/kubernetes/client-go/blob/5a0a4247921dd9e72d158aaa6c1ee124aba1da80/tools/watch/retrywatcher.go#L157
-			if metaObject, ok := event.Object.(resourceVersionGetter); ok {
-				watchOpts.ResourceVersion = metaObject.GetResourceVersion()
-			}
+			resumeFrom(&watchOpts, event)
 			if wh.eventQueue.Closed() {
 				watcher.Stop()
 				return backoff.Permanent(errors.New("event queue closed"))
@@ -59,6 +57,25 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts metav1.ListOpt
 	}); err != nil {
 		logger.L().Ctx(ctx).Fatal("giving up watch", helpers.Error(err),
 			helpers.String("resource", "pods"))
+	}
+}
+
+// resumeFrom records where the next watch resumes, the way client-go's RetryWatcher does:
+// at the version of the last object received, so a reconnect carries on from there, or
+// from the current state when the server says that version is gone, since nothing else
+// can follow it. An error event carries a Status, not an object; its empty version is not
+// a place to resume, and taking it for one restarted the watch from scratch after any
+// error, replaying every object.
+func resumeFrom(opts *metav1.ListOptions, event watch.Event) {
+	switch event.Type {
+	case watch.Added, watch.Modified, watch.Deleted, watch.Bookmark:
+		if metaObject, ok := event.Object.(resourceVersionGetter); ok {
+			opts.ResourceVersion = metaObject.GetResourceVersion()
+		}
+	case watch.Error:
+		if status, ok := apierrors.FromObject(event.Object).(*apierrors.StatusError); ok && status.ErrStatus.Code == http.StatusGone {
+			opts.ResourceVersion = ""
+		}
 	}
 }
 
