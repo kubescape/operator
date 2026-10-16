@@ -123,7 +123,9 @@ Read-only Helm source audit at
   `operator.env`, set the existing nested discovery field, or provide an explicit
   base/per-signal endpoint. Offline installs with no API/endpoint remain off.
 
-These are source checks, not rendered release manifests or a live deployment audit.
+These initial findings are source checks, not rendered release manifests. A later
+authorized stage run verified the temporary operator deployment and in-cluster
+SigNoz ingestion; see [live stage validation](telemetry-stage-validation.md).
 Follow-ups for chart owners: wire the intended backend API URL and pod identity and
 verify the deployed cloud secret. Follow-ups for shared-library owners: expose
 sampler/processor/exporter options and disable-ring options directly rather than
@@ -175,7 +177,18 @@ Remaining limitations: sampling and fixed gates intentionally omit individual ev
 work success means dispatch completion, not downstream scan completion; scoped-parent
 list failures and existing silent skip paths are not individual work failures. Progress
 age can miss a stuck member when peers in its kind continue completing. CPU and
-end-to-end queue residence time are not measured. No application byte quota, live
-fleet cardinality measurement, collector quota, or backend admission guarantee is
+end-to-end queue residence time are not measured. No application byte quota, fleet-wide
+cardinality measurement, collector quota, or backend admission guarantee is
 claimed. Batching, authentication, retention, and container memory limits are not ingest
 quotas. During outages exports can be lost; core work does not wait for telemetry.
+
+
+## Live stage follow-up
+
+[Stage validation](telemetry-stage-validation.md) records a temporary rollout of
+commit b55796e to the existing operator in armo-dev-stage, using its existing
+credentials and backend discovery to reach SigNoz in that cluster. It separates
+natural workload observations, validation-only failure traffic, collector-expanded
+series counts, sampled/gated spans, restored deployment state, and the remaining
+hourly byte-meter limitation. This supplements the synthetic receiver fixtures;
+it does not validate the 5–15 KB/agent/hour planning target.
