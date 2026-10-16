@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -26,6 +25,7 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts metav1.ListOpt
 	if err := backoff.RetryNotify(func() error {
 		watcher, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").Watch(context.Background(), watchOpts)
 		if err != nil {
+			dropGoneVersion(&watchOpts, err)
 			return fmt.Errorf("client resource: %w", err)
 		}
 		for {
@@ -73,9 +73,15 @@ func resumeFrom(opts *metav1.ListOptions, event watch.Event) {
 			opts.ResourceVersion = metaObject.GetResourceVersion()
 		}
 	case watch.Error:
-		if status, ok := apierrors.FromObject(event.Object).(*apierrors.StatusError); ok && status.ErrStatus.Code == http.StatusGone {
-			opts.ResourceVersion = ""
-		}
+		dropGoneVersion(opts, apierrors.FromObject(event.Object))
+	}
+}
+
+// dropGoneVersion forgets the resume version when err says the server no longer has it,
+// whether the server said so in an event or by refusing the watch request itself.
+func dropGoneVersion(opts *metav1.ListOptions, err error) {
+	if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) {
+		opts.ResourceVersion = ""
 	}
 }
 

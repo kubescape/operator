@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,6 +45,7 @@ func TestResumeFromTakesTheVersionFromObjectsOnly(t *testing.T) {
 		{name: "bookmark", event: watch.Event{Type: watch.Bookmark, Object: pod("8")}, want: "8"},
 		{name: "error keeps the version", event: watch.Event{Type: watch.Error, Object: watchStatus(http.StatusInternalServerError)}, want: "3"},
 		{name: "gone drops it", event: watch.Event{Type: watch.Error, Object: watchStatus(http.StatusGone)}, want: ""},
+		{name: "expired drops it", event: watch.Event{Type: watch.Error, Object: &apierrors.NewResourceExpired("too old resource version").ErrStatus}, want: ""},
 		{name: "closed channel keeps the version", event: watch.Event{}, want: "3"},
 	}
 	for _, tt := range tests {
@@ -54,22 +57,71 @@ func TestResumeFromTakesTheVersionFromObjectsOnly(t *testing.T) {
 	}
 }
 
-// scriptedWatches answers each Watch call with a fresh fake watcher and records the
-// resourceVersion the call asked to resume from.
+func TestDropGoneVersionOnlyForAGoneVersion(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "expired", err: apierrors.NewResourceExpired("too old resource version"), want: ""},
+		{name: "gone", err: apierrors.NewGone("gone"), want: ""},
+		{name: "other status", err: apierrors.NewServiceUnavailable("busy"), want: "3"},
+		{name: "plain error", err: assert.AnError, want: "3"},
+		{name: "no error", err: nil, want: "3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := metav1.ListOptions{ResourceVersion: "3"}
+			dropGoneVersion(&opts, tt.err)
+			assert.Equal(t, tt.want, opts.ResourceVersion)
+		})
+	}
+}
+
+// scriptedWatches answers each Watch call with a fresh fake watcher, or with the error
+// the test armed for the next call, and records the resourceVersion the call asked to
+// resume from.
 type scriptedWatches struct {
 	versions chan string
 	watchers chan *watch.FakeWatcher
+	mu       sync.Mutex
+	failNext error
 }
 
 func newScriptedWatches() *scriptedWatches {
 	return &scriptedWatches{versions: make(chan string, 8), watchers: make(chan *watch.FakeWatcher, 8)}
 }
 
+func (sw *scriptedWatches) failNextCall(err error) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	sw.failNext = err
+}
+
 func (sw *scriptedWatches) react(action k8stesting.Action) (bool, watch.Interface, error) {
 	sw.versions <- action.(k8stesting.WatchAction).GetWatchRestrictions().ResourceVersion
+	sw.mu.Lock()
+	err := sw.failNext
+	sw.failNext = nil
+	sw.mu.Unlock()
+	if err != nil {
+		return true, nil, err
+	}
 	fw := watch.NewFake()
 	sw.watchers <- fw
 	return true, fw, nil
+}
+
+// failedCall waits for the version of a Watch call that was answered with an error.
+func (sw *scriptedWatches) failedCall(t *testing.T) string {
+	t.Helper()
+	select {
+	case version := <-sw.versions:
+		return version
+	case <-time.After(10 * time.Second):
+		t.Fatal("no new watch was attempted")
+	}
+	return ""
 }
 
 func (sw *scriptedWatches) next(t *testing.T) (*watch.FakeWatcher, string) {
@@ -109,8 +161,14 @@ func TestWatchRetryResumesWhereItLeftOff(t *testing.T) {
 	third.Add(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default", ResourceVersion: "9"}})
 	third.Stop()
 
-	_, version = watches.next(t)
+	fourth, version := watches.next(t)
 	assert.Equal(t, "9", version, "a closed channel resumes from the last object")
+	watches.failNextCall(apierrors.NewResourceExpired("too old resource version"))
+	fourth.Stop()
+
+	assert.Equal(t, "9", watches.failedCall(t))
+	_, version = watches.next(t)
+	assert.Equal(t, "", version, "a watch request refused as expired starts over from the current state")
 }
 
 func TestCommandWatchRetryResumesWhereItLeftOff(t *testing.T) {
@@ -137,6 +195,12 @@ func TestCommandWatchRetryResumesWhereItLeftOff(t *testing.T) {
 	first.Add(command("12"))
 	first.Error(watchStatus(http.StatusServiceUnavailable))
 
-	_, version = watches.next(t)
+	second, version := watches.next(t)
 	assert.Equal(t, "12", version, "an in-flight command must not be dispatched again after a server error")
+	watches.failNextCall(apierrors.NewGone("gone"))
+	second.Stop()
+
+	assert.Equal(t, "12", watches.failedCall(t))
+	_, version = watches.next(t)
+	assert.Equal(t, "", version)
 }

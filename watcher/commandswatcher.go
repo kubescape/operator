@@ -83,6 +83,7 @@ func (cwh *CommandWatchHandler) watchRetry(ctx context.Context) {
 	if err := backoff.RetryNotify(func() error {
 		watcher, err := cwh.k8sAPI.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(cwh.config.Namespace()).Watch(context.Background(), watchOpts)
 		if err != nil {
+			dropGoneVersion(&watchOpts, err)
 			return fmt.Errorf("failed to get commands watcher: %w", err)
 		}
 		for {
