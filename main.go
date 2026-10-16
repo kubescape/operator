@@ -95,7 +95,7 @@ func main() {
 	if validationErr != nil {
 		logger.L().Ctx(ctx).Error("validate config error", helpers.Error(validationErr))
 	}
-	if credentials.AccessKey == "" {
+	if enabled && credentials.AccessKey == "" {
 		logger.L().Warning("operational telemetry has no access key; authenticated backends may reject export")
 	}
 	if discoveryErr != nil {
