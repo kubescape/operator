@@ -6,12 +6,53 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/kubescape/go-logger/otelsetup"
 )
+
+// Fresh processes are essential: resetProviders in other tests replaces OTEL's
+// initial delegating logger provider and would hide a self-delegation deadlock.
+func TestInitUnconfiguredLogsFreshProcess(t *testing.T) {
+	const caseEnv = "OPERATOR_TEST_UNCONFIGURED_LOGS"
+	if signal := os.Getenv(caseEnv); signal != "" {
+		if signal != "offline" {
+			t.Setenv("OTEL_EXPORTER_OTLP_"+strings.ToUpper(signal)+"_ENDPOINT", "http://127.0.0.1:1")
+		}
+		t.Setenv("OTEL_METRIC_EXPORT_INTERVAL", "3600000")
+		shutdown, err := Init(context.Background(), otelsetup.ProviderConfig{ServiceName: "operator"}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, finish := NewRecorder().Begin(context.Background(), "scan")
+		finish(errors.New("validation failure"))
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		_ = shutdown(ctx)
+		return
+	}
+	for _, signal := range []string{"offline", "metrics", "traces"} {
+		t.Run(signal, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestInitUnconfiguredLogsFreshProcess$")
+			for _, entry := range os.Environ() {
+				key := strings.SplitN(entry, "=", 2)[0]
+				if strings.HasPrefix(key, "OTEL_") || strings.HasPrefix(key, "KS_LOGGER_") || key == caseEnv {
+					continue
+				}
+				cmd.Env = append(cmd.Env, entry)
+			}
+			cmd.Env = append(cmd.Env, caseEnv+"="+signal)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("fresh-process %s startup/failed operation did not complete: %v (deadline: %v)\n%s", signal, err, ctx.Err(), output)
+			}
+		})
+	}
+}
 
 func unset(t *testing.T, key string) { t.Helper(); t.Setenv(key, ""); _ = os.Unsetenv(key) }
 func TestEndpointPrecedence(t *testing.T) {

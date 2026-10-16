@@ -21,6 +21,9 @@ logger is then constructed, followed by instruments and worker pools. Configurat
 errors that prevent startup can still print local fatal logs before initialization.
 Missing credentials and discovery/provider failures are nonfatal to operational
 telemetry. Shutdown uses a fresh background context with a five-second deadline.
+When logs are unconfigured, a concrete no-op logger provider keeps offline,
+metrics-only, and traces-only startup independent of OTEL's initial delegating
+logger provider; fresh-process regression tests exercise the first failed operation.
 The old `logger.InitOtel` provider path is removed, avoiding duplicate exporters.
 
 | Setting | Effective default / precedence |

@@ -147,7 +147,13 @@ func Init(ctx context.Context, cfg otelsetup.ProviderConfig, enabled bool) (func
 	// Legacy spans can contain workload data. Only the bounded operational scope
 	// may export spans; existing call sites keep working with nonrecording spans.
 	otel.SetTracerProvider(safeTraces{TracerProvider: otel.GetTracerProvider()})
-	global.SetLoggerProvider(safeLogs{LoggerProvider: global.GetLoggerProvider()})
+	if os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") == "" && os.Getenv(endpointEnv) == "" {
+		// Shared setup leaves the initial delegating provider untouched when
+		// logs are unconfigured. Wrapping it would make it delegate to itself.
+		global.SetLoggerProvider(lognoop.NewLoggerProvider())
+	} else {
+		global.SetLoggerProvider(safeLogs{LoggerProvider: global.GetLoggerProvider()})
+	}
 	return shutdown, nil
 }
 
