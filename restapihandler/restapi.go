@@ -9,7 +9,8 @@ import (
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/docs"
 	"github.com/panjf2000/ants/v2"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type HTTPHandler struct {
@@ -44,10 +45,10 @@ func (resthandler *HTTPHandler) SetupHTTPListener(bindAddress, port string) erro
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*resthandler.keyPair}}
 	}
 	rtr := http.NewServeMux()
-	rtr.Handle("/v1/triggerAction", otelhttp.NewHandler(http.HandlerFunc(resthandler.ActionRequest), "triggerAction"))
+	rtr.Handle("/v1/triggerAction", extractContext(http.HandlerFunc(resthandler.ActionRequest)))
 
 	openAPIUIHandler := docs.NewOpenAPIUIHandler()
-	rtr.Handle("GET "+docs.OpenAPIV2Prefix, otelhttp.NewHandler(openAPIUIHandler, "openapi"))
+	rtr.Handle("GET "+docs.OpenAPIV2Prefix, extractContext(openAPIUIHandler))
 
 	server.Handler = rtr
 
@@ -59,4 +60,12 @@ func (resthandler *HTTPHandler) SetupHTTPListener(bindAddress, port string) erro
 	} else {
 		return server.ListenAndServe()
 	}
+}
+
+// Extract W3C context without generating a span for every HTTP request.
+func extractContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }

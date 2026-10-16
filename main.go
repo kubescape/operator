@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +17,7 @@ import (
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/go-logger/otelsetup"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/node-agent/pkg/cloudmetadata"
 	"github.com/kubescape/node-agent/pkg/rulebindingmanager"
@@ -34,6 +35,7 @@ import (
 	"github.com/kubescape/operator/objectcache"
 	"github.com/kubescape/operator/restapihandler"
 	"github.com/kubescape/operator/servicehandler"
+	"github.com/kubescape/operator/telemetry"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
@@ -50,8 +52,6 @@ func main() {
 	isReadinessReady := false
 	go probes.InitReadinessV1(&isReadinessReady)
 
-	displayBuildTag()
-
 	clusterConfig, err := config.LoadClusterConfig()
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load clusterData error", helpers.Error(err))
@@ -61,16 +61,11 @@ func main() {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("load components error", helpers.Error(err))
 	}
-	logger.L().Debug("loaded config for components", helpers.Interface("components", components))
 
 	var credentials *beUtils.Credentials
 	if credentials, err = beUtils.LoadCredentialsFromFile("/etc/credentials"); err != nil {
-		logger.L().Ctx(ctx).Error("failed to load credentials", helpers.Error(err))
+		// Missing credentials are reported after provider and logger initialization.
 		credentials = &beUtils.Credentials{}
-	} else {
-		logger.L().Info("credentials loaded",
-			helpers.Int("accessKeyLength", len(credentials.AccessKey)),
-			helpers.Int("accountLength", len(credentials.Account)))
 	}
 
 	cfg, err := config.LoadConfig("/etc/config")
@@ -83,20 +78,41 @@ func main() {
 	if err != nil {
 		logger.L().Ctx(ctx).Fatal("initialize operator config error", helpers.Error(err))
 	}
-	if err := config.ValidateConfig(operatorConfig); err != nil {
-		logger.L().Ctx(ctx).Error("validate config error", helpers.Error(err))
+	validationErr := config.ValidateConfig(operatorConfig)
+
+	apiURL := components.Configurations.Server.DiscoveryURL
+	if value, ok := os.LookupEnv("API_URL"); ok {
+		apiURL = value
+	}
+	enabled, discoveryErr := telemetry.ConfigureEndpoint(ctx, apiURL)
+	shutdown, telemetryErr := telemetry.Init(ctx, otelsetup.ProviderConfig{
+		ServiceName: "operator", ServiceVersion: os.Getenv("RELEASE"),
+		AccountID: operatorConfig.AccountID(), AccessKey: operatorConfig.AccessKey(),
+		ClusterName: operatorConfig.ClusterName(), Namespace: operatorConfig.Namespace(),
+		NodeName: os.Getenv("NODE_NAME"), PodName: os.Getenv("POD_NAME"),
+	}, enabled)
+	logger.InitDefaultLogger()
+	if validationErr != nil {
+		logger.L().Ctx(ctx).Error("validate config error", helpers.Error(validationErr))
+	}
+	if enabled && credentials.AccessKey == "" {
+		logger.L().Warning("operational telemetry has no access key; authenticated backends may reject export")
+	}
+	if discoveryErr != nil {
+		logger.L().Warning("operational telemetry discovery unavailable; continuing")
+	}
+	if telemetryErr != nil {
+		logger.L().Warning("operational telemetry initialization failed; continuing")
+	}
+	if shutdown != nil {
+		defer func() {
+			flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdown(flushCtx)
+		}()
 	}
 
-	// to enable otel, set OTEL_COLLECTOR_SVC=otel-collector:4317
-	if otelHost, present := os.LookupEnv("OTEL_COLLECTOR_SVC"); present && components.Components.OtelCollector.Enabled {
-		otelCtx := logger.InitOtel("operator",
-			os.Getenv("RELEASE"),
-			operatorConfig.AccountID(),
-			operatorConfig.ClusterName(),
-			url.URL{Host: otelHost})
-		defer logger.ShutdownOtel(otelCtx)
-	}
-
+	displayBuildTag()
 	initHttpHandlers(operatorConfig)
 	k8sApi := k8sinterface.NewKubernetesApi()
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
@@ -253,7 +269,7 @@ func main() {
 				serverCancel()
 			}()
 			err := admissionController.Run(serverContext)
-			logger.L().Ctx(ctx).Fatal("server stopped", helpers.Error(err))
+			handleAdmissionExit(serverContext, err, stop)
 		}()
 
 		dWatcher.Start(ctx)
@@ -283,4 +299,14 @@ func displayBuildTag() {
 func initHttpHandlers(config config.IConfig) {
 	mainhandler.KubescapeHttpClient = utils.InitHttpClient(config.KubescapeURL())
 	mainhandler.VulnScanHttpClient = utils.InitHttpClient(config.KubevulnURL())
+}
+
+// Runtime server failure cancels main so deferred provider flushing can run.
+// Cancellation and normal HTTP close are expected shutdown outcomes.
+func handleAdmissionExit(ctx context.Context, err error, stop func()) {
+	if ctx.Err() != nil || errors.Is(err, http.ErrServerClosed) {
+		return
+	}
+	logger.L().Ctx(ctx).Error("admission server stopped", helpers.Error(err))
+	stop()
 }
