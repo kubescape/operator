@@ -69,6 +69,10 @@ var certWatchInterval = 2 * time.Second
 // one of paths, or whether it can be stat'ed, changes. The channel is closed when
 // ctx is cancelled.
 func notifyChanges(ctx context.Context, paths ...string) <-chan struct{} {
+	// Read the interval once, before the goroutine starts, so the watcher never
+	// touches the package variable again (tests swap it).
+	interval := certWatchInterval
+
 	type info struct {
 		modTime time.Time
 		err     string
@@ -97,7 +101,7 @@ func notifyChanges(ctx context.Context, paths ...string) <-chan struct{} {
 				// context cancelled, stop watching
 				return
 
-			case <-time.After(certWatchInterval):
+			case <-time.After(interval):
 				newInfos := getInfos()
 				if reflect.DeepEqual(lastInfos, newInfos) {
 					continue

@@ -102,6 +102,25 @@ func waitForSerial(t *testing.T, addr string, serial int64, within time.Duration
 	t.Fatalf("server did not serve certificate #%d within %s (last serial %d, last error %v)", serial, within, last, lastErr)
 }
 
+// stopWatching cancels a notifyChanges watcher and waits for it to exit, so
+// nothing is still running when the test returns and its cleanups run.
+func stopWatching(t *testing.T, cancel context.CancelFunc, changes <-chan struct{}) {
+	t.Helper()
+	cancel()
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case _, ok := <-changes:
+			if !ok {
+				return
+			}
+		case <-timeout:
+			t.Error("watcher did not exit after its context was cancelled")
+			return
+		}
+	}
+}
+
 func TestNotifyChanges_ReportsModifiedFile(t *testing.T) {
 	fastWatch(t)
 	path := filepath.Join(t.TempDir(), "tls.crt")
@@ -109,8 +128,8 @@ func TestNotifyChanges_ReportsModifiedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	changes := notifyChanges(ctx, path)
+	defer stopWatching(t, cancel, changes)
 
 	select {
 	case <-changes:
@@ -140,8 +159,8 @@ func TestNotifyChanges_ReportsFileDisappearing(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	changes := notifyChanges(ctx, path)
+	defer stopWatching(t, cancel, changes)
 
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
