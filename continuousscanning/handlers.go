@@ -201,8 +201,10 @@ func rbacRecordSelector(uObject *unstructured.Unstructured) (labels.Selector, bo
 
 // deleteScanArtifacts removes the posture and vulnerability records the scanner stored for
 // the deleted object: the ones named after it, in its namespace or in the kubescape namespace
-// when it is cluster-scoped, and the RBAC records it took part in. A record that is not
-// there is not an error; the first other error is returned once everything was attempted.
+// when it is cluster-scoped, and the RBAC records it took part in. Scans and summaries are
+// listed separately, so a record whose counterpart is already gone is still found. A record
+// that is not there is not an error; the first other error is returned once everything was
+// attempted.
 func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
 	kubescapeNamespace := h.clusterConfig.Namespace()
 	ns := h.getObjectNamespace(uObject, kubescapeNamespace)
@@ -229,13 +231,20 @@ func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject
 	attempt("vulnerability manifest summary", storageClient.SpdxV1beta1().VulnerabilityManifestSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{}))
 
 	if selector, ok := rbacRecordSelector(uObject); ok {
-		summaries, err := storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
+		opts := metav1.ListOptions{LabelSelector: selector.String()}
+		scans, err := storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).List(ctx, opts)
 		if err != nil {
-			attempt("list of RBAC records", err)
-		} else {
-			for i := range summaries.Items {
-				deletePosture(kubescapeNamespace, summaries.Items[i].Name)
-			}
+			attempt("list of RBAC workload configurations", err)
+		}
+		for i := range scans.Items {
+			attempt("workload configuration", storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).Delete(ctx, scans.Items[i].Name, metav1.DeleteOptions{}))
+		}
+		summaries, err := storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).List(ctx, opts)
+		if err != nil {
+			attempt("list of RBAC workload configuration summaries", err)
+		}
+		for i := range summaries.Items {
+			attempt("workload configuration summary", storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).Delete(ctx, summaries.Items[i].Name, metav1.DeleteOptions{}))
 		}
 	}
 	return firstErr

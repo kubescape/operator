@@ -182,6 +182,47 @@ func TestDeletedCleanerReportsTheFirstRealErrorAfterTryingEverything(t *testing.
 	assert.Empty(t, remainingSummaries(t, client), "the summary is still removed after the scan delete failed")
 }
 
+// An RBAC scan is found through its own labels, not through its summary, so one whose
+// summary is already gone is still removed.
+func TestDeletedCleanerFindsAnRBACScanWithoutItsSummary(t *testing.T) {
+	triplet := map[string]string{
+		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "team",
+		helpersv1.RoleBindingNameMetadataKey: "app-reader", helpersv1.RoleBindingNamespaceMetadataKey: "team",
+	}
+	scanOnly := rbacRecords("serviceaccount-app-role-reader-rolebinding-app-reader", triplet)[:1]
+	h, client := newCleaner(t, scanOnly...)
+	require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("rbac.authorization.k8s.io/v1", "RoleBinding", "team", "app-reader"), client))
+	assert.Empty(t, remainingScans(t, client))
+}
+
+// A scan whose delete failed stays discoverable: the next cleanup of the same object finds
+// it by its labels even though its summary is gone.
+func TestDeletedCleanerRemovesAnRBACScanOnTheNextRunAfterAFailedDelete(t *testing.T) {
+	triplet := map[string]string{
+		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "team",
+		helpersv1.RoleBindingNameMetadataKey: "app-reader", helpersv1.RoleBindingNamespaceMetadataKey: "team",
+	}
+	h, client := newCleaner(t, rbacRecords("serviceaccount-app-role-reader-rolebinding-app-reader", triplet)...)
+	boom := errors.New("storage unavailable")
+	failed := false
+	client.PrependReactor("delete", "workloadconfigurationscans", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if failed || action.(k8stesting.DeleteAction).GetName() != "serviceaccount-app-role-reader-rolebinding-app-reader" {
+			return false, nil, nil
+		}
+		failed = true
+		return true, nil, boom
+	})
+	deleted := deletedObject("rbac.authorization.k8s.io/v1", "RoleBinding", "team", "app-reader")
+
+	err := h.deleteScanArtifacts(context.Background(), deleted, client)
+	require.ErrorIs(t, err, boom)
+	assert.Equal(t, []string{"kubescape/serviceaccount-app-role-reader-rolebinding-app-reader"}, remainingScans(t, client))
+	assert.Empty(t, remainingSummaries(t, client), "the summary delete is still attempted")
+
+	require.NoError(t, h.deleteScanArtifacts(context.Background(), deleted, client))
+	assert.Empty(t, remainingScans(t, client))
+}
+
 func TestRBACRecordSelector(t *testing.T) {
 	tests := []struct {
 		kind, namespace, name string
