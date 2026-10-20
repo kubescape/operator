@@ -75,6 +75,9 @@ func (config *HTTPExporterConfig) Validate() error {
 	if config.Headers == nil {
 		config.Headers = make(map[string]string)
 	}
+	if config.Headers["Content-Type"] == "" {
+		config.Headers["Content-Type"] = "application/json"
+	}
 	if config.URL == "" {
 		return fmt.Errorf("URL is required")
 	}
