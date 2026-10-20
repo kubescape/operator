@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -293,7 +292,7 @@ func main() {
 
 // displayBuildTag logs the running image version from the RELEASE environment variable.
 func displayBuildTag() {
-	logger.L().Info(fmt.Sprintf("Image version: %s", os.Getenv("RELEASE")))
+	logger.L().Info("Image version", helpers.String("version", os.Getenv("RELEASE")))
 }
 
 func initHttpHandlers(config config.IConfig) {
