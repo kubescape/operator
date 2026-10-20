@@ -241,61 +241,82 @@ func TestDeletedCleanerRemovesAnRBACScanOnTheNextRunAfterAFailedDelete(t *testin
 	assert.Empty(t, remainingScans(t, client))
 }
 
-// Two objects whose names differ past the 63rd character share every label the scanner
-// puts on their records. Deleting one must leave the other's scan and summary alone,
-// whether the record is a full scan or a summary whose scan is gone.
+// Two objects can share every label the scanner puts on their records: names that differ
+// past the 63rd character, and names that differ only in a character the sanitizer maps to
+// "-". Deleting one must leave the other's scan and summary alone, whether the record is a
+// full scan or a summary whose scan is gone. A summary states its role only by a label, so
+// a deleted role leaves it too, to its binding's or subject's deletion.
 func TestDeletedCleanerKeepsTheRecordsOfAnObjectWhoseLabelsCollide(t *testing.T) {
 	long := strings.Repeat("a", 63)
+	rbac := "rbac.authorization.k8s.io/v1"
 	tests := []struct {
-		kind       string
-		deleted    *unstructured.Unstructured
-		gone, kept [3]rbacObject
+		name         string
+		deleted      *unstructured.Unstructured
+		gone, kept   [3]rbacObject
+		summaryStays bool
 	}{
-		{kind: "ServiceAccount", deleted: deletedObject("v1", "ServiceAccount", "team", long+"x"),
+		{name: "ServiceAccount cut", deleted: deletedObject("v1", "ServiceAccount", "team", long+"x"),
 			gone: [3]rbacObject{sa(long + "x"), role("reader"), binding("bx")}, kept: [3]rbacObject{sa(long + "y"), role("reader"), binding("by")}},
-		{kind: "Role", deleted: deletedObject("rbac.authorization.k8s.io/v1", "Role", "team", long+"x"),
-			gone: [3]rbacObject{sa("app"), role(long + "x"), binding("bx")}, kept: [3]rbacObject{sa("app"), role(long + "y"), binding("by")}},
-		{kind: "RoleBinding", deleted: deletedObject("rbac.authorization.k8s.io/v1", "RoleBinding", "team", long+"x"),
+		{name: "Role cut", deleted: deletedObject(rbac, "Role", "team", long+"x"),
+			gone: [3]rbacObject{sa("app"), role(long + "x"), binding("bx")}, kept: [3]rbacObject{sa("app"), role(long + "y"), binding("by")}, summaryStays: true},
+		{name: "Role punctuation", deleted: deletedObject(rbac, "Role", "team", "reader:app"),
+			gone: [3]rbacObject{sa("app-a"), role("reader:app"), binding("bind-a")}, kept: [3]rbacObject{sa("app-b"), role("reader-app"), binding("bind-b")}, summaryStays: true},
+		{name: "RoleBinding cut", deleted: deletedObject(rbac, "RoleBinding", "team", long+"x"),
 			gone: [3]rbacObject{sa("app"), role("reader"), binding(long + "x")}, kept: [3]rbacObject{sa("app"), role("reader"), binding(long + "y")}},
-		{kind: "ClusterRole", deleted: deletedObject("rbac.authorization.k8s.io/v1", "ClusterRole", "", long+"x"),
-			gone: [3]rbacObject{sa("app"), clusterRole(long + "x"), clusterBinding("bx")}, kept: [3]rbacObject{sa("app"), clusterRole(long + "y"), clusterBinding("by")}},
-		{kind: "ClusterRoleBinding", deleted: deletedObject("rbac.authorization.k8s.io/v1", "ClusterRoleBinding", "", long+"x"),
+		{name: "RoleBinding punctuation", deleted: deletedObject(rbac, "RoleBinding", "team", "bind:a"),
+			gone: [3]rbacObject{sa("app-a"), role("reader"), binding("bind:a")}, kept: [3]rbacObject{sa("app-b"), role("reader"), binding("bind-a")}},
+		{name: "ClusterRole cut", deleted: deletedObject(rbac, "ClusterRole", "", long+"x"),
+			gone: [3]rbacObject{sa("app"), clusterRole(long + "x"), clusterBinding("bx")}, kept: [3]rbacObject{sa("app"), clusterRole(long + "y"), clusterBinding("by")}, summaryStays: true},
+		{name: "ClusterRole punctuation", deleted: deletedObject(rbac, "ClusterRole", "", "system:reader"),
+			gone: [3]rbacObject{sa("app-a"), clusterRole("system:reader"), clusterBinding("bind-a")}, kept: [3]rbacObject{sa("app-b"), clusterRole("system-reader"), clusterBinding("bind-b")}, summaryStays: true},
+		{name: "ClusterRoleBinding cut", deleted: deletedObject(rbac, "ClusterRoleBinding", "", long+"x"),
 			gone: [3]rbacObject{sa("app"), clusterRole("view"), clusterBinding(long + "x")}, kept: [3]rbacObject{sa("app"), clusterRole("view"), clusterBinding(long + "y")}},
+		{name: "ClusterRoleBinding punctuation", deleted: deletedObject(rbac, "ClusterRoleBinding", "", "bind:a"),
+			gone: [3]rbacObject{sa("app-a"), clusterRole("view"), clusterBinding("bind:a")}, kept: [3]rbacObject{sa("app-b"), clusterRole("view"), clusterBinding("bind-a")}},
 	}
 	for _, tt := range tests {
-		for _, summaryOnly := range []bool{false, true} {
-			name := tt.kind
-			if summaryOnly {
-				name += " with the scans gone"
+		gone := tripletRecords(t, tt.gone[0], tt.gone[1], tt.gone[2])
+		kept := tripletRecords(t, tt.kept[0], tt.kept[1], tt.kept[2])
+		goneName := kubescapeNamespace + "/" + gone[0].(metav1.Object).GetName()
+		keptName := kubescapeNamespace + "/" + kept[0].(metav1.Object).GetName()
+		require.NotEqual(t, goneName, keptName, "the scanner stores the two under different names")
+		t.Run(tt.name, func(t *testing.T) {
+			h, client := newCleaner(t, append(append([]runtime.Object{}, gone...), kept...)...)
+			require.NoError(t, h.deleteScanArtifacts(context.Background(), tt.deleted, client))
+			assert.Equal(t, []string{keptName}, remainingScans(t, client))
+			assert.Equal(t, []string{keptName}, remainingSummaries(t, client))
+		})
+		t.Run(tt.name+" with the scans gone", func(t *testing.T) {
+			h, client := newCleaner(t, gone[1], kept[1])
+			require.NoError(t, h.deleteScanArtifacts(context.Background(), tt.deleted, client))
+			want := []string{keptName}
+			if tt.summaryStays {
+				want = append(want, goneName)
+				sort.Strings(want)
 			}
-			t.Run(name, func(t *testing.T) {
-				gone := tripletRecords(t, tt.gone[0], tt.gone[1], tt.gone[2])
-				kept := tripletRecords(t, tt.kept[0], tt.kept[1], tt.kept[2])
-				if summaryOnly {
-					gone, kept = gone[1:], kept[1:]
-				}
-				h, client := newCleaner(t, append(gone, kept...)...)
-				require.NoError(t, h.deleteScanArtifacts(context.Background(), tt.deleted, client))
-				want := []string{kubescapeNamespace + "/" + kept[0].(metav1.Object).GetName()}
-				assert.Equal(t, want, remainingSummaries(t, client))
-				if !summaryOnly {
-					assert.Equal(t, want, remainingScans(t, client))
-				}
-			})
-		}
+			assert.Equal(t, want, remainingSummaries(t, client))
+		})
 	}
 }
 
-// A summary states its subject only through the labels. When those had to cut the
-// subject's name, the summary of a deleted role cannot be told from a live subject's and
-// stays; the subject's own deletion, which states it exactly, removes it.
-func TestDeletedCleanerLeavesASummaryItCannotTellApartToTheSubjectsDeletion(t *testing.T) {
-	long := strings.Repeat("a", 63) + "x"
-	h, client := newCleaner(t, tripletRecords(t, sa(long), role("reader"), binding("bx"))[1:]...)
-	require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("rbac.authorization.k8s.io/v1", "Role", "team", "reader"), client))
-	assert.Len(t, remainingSummaries(t, client), 1)
-	require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("v1", "ServiceAccount", "team", long), client))
-	assert.Empty(t, remainingSummaries(t, client))
+// A summary whose scan is gone states its role only by a label, so a deleted role leaves
+// it; its binding and its subject are stated exactly, and either one's deletion removes it.
+func TestDeletedCleanerLeavesASummaryWithoutItsScanToItsBindingOrSubject(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		deleted *unstructured.Unstructured
+	}{
+		{name: "binding", deleted: deletedObject("rbac.authorization.k8s.io/v1", "RoleBinding", "team", "bx")},
+		{name: "subject", deleted: deletedObject("v1", "ServiceAccount", "team", "app")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h, client := newCleaner(t, tripletRecords(t, sa("app"), role("reader"), binding("bx"))[1:]...)
+			require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("rbac.authorization.k8s.io/v1", "Role", "team", "reader"), client))
+			assert.Len(t, remainingSummaries(t, client), 1)
+			require.NoError(t, h.deleteScanArtifacts(context.Background(), tt.deleted, client))
+			assert.Empty(t, remainingSummaries(t, client))
+		})
+	}
 }
 
 func TestRBACRecordSelector(t *testing.T) {
