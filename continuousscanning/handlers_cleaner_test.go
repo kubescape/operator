@@ -3,12 +3,16 @@ package continuousscanning
 import (
 	"context"
 	"errors"
+	"maps"
 	"sort"
+	"strings"
 	"testing"
 
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
+	armowlid "github.com/armosec/utils-k8s-go/wlid"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
+	"github.com/kubescape/k8s-interface/names"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
@@ -39,14 +43,50 @@ func postureRecords(namespace, name string, lbls map[string]string) []runtime.Ob
 	}
 }
 
-// rbacRecords returns the records of one subject, role and binding triplet, named and
-// labelled the way httphandler/storage names and labels them.
-func rbacRecords(name string, extra map[string]string) []runtime.Object {
-	lbls := map[string]string{helpersv1.RbacResourceMetadataKey: "true"}
-	for k, v := range extra {
-		lbls[k] = v
+type rbacObject struct {
+	kind, namespace, name string
+}
+
+func sa(name string) rbacObject             { return rbacObject{"ServiceAccount", "team", name} }
+func role(name string) rbacObject           { return rbacObject{"Role", "team", name} }
+func binding(name string) rbacObject        { return rbacObject{"RoleBinding", "team", name} }
+func clusterRole(name string) rbacObject    { return rbacObject{"ClusterRole", "", name} }
+func clusterBinding(name string) rbacObject { return rbacObject{"ClusterRoleBinding", "", name} }
+
+// tripletRecords returns the scan and the summary the scanner stores for one subject, role
+// and binding, the way httphandler/storage writes them: named by the slug of the three,
+// labelled with their sanitized names, annotated with the binding's wlid, and the scan
+// listing the role and the binding as its related objects.
+func tripletRecords(t *testing.T, subject, role, binding rbacObject) []runtime.Object {
+	t.Helper()
+	name, err := names.RoleBindingResourceToSlug(rbacComponent(subject.kind, subject.namespace, subject.name), rbacComponent(role.kind, role.namespace, role.name), rbacComponent(binding.kind, binding.namespace, binding.name))
+	require.NoError(t, err)
+	lbls := map[string]string{
+		helpersv1.RbacResourceMetadataKey: "true",
+		helpersv1.RelatedKindMetadataKey:  subject.kind, helpersv1.RelatedNameMetadataKey: subject.name, helpersv1.RelatedNamespaceMetadataKey: subject.namespace,
 	}
-	return postureRecords(kubescapeNamespace, name, lbls)
+	switch role.kind {
+	case "Role":
+		lbls[helpersv1.RoleNameMetadataKey], lbls[helpersv1.RoleNamespaceMetadataKey] = role.name, role.namespace
+	case "ClusterRole":
+		lbls[helpersv1.ClusterRoleNameMetadataKey] = role.name
+	}
+	switch binding.kind {
+	case "RoleBinding":
+		lbls[helpersv1.RoleBindingNameMetadataKey], lbls[helpersv1.RoleBindingNamespaceMetadataKey] = binding.name, binding.namespace
+	case "ClusterRoleBinding":
+		lbls[helpersv1.ClusterRoleBindingNameMetadataKey] = binding.name
+	}
+	names.SanitizeLabelValues(lbls)
+	annotations := map[string]string{helpersv1.WlidMetadataKey: armowlid.GetK8sWLID("test", binding.namespace, binding.kind, binding.name)}
+	related := []v1beta1.WorkloadScanRelatedObject{
+		{Namespace: role.namespace, APIGroup: "rbac.authorization.k8s.io", APIVersion: "v1", Kind: role.kind, Name: role.name},
+		{Namespace: binding.namespace, APIGroup: "rbac.authorization.k8s.io", APIVersion: "v1", Kind: binding.kind, Name: binding.name},
+	}
+	return []runtime.Object{
+		&v1beta1.WorkloadConfigurationScan{ObjectMeta: metav1.ObjectMeta{Namespace: kubescapeNamespace, Name: name, Labels: lbls, Annotations: annotations}, Spec: v1beta1.WorkloadConfigurationScanSpec{RelatedObjects: related}},
+		&v1beta1.WorkloadConfigurationScanSummary{ObjectMeta: metav1.ObjectMeta{Namespace: kubescapeNamespace, Name: name, Labels: maps.Clone(lbls), Annotations: maps.Clone(annotations)}},
+	}
 }
 
 func newCleaner(t *testing.T, objects ...runtime.Object) (*deletedCleanerHandler, *kssfake.Clientset) {
@@ -82,24 +122,10 @@ func remainingScans(t *testing.T, client *kssfake.Clientset) []string {
 }
 
 func TestDeletedCleanerRemovesTheRecordsOfADeletedObject(t *testing.T) {
-	saTriplet := map[string]string{
-		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "team",
-		helpersv1.RoleNameMetadataKey: "reader", helpersv1.RoleNamespaceMetadataKey: "team",
-		helpersv1.RoleBindingNameMetadataKey: "app-reader", helpersv1.RoleBindingNamespaceMetadataKey: "team",
-	}
-	otherTriplet := map[string]string{
-		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "other", helpersv1.RelatedNamespaceMetadataKey: "team",
-		helpersv1.RoleNameMetadataKey: "writer", helpersv1.RoleNamespaceMetadataKey: "team",
-		helpersv1.RoleBindingNameMetadataKey: "other-writer", helpersv1.RoleBindingNamespaceMetadataKey: "team",
-	}
-	clusterTriplet := map[string]string{
-		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "team",
-		helpersv1.ClusterRoleNameMetadataKey: "view", helpersv1.ClusterRoleBindingNameMetadataKey: "app-view",
-	}
 	var fixtures []runtime.Object
-	fixtures = append(fixtures, rbacRecords("serviceaccount-app-role-reader-rolebinding-app-reader", saTriplet)...)
-	fixtures = append(fixtures, rbacRecords("serviceaccount-other-role-writer-rolebinding-other-writer", otherTriplet)...)
-	fixtures = append(fixtures, rbacRecords("serviceaccount-app-clusterrole-view-clusterrolebinding-app-view", clusterTriplet)...)
+	fixtures = append(fixtures, tripletRecords(t, sa("app"), role("reader"), binding("app-reader"))...)
+	fixtures = append(fixtures, tripletRecords(t, sa("other"), role("writer"), binding("other-writer"))...)
+	fixtures = append(fixtures, tripletRecords(t, sa("app"), clusterRole("view"), clusterBinding("app-view"))...)
 	fixtures = append(fixtures, postureRecords("team", "serviceaccount-app", nil)...)
 	fixtures = append(fixtures, postureRecords("team", "secret-token", nil)...)
 	fixtures = append(fixtures, postureRecords(kubescapeNamespace, "node-worker-1", nil)...)
@@ -185,11 +211,7 @@ func TestDeletedCleanerReportsTheFirstRealErrorAfterTryingEverything(t *testing.
 // An RBAC scan is found through its own labels, not through its summary, so one whose
 // summary is already gone is still removed.
 func TestDeletedCleanerFindsAnRBACScanWithoutItsSummary(t *testing.T) {
-	triplet := map[string]string{
-		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "team",
-		helpersv1.RoleBindingNameMetadataKey: "app-reader", helpersv1.RoleBindingNamespaceMetadataKey: "team",
-	}
-	scanOnly := rbacRecords("serviceaccount-app-role-reader-rolebinding-app-reader", triplet)[:1]
+	scanOnly := tripletRecords(t, sa("app"), role("reader"), binding("app-reader"))[:1]
 	h, client := newCleaner(t, scanOnly...)
 	require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("rbac.authorization.k8s.io/v1", "RoleBinding", "team", "app-reader"), client))
 	assert.Empty(t, remainingScans(t, client))
@@ -198,11 +220,7 @@ func TestDeletedCleanerFindsAnRBACScanWithoutItsSummary(t *testing.T) {
 // A scan whose delete failed stays discoverable: the next cleanup of the same object finds
 // it by its labels even though its summary is gone.
 func TestDeletedCleanerRemovesAnRBACScanOnTheNextRunAfterAFailedDelete(t *testing.T) {
-	triplet := map[string]string{
-		helpersv1.RelatedKindMetadataKey: "ServiceAccount", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "team",
-		helpersv1.RoleBindingNameMetadataKey: "app-reader", helpersv1.RoleBindingNamespaceMetadataKey: "team",
-	}
-	h, client := newCleaner(t, rbacRecords("serviceaccount-app-role-reader-rolebinding-app-reader", triplet)...)
+	h, client := newCleaner(t, tripletRecords(t, sa("app"), role("reader"), binding("app-reader"))...)
 	boom := errors.New("storage unavailable")
 	failed := false
 	client.PrependReactor("delete", "workloadconfigurationscans", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -221,6 +239,63 @@ func TestDeletedCleanerRemovesAnRBACScanOnTheNextRunAfterAFailedDelete(t *testin
 
 	require.NoError(t, h.deleteScanArtifacts(context.Background(), deleted, client))
 	assert.Empty(t, remainingScans(t, client))
+}
+
+// Two objects whose names differ past the 63rd character share every label the scanner
+// puts on their records. Deleting one must leave the other's scan and summary alone,
+// whether the record is a full scan or a summary whose scan is gone.
+func TestDeletedCleanerKeepsTheRecordsOfAnObjectWhoseLabelsCollide(t *testing.T) {
+	long := strings.Repeat("a", 63)
+	tests := []struct {
+		kind       string
+		deleted    *unstructured.Unstructured
+		gone, kept [3]rbacObject
+	}{
+		{kind: "ServiceAccount", deleted: deletedObject("v1", "ServiceAccount", "team", long+"x"),
+			gone: [3]rbacObject{sa(long + "x"), role("reader"), binding("bx")}, kept: [3]rbacObject{sa(long + "y"), role("reader"), binding("by")}},
+		{kind: "Role", deleted: deletedObject("rbac.authorization.k8s.io/v1", "Role", "team", long+"x"),
+			gone: [3]rbacObject{sa("app"), role(long + "x"), binding("bx")}, kept: [3]rbacObject{sa("app"), role(long + "y"), binding("by")}},
+		{kind: "RoleBinding", deleted: deletedObject("rbac.authorization.k8s.io/v1", "RoleBinding", "team", long+"x"),
+			gone: [3]rbacObject{sa("app"), role("reader"), binding(long + "x")}, kept: [3]rbacObject{sa("app"), role("reader"), binding(long + "y")}},
+		{kind: "ClusterRole", deleted: deletedObject("rbac.authorization.k8s.io/v1", "ClusterRole", "", long+"x"),
+			gone: [3]rbacObject{sa("app"), clusterRole(long + "x"), clusterBinding("bx")}, kept: [3]rbacObject{sa("app"), clusterRole(long + "y"), clusterBinding("by")}},
+		{kind: "ClusterRoleBinding", deleted: deletedObject("rbac.authorization.k8s.io/v1", "ClusterRoleBinding", "", long+"x"),
+			gone: [3]rbacObject{sa("app"), clusterRole("view"), clusterBinding(long + "x")}, kept: [3]rbacObject{sa("app"), clusterRole("view"), clusterBinding(long + "y")}},
+	}
+	for _, tt := range tests {
+		for _, summaryOnly := range []bool{false, true} {
+			name := tt.kind
+			if summaryOnly {
+				name += " with the scans gone"
+			}
+			t.Run(name, func(t *testing.T) {
+				gone := tripletRecords(t, tt.gone[0], tt.gone[1], tt.gone[2])
+				kept := tripletRecords(t, tt.kept[0], tt.kept[1], tt.kept[2])
+				if summaryOnly {
+					gone, kept = gone[1:], kept[1:]
+				}
+				h, client := newCleaner(t, append(gone, kept...)...)
+				require.NoError(t, h.deleteScanArtifacts(context.Background(), tt.deleted, client))
+				want := []string{kubescapeNamespace + "/" + kept[0].(metav1.Object).GetName()}
+				assert.Equal(t, want, remainingSummaries(t, client))
+				if !summaryOnly {
+					assert.Equal(t, want, remainingScans(t, client))
+				}
+			})
+		}
+	}
+}
+
+// A summary states its subject only through the labels. When those had to cut the
+// subject's name, the summary of a deleted role cannot be told from a live subject's and
+// stays; the subject's own deletion, which states it exactly, removes it.
+func TestDeletedCleanerLeavesASummaryItCannotTellApartToTheSubjectsDeletion(t *testing.T) {
+	long := strings.Repeat("a", 63) + "x"
+	h, client := newCleaner(t, tripletRecords(t, sa(long), role("reader"), binding("bx"))[1:]...)
+	require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("rbac.authorization.k8s.io/v1", "Role", "team", "reader"), client))
+	assert.Len(t, remainingSummaries(t, client), 1)
+	require.NoError(t, h.deleteScanArtifacts(context.Background(), deletedObject("v1", "ServiceAccount", "team", long), client))
+	assert.Empty(t, remainingSummaries(t, client))
 }
 
 func TestRBACRecordSelector(t *testing.T) {

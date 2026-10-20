@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
@@ -18,6 +19,7 @@ import (
 	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -199,12 +201,82 @@ func rbacRecordSelector(uObject *unstructured.Unstructured) (labels.Selector, bo
 	return labels.SelectorFromSet(set), true
 }
 
+// rbacRecordIsFor reports whether an RBAC record found by its labels was written for the
+// deleted object. The labels only narrow the search: the scanner sanitizes them and cuts
+// them at 63 characters, so two live objects can share them. A binding is stated exactly
+// by the record's wlid annotation and a role by a scan's related objects. Otherwise the
+// record is the deleted object's when its name is the slug the scanner derives from the
+// subject, role and binding, computed with the deleted object in its slot and the other
+// two as the record states them. A record whose other components the labels had to cut
+// cannot be told apart from a live object's, and stays.
+func rbacRecordIsFor(uObject *unstructured.Unstructured, meta metav1.ObjectMeta, related []v1beta1.WorkloadScanRelatedObject) bool {
+	deleted := workloadinterface.NewWorkloadObj(uObject.Object)
+	bindingWlid := meta.Annotations[helpersv1.WlidMetadataKey]
+	if wlidTail(bindingWlid) == wlidTail(armowlid.GetK8sWLID("", deleted.GetNamespace(), deleted.GetKind(), deleted.GetName())) {
+		return true
+	}
+	for _, r := range related {
+		if r.Kind == deleted.GetKind() && r.Name == deleted.GetName() && r.Namespace == deleted.GetNamespace() {
+			return true
+		}
+	}
+
+	subject := rbacComponent(meta.Labels[helpersv1.RelatedKindMetadataKey], meta.Labels[helpersv1.RelatedNamespaceMetadataKey], meta.Labels[helpersv1.RelatedNameMetadataKey])
+	role := rbacComponent("Role", meta.Labels[helpersv1.RoleNamespaceMetadataKey], meta.Labels[helpersv1.RoleNameMetadataKey])
+	if name, ok := meta.Labels[helpersv1.ClusterRoleNameMetadataKey]; ok {
+		role = rbacComponent("ClusterRole", "", name)
+	}
+	binding := rbacComponent("RoleBinding", meta.Labels[helpersv1.RoleBindingNamespaceMetadataKey], meta.Labels[helpersv1.RoleBindingNameMetadataKey])
+	if name, ok := meta.Labels[helpersv1.ClusterRoleBindingNameMetadataKey]; ok {
+		binding = rbacComponent("ClusterRoleBinding", "", name)
+	}
+	if name, ok := strings.CutPrefix(wlidTail(bindingWlid), wlidTail(armowlid.GetK8sWLID("", binding.GetNamespace(), binding.GetKind(), ""))+"-"); ok {
+		binding.SetName(name)
+	}
+	for _, r := range related {
+		switch r.Kind {
+		case role.GetKind():
+			role = rbacComponent(r.Kind, r.Namespace, r.Name)
+		case binding.GetKind():
+			binding = rbacComponent(r.Kind, r.Namespace, r.Name)
+		}
+	}
+	switch deleted.GetKind() {
+	case subject.GetKind():
+		subject = deleted
+	case role.GetKind():
+		role = deleted
+	case binding.GetKind():
+		binding = deleted
+	default:
+		return false
+	}
+	name, err := names.RoleBindingResourceToSlug(subject, role, binding)
+	return err == nil && name == meta.Name
+}
+
+// rbacComponent is one of the three objects an RBAC record is about, as far as the record
+// states it.
+func rbacComponent(kind, namespace, name string) workloadinterface.IMetadata {
+	return workloadinterface.NewWorkloadObj(map[string]interface{}{"kind": kind, "metadata": map[string]interface{}{"name": name, "namespace": namespace}})
+}
+
+// wlidTail is the namespace, kind and name part of a wlid, whatever cluster name the
+// scanner ran with.
+func wlidTail(wlid string) string {
+	parts := strings.Split(wlid, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.Join(parts[len(parts)-2:], "/")
+}
+
 // deleteScanArtifacts removes the posture and vulnerability records the scanner stored for
 // the deleted object: the ones named after it, in its namespace or in the kubescape namespace
 // when it is cluster-scoped, and the RBAC records it took part in. Scans and summaries are
-// listed separately, so a record whose counterpart is already gone is still found. A record
-// that is not there is not an error; the first other error is returned once everything was
-// attempted.
+// listed separately, so a record whose counterpart is already gone is still found, and each
+// is checked to be the deleted object's before it goes. A record that is not there is not
+// an error; the first other error is returned once everything was attempted.
 func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
 	kubescapeNamespace := h.clusterConfig.Namespace()
 	ns := h.getObjectNamespace(uObject, kubescapeNamespace)
@@ -232,19 +304,23 @@ func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject
 
 	if selector, ok := rbacRecordSelector(uObject); ok {
 		opts := metav1.ListOptions{LabelSelector: selector.String()}
-		scans, err := storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).List(ctx, opts)
-		if err != nil {
+		if scans, err := storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).List(ctx, opts); err != nil {
 			attempt("list of RBAC workload configurations", err)
+		} else {
+			for i := range scans.Items {
+				if rbacRecordIsFor(uObject, scans.Items[i].ObjectMeta, scans.Items[i].Spec.RelatedObjects) {
+					attempt("workload configuration", storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).Delete(ctx, scans.Items[i].Name, metav1.DeleteOptions{}))
+				}
+			}
 		}
-		for i := range scans.Items {
-			attempt("workload configuration", storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).Delete(ctx, scans.Items[i].Name, metav1.DeleteOptions{}))
-		}
-		summaries, err := storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).List(ctx, opts)
-		if err != nil {
+		if summaries, err := storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).List(ctx, opts); err != nil {
 			attempt("list of RBAC workload configuration summaries", err)
-		}
-		for i := range summaries.Items {
-			attempt("workload configuration summary", storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).Delete(ctx, summaries.Items[i].Name, metav1.DeleteOptions{}))
+		} else {
+			for i := range summaries.Items {
+				if rbacRecordIsFor(uObject, summaries.Items[i].ObjectMeta, nil) {
+					attempt("workload configuration summary", storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).Delete(ctx, summaries.Items[i].Name, metav1.DeleteOptions{}))
+				}
+			}
 		}
 	}
 	return firstErr
