@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	armowlid "github.com/armosec/utils-k8s-go/wlid"
 	sets "github.com/deckarep/golang-set/v2"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
+	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/names"
 	"github.com/kubescape/k8s-interface/workloadinterface"
@@ -17,10 +19,13 @@ import (
 	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
 	"github.com/panjf2000/ants/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/utils/ptr"
@@ -154,6 +159,8 @@ type deletedCleanerHandler struct {
 	storageClient kssc.Interface
 }
 
+// getObjectNamespace is the namespace the scanner stored the object's records in: its own
+// for a namespaced object, fallback for a cluster-scoped one.
 func (h *deletedCleanerHandler) getObjectNamespace(uObject *unstructured.Unstructured, fallback string) string {
 	ns := uObject.GetNamespace()
 	if ns != "" {
@@ -163,45 +170,151 @@ func (h *deletedCleanerHandler) getObjectNamespace(uObject *unstructured.Unstruc
 }
 
 func (h *deletedCleanerHandler) getObjectName(uObject *unstructured.Unstructured) (string, error) {
-	kind := uObject.GetKind()
-	wl := workloadinterface.NewWorkloadObj(uObject.Object)
-
-	var slug string
-	if kind == "RoleBinding" {
-		slug, _ = names.ResourceToSlug(wl)
-	}
-
-	slug, err := names.ResourceToSlug(wl)
-	if err != nil {
-		return "", err
-	}
-
-	return slug, nil
+	return names.ResourceToSlug(workloadinterface.NewWorkloadObj(uObject.Object))
 }
 
+// rbacRecordSelector selects the RBAC records that name the object as their subject, role or
+// binding. Those records are stored in the kubescape namespace under a name built from all
+// three, so they can only be found through the labels the scanner puts on them. Objects that
+// take no part in RBAC records select nothing.
+func rbacRecordSelector(uObject *unstructured.Unstructured) (labels.Selector, bool) {
+	set := labels.Set{helpersv1.RbacResourceMetadataKey: "true"}
+	name, namespace := names.ToValidLabelValue(uObject.GetName()), names.ToValidLabelValue(uObject.GetNamespace())
+	switch uObject.GetKind() {
+	case "RoleBinding":
+		set[helpersv1.RoleBindingNameMetadataKey] = name
+		set[helpersv1.RoleBindingNamespaceMetadataKey] = namespace
+	case "ClusterRoleBinding":
+		set[helpersv1.ClusterRoleBindingNameMetadataKey] = name
+	case "Role":
+		set[helpersv1.RoleNameMetadataKey] = name
+		set[helpersv1.RoleNamespaceMetadataKey] = namespace
+	case "ClusterRole":
+		set[helpersv1.ClusterRoleNameMetadataKey] = name
+	case "ServiceAccount":
+		set[helpersv1.RelatedKindMetadataKey] = "ServiceAccount"
+		set[helpersv1.RelatedNameMetadataKey] = name
+		set[helpersv1.RelatedNamespaceMetadataKey] = namespace
+	default:
+		return nil, false
+	}
+	return labels.SelectorFromSet(set), true
+}
+
+// rbacRecordIsFor reports whether an RBAC record found by its labels was written for the
+// deleted object. The labels only narrow the search: the scanner sanitizes them and cuts
+// them at 63 characters, so two live objects can share them, two names that differ only in
+// a character the sanitizer maps to "-" share them, and a cut label can be completed into
+// another name. A binding is matched on the wlid annotation the scanner writes on both
+// records. A role and a subject are matched through the related objects of the record's
+// scan, which state the role and the binding in full: the role directly, the subject on the
+// record's name, the slug the scanner derives from subject, role and binding, recomputed
+// with the deleted subject and those two, where the subject's part is its name unchanged, a
+// DNS subdomain. A summary whose scan is gone states nothing but its binding in full and is
+// left to that binding's deletion.
+func rbacRecordIsFor(uObject *unstructured.Unstructured, meta metav1.ObjectMeta, related []v1beta1.WorkloadScanRelatedObject) bool {
+	deleted := workloadinterface.NewWorkloadObj(uObject.Object)
+	switch deleted.GetKind() {
+	case "RoleBinding", "ClusterRoleBinding":
+		return wlidTail(meta.Annotations[helpersv1.WlidMetadataKey]) == wlidTail(armowlid.GetK8sWLID("", deleted.GetNamespace(), deleted.GetKind(), deleted.GetName()))
+	case "Role", "ClusterRole":
+		for _, r := range related {
+			if r.Kind == deleted.GetKind() {
+				return r.Name == deleted.GetName() && r.Namespace == deleted.GetNamespace()
+			}
+		}
+		return false
+	case "ServiceAccount":
+		var role, binding workloadinterface.IMetadata
+		for _, r := range related {
+			switch r.Kind {
+			case "Role", "ClusterRole":
+				role = rbacComponent(r.Kind, r.Namespace, r.Name)
+			case "RoleBinding", "ClusterRoleBinding":
+				binding = rbacComponent(r.Kind, r.Namespace, r.Name)
+			}
+		}
+		if role == nil || binding == nil || meta.Labels[helpersv1.RelatedNamespaceMetadataKey] != deleted.GetNamespace() {
+			return false
+		}
+		name, err := names.RoleBindingResourceToSlug(deleted, role, binding)
+		return err == nil && name == meta.Name
+	}
+	return false
+}
+
+// rbacComponent is one of the three objects an RBAC record is about, as far as the record
+// states it.
+func rbacComponent(kind, namespace, name string) workloadinterface.IMetadata {
+	return workloadinterface.NewWorkloadObj(map[string]interface{}{"kind": kind, "metadata": map[string]interface{}{"name": name, "namespace": namespace}})
+}
+
+// wlidTail is the namespace, kind and name part of a wlid, whatever cluster name the
+// scanner ran with.
+func wlidTail(wlid string) string {
+	parts := strings.Split(wlid, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.Join(parts[len(parts)-2:], "/")
+}
+
+// deleteScanArtifacts removes the posture and vulnerability records the scanner stored for
+// the deleted object: the ones named after it, in its namespace or in the kubescape namespace
+// when it is cluster-scoped, and the RBAC records it took part in. Scans and summaries are
+// listed separately, so a record whose counterpart is already gone is still found, and each
+// is checked to be the deleted object's before it goes, a summary through the scan of the
+// same name when that scan is listed. A record that is not there is not an error; the first
+// other error is returned once everything was attempted.
 func (h *deletedCleanerHandler) deleteScanArtifacts(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
-	nsFallback := ""
-	ns := h.getObjectNamespace(uObject, nsFallback)
+	kubescapeNamespace := h.clusterConfig.Namespace()
+	ns := h.getObjectNamespace(uObject, kubescapeNamespace)
 	name, err := h.getObjectName(uObject)
 	if err != nil {
 		return fmt.Errorf("failed to get object name: %w", err)
 	}
 
-	err = storageClient.SpdxV1beta1().WorkloadConfigurationScans(ns).Delete(ctx, name, metav1.DeleteOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to delete workload configuration: %w", err)
+	var firstErr error
+	attempt := func(what string, err error) {
+		if err == nil || apierrors.IsNotFound(err) {
+			return
+		}
+		if firstErr == nil {
+			firstErr = fmt.Errorf("failed to delete %s: %w", what, err)
+		}
+	}
+	deletePosture := func(namespace, name string) {
+		attempt("workload configuration", storageClient.SpdxV1beta1().WorkloadConfigurationScans(namespace).Delete(ctx, name, metav1.DeleteOptions{}))
+		attempt("workload configuration summary", storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(namespace).Delete(ctx, name, metav1.DeleteOptions{}))
 	}
 
-	err = storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to delete workload configuration summary: %w", err)
-	}
+	deletePosture(ns, name)
+	attempt("vulnerability manifest summary", storageClient.SpdxV1beta1().VulnerabilityManifestSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{}))
 
-	err = storageClient.SpdxV1beta1().VulnerabilityManifestSummaries(ns).Delete(ctx, name, metav1.DeleteOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to delete vulnerability manifest summary: %w", err)
+	if selector, ok := rbacRecordSelector(uObject); ok {
+		opts := metav1.ListOptions{LabelSelector: selector.String()}
+		relatedByName := map[string][]v1beta1.WorkloadScanRelatedObject{}
+		if scans, err := storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).List(ctx, opts); err != nil {
+			attempt("list of RBAC workload configurations", err)
+		} else {
+			for i := range scans.Items {
+				relatedByName[scans.Items[i].Name] = scans.Items[i].Spec.RelatedObjects
+				if rbacRecordIsFor(uObject, scans.Items[i].ObjectMeta, scans.Items[i].Spec.RelatedObjects) {
+					attempt("workload configuration", storageClient.SpdxV1beta1().WorkloadConfigurationScans(kubescapeNamespace).Delete(ctx, scans.Items[i].Name, metav1.DeleteOptions{}))
+				}
+			}
+		}
+		if summaries, err := storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).List(ctx, opts); err != nil {
+			attempt("list of RBAC workload configuration summaries", err)
+		} else {
+			for i := range summaries.Items {
+				if rbacRecordIsFor(uObject, summaries.Items[i].ObjectMeta, relatedByName[summaries.Items[i].Name]) {
+					attempt("workload configuration summary", storageClient.SpdxV1beta1().WorkloadConfigurationScanSummaries(kubescapeNamespace).Delete(ctx, summaries.Items[i].Name, metav1.DeleteOptions{}))
+				}
+			}
+		}
 	}
-	return nil
+	return firstErr
 }
 
 func (h *deletedCleanerHandler) deleteCRDs(ctx context.Context, uObject *unstructured.Unstructured, storageClient kssc.Interface) error {
