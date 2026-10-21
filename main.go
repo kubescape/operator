@@ -176,6 +176,10 @@ func main() {
 	// setup main handler
 	mainHandler := mainhandler.NewMainHandler(operatorConfig, k8sApi, exporter, ksStorageClient)
 
+	if err := mainhandler.MigrateScheduleCronJobs(ctx, k8sApi, operatorConfig.Namespace()); err != nil {
+		logger.L().Ctx(ctx).Warning("some schedules still post to the trigger endpoint", helpers.Error(err))
+	}
+
 	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), operatorConfig)
 		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIBindAddress, cfg.RestAPIPort); err != nil {
