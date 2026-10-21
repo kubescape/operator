@@ -3,6 +3,7 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,20 +63,29 @@ func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validato
 	}
 }
 
+// certWatchInterval is how often notifyChanges polls the TLS files for changes.
+var certWatchInterval = 2 * time.Second
+
+// notifyChanges sends on the returned channel whenever the modification time of
+// one of paths, or whether it can be stat'ed, changes. The channel is closed when
+// ctx is cancelled.
 func notifyChanges(ctx context.Context, paths ...string) <-chan struct{} {
+	// Read the interval once, before the goroutine starts, so the watcher never
+	// touches the package variable again (tests swap it).
+	interval := certWatchInterval
+
 	type info struct {
 		modTime time.Time
 		err     string
 	}
-	infos := map[string]info{}
 	getInfos := func() map[string]info {
 		res := map[string]info{}
 		for _, v := range paths {
 			fileInfo, err := os.Stat(v)
 			if err != nil {
-				infos[v] = info{err: err.Error()}
+				res[v] = info{err: err.Error()}
 			} else {
-				infos[v] = info{modTime: fileInfo.ModTime()}
+				res[v] = info{modTime: fileInfo.ModTime()}
 			}
 		}
 		return res
@@ -92,7 +102,7 @@ func notifyChanges(ctx context.Context, paths ...string) <-chan struct{} {
 				// context cancelled, stop watching
 				return
 
-			case <-time.After(2 * time.Second):
+			case <-time.After(interval):
 				newInfos := getInfos()
 				if reflect.DeepEqual(lastInfos, newInfos) {
 					continue
@@ -122,22 +132,28 @@ func (wh *webhook) Run(ctx context.Context) error {
 	wg.Add(1)
 	defer wg.Done()
 
-	launchServer := func() (*http.Server, <-chan error) {
+	// launchServer serves cert on wh.addr. The certificate is already loaded, so the server
+	// never reads the TLS files itself and cannot fail on a half written rotation.
+	launchServer := func(cert tls.Certificate) (*http.Server, <-chan error) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/health", wh.handleHealth)
 		mux.HandleFunc("/validate", wh.handleWebhookValidate)
 		srv := &http.Server{}
 		srv.Handler = mux
 		srv.Addr = wh.addr
+		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 
-		errChan := make(chan error)
+		// Buffered so the server goroutine can always deliver its final error and
+		// exit, even once Run has moved on to a newer server and no longer reads
+		// this channel. Otherwise it would block forever and wg.Wait() never returns.
+		errChan := make(chan error, 1)
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer close(errChan)
 
-			err := srv.ListenAndServeTLS(wh.certFile, wh.keyFile)
+			err := srv.ListenAndServeTLS("", "")
 			errChan <- err
 			// ListenAndServeTLS always returns non-nil error
 		}()
@@ -148,9 +164,14 @@ func (wh *webhook) Run(ctx context.Context) error {
 	watchCtx, cancelWatches := context.WithCancel(ctx)
 	defer cancelWatches()
 
+	// Start watching before the first load, so a rotation between the two is not missed.
 	keyWatch := notifyChanges(watchCtx, wh.certFile, wh.keyFile)
 
-	currentServer, currentErrorChannel := launchServer()
+	cert, err := tls.LoadX509KeyPair(wh.certFile, wh.keyFile)
+	if err != nil {
+		return err
+	}
+	currentServer, currentErrorChannel := launchServer(cert)
 loop:
 	for {
 		select {
@@ -177,23 +198,26 @@ loop:
 				break loop
 			}
 
+			// A rotation can be seen half done: a new certificate next to the old key, a key
+			// that is briefly missing, a truncated file. Load the pair first and keep serving
+			// the last good one if it is not valid. The next change to the files tries again.
+			newCert, err := tls.LoadX509KeyPair(wh.certFile, wh.keyFile)
+			if err != nil {
+				logger.L().Warning("TLS files are not a valid key pair, keeping the current certificate", helpers.Error(err))
+				continue
+			}
+
 			logger.L().Info("TLS input has changed, restarting HTTP server")
 
-			// Graceful shutdown, ignore any errors
-			wg.Add(1)
-
-			webhookServer := currentServer
-			go func() {
-				defer wg.Done()
-
-				//!TOOD: add shutdown timeout, requests to a webhook should
-				// not be long-lived
-				shutdownCtx, shutdownCancel := context.WithTimeout(watchCtx, 5*time.Second)
-				defer shutdownCancel()
-
-				webhookServer.Shutdown(shutdownCtx)
-			}()
-			currentServer, currentErrorChannel = launchServer()
+			// Shut the old server down before starting its replacement: both listen
+			// on wh.addr, so starting the new one first races for the port. Requests
+			// to a webhook are short-lived, so this bound is generous.
+			shutdownCtx, shutdownCancel := context.WithTimeout(watchCtx, 5*time.Second)
+			if err := currentServer.Shutdown(shutdownCtx); err != nil {
+				logger.L().Error("error shutting down webhook server for TLS reload", helpers.Error(err))
+			}
+			shutdownCancel()
+			currentServer, currentErrorChannel = launchServer(newCert)
 		}
 	}
 	return serverError
