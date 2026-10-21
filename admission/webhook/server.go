@@ -9,9 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"reflect"
 	"sync"
-	"time"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -63,164 +61,136 @@ func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validato
 	}
 }
 
-// certWatchInterval is how often notifyChanges polls the TLS files for changes.
-var certWatchInterval = 2 * time.Second
-
-// notifyChanges sends on the returned channel whenever the modification time of
-// one of paths, or whether it can be stat'ed, changes. The channel is closed when
-// ctx is cancelled.
-func notifyChanges(ctx context.Context, paths ...string) <-chan struct{} {
-	// Read the interval once, before the goroutine starts, so the watcher never
-	// touches the package variable again (tests swap it).
-	interval := certWatchInterval
-
-	type info struct {
-		modTime time.Time
-		err     string
-	}
-	getInfos := func() map[string]info {
-		res := map[string]info{}
-		for _, v := range paths {
-			fileInfo, err := os.Stat(v)
-			if err != nil {
-				res[v] = info{err: err.Error()}
-			} else {
-				res[v] = info{modTime: fileInfo.ModTime()}
-			}
-		}
-		return res
-	}
-	lastInfos := getInfos()
-
-	res := make(chan struct{})
-	go func() {
-		defer close(res)
-
-		for {
-			select {
-			case <-ctx.Done():
-				// context cancelled, stop watching
-				return
-
-			case <-time.After(interval):
-				newInfos := getInfos()
-				if reflect.DeepEqual(lastInfos, newInfos) {
-					continue
-				}
-
-				lastInfos = newInfos
-
-				// skip event if client has not read last change
-				select {
-				case res <- struct{}{}:
-				default:
-				}
-			}
-		}
-	}()
-	return res
+// certificateSnapshot follows symlink targets, including Kubernetes Secret
+// volumes whose ..data link is replaced on rotation. In-place rewrites that
+// preserve identity, size and modification time cannot be detected this way.
+type certificateSnapshot struct {
+	cert os.FileInfo
+	key  os.FileInfo
 }
 
-func (wh *webhook) Run(ctx context.Context) error {
-	var serverError error
-	var wg sync.WaitGroup
-
-	logger.L().Info("starting webhook HTTP server")
-	defer logger.L().Info("stopping webhook HTTP server")
-	defer wg.Wait()
-
-	wg.Add(1)
-	defer wg.Done()
-
-	// launchServer serves cert on wh.addr. The certificate is already loaded, so the server
-	// never reads the TLS files itself and cannot fail on a half written rotation.
-	launchServer := func(cert tls.Certificate) (*http.Server, <-chan error) {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/health", wh.handleHealth)
-		mux.HandleFunc("/validate", wh.handleWebhookValidate)
-		srv := &http.Server{}
-		srv.Handler = mux
-		srv.Addr = wh.addr
-		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
-
-		// Buffered so the server goroutine can always deliver its final error and
-		// exit, even once Run has moved on to a newer server and no longer reads
-		// this channel. Otherwise it would block forever and wg.Wait() never returns.
-		errChan := make(chan error, 1)
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer close(errChan)
-
-			err := srv.ListenAndServeTLS("", "")
-			errChan <- err
-			// ListenAndServeTLS always returns non-nil error
-		}()
-
-		return srv, errChan
+func (s certificateSnapshot) equal(other certificateSnapshot) bool {
+	same := func(a, b os.FileInfo) bool {
+		return os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime())
 	}
+	return same(s.cert, other.cert) && same(s.key, other.key)
+}
 
-	watchCtx, cancelWatches := context.WithCancel(ctx)
-	defer cancelWatches()
+type certificateCache struct {
+	mu                sync.Mutex
+	certFile, keyFile string
+	loadKeyPair       func(string, string) (tls.Certificate, error)
+	certificate       *tls.Certificate
+	snapshot          certificateSnapshot
+	lastWarning       string
+}
 
-	// Start watching before the first load, so a rotation between the two is not missed.
-	keyWatch := notifyChanges(watchCtx, wh.certFile, wh.keyFile)
+func newCertificateCache(certFile, keyFile string, loadKeyPair func(string, string) (tls.Certificate, error)) (*certificateCache, error) {
+	if loadKeyPair == nil {
+		loadKeyPair = tls.LoadX509KeyPair
+	}
+	cache := &certificateCache{certFile: certFile, keyFile: keyFile, loadKeyPair: loadKeyPair}
+	// Use the same consistency checks at startup, before the cache is shared.
+	if err := cache.reloadIfChanged(); err != nil {
+		return nil, err
+	}
+	return cache, nil
+}
 
-	cert, err := tls.LoadX509KeyPair(wh.certFile, wh.keyFile)
+func (c *certificateCache) stat() (certificateSnapshot, error) {
+	cert, err := os.Stat(c.certFile)
+	if err != nil {
+		return certificateSnapshot{}, err
+	}
+	key, err := os.Stat(c.keyFile)
+	if err != nil {
+		return certificateSnapshot{}, err
+	}
+	return certificateSnapshot{cert: cert, key: key}, nil
+}
+
+// reloadIfChanged makes one attempt. Its caller holds mu once the cache is
+// shared; both the certificate and metadata are published together. Neither
+// is updated if the files change while loading or the pair cannot be parsed.
+func (c *certificateCache) reloadIfChanged() error {
+	before, err := c.stat()
 	if err != nil {
 		return err
 	}
-	currentServer, currentErrorChannel := launchServer(cert)
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			// If the caller closed their context, rather than the server having errored,
-			// close the server. srv.Close() is safe to call on an already-closed server
-			//
-			// note: should we prefer to use Shutdown with a deadline for graceful close
-			// rather than Close?
-			if err := currentServer.Close(); err != nil {
-				// Errors with gracefully shutting down connections. Not fatal. Server
-				// is still closed.
-				logger.L().Error("error closing server", helpers.Error(err))
-			}
-			serverError = ctx.Err()
-			break loop
-		case serverError = <-currentErrorChannel:
-			// Server was closed independently of being restarted
-			break loop
-
-		case _, ok := <-keyWatch:
-			if !ok {
-				serverError = watchCtx.Err()
-				break loop
-			}
-
-			// A rotation can be seen half done: a new certificate next to the old key, a key
-			// that is briefly missing, a truncated file. Load the pair first and keep serving
-			// the last good one if it is not valid. The next change to the files tries again.
-			newCert, err := tls.LoadX509KeyPair(wh.certFile, wh.keyFile)
-			if err != nil {
-				logger.L().Warning("TLS files are not a valid key pair, keeping the current certificate", helpers.Error(err))
-				continue
-			}
-
-			logger.L().Info("TLS input has changed, restarting HTTP server")
-
-			// Shut the old server down before starting its replacement: both listen
-			// on wh.addr, so starting the new one first races for the port. Requests
-			// to a webhook are short-lived, so this bound is generous.
-			shutdownCtx, shutdownCancel := context.WithTimeout(watchCtx, 5*time.Second)
-			if err := currentServer.Shutdown(shutdownCtx); err != nil {
-				logger.L().Error("error shutting down webhook server for TLS reload", helpers.Error(err))
-			}
-			shutdownCancel()
-			currentServer, currentErrorChannel = launchServer(newCert)
-		}
+	if c.certificate != nil && c.snapshot.equal(before) {
+		return nil
 	}
-	return serverError
+	cert, err := c.loadKeyPair(c.certFile, c.keyFile)
+	if err != nil {
+		return err
+	}
+	after, err := c.stat()
+	if err != nil {
+		return err
+	}
+	if !before.equal(after) {
+		return errors.New("TLS files changed while loading the key pair")
+	}
+	c.certificate = &cert
+	c.snapshot = after
+	return nil
+}
+
+func (c *certificateCache) getCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.reloadIfChanged(); err != nil {
+		// Diagnostic state is separate from the last successful snapshot. In
+		// particular, a failed attempt must remain retryable on the next handshake.
+		if message := err.Error(); message != c.lastWarning {
+			logger.L().Warning("TLS reload failed, keeping the current certificate", helpers.Error(err))
+			c.lastWarning = message
+		}
+	} else {
+		c.lastWarning = ""
+	}
+	// Construction requires a valid initial pair. Reload errors never turn a
+	// working cached certificate into a handshake failure.
+	return c.certificate, nil
+}
+
+func (wh *webhook) Run(ctx context.Context) error {
+	logger.L().Info("starting webhook HTTP server")
+	defer logger.L().Info("stopping webhook HTTP server")
+
+	cache, err := newCertificateCache(wh.certFile, wh.keyFile, nil)
+	if err != nil {
+		return err
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", wh.handleHealth)
+	mux.HandleFunc("/validate", wh.handleWebhookValidate)
+	srv := &http.Server{
+		Handler: mux,
+		Addr:    wh.addr,
+		// Leave Certificates empty so clients without SNI also use the callback.
+		TLSConfig: &tls.Config{GetCertificate: cache.getCertificate},
+	}
+	// A buffered result lets the serving goroutine exit during cancellation.
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errChan <- srv.ListenAndServeTLS("", "")
+	}()
+	defer wg.Wait()
+
+	select {
+	case <-ctx.Done():
+		if err := srv.Close(); err != nil {
+			logger.L().Error("error closing server", helpers.Error(err))
+		}
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
 }
 
 func (wh *webhook) handleHealth(w http.ResponseWriter, req *http.Request) {
