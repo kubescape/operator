@@ -203,20 +203,20 @@ func rbacRecordSelector(uObject *unstructured.Unstructured) (labels.Selector, bo
 
 // rbacRecordIsFor reports whether an RBAC record found by its labels was written for the
 // deleted object. The labels only narrow the search: the scanner sanitizes them and cuts
-// them at 63 characters, so two live objects can share them, and so can two names that
-// differ only in a character the sanitizer maps to "-". A binding is matched on the wlid
-// annotation the scanner writes on both records and a role on the related objects of the
-// record's scan; a summary whose scan is gone states its role only by a label and is left
-// to its binding's or subject's deletion. A subject is matched on the record's name, the
-// slug the scanner derives from subject, role and binding, recomputed with the deleted
-// subject and the other two as the record states them: a subject name is a DNS subdomain,
-// which the slug keeps as it is, so an equal name means the same subject.
+// them at 63 characters, so two live objects can share them, two names that differ only in
+// a character the sanitizer maps to "-" share them, and a cut label can be completed into
+// another name. A binding is matched on the wlid annotation the scanner writes on both
+// records. A role and a subject are matched through the related objects of the record's
+// scan, which state the role and the binding in full: the role directly, the subject on the
+// record's name, the slug the scanner derives from subject, role and binding, recomputed
+// with the deleted subject and those two, where the subject's part is its name unchanged, a
+// DNS subdomain. A summary whose scan is gone states nothing but its binding in full and is
+// left to that binding's deletion.
 func rbacRecordIsFor(uObject *unstructured.Unstructured, meta metav1.ObjectMeta, related []v1beta1.WorkloadScanRelatedObject) bool {
 	deleted := workloadinterface.NewWorkloadObj(uObject.Object)
-	bindingWlid := wlidTail(meta.Annotations[helpersv1.WlidMetadataKey])
 	switch deleted.GetKind() {
 	case "RoleBinding", "ClusterRoleBinding":
-		return bindingWlid == wlidTail(armowlid.GetK8sWLID("", deleted.GetNamespace(), deleted.GetKind(), deleted.GetName()))
+		return wlidTail(meta.Annotations[helpersv1.WlidMetadataKey]) == wlidTail(armowlid.GetK8sWLID("", deleted.GetNamespace(), deleted.GetKind(), deleted.GetName()))
 	case "Role", "ClusterRole":
 		for _, r := range related {
 			if r.Kind == deleted.GetKind() {
@@ -225,24 +225,17 @@ func rbacRecordIsFor(uObject *unstructured.Unstructured, meta metav1.ObjectMeta,
 		}
 		return false
 	case "ServiceAccount":
-		role := rbacComponent("Role", meta.Labels[helpersv1.RoleNamespaceMetadataKey], meta.Labels[helpersv1.RoleNameMetadataKey])
-		if name, ok := meta.Labels[helpersv1.ClusterRoleNameMetadataKey]; ok {
-			role = rbacComponent("ClusterRole", "", name)
-		}
-		binding := rbacComponent("RoleBinding", meta.Labels[helpersv1.RoleBindingNamespaceMetadataKey], meta.Labels[helpersv1.RoleBindingNameMetadataKey])
-		if name, ok := meta.Labels[helpersv1.ClusterRoleBindingNameMetadataKey]; ok {
-			binding = rbacComponent("ClusterRoleBinding", "", name)
-		}
-		if name, ok := strings.CutPrefix(bindingWlid, wlidTail(armowlid.GetK8sWLID("", binding.GetNamespace(), binding.GetKind(), ""))+"-"); ok {
-			binding.SetName(name)
-		}
+		var role, binding workloadinterface.IMetadata
 		for _, r := range related {
 			switch r.Kind {
-			case role.GetKind():
+			case "Role", "ClusterRole":
 				role = rbacComponent(r.Kind, r.Namespace, r.Name)
-			case binding.GetKind():
+			case "RoleBinding", "ClusterRoleBinding":
 				binding = rbacComponent(r.Kind, r.Namespace, r.Name)
 			}
+		}
+		if role == nil || binding == nil || meta.Labels[helpersv1.RelatedNamespaceMetadataKey] != deleted.GetNamespace() {
+			return false
 		}
 		name, err := names.RoleBindingResourceToSlug(deleted, role, binding)
 		return err == nil && name == meta.Name
