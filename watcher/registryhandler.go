@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -283,30 +284,39 @@ func (ch *RegistryCommandsHandler) getECRRepositoriesWithSDK(registry armotypes.
 	return allRepositories, nil
 }
 
+// deleteRegistry removes what upsertRegistry created for the registry: its secret, its
+// request ConfigMap, the schedule when it had one and the job of an immediate scan. A
+// registry without a scan frequency never had a CronJob, so an object that is not there is
+// not an error; everything is attempted and the first other error is returned. The jobs
+// are deleted with background propagation, since the API's default for a Job leaves its
+// pods behind.
 func (ch *RegistryCommandsHandler) deleteRegistry(cmd v1alpha1.OperatorCommand) error {
 	registry, err := armotypes.UnmarshalRegistry(cmd.Spec.Body)
 	if err != nil {
 		logger.L().Error("deleteRegistry - failed to unmarshal command payload", helpers.Error(err))
 		return err
 	}
-	resourceName := registry.GetBase().ResourceName
-	err = ch.k8sAPI.KubernetesClient.BatchV1().CronJobs(ch.config.Namespace()).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
-	if err != nil {
-		logger.L().Error("deleteRegistry - failed to delete cronjob resource", helpers.Error(err))
-		return err
+	name, namespace := registry.GetBase().ResourceName, ch.config.Namespace()
+	var firstErr error
+	attempt := func(what string, err error) {
+		if err == nil || apierrors.IsNotFound(err) {
+			return
+		}
+		logger.L().Error("deleteRegistry - failed to delete "+what, helpers.String("name", name), helpers.Error(err))
+		if firstErr == nil {
+			firstErr = fmt.Errorf("failed to delete %s %s: %w", what, name, err)
+		}
 	}
-	err = ch.k8sAPI.KubernetesClient.CoreV1().Secrets(ch.config.Namespace()).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
-	if err != nil {
-		logger.L().Error("deleteRegistry - failed to delete secret resource", helpers.Error(err))
-		return err
-	}
-	err = ch.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(ch.config.Namespace()).Delete(context.Background(), resourceName, metav1.DeleteOptions{})
-	if err != nil {
-		logger.L().Error("deleteRegistry - failed to delete configmap resource", helpers.Error(err))
-		return err
+	background := metav1.DeleteOptions{PropagationPolicy: ptr.To(metav1.DeletePropagationBackground)}
+	attempt("cronjob", ch.k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).Delete(context.Background(), name, background))
+	attempt("job", ch.k8sAPI.KubernetesClient.BatchV1().Jobs(namespace).Delete(context.Background(), name, background))
+	attempt("secret", ch.k8sAPI.KubernetesClient.CoreV1().Secrets(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}))
+	attempt("configmap", ch.k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}))
+	if firstErr != nil {
+		return firstErr
 	}
 
-	logger.L().Info("deleteRegistry: registry deleted successfully")
+	logger.L().Info("deleteRegistry: registry deleted successfully", helpers.String("name", name))
 	return nil
 }
 
