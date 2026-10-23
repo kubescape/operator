@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"istio.io/pkg/cache"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -77,6 +79,7 @@ func (q *CooldownQueue) Enqueue(e watch.Event) {
 	}
 	eventKey, err := makeEventKey(e)
 	if err != nil {
+		logger.L().Warning("failed to create event key, dropping event", helpers.Error(err), helpers.String("eventType", string(e.Type)))
 		return
 	}
 	q.seenEvents.Set(eventKey, e)

@@ -7,8 +7,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 )
+
+type nonMetaObject struct{}
+
+func (n *nonMetaObject) GetObjectKind() schema.ObjectKind {
+	return schema.EmptyObjectKind
+}
+
+func (n *nonMetaObject) DeepCopyObject() runtime.Object {
+	return n
+}
 
 var (
 	configmap       = unstructured.Unstructured{Object: map[string]interface{}{"kind": "ConfigMap", "metadata": map[string]interface{}{"uid": "748ad4a8-e5ff-44da-ba94-309992c97820"}}}
@@ -57,12 +69,34 @@ func TestCooldownQueue_Enqueue(t *testing.T) {
 	}
 }
 
+func TestCooldownQueue_Enqueue_InvalidObject(t *testing.T) {
+	q := NewCooldownQueueWithParams(100*time.Millisecond, 50*time.Millisecond)
+	defer q.Stop()
+
+	invalidEvent := watch.Event{
+		Type:   watch.Added,
+		Object: &nonMetaObject{},
+	}
+
+	assert.NotPanics(t, func() {
+		q.Enqueue(invalidEvent)
+	})
+
+	select {
+	case e := <-q.ResultChan:
+		t.Fatalf("expected no events, got: %v", e)
+	case <-time.After(250 * time.Millisecond):
+		// Success, invalid event was dropped without panicking
+	}
+}
+
 // key is only based on the UID of the object
 func Test_makeEventKey(t *testing.T) {
 	tests := []struct {
-		name string
-		e    watch.Event
-		want string
+		name    string
+		e       watch.Event
+		want    string
+		wantErr bool
 	}{
 		{
 			name: "add pod",
@@ -88,10 +122,22 @@ func Test_makeEventKey(t *testing.T) {
 			},
 			want: "//ConfigMap//",
 		},
+		{
+			name: "object does not implement metav1.Object",
+			e: watch.Event{
+				Type:   watch.Added,
+				Object: &nonMetaObject{},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := makeEventKey(tt.e)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
