@@ -228,8 +228,12 @@ func (mainHandler *MainHandler) handleRequest(j utils.Job) {
 			logger.L().Ctx(ctx).Error("failed to complete action", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()), helpers.Error(err))
 			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 		} else {
-			sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess())
-			logger.L().Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+			if sessionObj.ParentCommandDetails != nil && (sessionObj.Command.CommandName == apis.TypeRunKubescape || sessionObj.Command.CommandName == apis.TypeRunKubescapeJob) {
+				logger.L().Info("Kubescape scan accepted; waiting for terminal outcome", helpers.String("command", string(sessionObj.Command.CommandName)))
+			} else {
+				sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess())
+				logger.L().Info("action completed successfully", helpers.String("command", string(sessionObj.Command.CommandName)), helpers.String("wlid", sessionObj.Command.GetID()))
+			}
 		}
 	}
 	span.End()

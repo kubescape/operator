@@ -12,6 +12,7 @@ import (
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/utils-go/httputils"
+	"github.com/google/uuid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
@@ -25,11 +26,54 @@ import (
 const (
 	WaitTimeForKubescapeScanResponse = 40
 	KubescapeCronJobTemplateName     = "kubescape-cronjob-template"
+	maxKubescapeStatusFailures       = 3
+	maxPendingStatusWriteAttempts    = 3
 )
 
 type kubescapeResponseData struct {
-	scanID     string
-	sessionObj *utils.SessionObj
+	scanID             string
+	sessionObj         *utils.SessionObj
+	statusFailures     int
+	pendingWriteNeeded bool
+	terminalReady      bool
+	terminalError      error
+}
+
+func (data *kubescapeResponseData) complete(ctx context.Context, err error) (bool, *time.Duration) {
+	data.terminalReady = true
+	data.terminalError = err
+	return data.writeTerminalStatus(ctx)
+}
+
+func (data *kubescapeResponseData) writeTerminalStatus(ctx context.Context) (bool, *time.Duration) {
+	if data.pendingWriteNeeded {
+		if err := data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithPending(), utils.WithPayload([]byte(data.scanID))); err == nil {
+			data.pendingWriteNeeded = false
+		}
+	}
+	var err error
+	if data.terminalError != nil {
+		err = data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(data.terminalError), utils.WithPayload([]byte(data.scanID)))
+	} else {
+		err = data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload([]byte(data.scanID)))
+	}
+	if err != nil {
+		logger.L().Ctx(ctx).Error("failed to write terminal scan status; retrying", helpers.String("scanID", data.scanID), helpers.Error(err))
+		delay := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
+		return true, &delay
+	}
+	data.pendingWriteNeeded = false
+	return false, nil
+}
+
+func (data *kubescapeResponseData) statusReadFailed(ctx context.Context, err error) (bool, *time.Duration) {
+	data.statusFailures++
+	if data.statusFailures < maxKubescapeStatusFailures {
+		logger.L().Ctx(ctx).Info("scan status temporarily unavailable; retrying", helpers.String("scanID", data.scanID), helpers.Error(err))
+		delay := time.Duration(WaitTimeForKubescapeScanResponse * time.Second)
+		return true, &delay
+	}
+	return data.complete(ctx, fmt.Errorf("scan status unavailable for scanID '%s' after %d attempts: %w", data.scanID, data.statusFailures, err))
 }
 
 func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) error {
@@ -126,22 +170,29 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 func HandleKubescapeResponse(ctx context.Context, config config.IConfig, payload interface{}) (bool, *time.Duration) {
 	data := payload.(*kubescapeResponseData)
 	logger.L().Info(fmt.Sprintf("handle kubescape response for scan id %s", data.scanID))
+	if data.terminalReady {
+		return data.writeTerminalStatus(ctx)
+	}
+	if data.pendingWriteNeeded {
+		if err := data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithPending(), utils.WithPayload([]byte(data.scanID))); err == nil {
+			data.pendingWriteNeeded = false
+		}
+	}
 
 	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(config, data.scanID).String(), nil)
 	if err != nil {
-		data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(fmt.Errorf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())),
-			utils.WithPayload([]byte(data.scanID)))
 		logger.L().Ctx(ctx).Error("get scanID job status returned an error", helpers.String("scanID", data.scanID), helpers.Error(err))
-		return false, nil
+		return data.statusReadFailed(ctx, err)
 	}
 
 	response, err := readKubescapeV1ScanResponse(resp)
 	if err != nil {
-		data.sessionObj.SetOperatorCommandStatus(ctx,
-			utils.WithError(fmt.Errorf("parse scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())),
-			utils.WithPayload([]byte(data.scanID)))
 		logger.L().Ctx(ctx).Error("parse scanID job status returned an error", helpers.String("scanID", data.scanID), helpers.Error(err))
-		return false, nil
+		return data.statusReadFailed(ctx, err)
+	}
+	data.statusFailures = 0
+	if response.ID != data.scanID {
+		return data.complete(ctx, fmt.Errorf("scan outcome unavailable for scanID '%s': status returned scanID %q", data.scanID, response.ID))
 	}
 
 	if response.Type == utilsapisv1.BusyScanResponseType {
@@ -150,9 +201,24 @@ func HandleKubescapeResponse(ctx context.Context, config config.IConfig, payload
 		return true, &nextTimeRehandled
 	}
 
-	logger.L().Info(fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID))
-	data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload([]byte(data.scanID)))
-	return false, nil
+	if response.Type == utilsapisv1.NotBusyScanResponseType && response.ID == data.scanID && response.Outcome == "succeeded" {
+		logger.L().Info(fmt.Sprintf("Kubescape get job status scanID '%s' finished successfully", data.scanID))
+		return data.complete(ctx, nil)
+	}
+
+	message := fmt.Sprintf("scan outcome unavailable for scanID '%s' (type=%q, outcome=%q)", data.scanID, response.Type, response.Outcome)
+	if response.Type == utilsapisv1.NotBusyScanResponseType && response.ID == data.scanID {
+		switch response.Outcome {
+		case "failed":
+			message = "scan failed"
+		case "cancelled":
+			message = "scan cancelled"
+		}
+		if (response.Outcome == "failed" || response.Outcome == "cancelled") && response.Error != "" {
+			message = response.Error
+		}
+	}
+	return data.complete(ctx, errors.New(message))
 }
 
 func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
@@ -161,6 +227,17 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 
 	if !actionHandler.config.Components().Kubescape.Enabled {
 		return errors.New("kubescape is not enabled")
+	}
+	if details := actionHandler.sessionObj.ParentCommandDetails; details != nil && details.Command.Status.Started && !details.Command.Status.Completed && len(details.Command.Status.Payload) > 0 {
+		// A restarted operator receives unfinished OperatorCommands again. The
+		// pending status carries the scanner's scan ID, so resume its poll instead
+		// of dispatching a second scan.
+		data := &kubescapeResponseData{scanID: string(details.Command.Status.Payload), sessionObj: actionHandler.sessionObj}
+		if retry, delay := HandleKubescapeResponse(ctx, actionHandler.config, data); retry {
+			commandResponseData := createNewCommandResponseData(KubescapeResponse, HandleKubescapeResponse, data, delay)
+			insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
+		}
+		return nil
 	}
 
 	request, err := getKubescapeV1ScanRequest(actionHandler.sessionObj.Command.Args, actionHandler.config.DefaultFrameworks(), actionHandler.config.ExcludeControls())
@@ -189,13 +266,19 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	}
 
 	if response.Type == utilsapisv1.ErrorScanResponseType {
-		err := fmt.Errorf("%s", response.Response)
+		err := fmt.Errorf("Kubescape scan rejected: %v", response.Response)
 		logger.L().Info("Kubescape scan returned an error", helpers.String("scanID", response.ID), helpers.Error(err))
-		actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err), utils.WithPayload([]byte(response.ID)))
-	} else {
-		logger.L().Info("Kubescape scan triggered successfully", helpers.String("scanID", response.ID))
-		// sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload([]byte(response.ID)))
+		return err
 	}
+	if actionHandler.sessionObj.ParentCommandDetails != nil {
+		if response.Type != utilsapisv1.BusyScanResponseType {
+			return fmt.Errorf("Kubescape returned unexpected async scan response type %q", response.Type)
+		}
+		if _, err := uuid.Parse(response.ID); err != nil {
+			return fmt.Errorf("Kubescape returned invalid scan ID: %w", err)
+		}
+	}
+	logger.L().Info("Kubescape scan triggered successfully", helpers.String("scanID", response.ID))
 
 	data := &kubescapeResponseData{
 		scanID:     response.ID,
@@ -203,6 +286,16 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	}
 
 	if actionHandler.sessionObj.ParentCommandDetails != nil {
+		data.pendingWriteNeeded = true
+		for range maxPendingStatusWriteAttempts {
+			if err := actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithPending(), utils.WithPayload([]byte(response.ID))); err == nil {
+				data.pendingWriteNeeded = false
+				break
+			}
+		}
+		if data.pendingWriteNeeded {
+			logger.L().Ctx(ctx).Error("accepted scan ID could not be saved to OperatorCommand status; polling will retry", helpers.String("scanID", response.ID))
+		}
 		nextHandledTime := WaitTimeForKubescapeScanResponse * time.Second
 		commandResponseData := createNewCommandResponseData(KubescapeResponse, HandleKubescapeResponse, data, &nextHandledTime)
 		insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
