@@ -101,8 +101,14 @@ func getKubescapeV1ScanRequest(args map[string]interface{}, defaultFrameworks, e
 	return postScanRequest, nil
 }
 
-func readKubescapeV1ScanResponse(resp *http.Response) (*utilsmetav1.Response, error) {
-	response := &utilsmetav1.Response{}
+type kubescapeV1ScanResponse struct {
+	utilsmetav1.Response
+	Outcome string `json:"outcome,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+func readKubescapeV1ScanResponse(resp *http.Response) (*kubescapeV1ScanResponse, error) {
+	response := &kubescapeV1ScanResponse{}
 	if resp == nil {
 		return response, nil
 	}

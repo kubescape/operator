@@ -2,12 +2,15 @@ package watcher
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/cenkalti/backoff"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/google/uuid"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
 	"github.com/kubescape/go-logger"
@@ -124,7 +127,7 @@ func (cwh *CommandWatchHandler) AddHandler(obj runtime.Object) {
 		}
 
 		// Skip the command if it is older than the creation threshold
-		if cmd.CreationTimestamp.Time.Before(time.Now().Add(-minOperatorCommandAge)) {
+		if cmd.CreationTimestamp.Time.Before(time.Now().Add(-minOperatorCommandAge)) && !isRecoverablePendingScan(cmd) {
 			logger.L().Info("Skipping old OperatorCommand", helpers.String("command", cmd.Name), helpers.String("GUID", cmd.Spec.GUID), helpers.String("CreationTimestamp", cmd.CreationTimestamp.String()))
 			return
 		}
@@ -139,6 +142,20 @@ func (cwh *CommandWatchHandler) AddHandler(obj runtime.Object) {
 			receiver <- *cmd
 		}
 	}
+}
+
+func isRecoverablePendingScan(cmd *v1alpha1.OperatorCommand) bool {
+	if !cmd.Status.Started || cmd.Status.Completed || cmd.Spec.CommandType != string(command.OperatorCommandTypeOperatorAPI) {
+		return false
+	}
+	if _, err := uuid.Parse(string(cmd.Status.Payload)); err != nil {
+		return false
+	}
+	var request apis.Command
+	if err := json.Unmarshal(cmd.Spec.Body, &request); err != nil {
+		return false
+	}
+	return request.CommandName == apis.TypeRunKubescape || request.CommandName == apis.TypeRunKubescapeJob
 }
 
 func ConvertUnstructuredToOperatorCommand(un *unstructured.Unstructured) (*v1alpha1.OperatorCommand, error) {
