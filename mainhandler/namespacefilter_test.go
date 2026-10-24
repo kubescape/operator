@@ -84,3 +84,35 @@ func TestNamespaceFilteredScanDispatch(t *testing.T) {
 	require.NoError(t, sendWorkloadToRegistryScan(context.Background(), cfg, &apis.RegistryScanCommand{}))
 	require.Equal(t, before+3, calls.Load())
 }
+
+// node-agent stores the host profile in its own namespace, which the default filters
+// exclude; the host is filtered as namespace "host" instead.
+func TestHostContainerProfileScanDispatch(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	oldVuln := VulnScanHttpClient
+	t.Cleanup(func() { VulnScanHttpClient = oldVuln })
+	VulnScanHttpClient = server.Client()
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{Components: config.Components{
+		Kubevuln: config.Component{Enabled: true},
+	}}, armometadata.ClusterConfig{KubevulnURL: strings.TrimPrefix(server.URL, "http://")}, nil, config.Config{Namespace: "kubescape"})
+	require.NoError(t, err)
+	cmd := &apis.Command{CommandName: utils.CommandScanContainerProfile, Wlid: "wlid://cluster-unknown/namespace-host/host-worker-1", Args: map[string]interface{}{
+		utils.ArgsNamespace: "kubescape", utils.ArgsName: "node-worker-1-host",
+	}}
+	handler := &ActionHandler{config: cfg, k8sAPI: utils.NewK8sInterfaceFake(k8sfake.NewSimpleClientset()), sessionObj: &utils.SessionObj{Command: cmd}}
+
+	_, err = cfg.UpdateNamespaceFilters([]byte(`{"includeNamespaces":[],"excludeNamespaces":["kubescape"]}`))
+	require.NoError(t, err)
+	require.NoError(t, handler.runCommand(context.Background()))
+	require.Equal(t, int32(1), calls.Load())
+
+	_, err = cfg.UpdateNamespaceFilters([]byte(`{"includeNamespaces":[],"excludeNamespaces":["host"]}`))
+	require.NoError(t, err)
+	require.NoError(t, handler.runCommand(context.Background()))
+	require.Equal(t, int32(1), calls.Load())
+}
