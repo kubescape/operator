@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/armosec/armoapi-go/apis"
+	pkgwlid "github.com/armosec/utils-k8s-go/wlid"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
@@ -14,6 +16,30 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// HostNamespace is the synthetic namespace node-agent puts in the WLID of the host
+// pseudo-container, wlid://cluster-<cluster>/namespace-host/host-<node>.
+const HostNamespace = "host"
+
+// HostNodeFromWlid returns the node a host WLID refers to, and false for any other WLID.
+func HostNodeFromWlid(wlid string) (string, bool) {
+	r := pkgwlid.RestoreMicroserviceIDs(wlid)
+	if len(r) < 4 || r[1] != HostNamespace || !strings.EqualFold(r[2], "host") || r[3] == "" {
+		return "", false
+	}
+	return r[3], true
+}
+
+// ContainerProfileFilterNamespace returns the namespace the namespace filters apply to
+// for a ContainerProfile scan. That is the profile's namespace, except for the host,
+// whose profile node-agent stores in its own namespace (usually kubescape, which is
+// excluded by default): the host is filtered as namespace "host".
+func ContainerProfileFilterNamespace(wlid, profileNamespace string) string {
+	if _, ok := HostNodeFromWlid(wlid); ok {
+		return HostNamespace
+	}
+	return profileNamespace
+}
 
 func SkipContainerProfile(annotations map[string]string) (bool, error) {
 	ann := []string{
