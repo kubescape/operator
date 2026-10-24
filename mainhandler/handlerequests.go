@@ -267,8 +267,9 @@ func (actionHandler *ActionHandler) runCommand(ctx context.Context) error {
 			}
 		}
 		if c.CommandName == utils.CommandScanContainerProfile {
-			if targetNamespace, ok := c.Args[utils.ArgsNamespace].(string); ok && targetNamespace != "" {
-				namespace = targetNamespace
+			targetNamespace, _ := c.Args[utils.ArgsNamespace].(string)
+			if filterNamespace := utils.ContainerProfileFilterNamespace(actionHandler.wlid, targetNamespace); filterNamespace != "" {
+				namespace = filterNamespace
 			}
 		}
 		if namespace != "" && actionHandler.config.SkipNamespace(namespace) {

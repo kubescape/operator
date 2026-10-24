@@ -488,8 +488,9 @@ func sendCommandToScanner(ctx context.Context, config config.IConfig, webSocketS
 	// the namespace filters changed. SBOM storage namespaces are not workload namespaces.
 	namespace := pkgwlid.GetNamespaceFromWlid(webSocketScanCommand.Wlid)
 	if command == apis.TypeScanApplicationProfile {
-		if targetNamespace, ok := webSocketScanCommand.Args[utils.ArgsNamespace].(string); ok && targetNamespace != "" {
-			namespace = targetNamespace
+		targetNamespace, _ := webSocketScanCommand.Args[utils.ArgsNamespace].(string)
+		if filterNamespace := utils.ContainerProfileFilterNamespace(webSocketScanCommand.Wlid, targetNamespace); filterNamespace != "" {
+			namespace = filterNamespace
 		}
 	}
 	if namespace != "" && config.SkipNamespace(namespace) {

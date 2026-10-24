@@ -126,7 +126,7 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			continue
 		}
 
-		if wh.cfg != nil && wh.cfg.SkipNamespace(obj.Namespace) {
+		if wh.cfg != nil && wh.cfg.SkipNamespace(utils.ContainerProfileFilterNamespace(obj.Annotations[helpersv1.WlidMetadataKey], obj.Namespace)) {
 			continue
 		}
 
@@ -167,6 +167,15 @@ func (wh *WatchHandler) getContainerProfileWatcher() (watch.Interface, error) {
 	return wh.storageClient.SpdxV1beta1().ContainerProfiles("").Watch(context.Background(), metav1.ListOptions{})
 }
 
+// hostProfileNode returns the node of a ContainerProfile written by node-agent's host
+// monitoring, which carries a host WLID and the Node workload kind.
+func hostProfileNode(obj *spdxv1beta1.ContainerProfile) (string, bool) {
+	if obj.Labels[helpersv1.RelatedKindMetadataKey] != "Node" {
+		return "", false
+	}
+	return utils.HostNodeFromWlid(obj.Annotations[helpersv1.WlidMetadataKey])
+}
+
 func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
 	if kind, ok := obj.Labels[helpersv1.RelatedKindMetadataKey]; !ok || kind != "Pod" {
 		return nil, nil
@@ -183,6 +192,14 @@ func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*co
 
 func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 	labels := obj.Labels
+	// The host profile has no pod: its instance is the Node it was learned on.
+	if node, ok := hostProfileNode(obj); ok {
+		_, err := wh.k8sAPI.KubernetesClient.CoreV1().Nodes().Get(context.TODO(), node, metav1.GetOptions{})
+		if err != nil {
+			logger.L().Debug("hasMatchingPod - failed to get node of host profile", helpers.String("node", node), helpers.Error(err))
+		}
+		return err == nil
+	}
 	if labels[helpersv1.RelatedKindMetadataKey] == "Pod" {
 		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
 		return err == nil && podIsPresent(pod)
