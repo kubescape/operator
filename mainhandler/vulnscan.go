@@ -436,14 +436,10 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 	if err != nil {
 		return fmt.Errorf("failed to marshal websocketScanCommand: %w", err)
 	}
-	if command.GetWlid() == "" {
-		logger.L().Debug(fmt.Sprintf("sending scan command to kubevuln: %s", string(jsonScannerC)))
-	}
-
 	creds := command.GetCreds()
 	credsList := command.GetCredentialsList()
 	hasCreds := creds != nil && len(creds.Username) > 0 && len(creds.Password) > 0 || len(credsList) > 0
-	logger.L().Debug("scan request", helpers.String("url", scanUrl.String()), helpers.String("wlid", command.GetWlid()), helpers.String("instanceID", instanceID), helpers.String("imageTag", command.GetImageTag()), helpers.String("imageHash", command.GetImageHash()), helpers.Interface("credentials", hasCreds))
+	logger.L().Debug("scan request", helpers.String("url", scanUrl.String()), helpers.String("wlid", command.GetWlid()), helpers.String("instanceID", instanceID), helpers.String("imageTag", command.GetImageTag()), helpers.String("imageHash", command.GetImageHash()), helpers.String("jobID", command.GetJobID()), helpers.Interface("credentials", hasCreds))
 
 	headers := map[string]string{"Content-Type": "application/json"}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(headers))
