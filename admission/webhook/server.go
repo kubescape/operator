@@ -390,9 +390,12 @@ func (wh *webhook) reviewResponse(uid types.UID, err error, attrs admission.Attr
 	}
 }
 
-// maxAdmissionReviewBytes bounds a review's body: the API server refuses objects over
-// 3 MiB, so a review is smaller than that plus its envelope.
-const maxAdmissionReviewBytes = 4 << 20
+// maxAdmissionReviewBytes bounds a review's body against the whole review, not one
+// object: an UPDATE carries the stored object and the incoming one, each re-serialized
+// by the API server with its defaults, managed fields and JSON escaping, so two objects
+// at the API server's 3 MiB request limit can serialize to several times that. 16 MiB
+// leaves that margin and still caps what a sender can make this side read per request.
+const maxAdmissionReviewBytes = 16 << 20
 
 // parseRequest extracts an AdmissionReview from an http.Request if possible
 func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
