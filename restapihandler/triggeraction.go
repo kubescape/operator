@@ -3,6 +3,7 @@ package restapihandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,9 @@ import (
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/utils"
 )
+
+// maxTriggerRequestBytes bounds a trigger request's body.
+const maxTriggerRequestBytes = 1 << 20
 
 /*args may contain credentials*/
 func displayReceivedCommand(receivedCommands []byte) {
@@ -76,7 +80,16 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 	returnValue := []byte("ok")
 
 	httpStatus := http.StatusOK
-	readBuffer, err := io.ReadAll(r.Body)
+	// Bounded before it is read in full: the commands of a scheduled scan already fit
+	// a ConfigMap, which Kubernetes caps at 1 MiB, and the listener answers anyone
+	// who can reach it.
+	readBuffer, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxTriggerRequestBytes))
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		w.Write([]byte(err.Error()))
+		return
+	}
 	if err == nil {
 		switch r.Method {
 		case http.MethodPost:

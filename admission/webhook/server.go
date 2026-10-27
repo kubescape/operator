@@ -1,15 +1,16 @@
 package webhook
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -155,6 +156,22 @@ func (c *certificateCache) getCertificate(*tls.ClientHelloInfo) (*tls.Certificat
 	return c.certificate, nil
 }
 
+// newServer bounds what a peer can hold: the API server sends one review per request
+// and waits for the answer, so a request that takes longer than this to arrive or to
+// be answered is a stalled connection, and no review needs a larger header.
+func newServer(addr string, handler http.Handler, tlsConfig *tls.Config) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		TLSConfig:         tlsConfig,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
 func (wh *webhook) Run(ctx context.Context) error {
 	logger.L().Info("starting webhook HTTP server")
 	defer logger.L().Info("stopping webhook HTTP server")
@@ -166,12 +183,8 @@ func (wh *webhook) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", wh.handleHealth)
 	mux.HandleFunc("/validate", wh.handleWebhookValidate)
-	srv := &http.Server{
-		Handler: mux,
-		Addr:    wh.addr,
-		// Leave Certificates empty so clients without SNI also use the callback.
-		TLSConfig: &tls.Config{GetCertificate: cache.getCertificate},
-	}
+	// Leave Certificates empty so clients without SNI also use the callback.
+	srv := newServer(wh.addr, mux, &tls.Config{GetCertificate: cache.getCertificate})
 	// A buffered result lets the serving goroutine exit during cancellation.
 	errChan := make(chan error, 1)
 	var wg sync.WaitGroup
@@ -198,9 +211,18 @@ func (wh *webhook) handleHealth(w http.ResponseWriter, req *http.Request) {
 }
 
 func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Request) {
+	// The body is read in full before it is parsed, so it is bounded first: an
+	// AdmissionReview carries at most the API server's own object size limit, and the
+	// listener answers anyone who can reach it, not only the API server.
+	req.Body = http.MaxBytesReader(w, req.Body, maxAdmissionReviewBytes)
 	parsed, err := parseRequest(req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		status := http.StatusBadRequest
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 
@@ -368,6 +390,13 @@ func (wh *webhook) reviewResponse(uid types.UID, err error, attrs admission.Attr
 	}
 }
 
+// maxAdmissionReviewBytes bounds a review's body against the whole review, not one
+// object: an UPDATE carries the stored object and the incoming one, each re-serialized
+// by the API server with its defaults, managed fields and JSON escaping, so two objects
+// at the API server's 3 MiB request limit can serialize to several times that. 16 MiB
+// leaves that margin and still caps what a sender can make this side read per request.
+const maxAdmissionReviewBytes = 16 << 20
+
 // parseRequest extracts an AdmissionReview from an http.Request if possible
 func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
 	if r.Header.Get("Content-Type") != "application/json" {
@@ -375,9 +404,10 @@ func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
 			r.Header.Get("Content-Type"), "application/json")
 	}
 
-	bodybuf := new(bytes.Buffer)
-	bodybuf.ReadFrom(r.Body)
-	body := bodybuf.Bytes()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read admission review request: %w", err)
+	}
 
 	if len(body) == 0 {
 		return nil, fmt.Errorf("admission request body is empty")
