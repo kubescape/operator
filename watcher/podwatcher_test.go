@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -113,19 +114,24 @@ func TestPodWatch(t *testing.T) {
 			storageClient := kssfake.NewSimpleClientset()
 			k8sAPI.DynamicClient = dynClient
 
-			eventQueue := NewCooldownQueue()
+			eventQueue := NewCooldownQueueWithParams(500*time.Millisecond, 100*time.Millisecond)
+			defer eventQueue.Stop()
 			wh := NewWatchHandler(operatorConfig, k8sAPI, storageClient, eventQueue)
 
 			resourcesCreatedWg := &sync.WaitGroup{}
 			resourcesCreatedWg.Add(tc.numberOfExpectedCommands)
 
+			var commandsMu sync.Mutex
 			actualCommands := []apis.Command{}
 			pool, _ := ants.NewPoolWithFunc(1, func(i interface{}) {
 				j := i.(utils.Job)
 				command := j.Obj().Command
+				commandsMu.Lock()
 				actualCommands = append(actualCommands, *command)
+				commandsMu.Unlock()
 				resourcesCreatedWg.Done()
 			})
+			defer pool.Release()
 
 			go wh.PodWatch(ctx, pool)
 
