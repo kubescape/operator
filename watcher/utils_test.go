@@ -93,6 +93,51 @@ func Test_extractImageIDsFromPod(t *testing.T) {
 			},
 			expected: []string{"alpine@sha256:1", "alpine@sha256:2"},
 		},
+		{
+			name: "ephemeral container",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pod3",
+					Namespace: "namespace3",
+				},
+				Status: corev1.PodStatus{
+					EphemeralContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
+							},
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "debugger",
+						},
+					},
+				},
+			},
+			expected: []string{"alpine@sha256:1"},
+		},
+		{
+			name: "ephemeral container terminated (should be ignored)",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pod-terminated-debug",
+					Namespace: "namespace3",
+				},
+				Status: corev1.PodStatus{
+					EphemeralContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									ExitCode: 0,
+									Reason:   "Completed",
+								},
+							},
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "debugger",
+						},
+					},
+				},
+			},
+			expected: []string{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -218,6 +263,26 @@ func Test_extractImageIDsToContainersFromPod(t *testing.T) {
 			},
 			expected: map[string][]string{
 				"alpine@sha256:1": {"container1", "container2"},
+			},
+		},
+		{
+			name: "ephemeral container",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pod3",
+					Namespace: "namespace3",
+				},
+				Status: corev1.PodStatus{
+					EphemeralContainerStatuses: []corev1.ContainerStatus{
+						{
+							ImageID: "docker-pullable://alpine@sha256:1",
+							Name:    "debugger",
+						},
+					},
+				},
+			},
+			expected: map[string][]string{
+				"alpine@sha256:1": {"debugger"},
 			},
 		},
 	}

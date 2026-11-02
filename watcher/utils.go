@@ -24,6 +24,14 @@ func extractImageIDsToContainersFromPod(pod *corev1.Pod) map[string][]string {
 
 	}
 
+	for _, containerStatus := range pod.Status.EphemeralContainerStatuses {
+		imageID := utils.ExtractImageID(containerStatus.ImageID)
+		if _, ok := imageIDsToContainers[imageID]; !ok {
+			imageIDsToContainers[imageID] = []string{}
+		}
+		imageIDsToContainers[imageID] = append(imageIDsToContainers[imageID], containerStatus.Name)
+	}
+
 	return imageIDsToContainers
 }
 
@@ -37,6 +45,13 @@ func extractImageIDsFromPod(pod *corev1.Pod) []string {
 	}
 
 	for _, containerStatus := range pod.Status.InitContainerStatuses {
+		if containerStatus.State.Running != nil {
+			imageID := containerStatus.ImageID
+			imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
+		}
+	}
+
+	for _, containerStatus := range pod.Status.EphemeralContainerStatuses {
 		if containerStatus.State.Running != nil {
 			imageID := containerStatus.ImageID
 			imageIDs = append(imageIDs, utils.ExtractImageID(imageID))
