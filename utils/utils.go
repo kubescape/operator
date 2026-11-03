@@ -19,6 +19,7 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/storage/pkg/apiauth"
 	"github.com/panjf2000/ants/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +61,7 @@ func InitHttpClient(url string) httputils.IHttpClient {
 	if url == "" {
 		return &ClientMock{}
 	}
-	return &http.Client{}
+	return &http.Client{Transport: apiauth.NewTransport(nil, apiauth.NewFileTokenSource(apiauth.DefaultTokenFile()), url)}
 }
 
 func ExtractImageID(imageID string) string {
