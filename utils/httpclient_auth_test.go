@@ -53,3 +53,16 @@ func TestInitHttpClient_NoHeaderWithoutFile(t *testing.T) {
 	resp.Body.Close()
 	assert.Empty(t, got)
 }
+
+func TestAuthRejected(t *testing.T) {
+	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		err := AuthRejected(&http.Response{StatusCode: code}, "kubescape")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "kubescape rejected the API token")
+		assert.Contains(t, err.Error(), "KS_API_TOKEN_FILE")
+	}
+	for _, code := range []int{http.StatusOK, http.StatusInternalServerError, http.StatusNotFound} {
+		assert.NoError(t, AuthRejected(&http.Response{StatusCode: code}, "kubevuln"))
+	}
+	assert.NoError(t, AuthRejected(nil, "kubevuln"))
+}

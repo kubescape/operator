@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -62,6 +63,15 @@ func InitHttpClient(url string) httputils.IHttpClient {
 		return &ClientMock{}
 	}
 	return &http.Client{Transport: apiauth.NewTransport(nil, apiauth.NewFileTokenSource(apiauth.DefaultTokenFile()), url)}
+}
+
+// AuthRejected returns an error naming the token mount when the target service
+// answered 401 or 403, and nil otherwise.
+func AuthRejected(resp *http.Response, target string) error {
+	if resp == nil || (resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden) {
+		return nil
+	}
+	return fmt.Errorf("%s rejected the API token (HTTP %d): check KS_API_TOKEN_FILE and the caller Role", target, resp.StatusCode)
 }
 
 func ExtractImageID(imageID string) string {
