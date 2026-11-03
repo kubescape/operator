@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
@@ -130,8 +131,19 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			continue
 		}
 
+		// load the pod the workload runs as, once: the no-instance filter judges it and
+		// kubevuln takes the registry credentials from it
+		pod, err := wh.podForProfile(obj)
+		if err != nil {
+			if wh.cfg.SkipProfilesWithoutInstances() {
+				logger.L().Debug("skipping container profile without a pod", helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace), helpers.Error(err))
+				continue
+			}
+			logger.L().Error("failed loading pod spec", helpers.String("wlid", obj.Annotations[helpersv1.WlidMetadataKey]), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace), helpers.Error(err))
+			continue
+		}
 		// eventually skip processing if there is no matching pod
-		if wh.cfg.SkipProfilesWithoutInstances() && !wh.hasMatchingPod(obj) {
+		if wh.cfg.SkipProfilesWithoutInstances() && !podIsPresent(pod) {
 			continue
 		}
 
@@ -140,13 +152,7 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			utils.ArgsName:      obj.Name,
 			utils.ArgsNamespace: obj.Namespace,
 		}
-
-		// load the pod spec: kubevuln takes the registry credentials from it
-		pod, err := wh.podForProfile(obj)
-		if err != nil {
-			logger.L().Error("failed loading pod spec", helpers.String("wlid", obj.Annotations[helpersv1.WlidMetadataKey]), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace), helpers.Error(err))
-			continue
-		} else if pod != nil {
+		if pod != nil {
 			args[utils.ArgsPod] = pod
 		}
 
@@ -179,14 +185,6 @@ func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*co
 
 	pod, err := client.CoreV1().Pods(obj.Namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	return pod, err
-}
-
-func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
-	if obj.Labels[helpersv1.RelatedKindMetadataKey] == "Pod" {
-		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
-		return err == nil && podIsPresent(pod)
-	}
-	return wh.matchingPod(obj) != nil
 }
 
 // podForProfile returns the pod a profile's workload runs as: the named pod for a bare
@@ -268,28 +266,49 @@ func (wh *WatchHandler) matchingPod(obj *spdxv1beta1.ContainerProfile) *corev1.P
 		if !podIsPresent(pod) {
 			continue
 		}
-		if workloadKind == "StatefulSet" || workloadKind == "DaemonSet" {
-			if pod.Labels[appsv1.StatefulSetRevisionLabel] != revisionConstraint {
-				continue
-			}
-			for _, owner := range pod.OwnerReferences {
-				if owner.Kind == workloadKind && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
-					return pod
-				}
-			}
+		if (workloadKind == "StatefulSet" || workloadKind == "DaemonSet") && pod.Labels[appsv1.StatefulSetRevisionLabel] != revisionConstraint {
 			continue
 		}
-		if workloadKind != "ReplicaSet" {
+		if wh.ownsPod(pod, workloadKind, name, namespace, workloadObj.GetUID()) {
 			return pod
 		}
-		for _, owner := range pod.OwnerReferences {
-			if owner.Kind == "ReplicaSet" && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
-				return pod
+	}
+	// no pod of this workload found
+	return nil
+}
+
+// ownsPod says whether the workload controls the pod: through an owner reference, or
+// for a Deployment or a CronJob through the ReplicaSet or Job in between. The selector
+// alone is not enough, a Job with a manual selector or a stray pod with the same labels
+// would hand another workload's credentials to the scan.
+func (wh *WatchHandler) ownsPod(pod *corev1.Pod, kind, name, namespace string, uid types.UID) bool {
+	if uid == "" {
+		return false
+	}
+	for _, owner := range pod.OwnerReferences {
+		if owner.Kind == kind && owner.Name == name && owner.UID == uid {
+			return true
+		}
+		var via schema.GroupVersionResource
+		switch {
+		case kind == "Deployment" && owner.Kind == "ReplicaSet":
+			via = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"}
+		case kind == "CronJob" && owner.Kind == "Job":
+			via = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
+		default:
+			continue
+		}
+		middle, err := wh.k8sAPI.DynamicClient.Resource(via).Namespace(namespace).Get(context.TODO(), owner.Name, metav1.GetOptions{})
+		if err != nil || middle.GetUID() != owner.UID {
+			continue
+		}
+		for _, grand := range middle.GetOwnerReferences() {
+			if grand.Kind == kind && grand.Name == name && grand.UID == uid {
+				return true
 			}
 		}
 	}
-	// no matching pods found
-	return nil
+	return false
 }
 
 func podIsPresent(pod *corev1.Pod) bool {
