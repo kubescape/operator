@@ -568,3 +568,45 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 		}
 	}
 }
+
+// A profile of a ReplicaSet (or any other workload kind) must carry the pod the workload
+// runs as, like a bare Pod's profile does: kubevuln takes the registry credentials from it.
+func TestHandleContainerProfileEvents_WorkloadPodCarriesPullSecrets(t *testing.T) {
+	const namespace = "web"
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-new", Namespace: namespace, UID: "new-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-new-pod", Namespace: namespace, Labels: map[string]string{"app": "web"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID}}},
+		Spec:       corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "regcred"}}},
+	}
+	profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: "replicaset-app-new", Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid://cluster-test/namespace-web/deployment-app"}, Labels: map[string]string{
+		helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "ReplicaSet", helpersv1.RelatedNameMetadataKey: replicaSet.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+	}}}
+
+	sch := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(sch))
+	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sfake.NewClientset(pod), DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, replicaSet)}
+	cfg, err := config.LoadConfig("../configuration")
+	require.NoError(t, err)
+	operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+	require.NoError(t, err)
+	wh := NewWatchHandler(operatorConfig, k8sAPI, kssfake.NewSimpleClientset(profile), nil)
+
+	eventQueue := NewCooldownQueueWithParams(100*time.Millisecond, 50*time.Millisecond)
+	cmdCh := make(chan *apis.Command, 1)
+	errorCh := make(chan error, 1)
+	go wh.HandleContainerProfileEvents(eventQueue, cmdCh, errorCh)
+	eventQueue.Enqueue(watch.Event{Type: watch.Added, Object: profile})
+
+	select {
+	case cmd := <-cmdCh:
+		eventQueue.Stop()
+		got, _ := cmd.Args[utils.ArgsPod].(*corev1.Pod)
+		require.NotNil(t, got, "the command of a ReplicaSet profile must carry the workload's pod")
+		assert.Equal(t, pod.Name, got.Name)
+		assert.Equal(t, []corev1.LocalObjectReference{{Name: "regcred"}}, got.Spec.ImagePullSecrets)
+	case err := <-errorCh:
+		t.Fatalf("unexpected error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no command was produced")
+	}
+}
