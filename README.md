@@ -296,6 +296,10 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `RELEASE` | Image version for logging | *set at build time* |
 | `NODE_NAME` | Kubernetes node name (from downward API) | *set by Kubernetes* |
 | `KS_SKIP_UPDATE_CHECK` | Set to `true` on the Operator container to suppress its daily report | *not set* |
+| `KS_API_TOKEN_FILE` | Projected service-account token sent as `Authorization: Bearer` to kubescape, kubevuln and the synchronizer; no header is sent when the file is missing | `/var/run/secrets/kubescape.io/api-token/token` |
+| `KS_API_AUDIENCE` | Token audience the trigger API accepts | `kubescape.io` |
+| `KS_API_AUTH_DISABLED` | `true` disables authentication on the trigger API (tests and special deployments only) | unset |
+| `POD_NAMESPACE` | Namespace used for RBAC checks on the trigger API; required unless auth is disabled | *set by the chart* |
 
 ### Configuration Defaults
 
