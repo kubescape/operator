@@ -1,6 +1,7 @@
 package restapihandler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,9 +20,14 @@ func TestApiAuthRoute(t *testing.T) {
 		t.Fatalf("attributes = %+v, want %+v", attrs, want)
 	}
 
+	for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+		if attrs, ok := apiAuthRoute(httptest.NewRequest(m, "/v1/triggerAction", nil)); !ok || attrs != want {
+			t.Fatalf("%s /v1/triggerAction must be protected, got %+v %v", m, attrs, ok)
+		}
+	}
+
 	for _, r := range []*http.Request{
 		httptest.NewRequest(http.MethodGet, docs.OpenAPIV2Prefix, nil),
-		httptest.NewRequest(http.MethodGet, "/v1/triggerAction", nil),
 		httptest.NewRequest(http.MethodPost, "/other", nil),
 	} {
 		if attrs, ok := apiAuthRoute(r); ok || attrs != (apiauth.Attributes{}) {
@@ -48,5 +54,13 @@ func TestSetupHTTPListener_TriggerRequiresAuth(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, docs.OpenAPIV2Prefix, nil))
 	if rec.Code == http.StatusUnauthorized {
 		t.Fatal("OpenAPI UI must not be behind auth")
+	}
+}
+
+func TestNewAPIAuth_RequiresPodNamespace(t *testing.T) {
+	t.Setenv(apiauth.DisabledEnv, "")
+	t.Setenv("POD_NAMESPACE", "")
+	if _, err := NewAPIAuth(context.Background(), nil); err == nil {
+		t.Fatal("expected an error when POD_NAMESPACE is empty")
 	}
 }

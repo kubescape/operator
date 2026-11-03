@@ -52,7 +52,7 @@ func (resthandler *HTTPHandler) router(auth func(http.Handler) http.Handler) htt
 	if auth != nil {
 		trigger = auth(trigger)
 	}
-	rtr.Handle("/v1/triggerAction", trigger)
+	rtr.Handle(triggerActionPath, trigger)
 
 	openAPIUIHandler := docs.NewOpenAPIUIHandler()
 	rtr.Handle("GET "+docs.OpenAPIV2Prefix, extractContext(openAPIUIHandler))
