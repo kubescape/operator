@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	_ "embed"
+	"strings"
 	"testing"
 	"time"
 
@@ -337,12 +338,23 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 				Labels: map[string]string{
 					"app": "nginx",
 				},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "nginx-deployment-abc", UID: "nginx-rs-uid"}},
 			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "nginx-deployment-abc",
+				Namespace:       "web",
+				UID:             "nginx-rs-uid",
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "nginx-deployment", UID: "nginx-uid"}},
+			},
+			Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}},
 		},
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "nginx-deployment",
 				Namespace: "web",
+				UID:       "nginx-uid",
 				Labels: map[string]string{
 					"app": "nginx",
 				},
@@ -453,7 +465,7 @@ func TestWatchHandler_hasMatchingPod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Namespace: tt.labels[helpersv1.RelatedNamespaceMetadataKey], Labels: tt.labels}}
-			assert.Equalf(t, tt.want, wh.hasMatchingPod(profile), "hasMatchingPod(%v)", tt.labels)
+			assert.Equalf(t, tt.want, hasMatchingPod(wh, profile), "hasMatchingPod(%v)", tt.labels)
 		})
 	}
 }
@@ -466,13 +478,14 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 	daemonSet := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "node-agent", Namespace: namespace, UID: "daemon-uid"}, Spec: appsv1.DaemonSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "node-agent"}}}}
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-job", Namespace: namespace, UID: "job-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "scheduled-job", UID: "cron-uid"}}}, Spec: batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"job-name": "batch-job"}}}}
 	failedJob := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "failed-job", Namespace: namespace, UID: "failed-job-uid"}, Spec: batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"job-name": "failed-job"}}}}
-	expressionWorkload := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "expression-workload", Namespace: namespace}, Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "tier", Operator: metav1.LabelSelectorOpIn, Values: []string{"backend"}}}}}}
+	expressionWorkload := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "expression-workload", Namespace: namespace, UID: "expression-uid"}, Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "tier", Operator: metav1.LabelSelectorOpIn, Values: []string{"backend"}}}}}}
+	expressionReplicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "expression-workload-abc", Namespace: namespace, UID: "expression-rs-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: expressionWorkload.Name, UID: expressionWorkload.UID}}}}
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "app-new-pod", Namespace: namespace, Labels: map[string]string{"app": "web"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: current.Name, UID: current.UID}}}}
 	statefulPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "database-0", Namespace: namespace, Labels: map[string]string{"app": "database", appsv1.StatefulSetRevisionLabel: "database-new"}, OwnerReferences: []metav1.OwnerReference{{Kind: "StatefulSet", Name: statefulSet.Name, UID: statefulSet.UID}}}}
 	daemonPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "node-agent-xyz", Namespace: namespace, Labels: map[string]string{"app": "node-agent", appsv1.StatefulSetRevisionLabel: "f9dd7596f"}, OwnerReferences: []metav1.OwnerReference{{Kind: "DaemonSet", Name: daemonSet.Name, UID: daemonSet.UID}}}}
 	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "batch-job-pod", Namespace: namespace, Labels: map[string]string{"job-name": "batch-job"}, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: job.Name, UID: job.UID}}}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
 	failedJobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "failed-job-pod", Namespace: namespace, Labels: map[string]string{"job-name": "failed-job"}, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: failedJob.Name, UID: failedJob.UID}}}, Status: corev1.PodStatus{Phase: corev1.PodFailed}}
-	expressionPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "expression-pod", Namespace: namespace, Labels: map[string]string{"tier": "backend"}}}
+	expressionPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "expression-pod", Namespace: namespace, Labels: map[string]string{"tier": "backend"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: expressionReplicaSet.Name, UID: expressionReplicaSet.UID}}}}
 	directPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "direct-pod", Namespace: namespace}}
 	completedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
 	failedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodFailed}}
@@ -480,7 +493,7 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 	sch := runtime.NewScheme()
 	require.NoError(t, scheme.AddToScheme(sch))
 	k8sClient := k8sfake.NewClientset(pod, statefulPod, daemonPod, jobPod, failedJobPod, expressionPod, directPod, completedPod, failedPod)
-	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, current, wrongOwner, statefulSet, daemonSet, job, failedJob, expressionWorkload)}
+	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, current, wrongOwner, statefulSet, daemonSet, job, failedJob, expressionWorkload, expressionReplicaSet)}
 	cfg, err := config.LoadConfig("../configuration")
 	require.NoError(t, err)
 	require.True(t, cfg.SkipProfilesWithoutInstances)
@@ -533,16 +546,27 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 		daemonSetProfile("old-daemon-generation", "abc123old"),
 		daemonSetProfile("current-daemon-generation", "f9dd7596f"),
 	}
-	require.True(t, wh.hasMatchingPod(profiles[2]), "current ReplicaSet must have a matching Pod")
-	require.False(t, wh.hasMatchingPod(profiles[3]), "old StatefulSet revision must not match the current Pod")
-	require.True(t, wh.hasMatchingPod(profiles[4]), "current StatefulSet revision must match")
-	require.True(t, wh.hasMatchingPod(profiles[5]), "completed CronJob Pod must still match its Job")
-	require.True(t, wh.hasMatchingPod(profiles[6]), "matchExpressions-only workload must have a matching Pod")
-	require.True(t, wh.hasMatchingPod(profiles[9]), "current Pod must exist")
-	require.False(t, wh.hasMatchingPod(profiles[11]), "StatefulSet profile without a revision must not match")
-	require.True(t, wh.hasMatchingPod(profiles[12]), "failed Job Pod must still match its Job")
-	require.False(t, wh.hasMatchingPod(profiles[13]), "old DaemonSet revision must not match the current Pod")
-	require.True(t, wh.hasMatchingPod(profiles[14]), "current DaemonSet revision must match")
+	require.True(t, hasMatchingPod(wh, profiles[2]), "current ReplicaSet must have a matching Pod")
+	require.False(t, hasMatchingPod(wh, profiles[3]), "old StatefulSet revision must not match the current Pod")
+	require.True(t, hasMatchingPod(wh, profiles[4]), "current StatefulSet revision must match")
+	require.True(t, hasMatchingPod(wh, profiles[5]), "completed CronJob Pod must still match its Job")
+	require.True(t, hasMatchingPod(wh, profiles[6]), "matchExpressions-only workload must have a matching Pod")
+	require.True(t, hasMatchingPod(wh, profiles[9]), "current Pod must exist")
+	require.False(t, hasMatchingPod(wh, profiles[11]), "StatefulSet profile without a revision must not match")
+	require.True(t, hasMatchingPod(wh, profiles[12]), "failed Job Pod must still match its Job")
+	require.False(t, hasMatchingPod(wh, profiles[13]), "old DaemonSet revision must not match the current Pod")
+	require.True(t, hasMatchingPod(wh, profiles[14]), "current DaemonSet revision must match")
+	for _, tc := range []struct {
+		profile *spdxv1beta1.ContainerProfile
+		pod     string
+	}{
+		{profiles[2], pod.Name}, {profiles[4], statefulPod.Name}, {profiles[14], daemonPod.Name}, {profiles[5], jobPod.Name}, {profiles[6], expressionPod.Name}, {profiles[9], directPod.Name},
+	} {
+		got, err := wh.podForProfile(tc.profile)
+		require.NoError(t, err, tc.profile.Name)
+		require.NotNil(t, got, "%s must resolve to its pod", tc.profile.Name)
+		assert.Equal(t, tc.pod, got.Name, tc.profile.Name)
+	}
 	events := make(chan watch.Event, len(profiles))
 	queue := &CooldownQueue{ResultChan: events}
 	commands := make(chan *apis.Command)
@@ -567,4 +591,95 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 			t.Fatal("timed out waiting for profile events")
 		}
 	}
+}
+
+// A profile of a ReplicaSet (or any other workload kind) must carry the pod the workload
+// runs as, like a bare Pod's profile does: kubevuln takes the registry credentials from it.
+func TestHandleContainerProfileEvents_WorkloadPodCarriesPullSecrets(t *testing.T) {
+	const namespace = "web"
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "app-new", Namespace: namespace, UID: "new-uid"}, Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-new-pod", Namespace: namespace, Labels: map[string]string{"app": "web"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID}}},
+		Spec:       corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "regcred"}}},
+	}
+	profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: "replicaset-app-new", Namespace: namespace, Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "instance", helpersv1.WlidMetadataKey: "wlid://cluster-test/namespace-web/deployment-app"}, Labels: map[string]string{
+		helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "ReplicaSet", helpersv1.RelatedNameMetadataKey: replicaSet.Name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+	}}}
+
+	sch := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(sch))
+	k8sAPI := &k8sinterface.KubernetesApi{KubernetesClient: k8sfake.NewClientset(pod), DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, replicaSet)}
+	cfg, err := config.LoadConfig("../configuration")
+	require.NoError(t, err)
+	operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+	require.NoError(t, err)
+	wh := NewWatchHandler(operatorConfig, k8sAPI, kssfake.NewSimpleClientset(profile), nil)
+
+	eventQueue := NewCooldownQueueWithParams(100*time.Millisecond, 50*time.Millisecond)
+	cmdCh := make(chan *apis.Command, 1)
+	errorCh := make(chan error, 1)
+	go wh.HandleContainerProfileEvents(eventQueue, cmdCh, errorCh)
+	eventQueue.Enqueue(watch.Event{Type: watch.Added, Object: profile})
+
+	select {
+	case cmd := <-cmdCh:
+		eventQueue.Stop()
+		got, _ := cmd.Args[utils.ArgsPod].(*corev1.Pod)
+		require.NotNil(t, got, "the command of a ReplicaSet profile must carry the workload's pod")
+		assert.Equal(t, pod.Name, got.Name)
+		assert.Equal(t, []corev1.LocalObjectReference{{Name: "regcred"}}, got.Spec.ImagePullSecrets)
+	case err := <-errorCh:
+		t.Fatalf("unexpected error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no command was produced")
+	}
+}
+
+// hasMatchingPod is what the handler's no-instance filter decides from podForProfile.
+func hasMatchingPod(wh *WatchHandler, obj *spdxv1beta1.ContainerProfile) bool {
+	pod, err := wh.podForProfile(obj)
+	return err == nil && podIsPresent(pod)
+}
+
+// A Job with a manual selector, or a Deployment whose labels other pods share, is only
+// given a pod it controls: the scan takes the registry credentials from that pod.
+func TestPodForProfile_OnlyReturnsAPodTheWorkloadOwns(t *testing.T) {
+	const namespace = "web"
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: namespace, UID: "deploy-uid"}, Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "web-abc", Namespace: namespace, UID: "rs-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: deployment.Name, UID: deployment.UID}}}}
+	otherReplicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "other-xyz", Namespace: namespace, UID: "other-rs-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "other", UID: "other-uid"}}}}
+	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "manual-job", Namespace: namespace, UID: "job-uid"}, Spec: batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}}}
+	labels := map[string]string{"app": "web"}
+	webPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-abc-pod", Namespace: namespace, Labels: labels, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID}}}, Spec: corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "webcred"}}}}
+	otherPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-xyz-pod", Namespace: namespace, Labels: labels, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: otherReplicaSet.Name, UID: otherReplicaSet.UID}}}, Spec: corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "othercred"}}}}
+	strayPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "stray-pod", Namespace: namespace, Labels: labels}, Spec: corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "straycred"}}}}
+	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "manual-job-pod", Namespace: namespace, Labels: labels, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: job.Name, UID: job.UID}}}, Spec: corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "jobcred"}}}}
+
+	sch := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(sch))
+	k8sClient := k8sfake.NewClientset(strayPod, otherPod, webPod, jobPod)
+	wh := &WatchHandler{k8sAPI: &k8sinterface.KubernetesApi{KubernetesClient: k8sClient, DynamicClient: dynamicfake.NewSimpleDynamicClient(sch, deployment, replicaSet, otherReplicaSet, job)}}
+	profileFor := func(group, kind, name string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(kind) + "-" + name, Namespace: namespace, Labels: map[string]string{
+			helpersv1.ApiGroupMetadataKey: group, helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: kind, helpersv1.RelatedNameMetadataKey: name, helpersv1.RelatedNamespaceMetadataKey: namespace,
+		}}}
+	}
+
+	got, err := wh.podForProfile(profileFor("batch", "Job", job.Name))
+	require.NoError(t, err)
+	require.NotNil(t, got, "the Job's own pod must be found among the pods its selector overlaps")
+	assert.Equal(t, jobPod.Name, got.Name)
+	assert.Equal(t, []corev1.LocalObjectReference{{Name: "jobcred"}}, got.Spec.ImagePullSecrets)
+
+	got, err = wh.podForProfile(profileFor("apps", "Deployment", deployment.Name))
+	require.NoError(t, err)
+	require.NotNil(t, got, "the Deployment's pod must be found through its ReplicaSet")
+	assert.Equal(t, webPod.Name, got.Name)
+	assert.Equal(t, []corev1.LocalObjectReference{{Name: "webcred"}}, got.Spec.ImagePullSecrets)
+
+	// with the Job's own pod gone, the pods its selector overlaps are no substitute
+	require.NoError(t, k8sClient.CoreV1().Pods(namespace).Delete(context.Background(), jobPod.Name, metav1.DeleteOptions{}))
+	got, err = wh.podForProfile(profileFor("batch", "Job", job.Name))
+	require.NoError(t, err)
+	assert.Nil(t, got, "another workload's pod must not lend its credentials to the Job")
 }
