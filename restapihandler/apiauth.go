@@ -3,9 +3,11 @@ package restapihandler
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 
+	"github.com/go-logr/stdr"
 	"github.com/kubescape/storage/pkg/apiauth"
 	"k8s.io/client-go/kubernetes"
 )
@@ -39,5 +41,6 @@ func NewAPIAuth(ctx context.Context, client kubernetes.Interface) (func(http.Han
 		Audience:  audience,
 		Namespace: namespace,
 		Route:     apiAuthRoute,
+		Logger:    stdr.New(log.New(os.Stderr, "apiauth: ", log.LstdFlags)),
 	})
 }
