@@ -128,6 +128,12 @@ func HandleKubescapeResponse(ctx context.Context, config config.IConfig, payload
 	logger.L().Info(fmt.Sprintf("handle kubescape response for scan id %s", data.scanID))
 
 	resp, err := httputils.HttpGetWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanStatusURL(config, data.scanID).String(), nil)
+	if authErr := utils.AuthRejected(resp, "kubescape"); authErr != nil {
+		resp.Body.Close()
+		data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(authErr), utils.WithPayload([]byte(data.scanID)))
+		logger.L().Ctx(ctx).Error("kubescape rejected the request", helpers.String("scanID", data.scanID), helpers.Error(authErr))
+		return false, nil
+	}
 	if err != nil {
 		data.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(fmt.Errorf("get scanID job status with scanID '%s' returned an error: %s", data.scanID, err.Error())),
 			utils.WithPayload([]byte(data.scanID)))
@@ -180,6 +186,11 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	headers := map[string]string{}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(headers))
 	resp, err := httputils.HttpPostWithContext(ctx, KubescapeHttpClient, getKubescapeV1ScanURL(actionHandler.config).String(), headers, body, -1, func(resp *http.Response) bool { return true })
+	if authErr := utils.AuthRejected(resp, "kubescape"); authErr != nil {
+		resp.Body.Close()
+		logger.L().Ctx(ctx).Error("kubescape rejected the scan request", helpers.Error(authErr))
+		return authErr
+	}
 	if err != nil {
 		return err
 	}

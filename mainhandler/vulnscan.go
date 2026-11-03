@@ -450,6 +450,11 @@ func sendWorkloadWithCredentials(ctx context.Context, scanUrl *url.URL, command 
 		time.Sleep(5 * time.Second)
 		refusedNum++
 	}
+	if authErr := utils.AuthRejected(resp, "kubevuln"); authErr != nil {
+		resp.Body.Close()
+		logger.L().Ctx(ctx).Error("kubevuln rejected the scan request", helpers.String("query", command.GetImageTag()), helpers.Error(authErr))
+		return authErr
+	}
 	if err != nil {
 		return fmt.Errorf("failed posting to vulnerability scanner. query: '%s', reason: %s", command.GetImageTag(), err.Error())
 	}

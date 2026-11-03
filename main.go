@@ -179,9 +179,14 @@ func main() {
 		logger.L().Ctx(ctx).Warning("some schedules still post to the trigger endpoint", helpers.Error(err))
 	}
 
+	apiAuth, err := restapihandler.NewAPIAuth(ctx, k8sApi.KubernetesClient)
+	if err != nil {
+		logger.L().Ctx(ctx).Fatal("API auth setup failed", helpers.Error(err))
+	}
+
 	go func() { // open a REST API connection listener
 		restAPIHandler := restapihandler.NewHTTPHandler(mainHandler.EventWorkerPool(), operatorConfig)
-		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIBindAddress, cfg.RestAPIPort); err != nil {
+		if err := restAPIHandler.SetupHTTPListener(cfg.RestAPIBindAddress, cfg.RestAPIPort, apiAuth); err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error(), helpers.Error(err))
 		}
 	}()

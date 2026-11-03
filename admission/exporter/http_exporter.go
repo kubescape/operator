@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/admission/rules"
+	"github.com/kubescape/storage/pkg/apiauth"
 )
 
 type HTTPExporterConfig struct {
@@ -25,6 +27,8 @@ type HTTPExporterConfig struct {
 	// Method is the HTTP method to use for the HTTP request
 	Method             string `json:"method"`
 	MaxAlertsPerMinute int    `json:"maxAlertsPerMinute"`
+	// TokenFile is the path to a projected service-account token; when set, it is sent as a bearer token to the URL's host
+	TokenFile string `json:"tokenFile"`
 }
 
 // we will have a CRD-like json struct to send in the HTTP request
@@ -83,13 +87,22 @@ func InitHTTPExporter(config HTTPExporterConfig, clusterName string, cloudMetada
 		return nil, err
 	}
 
+	httpClient := &http.Client{
+		Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
+	}
+	if config.TokenFile != "" {
+		u, err := url.Parse(config.URL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL: %w", err)
+		}
+		httpClient.Transport = apiauth.NewTransport(httpClient.Transport, apiauth.NewFileTokenSource(config.TokenFile), u.Host)
+	}
+
 	return &HTTPExporter{
-		ClusterName: clusterName,
-		ClusterUID:  clusterUID,
-		config:      config,
-		httpClient: &http.Client{
-			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
-		},
+		ClusterName:   clusterName,
+		ClusterUID:    clusterUID,
+		config:        config,
+		httpClient:    httpClient,
 		cloudMetadata: cloudMetadata,
 	}, nil
 }

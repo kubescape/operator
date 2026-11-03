@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -108,5 +110,32 @@ func TestSendAdmissionAlert_SetsK8sAgentPlatform(t *testing.T) {
 		assert.Equal(t, "R2003", alert.RuleID)
 		assert.Equal(t, "ns/pod", alert.BaseRuntimeAlert.UniqueID)
 		assert.Equal(t, "test-cluster-uid", alert.RuntimeAlertK8sDetails.ClusterUID)
+	}
+}
+
+func TestHTTPExporter_SendsBearerFromTokenFile(t *testing.T) {
+	auth := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth <- r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	assert.NoError(t, os.WriteFile(tokenFile, []byte("synctoken\n"), 0o600))
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{URL: srv.URL, Method: "POST", TokenFile: tokenFile}, "test-cluster", nil, "uid")
+	assert.NoError(t, err)
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "Privileged pod", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	select {
+	case got := <-auth:
+		assert.Equal(t, "Bearer synctoken", got)
+	case <-time.After(2 * time.Second):
+		t.Fatal("exporter did not POST the alert")
 	}
 }

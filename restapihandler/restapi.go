@@ -45,15 +45,23 @@ func newServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
-// SetupHTTPListener set up listening http servers
-func (resthandler *HTTPHandler) SetupHTTPListener(bindAddress, port string) error {
+// router builds the mux; a non-nil auth wraps only the trigger route, the OpenAPI UI stays open.
+func (resthandler *HTTPHandler) router(auth func(http.Handler) http.Handler) http.Handler {
 	rtr := http.NewServeMux()
-	rtr.Handle("/v1/triggerAction", extractContext(http.HandlerFunc(resthandler.ActionRequest)))
+	var trigger http.Handler = extractContext(http.HandlerFunc(resthandler.ActionRequest))
+	if auth != nil {
+		trigger = auth(trigger)
+	}
+	rtr.Handle(triggerActionPath, trigger)
 
 	openAPIUIHandler := docs.NewOpenAPIUIHandler()
 	rtr.Handle("GET "+docs.OpenAPIV2Prefix, extractContext(openAPIUIHandler))
+	return rtr
+}
 
-	server := newServer(listenAddress(bindAddress, port), rtr)
+// SetupHTTPListener set up listening http servers
+func (resthandler *HTTPHandler) SetupHTTPListener(bindAddress, port string, auth func(http.Handler) http.Handler) error {
+	server := newServer(listenAddress(bindAddress, port), resthandler.router(auth))
 
 	logger.L().Info("Waiting for REST API to receive notifications, address: " + server.Addr)
 
