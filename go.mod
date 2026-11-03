@@ -29,7 +29,7 @@ require (
 	github.com/kubescape/node-agent v0.3.38
 	github.com/kubescape/opa-utils v0.0.315
 	github.com/kubescape/storage v0.0.301
-	github.com/kubescape/storage/pkg/apiauth v0.0.0-20261103122725-1fe80814fcf6
+	github.com/kubescape/storage/pkg/apiauth v0.1.0
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1

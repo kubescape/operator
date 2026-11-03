@@ -755,8 +755,8 @@ github.com/kubescape/regolibrary v1.0.317-0.20240320124840-1d84ac7186ea h1:hLUe+
 github.com/kubescape/regolibrary v1.0.317-0.20240320124840-1d84ac7186ea/go.mod h1:RK9dHjllKFnISDmVExQlI1B1z93TlQsAu/Kq9c0mt2U=
 github.com/kubescape/storage v0.0.301 h1:SsyS1Xdq8ClIOqCB5gNg7X82lGfrSpWLI+J+VenHr6k=
 github.com/kubescape/storage v0.0.301/go.mod h1:d/1hqWPda2clsjx2wmQgysnB5dThIo3rDKP7RWx+v+M=
-github.com/kubescape/storage/pkg/apiauth v0.0.0-20261103122725-1fe80814fcf6 h1:DGSFpp2xngMDsarvoRwStAUL/JVxTSQpFI9SuWGNHgU=
-github.com/kubescape/storage/pkg/apiauth v0.0.0-20261103122725-1fe80814fcf6/go.mod h1:WiGMS7DCUl6a3SPwuFjxXHosdkNCw8F+JqRtGhBwQF8=
+github.com/kubescape/storage/pkg/apiauth v0.1.0 h1:lkmcuT18mb1hi0R0Bz1MwWpJIpyVo1Ppuwo26fVh9WY=
+github.com/kubescape/storage/pkg/apiauth v0.1.0/go.mod h1:WiGMS7DCUl6a3SPwuFjxXHosdkNCw8F+JqRtGhBwQF8=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
