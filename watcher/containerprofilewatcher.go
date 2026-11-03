@@ -16,12 +16,12 @@ import (
 	"github.com/panjf2000/ants/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
 )
 
@@ -130,11 +130,6 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			continue
 		}
 
-		// eventually skip processing if there is no matching pod
-		if wh.cfg.SkipProfilesWithoutInstances() && !wh.hasMatchingPod(obj) {
-			continue
-		}
-
 		// assemble command arguments
 		args := map[string]interface{}{
 			utils.ArgsName:      obj.Name,
@@ -142,11 +137,15 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 		}
 
 		// load pod spec
-		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
+		pod, err := wh.getPod(obj)
 		if err != nil {
 			logger.L().Error("failed loading pod spec", helpers.String("wlid", obj.Annotations[helpersv1.WlidMetadataKey]), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace), helpers.Error(err))
 			continue
-		} else if pod != nil {
+		}
+		if wh.cfg.SkipProfilesWithoutInstances() && !podIsPresent(pod) {
+			continue
+		}
+		if pod != nil {
 			args[utils.ArgsPod] = pod
 		}
 
@@ -167,25 +166,25 @@ func (wh *WatchHandler) getContainerProfileWatcher() (watch.Interface, error) {
 	return wh.storageClient.SpdxV1beta1().ContainerProfiles("").Watch(context.Background(), metav1.ListOptions{})
 }
 
-func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
-	if kind, ok := obj.Labels[helpersv1.RelatedKindMetadataKey]; !ok || kind != "Pod" {
-		return nil, nil
-	}
-
-	podName, ok := obj.Labels[helpersv1.RelatedNameMetadataKey]
-	if !ok || podName == "" {
-		return nil, fmt.Errorf("label %s is missing", helpersv1.RelatedNameMetadataKey)
-	}
-
-	pod, err := client.CoreV1().Pods(obj.Namespace).Get(context.TODO(), podName, metav1.GetOptions{})
-	return pod, err
+func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
+	pod, err := wh.getPod(obj)
+	return err == nil && podIsPresent(pod)
 }
 
-func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
+// getPod resolves a profile's pod using the same selector, owner and revision
+// constraints used to decide whether the profile still has an instance.
+func (wh *WatchHandler) getPod(obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
 	labels := obj.Labels
-	if labels[helpersv1.RelatedKindMetadataKey] == "Pod" {
-		pod, err := getPod(wh.k8sAPI.KubernetesClient, obj)
-		return err == nil && podIsPresent(pod)
+	switch labels[helpersv1.RelatedKindMetadataKey] {
+	case "", "Node":
+		// Legacy and host profiles do not identify a pod workload.
+		return nil, nil
+	case "Pod":
+		podName := labels[helpersv1.RelatedNameMetadataKey]
+		if podName == "" {
+			return nil, fmt.Errorf("label %s is missing", helpersv1.RelatedNameMetadataKey)
+		}
+		return wh.k8sAPI.KubernetesClient.CoreV1().Pods(obj.Namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	}
 
 	// construct the GroupVersionResource for the workload
@@ -198,25 +197,30 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 	namespace := labels[helpersv1.RelatedNamespaceMetadataKey]
 	// get the unstructured workload object
 	workloadObj, err := wh.k8sAPI.DynamicClient.Resource(gvr).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
 	if err != nil {
-		logger.L().Debug("hasMatchingPod - failed to get workload matching labels", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
-		return false
+		return nil, fmt.Errorf("get workload %s %s/%s: %w", gvr, namespace, name, err)
 	}
 	// extract the workload's complete pod selector
 	selectorMap, found, err := unstructured.NestedMap(workloadObj.Object, "spec", "selector")
-	if err != nil || !found {
-		logger.L().Debug("hasMatchingPod - failed to get pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
-		return false
+	if err != nil {
+		return nil, fmt.Errorf("get workload pod selector: %w", err)
+	}
+	if !found {
+		return nil, nil
 	}
 	var selector metav1.LabelSelector
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(selectorMap, &selector); err != nil {
-		logger.L().Debug("hasMatchingPod - invalid pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name), helpers.Error(err))
-		return false
+		return nil, fmt.Errorf("decode workload pod selector: %w", err)
 	}
 	labelSelector, err := metav1.LabelSelectorAsSelector(&selector)
-	if err != nil || labelSelector.Empty() {
-		logger.L().Debug("hasMatchingPod - empty pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name))
-		return false
+	if err != nil {
+		return nil, fmt.Errorf("invalid workload pod selector: %w", err)
+	}
+	if labelSelector.Empty() {
+		return nil, nil
 	}
 	var revisionConstraint string
 	workloadKind := labels[helpersv1.RelatedKindMetadataKey]
@@ -224,7 +228,7 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 	case "StatefulSet", "DaemonSet":
 		instanceID, err := containerinstance.GenerateInstanceIDFromString(obj.Annotations[helpersv1.InstanceIDMetadataKey])
 		if err != nil || instanceID.Kind != workloadKind || instanceID.Namespace != namespace {
-			return false
+			return nil, nil
 		}
 		// StatefulSet: AlternateName is the full controller-revision-hash label value.
 		// DaemonSet: AlternateName is <daemonset-name>-<hash>, while the pod label
@@ -239,8 +243,7 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 		LabelSelector: labelSelector.String(),
 	})
 	if err != nil {
-		logger.L().Debug("hasMatchingPod - failed to list pods matching selector", helpers.String("selector", labelSelector.String()), helpers.String("namespace", namespace), helpers.Error(err))
-		return false
+		return nil, fmt.Errorf("list pods matching workload selector: %w", err)
 	}
 	for _, pod := range podList.Items {
 		if !podIsPresent(&pod) {
@@ -252,22 +255,22 @@ func (wh *WatchHandler) hasMatchingPod(obj *spdxv1beta1.ContainerProfile) bool {
 			}
 			for _, owner := range pod.OwnerReferences {
 				if owner.Kind == workloadKind && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
-					return true
+					return &pod, nil
 				}
 			}
 			continue
 		}
 		if workloadKind != "ReplicaSet" {
-			return true
+			return &pod, nil
 		}
 		for _, owner := range pod.OwnerReferences {
 			if owner.Kind == "ReplicaSet" && owner.Name == name && owner.UID == workloadObj.GetUID() && owner.UID != "" {
-				return true
+				return &pod, nil
 			}
 		}
 	}
 	// no matching pods found
-	return false
+	return nil, nil
 }
 
 func podIsPresent(pod *corev1.Pod) bool {

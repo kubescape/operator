@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"testing"
 	"time"
 
@@ -21,11 +22,13 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestHandleContainerProfileEvents(t *testing.T) {
@@ -566,5 +569,141 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 		case <-time.After(8 * time.Second):
 			t.Fatal("timed out waiting for profile events")
 		}
+	}
+}
+
+func TestContainerProfileWorkloadPodCredentials(t *testing.T) {
+	for _, kind := range []string{"Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job"} {
+		for _, skip := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/skip=%t", kind, skip), func(t *testing.T) {
+				const namespace = "web"
+				group := "apps"
+				if kind == "Job" {
+					group = "batch"
+				}
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+					Name: "private-pod", Namespace: namespace,
+					Labels:          map[string]string{"app": "private", appsv1.StatefulSetRevisionLabel: "private-new"},
+					OwnerReferences: []metav1.OwnerReference{{Kind: kind, Name: "private", UID: "owner-uid"}},
+				}, Spec: corev1.PodSpec{ImagePullSecrets: []corev1.LocalObjectReference{{Name: "registry-secret"}}}}
+				revision := "private-new"
+				if kind == "DaemonSet" {
+					revision = "private-private-new"
+				}
+				profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{
+					Name: "profile", Namespace: namespace,
+					Labels:      map[string]string{helpersv1.ApiGroupMetadataKey: group, helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: kind, helpersv1.RelatedNameMetadataKey: "private", helpersv1.RelatedNamespaceMetadataKey: namespace},
+					Annotations: map[string]string{helpersv1.InstanceIDMetadataKey: "apiVersion-" + group + "/v1/namespace-web/kind-" + kind + "/name-" + revision, helpersv1.WlidMetadataKey: "wlid"},
+				}}
+				if kind == "Pod" {
+					profile.Labels[helpersv1.RelatedNameMetadataKey] = pod.Name
+				}
+				workload := &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": group + "/v1", "kind": kind,
+					"metadata": map[string]interface{}{"name": "private", "namespace": namespace, "uid": "owner-uid"},
+					"spec":     map[string]interface{}{"selector": map[string]interface{}{"matchExpressions": []interface{}{map[string]interface{}{"key": "app", "operator": "In", "values": []interface{}{"private"}}}}},
+				}}
+				// Earlier candidates must not supply credentials from a deleted pod,
+				// another owner, or another controller revision.
+				terminating := pod.DeepCopy()
+				terminating.Name = "a-terminating"
+				now := metav1.Now()
+				terminating.DeletionTimestamp = &now
+				terminating.Spec.ImagePullSecrets = nil
+				pods := []runtime.Object{terminating, pod}
+				if kind == "ReplicaSet" || kind == "StatefulSet" || kind == "DaemonSet" {
+					wrongOwner := pod.DeepCopy()
+					wrongOwner.Name = "b-wrong-owner"
+					wrongOwner.OwnerReferences[0].UID = "other-uid"
+					wrongOwner.Spec.ImagePullSecrets = nil
+					pods = append(pods, wrongOwner)
+				}
+				if kind == "StatefulSet" || kind == "DaemonSet" {
+					old := pod.DeepCopy()
+					old.Name = "c-old-revision"
+					old.Labels[appsv1.StatefulSetRevisionLabel] = "private-old"
+					old.Spec.ImagePullSecrets = nil
+					pods = append(pods, old)
+				}
+				client := k8sfake.NewClientset(pods...)
+				dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme.Scheme, workload)
+				cfg, err := config.LoadConfig("../configuration")
+				require.NoError(t, err)
+				cfg.SkipProfilesWithoutInstances = skip
+				operatorConfig, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, cfg)
+				require.NoError(t, err)
+				wh := NewWatchHandler(operatorConfig, &k8sinterface.KubernetesApi{KubernetesClient: client, DynamicClient: dynamicClient}, nil, nil)
+				events := make(chan watch.Event, 1)
+				events <- watch.Event{Type: watch.Added, Object: profile}
+				close(events)
+				commands := make(chan *apis.Command, 1)
+				errors := make(chan error, 1)
+				wh.HandleContainerProfileEvents(&CooldownQueue{ResultChan: events}, commands, errors)
+				require.Len(t, commands, 1)
+				cmd := <-commands
+				assert.EqualValues(t, utils.CommandScanContainerProfile, cmd.CommandName)
+				assert.Equal(t, pod, cmd.Args[utils.ArgsPod])
+				require.Len(t, client.Actions(), 1, "resolve the pod only once per event")
+			})
+		}
+	}
+}
+
+func TestGetPodWorkloadErrors(t *testing.T) {
+	for _, operation := range []string{"get", "list"} {
+		t.Run(operation, func(t *testing.T) {
+			workload := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "web"}, Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "private"}}}}
+			client := k8sfake.NewClientset()
+			dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme.Scheme, workload)
+			failure := fmt.Errorf("API unavailable")
+			reactor := func(k8stesting.Action) (bool, runtime.Object, error) { return true, nil, failure }
+			if operation == "get" {
+				dynamicClient.PrependReactor("get", "deployments", reactor)
+			} else {
+				client.PrependReactor("list", "pods", reactor)
+			}
+			wh := &WatchHandler{k8sAPI: &k8sinterface.KubernetesApi{KubernetesClient: client, DynamicClient: dynamicClient}}
+			profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Namespace: "web", Labels: map[string]string{helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: "Deployment", helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "web"}}}
+			pod, err := wh.getPod(profile)
+			require.ErrorIs(t, err, failure)
+			require.Nil(t, pod)
+		})
+	}
+}
+
+func TestGetPodWithoutMatchingWorkloadInstance(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		kind     string
+		selector map[string]interface{}
+	}{
+		{name: "legacy profile"},
+		{name: "host profile", kind: "Node"},
+		{name: "deleted workload", kind: "ReplicaSet"},
+		{name: "missing selector", kind: "Deployment"},
+		{name: "empty selector", kind: "Deployment", selector: map[string]interface{}{}},
+		{name: "no matching pods", kind: "Deployment", selector: map[string]interface{}{"matchLabels": map[string]interface{}{"app": "missing"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			workload := &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "apps/v1", "kind": "Deployment",
+				"metadata": map[string]interface{}{"name": "app", "namespace": "web"},
+			}}
+			if test.selector != nil {
+				workload.Object["spec"] = map[string]interface{}{"selector": test.selector}
+			}
+			client := k8sfake.NewClientset(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "web"}})
+			dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme.Scheme, workload)
+			wh := &WatchHandler{k8sAPI: &k8sinterface.KubernetesApi{KubernetesClient: client, DynamicClient: dynamicClient}}
+			profile := &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{Namespace: "web", Labels: map[string]string{
+				helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1", helpersv1.RelatedKindMetadataKey: test.kind, helpersv1.RelatedNameMetadataKey: "app", helpersv1.RelatedNamespaceMetadataKey: "web",
+			}}}
+			pod, err := wh.getPod(profile)
+			require.NoError(t, err)
+			require.Nil(t, pod)
+			if test.kind == "" || test.kind == "Node" {
+				require.Empty(t, dynamicClient.Actions())
+			}
+		})
 	}
 }
