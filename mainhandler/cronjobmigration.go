@@ -3,7 +3,7 @@ package mainhandler
 import (
 	"context"
 	"fmt"
-	"strings"
+	"slices"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -14,10 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	scheduleTierLabel = "armo.tier"
-	triggerActionPath = "v1/triggerAction"
-)
+const scheduleTierLabel = "armo.tier"
 
 // scheduleTemplates maps the tier the chart puts on a schedule's pods to the template
 // ConfigMap the schedule is rendered from.
@@ -29,12 +26,15 @@ var scheduleTemplates = map[string]string{
 
 // MigrateScheduleCronJobs re-renders the pods of the schedules the operator created for the
 // backend from the current templates. A schedule is rendered once, when it is created, and
-// an update command rewrites only its schedule and annotations, so a schedule created
-// before the templates moved to OperatorCommands (helm-charts#964) still posts to the
-// operator's trigger port, which the chart's NetworkPolicy no longer admits. Only the pod
-// spec changes: name, schedule, labels, annotations and the request ConfigMap stay. A
-// template that still renders the trigger call, or that is not installed, leaves its
-// schedules alone. The first failed update is returned once every schedule was tried.
+// an update command rewrites only its schedule and annotations, so a schedule keeps the
+// containers of the chart release it was created under after the chart changes them: before
+// helm-charts#964 it posts to the operator's trigger port, which the chart's NetworkPolicy
+// no longer admits, and after a later template change it can need a ConfigMap or image the
+// chart no longer ships. A schedule whose containers differ from the template's is
+// re-rendered. Only the pod spec changes: name, schedule, labels, annotations and the
+// request ConfigMap stay. A CronJob that the operator did not create, such as the chart's
+// own scheduler with the same tier label, and a template that is not installed leave the
+// CronJob alone. The first failed update is returned once every schedule was tried.
 func MigrateScheduleCronJobs(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, namespace string) error {
 	cronJobs, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -45,7 +45,7 @@ func MigrateScheduleCronJobs(ctx context.Context, k8sAPI *k8sinterface.Kubernete
 	for i := range cronJobs.Items {
 		cronJob := &cronJobs.Items[i]
 		templateName, ok := scheduleTemplates[cronJob.Spec.JobTemplate.Spec.Template.Labels[scheduleTierLabel]]
-		if !ok || !postsToTriggerEndpoint(cronJob.Spec.JobTemplate.Spec.Template.Spec) {
+		if !ok || !createdFromTemplate(cronJob) {
 			continue
 		}
 		template, ok := templates[templateName]
@@ -64,7 +64,7 @@ func MigrateScheduleCronJobs(ctx context.Context, k8sAPI *k8sinterface.Kubernete
 			templates[templateName] = template
 		}
 		podSpec := renderedPodSpec(template, cronJob.Name)
-		if postsToTriggerEndpoint(podSpec) {
+		if sameContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers, podSpec.Containers) {
 			continue
 		}
 		cronJob.Spec.JobTemplate.Spec.Template.Spec = podSpec
@@ -80,17 +80,21 @@ func MigrateScheduleCronJobs(ctx context.Context, k8sAPI *k8sinterface.Kubernete
 	return firstErr
 }
 
-// postsToTriggerEndpoint reports whether a pod still calls the operator's trigger endpoint
-// over HTTP, the way the templates did before helm-charts#964.
-func postsToTriggerEndpoint(spec corev1.PodSpec) bool {
-	for _, container := range spec.Containers {
-		for _, arg := range container.Args {
-			if strings.Contains(arg, triggerActionPath) {
-				return true
-			}
-		}
-	}
-	return false
+// createdFromTemplate reports whether the operator created the CronJob from a template. The
+// operator points the template's request volume at a ConfigMap with the schedule's own name,
+// and the chart's scheduler CronJobs name that volume differently.
+func createdFromTemplate(cronJob *batchv1.CronJob) bool {
+	return slices.ContainsFunc(cronJob.Spec.JobTemplate.Spec.Template.Spec.Volumes, func(v corev1.Volume) bool {
+		return v.Name == requestVolumeName && v.ConfigMap != nil && v.ConfigMap.Name == cronJob.Name
+	})
+}
+
+// sameContainers compares the fields that decide what a schedule's pod runs. The API server
+// defaults none of them, so a schedule rendered from the template compares equal to it.
+func sameContainers(current, rendered []corev1.Container) bool {
+	return slices.EqualFunc(current, rendered, func(a, b corev1.Container) bool {
+		return a.Name == b.Name && a.Image == b.Image && slices.Equal(a.Command, b.Command) && slices.Equal(a.Args, b.Args)
+	})
 }
 
 // renderedPodSpec is the template's pod spec with the request volume pointing at the
