@@ -7,7 +7,7 @@ import (
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/interfaces"
-	dockerregistry "github.com/docker/docker/api/types/registry"
+	dockerregistry "github.com/moby/moby/api/types/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

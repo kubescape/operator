@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
-	"github.com/docker/docker/api/types/registry"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/utils"
+	"github.com/moby/moby/api/types/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

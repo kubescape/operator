@@ -3,8 +3,8 @@ module github.com/kubescape/operator
 go 1.26.9
 
 require (
-	github.com/armosec/armoapi-go v0.0.761
-	github.com/armosec/registryx v0.0.35
+	github.com/armosec/armoapi-go v0.0.773
+	github.com/armosec/registryx v0.0.36-0.20261104202430-ab3cb343e42c
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.35
 	github.com/aws/aws-sdk-go-v2 v1.41.2
@@ -15,7 +15,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/docker v28.5.2+incompatible
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-logr/stdr v1.2.2
 	github.com/go-openapi/runtime v0.33.2
@@ -24,12 +23,13 @@ require (
 	github.com/goradd/maps v1.3.0
 	github.com/kubescape/backend v0.0.37
 	github.com/kubescape/go-logger v0.0.35
-	github.com/kubescape/k8s-interface v0.0.214
+	github.com/kubescape/k8s-interface v0.0.231-0.20261104202156-04235a39a70b
 	github.com/kubescape/kubescape-network-scanner v0.0.15
 	github.com/kubescape/node-agent v0.3.38
 	github.com/kubescape/opa-utils v0.0.315
 	github.com/kubescape/storage v0.0.301
 	github.com/kubescape/storage/pkg/apiauth v0.1.0
+	github.com/moby/moby v28.5.2+incompatible
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
@@ -92,6 +92,10 @@ require (
 
 require (
 	cel.dev/expr v0.25.2 // indirect
+	cloud.google.com/go v0.123.0 // indirect
+	cloud.google.com/go/artifactregistry v1.20.0 // indirect
+	cloud.google.com/go/iam v1.5.3 // indirect
+	cloud.google.com/go/longrunning v0.8.0 // indirect
 	cyphar.com/go-pathrs v0.2.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
@@ -101,6 +105,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v2 v2.1.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerregistry/armcontainerregistry v1.2.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2 v2.4.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
@@ -160,6 +165,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/cli v29.3.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
+	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-events v0.0.0-20250114142523-c867878c5e32 // indirect
@@ -244,7 +250,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.3.3 // indirect
 	github.com/moby/locker v1.0.1 // indirect
-	github.com/moby/moby v28.5.2+incompatible // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/mountinfo v0.7.2 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
