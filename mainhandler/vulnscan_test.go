@@ -9,8 +9,8 @@ import (
 	"sort"
 	"testing"
 
-	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	dockerregistry "github.com/moby/moby/api/types/registry"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
