@@ -4,7 +4,7 @@ go 1.26.9
 
 require (
 	github.com/armosec/armoapi-go v0.0.773
-	github.com/armosec/registryx v0.0.36-0.20261104202430-ab3cb343e42c
+	github.com/armosec/registryx v0.0.36
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.35
 	github.com/aws/aws-sdk-go-v2 v1.41.2
@@ -23,7 +23,7 @@ require (
 	github.com/goradd/maps v1.3.0
 	github.com/kubescape/backend v0.0.37
 	github.com/kubescape/go-logger v0.0.35
-	github.com/kubescape/k8s-interface v0.0.231-0.20261104202156-04235a39a70b
+	github.com/kubescape/k8s-interface v0.0.231
 	github.com/kubescape/kubescape-network-scanner v0.0.15
 	github.com/kubescape/node-agent v0.3.38
 	github.com/kubescape/opa-utils v0.0.315
