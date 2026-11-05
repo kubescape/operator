@@ -161,3 +161,147 @@ func TestHTTPExporterConfig_Validate_PreservesCustomContentType(t *testing.T) {
 	assert.Equal(t, "application/custom+json", config.Headers["Content-Type"])
 }
 
+func TestHTTPExporterConfig_Validate_PreservesCaseInsensitiveContentType(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers map[string]string
+		key     string
+		want    string
+	}{
+		{
+			name: "lowercase content-type",
+			headers: map[string]string{
+				"content-type": "application/custom+json",
+			},
+			key:  "content-type",
+			want: "application/custom+json",
+		},
+		{
+			name: "uppercase CONTENT-TYPE",
+			headers: map[string]string{
+				"CONTENT-TYPE": "application/custom+json",
+			},
+			key:  "CONTENT-TYPE",
+			want: "application/custom+json",
+		},
+		{
+			name: "empty content-type",
+			headers: map[string]string{
+				"content-type": "",
+			},
+			key:  "content-type",
+			want: "",
+		},
+		{
+			name: "empty Content-Type",
+			headers: map[string]string{
+				"Content-Type": "",
+			},
+			key:  "Content-Type",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := HTTPExporterConfig{
+				URL:     "http://localhost:8080",
+				Headers: tt.headers,
+			}
+			err := config.Validate()
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, config.Headers[tt.key])
+			assert.Len(t, config.Headers, 1)
+		})
+	}
+}
+
+func TestHTTPExporter_OutgoingRequest_ContentTypeHeader(t *testing.T) {
+	tests := []struct {
+		name       string
+		headers    map[string]string
+		wantHeader string
+		wantValues []string
+	}{
+		{
+			name:       "default content-type when no headers configured",
+			headers:    nil,
+			wantHeader: "application/json",
+			wantValues: []string{"application/json"},
+		},
+		{
+			name: "preserves exact-case Content-Type",
+			headers: map[string]string{
+				"Content-Type": "application/custom+json",
+			},
+			wantHeader: "application/custom+json",
+			wantValues: []string{"application/custom+json"},
+		},
+		{
+			name: "preserves lowercase content-type without regression",
+			headers: map[string]string{
+				"content-type": "application/custom+json",
+			},
+			wantHeader: "application/custom+json",
+			wantValues: []string{"application/custom+json"},
+		},
+		{
+			name: "preserves uppercase CONTENT-TYPE",
+			headers: map[string]string{
+				"CONTENT-TYPE": "application/custom+json",
+			},
+			wantHeader: "application/custom+json",
+			wantValues: []string{"application/custom+json"},
+		},
+		{
+			name: "preserves empty lowercase content-type",
+			headers: map[string]string{
+				"content-type": "",
+			},
+			wantHeader: "",
+			wantValues: []string{""},
+		},
+		{
+			name: "preserves empty exact-case Content-Type",
+			headers: map[string]string{
+				"Content-Type": "",
+			},
+			wantHeader: "",
+			wantValues: []string{""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotHeader := make(chan string, 1)
+			gotValues := make(chan []string, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotHeader <- r.Header.Get("Content-Type")
+				gotValues <- r.Header.Values("Content-Type")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+
+			exporter, err := InitHTTPExporter(HTTPExporterConfig{
+				URL:     srv.URL,
+				Method:  "POST",
+				Headers: tt.headers,
+			}, "test-cluster", nil, "uid")
+			assert.NoError(t, err)
+
+			exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+				BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+				RuleID:           "R2003",
+			})
+
+			select {
+			case header := <-gotHeader:
+				values := <-gotValues
+				assert.Equal(t, tt.wantHeader, header)
+				assert.Equal(t, tt.wantValues, values)
+			case <-time.After(2 * time.Second):
+				t.Fatal("exporter did not POST the alert")
+			}
+		})
+	}
+}
