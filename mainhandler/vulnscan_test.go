@@ -13,6 +13,7 @@ import (
 	dockerregistry "github.com/moby/moby/api/types/registry"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
@@ -131,6 +132,83 @@ func Test_ActionHandler_getImageScanConfig(t *testing.T) {
 				return got.authConfigs[i].ServerAddress < got.authConfigs[j].ServerAddress
 			})
 			assert.Equalf(t, tt.want, got, "getImageScanConfig(%v, %v, %v, %v)", k8sApiMock, tt.args.namespace, tt.args.pod, tt.args.imageTag)
+		})
+	}
+}
+
+// The skipTLSVerify and http settings of a registry scan secret entry belong to the
+// registry that entry names. An entry for a different registry, whose name only contains
+// the image's registry, must not hand them to the image's scan.
+func Test_getImageScanConfig_tlsSettingsFollowTheExactRegistry(t *testing.T) {
+	tests := []struct {
+		name         string
+		registry     string
+		imageTag     string
+		wantSkipTLS  *bool
+		wantInsecure *bool
+	}{
+		{
+			name:     "another registry whose name contains the image's registry",
+			registry: "harbor.example.com",
+			imageTag: "example.com/team/app:1.0",
+		},
+		{
+			name:     "a Docker Hub mirror named after Docker Hub",
+			registry: "mirror.docker.io.internal",
+			imageTag: "nginx:latest",
+		},
+		{
+			name:     "the same host on another port",
+			registry: "registry.local:5000",
+			imageTag: "registry.local/app:1.0",
+		},
+		{
+			name:         "the image's own registry",
+			registry:     "harbor.example.com",
+			imageTag:     "harbor.example.com/team/app:1.0",
+			wantSkipTLS:  ptr.To(true),
+			wantInsecure: ptr.To(true),
+		},
+		{
+			name:         "the image's own registry written with a scheme and a path",
+			registry:     "https://harbor.example.com/team",
+			imageTag:     "harbor.example.com/team/app:1.0",
+			wantSkipTLS:  ptr.To(true),
+			wantInsecure: ptr.To(true),
+		},
+		{
+			name:         "Docker Hub under its index address",
+			registry:     "https://index.docker.io/v1/",
+			imageTag:     "nginx:latest",
+			wantSkipTLS:  ptr.To(true),
+			wantInsecure: ptr.To(true),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auth, err := json.Marshal([]registryAuth{{
+				Registry:      tt.registry,
+				AuthMethod:    "credentials",
+				Username:      "user",
+				Password:      "pass",
+				SkipTLSVerify: ptr.To(true),
+				Insecure:      ptr.To(true),
+			}})
+			assert.NoError(t, err)
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "kubescape-registry-scan-test", Namespace: "kubescape"},
+				Data:       map[string][]byte{registriesAuthFieldInSecret: auth},
+			}
+			k8sApiMock := &k8sinterface.KubernetesApi{
+				Context:          context.TODO(),
+				KubernetesClient: k8sfake.NewClientset(secret),
+			}
+
+			got, err := getImageScanConfig(k8sApiMock, "", nil, tt.imageTag)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantSkipTLS, got.skipTLSVerify, "skipTLSVerify")
+			assert.Equal(t, tt.wantInsecure, got.insecure, "http")
 		})
 	}
 }
