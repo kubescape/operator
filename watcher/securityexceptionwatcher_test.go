@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func shortenTunables(t *testing.T) {
 
 func testConfig() config.IConfig {
 	cfg, err := config.NewOperatorConfig(
-		config.CapabilitiesConfig{},
+		config.CapabilitiesConfig{Components: config.Components{Kubescape: config.Component{Enabled: true}}},
 		utilsmetadata.ClusterConfig{ClusterName: testClusterName},
 		&beUtils.Credentials{},
 		config.Config{},
@@ -280,4 +281,72 @@ func drainEvents(t *testing.T, q *CooldownQueue, n int, timeout time.Duration) [
 		}
 	}
 	return events
+}
+
+func TestVulnerabilityExceptionDispatchesImageScan(t *testing.T) {
+	wh, dispatched := recordingHandler(t)
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{Components: config.Components{Kubevuln: config.Component{Enabled: true}}}, utilsmetadata.ClusterConfig{ClusterName: testClusterName}, &beUtils.Credentials{}, config.Config{})
+	require.NoError(t, err)
+	wh.cfg = cfg
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go wh.rescanLoop(ctx)
+	go wh.handleEvents(ctx)
+	obj := newSecurityException("prod", "cve", "")
+	obj.Object["spec"] = map[string]interface{}{"vulnerabilities": []interface{}{map[string]interface{}{"vulnerability": map[string]interface{}{"id": "CVE-2020-15999"}}}}
+	wh.eventQueue.Enqueue(watch.Event{Type: watch.Added, Object: obj})
+	select {
+	case cmd := <-dispatched:
+		assert.Equal(t, apis.TypeScanImages, cmd.CommandName)
+		assert.Equal(t, pkgwlid.GetK8sWLID(testClusterName, "", "", ""), cmd.WildWlid)
+	case <-time.After(time.Second):
+		t.Fatal("expected vulnerability rescan")
+	}
+}
+
+func TestSweepVulnerabilityEntryExpiriesIndependently(t *testing.T) {
+	obj := newSecurityException("prod", "cve", "2999-01-01T00:00:00Z")
+	obj.Object["spec"].(map[string]interface{})["vulnerabilities"] = []interface{}{
+		map[string]interface{}{"expiresAt": "2026-07-01T00:00:00Z"},
+		map[string]interface{}{"expiresAt": "2026-07-03T00:00:00Z"},
+	}
+	wh, _ := recordingHandler(t, obj)
+	now := time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)
+	wh.clock = func() time.Time { return now }
+	wh.sweepExpired(context.Background())
+	require.Len(t, wh.rescanSignal, 1)
+	<-wh.rescanSignal
+	wh.sweepExpired(context.Background())
+	require.Empty(t, wh.rescanSignal)
+	now = now.Add(48 * time.Hour)
+	wh.sweepExpired(context.Background())
+	require.Len(t, wh.rescanSignal, 1, "the second expiry must also rescan")
+}
+
+func TestSecurityExceptionDispatchesEnabledScannersAndRetries(t *testing.T) {
+	wh, dispatched := recordingHandler(t)
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{Components: config.Components{Kubescape: config.Component{Enabled: true}, Kubevuln: config.Component{Enabled: true}}}, utilsmetadata.ClusterConfig{ClusterName: testClusterName}, &beUtils.Credentials{}, config.Config{})
+	require.NoError(t, err)
+	wh.cfg = cfg
+	attempts := 0
+	original := wh.dispatchRescan
+	wh.dispatchRescan = func(ctx context.Context, cmd *apis.Command) error {
+		if cmd.CommandName == apis.TypeScanImages && attempts == 0 {
+			attempts++
+			return fmt.Errorf("busy")
+		}
+		return original(ctx, cmd)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go wh.rescanLoop(ctx)
+	wh.requestRescan()
+	require.Eventually(t, func() bool {
+		for len(dispatched) > 0 {
+			if (<-dispatched).CommandName == apis.TypeScanImages {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond, "failed image dispatch must be retried")
 }

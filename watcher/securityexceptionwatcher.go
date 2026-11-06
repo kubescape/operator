@@ -2,6 +2,8 @@ package watcher
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,7 +70,7 @@ var (
 )
 
 // SecurityExceptionWatchHandler watches SecurityException and
-// ClusterSecurityException CRDs and dispatches a cluster posture rescan whenever
+// ClusterSecurityException CRDs and dispatches enabled cluster scans whenever
 // an exception is created, changed, removed, or expires — so results reflect the
 // current set of exceptions without waiting for the next scheduled scan.
 type SecurityExceptionWatchHandler struct {
@@ -83,8 +85,7 @@ type SecurityExceptionWatchHandler struct {
 	// mu guards expiredSeen and watchFailures, touched by both the event handlers
 	// and the expiry sweep.
 	mu sync.Mutex
-	// expiredSeen tracks exceptions we have already rescanned on expiry, keyed by
-	// GVR/namespace/name, so each expiry triggers exactly one rescan.
+	// expiredSeen tracks document and per-entry expiry deadlines already processed.
 	expiredSeen map[string]struct{}
 	// watchFailures counts consecutive informer watch failures per resource, so a
 	// persistently-broken watch (e.g. missing RBAC) can be escalated in the logs.
@@ -258,7 +259,7 @@ func (wh *SecurityExceptionWatchHandler) requestRescan() {
 	}
 }
 
-// rescanLoop dispatches one cluster posture rescan per signal, throttled so a
+// rescanLoop dispatches enabled cluster scans per signal, throttled so a
 // burst of changes does not produce a storm of full scans.
 func (wh *SecurityExceptionWatchHandler) rescanLoop(ctx context.Context) {
 	for {
@@ -266,16 +267,22 @@ func (wh *SecurityExceptionWatchHandler) rescanLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-wh.rescanSignal:
-			cmd := buildRescanCommand(wh.cfg.ClusterName(), wh.cfg.DefaultFrameworks())
-			if err := wh.dispatchRescan(ctx, cmd); err != nil {
-				// Re-arm so a transient failure (e.g. the shared worker pool is
-				// overloaded and Invoke returns ErrPoolOverload) is retried after
-				// the throttle instead of being dropped until the next unrelated
-				// change. The throttle sleep below prevents a tight retry loop.
-				logger.L().Ctx(ctx).Error("failed to dispatch security exception rescan, will retry after throttle", helpers.Error(err))
-				wh.requestRescan()
-			} else {
-				logger.L().Info("dispatched cluster posture rescan for security exception change")
+			var commands []*apis.Command
+			if wh.cfg.Components().Kubescape.Enabled {
+				commands = append(commands, buildRescanCommand(wh.cfg.ClusterName(), wh.cfg.DefaultFrameworks()))
+			}
+			if wh.cfg.Components().Kubevuln.Enabled {
+				// A cluster wildcard selects the operator's scoped image-scan path.
+				// A changed selector or removed entry can affect the old scope too.
+				commands = append(commands, &apis.Command{CommandName: apis.TypeScanImages, WildWlid: pkgwlid.GetK8sWLID(wh.cfg.ClusterName(), "", "", "")})
+			}
+			for _, cmd := range commands {
+				if err := wh.dispatchRescan(ctx, cmd); err != nil {
+					logger.L().Ctx(ctx).Error("failed to dispatch security exception rescan, will retry after throttle", helpers.Error(err))
+					wh.requestRescan()
+				} else {
+					logger.L().Info("dispatched security exception rescan", helpers.String("command", string(cmd.CommandName)))
+				}
 			}
 			if !sleepCtx(ctx, wh.rescanThrottle) {
 				return
@@ -299,9 +306,8 @@ func (wh *SecurityExceptionWatchHandler) expiryLoop(ctx context.Context) {
 	}
 }
 
-// sweepExpired lists both kinds and requests a rescan if any exception has
-// expired since the last sweep. Each expired exception triggers exactly one
-// rescan (tracked in expiredSeen).
+// sweepExpired lists both kinds and requests a rescan for each newly expired
+// document or vulnerability entry.
 func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 	now := wh.clock()
 
@@ -310,6 +316,7 @@ func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 	type entry struct {
 		key       string
 		expired   bool
+		deadlines map[string]bool
 		kind      string
 		name      string
 		namespace string
@@ -326,8 +333,23 @@ func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 				return nil
 			}
 			expiresAt, ok := parseExpiresAt(item)
+			key := expiredKey(gvr, item)
+			deadlines := map[string]bool{}
+			vulnerabilities, _, _ := unstructured.NestedSlice(item.Object, "spec", "vulnerabilities")
+			for i, raw := range vulnerabilities {
+				v, ok := raw.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				value, _, _ := unstructured.NestedString(v, "expiresAt")
+				deadline, err := time.Parse(time.RFC3339, value)
+				if err == nil && !now.Before(deadline) {
+					deadlines[fmt.Sprintf("%s/vulnerability/%d/%s", key, i, value)] = true
+				}
+			}
 			entries = append(entries, entry{
-				key:       expiredKey(gvr, item),
+				key:       key,
+				deadlines: deadlines,
 				expired:   ok && !now.Before(expiresAt),
 				kind:      item.GetKind(),
 				name:      item.GetName(),
@@ -345,21 +367,22 @@ func (wh *SecurityExceptionWatchHandler) sweepExpired(ctx context.Context) {
 	newlyExpired := false
 	wh.mu.Lock()
 	for _, e := range entries {
-		if !e.expired {
-			// not expired (or never expires): drop any stale mark so a future
-			// re-expiry (e.g. expiresAt pushed out then back) is caught again
-			delete(wh.expiredSeen, e.key)
-			continue
+		if e.expired {
+			e.deadlines[e.key] = true
 		}
-		if _, seen := wh.expiredSeen[e.key]; seen {
-			continue
+		for key := range wh.expiredSeen {
+			if (key == e.key || strings.HasPrefix(key, e.key+"/vulnerability/")) && !e.deadlines[key] {
+				delete(wh.expiredSeen, key)
+			}
 		}
-		wh.expiredSeen[e.key] = struct{}{}
-		newlyExpired = true
-		logger.L().Info("security exception expired, requesting rescan",
-			helpers.String("kind", e.kind),
-			helpers.String("name", e.name),
-			helpers.String("namespace", e.namespace))
+		for key := range e.deadlines {
+			if _, seen := wh.expiredSeen[key]; seen {
+				continue
+			}
+			wh.expiredSeen[key] = struct{}{}
+			newlyExpired = true
+			logger.L().Info("security exception expired, requesting rescan", helpers.String("kind", e.kind), helpers.String("name", e.name), helpers.String("namespace", e.namespace))
+		}
 	}
 	wh.mu.Unlock()
 
@@ -374,7 +397,12 @@ func (wh *SecurityExceptionWatchHandler) forgetExpired(obj *unstructured.Unstruc
 		gvr = clusterSecurityExceptionGVR
 	}
 	wh.mu.Lock()
-	delete(wh.expiredSeen, expiredKey(gvr, obj))
+	key := expiredKey(gvr, obj)
+	for seen := range wh.expiredSeen {
+		if seen == key || strings.HasPrefix(seen, key+"/vulnerability/") {
+			delete(wh.expiredSeen, seen)
+		}
+	}
 	wh.mu.Unlock()
 }
 
