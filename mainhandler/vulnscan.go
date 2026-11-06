@@ -352,6 +352,9 @@ type ImageScanConfig struct {
 	authConfigs   []dockerregistry.AuthConfig
 }
 
+// getImageScanConfig collects the credentials for scanning imageTag from the registry scan
+// secrets and, when pod is set, from its image pull secrets. The skipTLSVerify and http
+// settings are taken only from the registry scan secret entry for the image's own registry.
 func getImageScanConfig(k8sAPI *k8sinterface.KubernetesApi, namespace string, pod *corev1.Pod, imageTag string) (*ImageScanConfig, error) {
 	imageScanConfig := ImageScanConfig{}
 	registryName := getRegistryNameFromImageTag(imageTag)
