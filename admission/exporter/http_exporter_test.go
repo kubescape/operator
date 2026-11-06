@@ -161,6 +161,18 @@ func TestHTTPExporterConfig_Validate_PreservesCustomContentType(t *testing.T) {
 	assert.Equal(t, "application/custom+json", config.Headers["Content-Type"])
 }
 
+func TestHTTPExporterConfig_Validate_EmptyContentTypeDefaultsToJSON(t *testing.T) {
+	config := HTTPExporterConfig{
+		URL: "http://localhost:8080",
+		Headers: map[string]string{
+			"Content-Type": "",
+		},
+	}
+	err := config.Validate()
+	assert.NoError(t, err)
+	assert.Equal(t, "application/json", config.Headers["Content-Type"])
+}
+
 func TestHTTPExporterConfig_Validate_PreservesCaseInsensitiveContentType(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -185,20 +197,20 @@ func TestHTTPExporterConfig_Validate_PreservesCaseInsensitiveContentType(t *test
 			want: "application/custom+json",
 		},
 		{
-			name: "empty content-type",
+			name: "empty content-type defaults to application/json",
 			headers: map[string]string{
 				"content-type": "",
 			},
 			key:  "content-type",
-			want: "",
+			want: "application/json",
 		},
 		{
-			name: "empty Content-Type",
+			name: "empty Content-Type defaults to application/json",
 			headers: map[string]string{
 				"Content-Type": "",
 			},
 			key:  "Content-Type",
-			want: "",
+			want: "application/json",
 		},
 	}
 
@@ -254,20 +266,20 @@ func TestHTTPExporter_OutgoingRequest_ContentTypeHeader(t *testing.T) {
 			wantValues: []string{"application/custom+json"},
 		},
 		{
-			name: "preserves empty lowercase content-type",
+			name: "defaults empty lowercase content-type to application/json",
 			headers: map[string]string{
 				"content-type": "",
 			},
-			wantHeader: "",
-			wantValues: []string{""},
+			wantHeader: "application/json",
+			wantValues: []string{"application/json"},
 		},
 		{
-			name: "preserves empty exact-case Content-Type",
+			name: "defaults empty exact-case Content-Type to application/json",
 			headers: map[string]string{
 				"Content-Type": "",
 			},
-			wantHeader: "",
-			wantValues: []string{""},
+			wantHeader: "application/json",
+			wantValues: []string{"application/json"},
 		},
 	}
 

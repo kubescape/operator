@@ -77,10 +77,12 @@ func (config *HTTPExporterConfig) Validate() error {
 		config.Headers = make(map[string]string)
 	}
 	hasContentType := false
-	for key := range config.Headers {
+	for key, val := range config.Headers {
 		if strings.EqualFold(key, "Content-Type") {
 			hasContentType = true
-			break
+			if val == "" {
+				config.Headers[key] = "application/json"
+			}
 		}
 	}
 	if !hasContentType {
