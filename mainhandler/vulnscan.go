@@ -363,7 +363,7 @@ func getImageScanConfig(k8sAPI *k8sinterface.KubernetesApi, namespace string, po
 			if auth, err := parseRegistryAuthSecret(secrets[i]); err == nil {
 				for _, authConfig := range auth {
 					// if we have a registry name and it matches the current registry, check if we need to skip TLS verification
-					if registryName != "" && containsIgnoreCase(authConfig.Registry, registryName) {
+					if registryName != "" && sameRegistry(authConfig.Registry, registryName) {
 						imageScanConfig.skipTLSVerify = authConfig.SkipTLSVerify
 						imageScanConfig.insecure = authConfig.Insecure
 					}
@@ -525,7 +525,24 @@ func getRegistryNameFromImageTag(imageTag string) string {
 	return imageInfo.Registry
 }
 
-// containsIgnoreCase reports whether substr is within s (ignoring case)
-func containsIgnoreCase(s, substr string) bool {
-	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+// sameRegistry reports whether a registry scan secret entry names the registry an image is
+// pulled from. Both sides are reduced to their host and port first, since an entry may be
+// written with a scheme and a path (e.g. "https://index.docker.io/v1/"). A substring match
+// would hand an entry's TLS settings to every registry whose name it contains.
+func sameRegistry(configured, registry string) bool {
+	return registryHost(configured) == registryHost(registry)
+}
+
+// registryHost lower-cases a registry reference, strips its scheme and path, and maps Docker
+// Hub's other hostnames to docker.io, the name image references resolve to.
+func registryHost(registry string) string {
+	host := strings.ToLower(strings.TrimSpace(registry))
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host, _, _ = strings.Cut(host, "/")
+	switch host {
+	case "index.docker.io", "registry-1.docker.io":
+		return "docker.io"
+	}
+	return host
 }
