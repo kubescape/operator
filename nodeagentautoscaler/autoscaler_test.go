@@ -15,9 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// TestSanitizeName checks that node group label values become DNS-safe DaemonSet name suffixes.
 func TestSanitizeName(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -54,12 +56,33 @@ func TestSanitizeName(t *testing.T) {
 			input:    "this-is-a-very-long-instance-type-name-that-exceeds-the-maximum-allowed-length-for-dns-names",
 			expected: "this-is-a-very-long-instance-type-name-that-exceed",
 		},
+		{
+			name:     "very long name cut right after a separator",
+			input:    "gke-prod-cluster-default-pool-highmem-preemptible-v2-west",
+			expected: "gke-prod-cluster-default-pool-highmem-preemptible",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := sanitizeName(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// The API server rejects a DaemonSet whose name is not a DNS-1123 subdomain, which
+// must end with an alphanumeric character, so the node group would get no node-agent.
+func TestGenerateDaemonSetNameIsValidForLongLabelValues(t *testing.T) {
+	for _, labelValue := range []string{
+		"m5.large",
+		"Standard_D4s_v3",
+		"this-is-a-very-long-instance-type-name-that-exceeds-the-maximum-allowed-length-for-dns-names",
+		"gke-prod-cluster-default-pool-highmem-preemptible-v2-west",
+	} {
+		t.Run(labelValue, func(t *testing.T) {
+			name := GenerateDaemonSetName(NodeGroup{LabelValue: labelValue, SanitizedName: sanitizeName(labelValue)})
+			assert.Empty(t, validation.IsDNS1123Subdomain(name), "DaemonSet name %q", name)
 		})
 	}
 }

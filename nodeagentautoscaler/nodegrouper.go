@@ -269,7 +269,8 @@ func sanitizeName(name string) string {
 	// Truncate to max length (63 chars for DNS names, minus prefix)
 	maxLen := 50 // Leave room for "node-agent-" prefix
 	if len(sanitized) > maxLen {
-		sanitized = sanitized[:maxLen]
+		// The cut can land right after a separator; a DNS name must end with an alphanumeric.
+		sanitized = strings.TrimRight(sanitized[:maxLen], "-")
 	}
 
 	return sanitized
