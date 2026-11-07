@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,6 +75,18 @@ func (config *HTTPExporterConfig) Validate() error {
 	}
 	if config.Headers == nil {
 		config.Headers = make(map[string]string)
+	}
+	hasContentType := false
+	for key, val := range config.Headers {
+		if strings.EqualFold(key, "Content-Type") {
+			hasContentType = true
+			if val == "" {
+				config.Headers[key] = "application/json"
+			}
+		}
+	}
+	if !hasContentType {
+		config.Headers["Content-Type"] = "application/json"
 	}
 	if config.URL == "" {
 		return fmt.Errorf("URL is required")
