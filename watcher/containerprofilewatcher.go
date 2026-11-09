@@ -127,7 +127,16 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			continue
 		}
 
-		if wh.cfg != nil && wh.cfg.SkipNamespace(obj.Namespace) {
+		if wh.cfg != nil && wh.cfg.SkipNamespace(utils.ContainerProfileFilterNamespace(obj.Annotations[helpersv1.WlidMetadataKey], obj.Namespace)) {
+			continue
+		}
+
+		// The host profile has no pod: its instance is the Node it was learned on.
+		if node, ok := hostProfileNode(obj); ok {
+			if wh.cfg.SkipProfilesWithoutInstances() && !wh.nodeExists(node) {
+				continue
+			}
+			wh.sendContainerProfileCommand(obj, nil, producedCommands)
 			continue
 		}
 
@@ -147,30 +156,53 @@ func (wh *WatchHandler) HandleContainerProfileEvents(eventQueue *CooldownQueue, 
 			continue
 		}
 
-		// assemble command arguments
-		args := map[string]interface{}{
-			utils.ArgsName:      obj.Name,
-			utils.ArgsNamespace: obj.Namespace,
-		}
-		if pod != nil {
-			args[utils.ArgsPod] = pod
-		}
-
-		// create command
-		cmd := &apis.Command{
-			Wlid:        obj.Annotations[helpersv1.WlidMetadataKey],
-			CommandName: utils.CommandScanContainerProfile,
-			Args:        args,
-		}
-		// send command
-		logger.L().Info("scanning container profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
-		producedCommands <- cmd
+		wh.sendContainerProfileCommand(obj, pod, producedCommands)
 	}
+}
+
+// sendContainerProfileCommand asks kubevuln to scan the profile, passing the pod when there is one.
+func (wh *WatchHandler) sendContainerProfileCommand(obj *spdxv1beta1.ContainerProfile, pod *corev1.Pod, producedCommands chan<- *apis.Command) {
+	// assemble command arguments
+	args := map[string]interface{}{
+		utils.ArgsName:      obj.Name,
+		utils.ArgsNamespace: obj.Namespace,
+	}
+	if pod != nil {
+		args[utils.ArgsPod] = pod
+	}
+
+	// create command
+	cmd := &apis.Command{
+		Wlid:        obj.Annotations[helpersv1.WlidMetadataKey],
+		CommandName: utils.CommandScanContainerProfile,
+		Args:        args,
+	}
+	// send command
+	logger.L().Info("scanning container profile", helpers.String("wlid", cmd.Wlid), helpers.String("name", obj.Name), helpers.String("namespace", obj.Namespace))
+	producedCommands <- cmd
+}
+
+// nodeExists reports whether the Node a host profile was learned on is still present.
+func (wh *WatchHandler) nodeExists(node string) bool {
+	_, err := wh.k8sAPI.KubernetesClient.CoreV1().Nodes().Get(context.TODO(), node, metav1.GetOptions{})
+	if err != nil {
+		logger.L().Debug("nodeExists - failed to get node of host profile", helpers.String("node", node), helpers.Error(err))
+	}
+	return err == nil
 }
 
 func (wh *WatchHandler) getContainerProfileWatcher() (watch.Interface, error) {
 	// no need to support ExcludeNamespaces and IncludeNamespaces since node-agent will respect them as well
 	return wh.storageClient.SpdxV1beta1().ContainerProfiles("").Watch(context.Background(), metav1.ListOptions{})
+}
+
+// hostProfileNode returns the node of a ContainerProfile written by node-agent's host
+// monitoring, which carries a host WLID and the Node workload kind.
+func hostProfileNode(obj *spdxv1beta1.ContainerProfile) (string, bool) {
+	if obj.Labels[helpersv1.RelatedKindMetadataKey] != "Node" {
+		return "", false
+	}
+	return utils.HostNodeFromWlid(obj.Annotations[helpersv1.WlidMetadataKey])
 }
 
 func getPod(client kubernetes.Interface, obj *spdxv1beta1.ContainerProfile) (*corev1.Pod, error) {
