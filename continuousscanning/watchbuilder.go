@@ -7,6 +7,8 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/operator/watcher"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
@@ -53,11 +55,18 @@ func (w *SelfHealingWatch) RunUntilWatchCloses(ctx context.Context, out chan<- w
 		watchEvents := w.currWatch.ResultChan()
 		select {
 		case event, ok := <-watchEvents:
-			if ok {
-				out <- event
-			} else {
+			if !ok {
 				return nil
 			}
+			// Without a version the next watch replays every object as ADDED.
+			watcher.ResumeFrom(&w.opts, event)
+			if event.Type == watch.Error {
+				// The event carries a Status, not an object, and the watch is over.
+				logger.L().Ctx(ctx).Warning("watch failed", helpers.String("gvr", w.gvr.String()), helpers.Error(apierrors.FromObject(event.Object)))
+				w.currWatch.Stop()
+				return nil
+			}
+			out <- event
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -76,6 +85,7 @@ func (w *SelfHealingWatch) Run(ctx context.Context, readyWg *sync.WaitGroup, out
 			logger.L().Debug("creating watch for GVR", gvr)
 			watchFunc, err := w.makeWatchFunc(ctx, w.client, w.gvr, w.namespace, w.opts)
 			if err != nil {
+				watcher.DropGoneVersion(&w.opts, err)
 				logger.L().Ctx(ctx).Warning(
 					"got error when creating a watch for gvr",
 					gvr,

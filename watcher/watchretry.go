@@ -25,12 +25,12 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts metav1.ListOpt
 	if err := backoff.RetryNotify(func() error {
 		watcher, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods("").Watch(context.Background(), watchOpts)
 		if err != nil {
-			dropGoneVersion(&watchOpts, err)
+			DropGoneVersion(&watchOpts, err)
 			return fmt.Errorf("client resource: %w", err)
 		}
 		for {
 			event, chanActive := <-watcher.ResultChan()
-			resumeFrom(&watchOpts, event)
+			ResumeFrom(&watchOpts, event)
 			if wh.eventQueue.Closed() {
 				watcher.Stop()
 				return backoff.Permanent(errors.New("event queue closed"))
@@ -60,26 +60,26 @@ func (wh *WatchHandler) watchRetry(ctx context.Context, watchOpts metav1.ListOpt
 	}
 }
 
-// resumeFrom records where the next watch resumes, the way client-go's RetryWatcher does:
+// ResumeFrom records where the next watch resumes, the way client-go's RetryWatcher does:
 // at the version of the last object received, so a reconnect carries on from there, or
 // from the current state when the server says that version is gone, since nothing else
 // can follow it. An error event carries a Status, not an object; its empty version is not
 // a place to resume, and taking it for one restarted the watch from scratch after any
 // error, replaying every object.
-func resumeFrom(opts *metav1.ListOptions, event watch.Event) {
+func ResumeFrom(opts *metav1.ListOptions, event watch.Event) {
 	switch event.Type {
 	case watch.Added, watch.Modified, watch.Deleted, watch.Bookmark:
 		if metaObject, ok := event.Object.(resourceVersionGetter); ok {
 			opts.ResourceVersion = metaObject.GetResourceVersion()
 		}
 	case watch.Error:
-		dropGoneVersion(opts, apierrors.FromObject(event.Object))
+		DropGoneVersion(opts, apierrors.FromObject(event.Object))
 	}
 }
 
-// dropGoneVersion forgets the resume version when err says the server no longer has it,
+// DropGoneVersion forgets the resume version when err says the server no longer has it,
 // whether the server said so in an event or by refusing the watch request itself.
-func dropGoneVersion(opts *metav1.ListOptions, err error) {
+func DropGoneVersion(opts *metav1.ListOptions, err error) {
 	if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) {
 		opts.ResourceVersion = ""
 	}
