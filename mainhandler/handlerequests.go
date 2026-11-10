@@ -518,7 +518,12 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 
 func (mainHandler *MainHandler) getNamespaces(ctx context.Context, sessionObj *utils.SessionObj) ([]string, error) {
 	namespaces := make([]string, 0, 1)
-	namespaces = append(namespaces, pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()))
+	// A cluster-wide request has no namespace in its ID. Leaving the list empty makes every
+	// namespace be listed below, so each one is filtered and looked up on its own instead of
+	// as "".
+	if ns := pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()); ns != "" {
+		namespaces = append(namespaces, ns)
+	}
 	if len(sessionObj.Command.Designators) > 0 {
 		namespaces = make([]string, 0, 3)
 		for desiIdx := range sessionObj.Command.Designators {
