@@ -51,7 +51,7 @@ func TestResumeFromTakesTheVersionFromObjectsOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := metav1.ListOptions{ResourceVersion: "3"}
-			resumeFrom(&opts, tt.event)
+			ResumeFrom(&opts, tt.event)
 			assert.Equal(t, tt.want, opts.ResourceVersion)
 		})
 	}
@@ -72,7 +72,7 @@ func TestDropGoneVersionOnlyForAGoneVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := metav1.ListOptions{ResourceVersion: "3"}
-			dropGoneVersion(&opts, tt.err)
+			DropGoneVersion(&opts, tt.err)
 			assert.Equal(t, tt.want, opts.ResourceVersion)
 		})
 	}

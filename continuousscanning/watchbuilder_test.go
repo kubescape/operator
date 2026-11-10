@@ -2,12 +2,18 @@ package continuousscanning
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	ktest "k8s.io/client-go/testing"
 )
@@ -176,6 +182,91 @@ func TestNewWatchPoolClusterScopedGVRs(t *testing.T) {
 				gotNamespaces[w.namespace]++
 			}
 			assert.Equal(t, tc.wantNamespaces, gotNamespaces)
+		})
+	}
+}
+
+// TestSelfHealingWatchReconnect checks what an ended watch leaves for the next one. The
+// next watch has to carry on from the last object: started without a version, the server
+// replays every object as ADDED and each one is scanned again.
+func TestSelfHealingWatchReconnect(t *testing.T) {
+	object := func(version string) *unstructured.Unstructured {
+		o := &unstructured.Unstructured{}
+		o.SetKind("Deployment")
+		o.SetNamespace("default")
+		o.SetName("app")
+		o.SetResourceVersion(version)
+		return o
+	}
+	failure := func(code int32, reason metav1.StatusReason) *metav1.Status {
+		return &metav1.Status{Status: metav1.StatusFailure, Code: code, Reason: reason}
+	}
+
+	tt := []struct {
+		name          string
+		events        []watch.Event
+		wantResume    string
+		wantForwarded int
+	}{
+		{
+			name: "resumes from the last object",
+			events: []watch.Event{
+				{Type: watch.Added, Object: object("7")},
+				{Type: watch.Modified, Object: object("8")},
+			},
+			wantResume:    "8",
+			wantForwarded: 2,
+		},
+		{
+			name: "an error event is not forwarded and keeps the version",
+			events: []watch.Event{
+				{Type: watch.Added, Object: object("7")},
+				{Type: watch.Error, Object: failure(http.StatusInternalServerError, metav1.StatusReasonInternalError)},
+			},
+			wantResume:    "7",
+			wantForwarded: 1,
+		},
+		{
+			name: "an expired version is forgotten",
+			events: []watch.Event{
+				{Type: watch.Added, Object: object("7")},
+				{Type: watch.Error, Object: failure(http.StatusGone, metav1.StatusReasonExpired)},
+			},
+			wantResume:    "",
+			wantForwarded: 1,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			first := watch.NewFakeWithChanSize(len(tc.events), false)
+			for _, e := range tc.events {
+				first.Action(e.Type, e.Object)
+			}
+			first.Stop()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var calls []metav1.ListOptions
+			w := NewSelfHealingWatch(nil, schema.GroupVersionResource{}, "", metav1.ListOptions{})
+			w.makeWatchFunc = func(_ context.Context, _ dynamic.Interface, _ schema.GroupVersionResource, _ string, opts metav1.ListOptions) (watch.Interface, error) {
+				calls = append(calls, opts)
+				if len(calls) == 1 {
+					return first, nil
+				}
+				cancel() // the reconnect is what this test is after
+				return nil, errors.New("stop")
+			}
+
+			ready := &sync.WaitGroup{}
+			ready.Add(1)
+			out := make(chan watch.Event, len(tc.events))
+			assert.ErrorIs(t, w.Run(ctx, ready, out), context.Canceled)
+
+			assert.Len(t, calls, 2)
+			assert.Equal(t, tc.wantResume, calls[1].ResourceVersion)
+			assert.Len(t, out, tc.wantForwarded)
 		})
 	}
 }
