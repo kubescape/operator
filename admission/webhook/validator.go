@@ -199,7 +199,8 @@ func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attr
 		telemetry.Admission(ctx, "unmatched_kind", 0)
 		return nil
 	}
-	if attrs.GetObject() == nil {
+	// A DELETE carries the deleted object as the old object and no object.
+	if attrs.GetObject() == nil && attrs.GetOldObject() == nil {
 		telemetry.Admission(ctx, "empty", 0)
 		return nil
 	}
@@ -283,7 +284,12 @@ func (av *AdmissionValidator) evaluate(ctx context.Context, attrs admission.Attr
 			return
 		}
 	} else {
-		un, ok := attrs.GetObject().(*unstructured.Unstructured)
+		admitted := attrs.GetObject()
+		if admitted == nil {
+			// DELETE: the rules apply to the object being deleted.
+			admitted = attrs.GetOldObject()
+		}
+		un, ok := admitted.(*unstructured.Unstructured)
 		if !ok {
 			logger.L().Warning("admission worker: object is not unstructured",
 				helpers.String("kind", attrs.GetKind().Kind))
