@@ -30,6 +30,7 @@ The **Kubescape Operator** is the central orchestration engine for [Kubescape](h
 - [Features](#features)
   - [Continuous Scanning](#continuous-scanning)
   - [Admission Controller](#admission-controller)
+  - [SBOM Export to Dependency-Track](#sbom-export-to-dependency-track)
 - [Development](#development)
   - [Building from Source](#building-from-source)
   - [VS Code Configuration](#vs-code-configuration)
@@ -239,7 +240,8 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
     "nodeSbomGeneration": "disable",
     "seccomp": "disable",
     "otel": "enable",
-    "admissionController": "disable"
+    "admissionController": "disable",
+    "sbomExport": "disable"
   },
   "components": {
     "operator": { "enabled": true },
@@ -321,6 +323,10 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `excludeControls` | `[]` | Control IDs or legacy CIS section numbers omitted from operator posture scans |
 | `excludeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to exclude |
 | `namespaceFilterConfigMapName` | `""` | Optional ConfigMap name in the operator namespace for live namespace filtering |
+| `sbomExport.resyncInterval` | `1h` | How often the [SBOM export](docs/features/sbom-export.md) compares every running image with Dependency-Track |
+| `sbomExport.dependencyTrack.url` | `""` | Dependency-Track API server the SBOM export sends to |
+| `sbomExport.dependencyTrack.apiKeyFile` | `/etc/sbom-export/api-key` | File holding the Dependency-Track API key, read on every request |
+| `sbomExport.dependencyTrack.rootProject` | cluster name | Root of the SBOM export's project tree in Dependency-Track |
 
 ### Exclude controls from posture scans
 
@@ -806,6 +812,22 @@ helm upgrade kubescape kubescape/kubescape-operator \
 ```
 
 When enabled, the Operator runs an HTTPS webhook server on port `8443` that integrates with Kubernetes admission control.
+
+### SBOM Export to Dependency-Track
+
+The Operator sends the SBOM of every running image, as node-agent built it, to [Dependency-Track](https://dependencytrack.org): one project per image and namespace, kept current as workloads change. It needs `nodeSbomGeneration`, but neither kubevuln nor registry access.
+
+**Enable via Helm**, with the API key in a Secret you create in the Kubescape namespace:
+```bash
+helm upgrade kubescape kubescape/kubescape-operator \
+  -n kubescape \
+  --set capabilities.nodeSbomGeneration=enable \
+  --set capabilities.sbomExport=enable \
+  --set sbomExport.dependencyTrack.url=https://dtrack.example.com \
+  --set sbomExport.dependencyTrack.apiKeySecret.name=dependency-track
+```
+
+See [SBOM export to Dependency-Track](docs/features/sbom-export.md) for the project tree, the settings and the permissions the API key needs.
 
 ---
 

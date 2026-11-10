@@ -179,6 +179,12 @@ func TestLoadConfig(t *testing.T) {
 					SELinuxType:            "spc_t",
 					BottlerocketAutoDetect: true,
 				},
+				SBOMExport: SBOMExportConfig{
+					ResyncInterval: time.Hour,
+					DependencyTrack: DependencyTrackConfig{
+						APIKeyFile: "/etc/sbom-export/api-key",
+					},
+				},
 			},
 		},
 	}
@@ -618,4 +624,62 @@ func TestNewOperatorConfig_RegexValidation(t *testing.T) {
 		require.NotNil(t, opCfg)
 		assert.False(t, opCfg.SkipNamespace("default"))
 	})
+}
+
+func TestSBOMExportEnabled(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"enable", true},
+		{"disable", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			cfg, err := NewOperatorConfig(
+				CapabilitiesConfig{Capabilities: Capabilities{SBOMExport: tt.value}},
+				armometadata.ClusterConfig{},
+				&utils.Credentials{},
+				Config{},
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.SBOMExportEnabled())
+		})
+	}
+}
+
+func TestLoadConfigSBOMExportDefaults(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0600))
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, time.Hour, cfg.SBOMExport.ResyncInterval)
+	assert.Equal(t, "/etc/sbom-export/api-key", cfg.SBOMExport.DependencyTrack.APIKeyFile)
+	assert.Empty(t, cfg.SBOMExport.DependencyTrack.URL)
+	assert.Empty(t, cfg.SBOMExport.DependencyTrack.RootProject)
+}
+
+func TestLoadConfigSBOMExport(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
+		"sbomExport": {
+			"resyncInterval": "30m",
+			"dependencyTrack": {"url": "https://dtrack.example.com", "apiKeyFile": "/keys/dtrack", "rootProject": "prod"}
+		}
+	}`), 0600))
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, SBOMExportConfig{
+		ResyncInterval: 30 * time.Minute,
+		DependencyTrack: DependencyTrackConfig{
+			URL:         "https://dtrack.example.com",
+			APIKeyFile:  "/keys/dtrack",
+			RootProject: "prod",
+		},
+	}, cfg.SBOMExport)
 }

@@ -1,0 +1,412 @@
+// Package sbomexport sends the SBOMs that node-agent stores (SBOMSyft
+// objects) to Dependency-Track, one project per running image and namespace,
+// and keeps them current as workloads change.
+//
+// The projects form a tree under a root project, by default the cluster name:
+//
+//	<root> : current                          collection, adds up its namespaces
+//	└── <root>/<namespace> : current          collection, adds up the latest version of each image
+//	    └── <root>/<namespace>/<repository> : <tag>
+//
+// Two things trigger an export: SBOMWatch's events (an SBOM becomes ready, a
+// pod starts with an image whose SBOM is ready), and a resync that compares
+// every running image with Dependency-Track, so nothing is lost while
+// Dependency-Track is unreachable or the operator restarts. An image is sent
+// again only when its SBOMSyft is newer than the project's last BOM import.
+package sbomexport
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
+	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/pager"
+	"k8s.io/client-go/util/workqueue"
+)
+
+const (
+	// collectionVersion is the version of the two collection levels:
+	// Dependency-Track 5 refuses a project without a version.
+	collectionVersion = "current"
+
+	// The cluster adds up its namespaces; a namespace adds up the latest
+	// version of each of its images, so the running tag is what counts.
+	clusterLogic   = "AGGREGATE_DIRECT_CHILDREN"
+	namespaceLogic = "AGGREGATE_LATEST_VERSION_CHILDREN"
+
+	// maxRetries bounds the retries of one image between two resyncs.
+	maxRetries = 5
+
+	requestTimeout = 2 * time.Minute
+)
+
+// Options configures an Exporter.
+type Options struct {
+	// URL is the base URL of the Dependency-Track API server.
+	URL string
+	// APIKeyFile holds the API key; it is read on every request.
+	APIKeyFile string
+	// RootProject is the root of the project tree.
+	RootProject string
+	// ResyncInterval is how often every running image is compared with
+	// Dependency-Track. It is also how long an image counts as running in a
+	// namespace after its last pod there ended.
+	ResyncInterval time.Duration
+	// SkipNamespace reports the namespaces whose images are not exported.
+	SkipNamespace func(namespace string) bool
+}
+
+func (o Options) validate() error {
+	u, err := url.Parse(o.URL)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return fmt.Errorf("sbomExport.dependencyTrack.url %q is not an http(s) URL", o.URL)
+	}
+	if o.APIKeyFile == "" {
+		return errors.New("sbomExport.dependencyTrack.apiKeyFile is empty")
+	}
+	if o.RootProject == "" {
+		return errors.New("sbomExport.dependencyTrack.rootProject is empty and the cluster has no name")
+	}
+	if o.ResyncInterval <= 0 {
+		return fmt.Errorf("sbomExport.resyncInterval %s must be positive", o.ResyncInterval)
+	}
+	return nil
+}
+
+// Exporter sends SBOMs to Dependency-Track. Create it with New, feed it
+// SBOMWatch's events with ObservePod and ObserveSBOM, and run it with Start.
+type Exporter struct {
+	opts    Options
+	pods    kubernetes.Interface
+	sboms   sbomStore
+	dt      *dtClient
+	running *index
+	queue   workqueue.TypedRateLimitingInterface[string] // image digests
+
+	mu          sync.Mutex
+	sbomByImage map[string]sbomMeta // digest → its SBOMSyft
+	collections map[string]string   // collection project name → uuid, emptied on every resync
+
+	stats stats
+}
+
+// New returns an Exporter that lists pods with pods and reads SBOMSyft
+// objects with storage.
+func New(opts Options, pods kubernetes.Interface, storage kssc.Interface) (*Exporter, error) {
+	return newExporter(opts, pods, storageSBOMs{client: storage}, &http.Client{Timeout: requestTimeout}, time.Now)
+}
+
+func newExporter(opts Options, pods kubernetes.Interface, sboms sbomStore, httpClient *http.Client, now func() time.Time) (*Exporter, error) {
+	if err := opts.validate(); err != nil {
+		return nil, err
+	}
+	if opts.SkipNamespace == nil {
+		opts.SkipNamespace = func(string) bool { return false }
+	}
+	return &Exporter{
+		opts:    opts,
+		pods:    pods,
+		sboms:   sboms,
+		dt:      &dtClient{baseURL: strings.TrimRight(opts.URL, "/"), apiKeyFile: opts.APIKeyFile, http: httpClient},
+		running: newIndex(opts.ResyncInterval, now),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.NewTypedItemExponentialFailureRateLimiter[string](5*time.Second, 5*time.Minute),
+			workqueue.TypedRateLimitingQueueConfig[string]{Name: "sbom-export"},
+		),
+		sbomByImage: map[string]sbomMeta{},
+		collections: map[string]string{},
+	}, nil
+}
+
+// ObservePod records a pod event from SBOMWatch's pod watch, which only sees
+// running pods: a pod that stops running arrives as Deleted.
+func (e *Exporter) ObservePod(eventType watch.EventType, pod *corev1.Pod) {
+	if e.opts.SkipNamespace(pod.Namespace) {
+		return
+	}
+	key := pod.Namespace + "/" + pod.Name
+	switch eventType {
+	case watch.Added, watch.Modified:
+		for _, d := range e.running.setPod(key, pod.Namespace, runningDigests(pod)) {
+			if m, ok := e.sbom(d); ok && m.ready() {
+				e.queue.Add(d)
+			}
+		}
+	case watch.Deleted:
+		e.running.removePod(key)
+	}
+}
+
+// ObserveSBOM records an SBOMSyft event from SBOMWatch.
+func (e *Exporter) ObserveSBOM(eventType watch.EventType, obj *spdxv1beta1.SBOMSyft) {
+	m, ok := metaOf(obj)
+	if !ok {
+		return
+	}
+	switch eventType {
+	case watch.Added, watch.Modified:
+		e.mu.Lock()
+		e.sbomByImage[m.digest] = m
+		e.mu.Unlock()
+		if m.ready() {
+			e.queue.Add(m.digest)
+		}
+	case watch.Deleted:
+		e.mu.Lock()
+		if cur, ok := e.sbomByImage[m.digest]; ok && cur.name == m.name && cur.namespace == m.namespace {
+			delete(e.sbomByImage, m.digest)
+		}
+		e.mu.Unlock()
+	}
+}
+
+// Start exports until ctx is done: one worker drains the queue, and a resync
+// runs now and every ResyncInterval.
+func (e *Exporter) Start(ctx context.Context) {
+	go func() {
+		<-ctx.Done()
+		e.queue.ShutDown()
+	}()
+	go e.work(ctx)
+
+	logger.L().Info("starting SBOM export to Dependency-Track",
+		helpers.String("url", e.opts.URL),
+		helpers.String("rootProject", e.opts.RootProject),
+		helpers.String("resyncInterval", e.opts.ResyncInterval.String()))
+
+	ticker := time.NewTicker(e.opts.ResyncInterval)
+	defer ticker.Stop()
+	for {
+		if err := e.resync(ctx); err != nil && ctx.Err() == nil {
+			logger.L().Ctx(ctx).Error("SBOM export resync failed, retrying at the next one", helpers.Error(err))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (e *Exporter) work(ctx context.Context) {
+	for {
+		digest, shutdown := e.queue.Get()
+		if shutdown {
+			return
+		}
+		err := e.process(ctx, digest)
+		switch {
+		case err == nil:
+			e.queue.Forget(digest)
+		case e.queue.NumRequeues(digest) < maxRetries && ctx.Err() == nil:
+			e.queue.AddRateLimited(digest)
+		default:
+			e.queue.Forget(digest)
+			logger.L().Ctx(ctx).Warning("giving up on exporting this SBOM until the next resync",
+				helpers.String("digest", digest), helpers.Error(err))
+		}
+		e.queue.Done(digest)
+	}
+}
+
+// resync rebuilds the running index from one paged list of running pods and
+// the SBOM metadata from one list of SBOMSyft objects, then queues every
+// running image. If either list fails, nothing changes.
+func (e *Exporter) resync(ctx context.Context) error {
+	logger.L().Info("SBOM export since the last resync", e.stats.takeFields()...)
+
+	pods := map[string]podEntry{}
+	err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return e.pods.CoreV1().Pods("").List(ctx, opts)
+	}).EachListItem(ctx, metav1.ListOptions{FieldSelector: "status.phase=Running"}, func(obj runtime.Object) error {
+		pod := obj.(*corev1.Pod)
+		if e.opts.SkipNamespace(pod.Namespace) {
+			return nil
+		}
+		if digests := runningDigests(pod); len(digests) > 0 {
+			pods[pod.Namespace+"/"+pod.Name] = podEntry{namespace: pod.Namespace, digests: digests}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("list running pods: %w", err)
+	}
+	sboms, err := e.sboms.listSBOMs(ctx)
+	if err != nil {
+		return fmt.Errorf("list SBOMSyft objects: %w", err)
+	}
+
+	e.running.replace(pods)
+	byImage := make(map[string]sbomMeta, len(sboms))
+	for _, m := range sboms {
+		byImage[m.digest] = m
+	}
+	e.mu.Lock()
+	e.sbomByImage = byImage
+	e.collections = map[string]string{}
+	e.mu.Unlock()
+
+	for _, d := range e.running.digests() {
+		e.queue.Add(d)
+	}
+	return nil
+}
+
+func (e *Exporter) sbom(digest string) (sbomMeta, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	m, ok := e.sbomByImage[digest]
+	return m, ok
+}
+
+// process exports the SBOM of one image to the project of every namespace it
+// runs in. One namespace failing does not stop the others; the image is
+// retried as a whole, and namespaces already done are then only looked up.
+func (e *Exporter) process(ctx context.Context, digest string) error {
+	namespaces := e.running.namespaces(digest)
+	if len(namespaces) == 0 {
+		return nil
+	}
+	m, ok := e.sbom(digest)
+	if !ok || !m.ready() {
+		e.stats.skipped.Add(1)
+		return nil
+	}
+
+	root, err := e.collection(ctx, e.opts.RootProject, "", clusterLogic)
+	if err != nil {
+		e.stats.failed.Add(1)
+		e.logFailure(ctx, err, m.imageTag, e.opts.RootProject, collectionVersion)
+		return err
+	}
+	repository, version := splitRef(m.imageTag)
+	var bom []byte // converted once, for every namespace
+	var errs []error
+	for _, ns := range namespaces {
+		nsProject := e.opts.RootProject + "/" + ns
+		name := nsProject + "/" + repository
+		sent, err := e.exportTo(ctx, m, name, version, nsProject, root, &bom)
+		switch {
+		case err != nil:
+			e.stats.failed.Add(1)
+			e.logFailure(ctx, err, m.imageTag, name, version)
+			errs = append(errs, err)
+		case sent:
+			e.stats.sent.Add(1)
+			logger.L().Info("sent SBOM to Dependency-Track", helpers.String("project", name), helpers.String("version", version))
+		default:
+			e.stats.unchanged.Add(1)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// exportTo makes name:version hold m's SBOM as its latest version. It reports
+// whether it uploaded: an image whose project imported a BOM no older than the
+// SBOMSyft is only marked latest.
+func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, name, version, nsProject, rootUUID string, bom *[]byte) (bool, error) {
+	p, err := e.dt.lookup(ctx, name, version)
+	if err != nil {
+		return false, err
+	}
+	if p != nil && !p.LastBOMImport.Time().Before(m.created) {
+		if !p.IsLatest {
+			if err := e.dt.patch(ctx, p.UUID, map[string]any{"isLatest": true}); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
+	}
+	nsUUID, err := e.collection(ctx, nsProject, rootUUID, namespaceLogic)
+	if err != nil {
+		return false, err
+	}
+	if *bom == nil {
+		doc, err := e.sboms.syftDocument(ctx, m.namespace, m.name)
+		if err != nil {
+			return false, err
+		}
+		if *bom, err = toCycloneDX(doc); err != nil {
+			return false, fmt.Errorf("convert SBOMSyft %s/%s: %w", m.namespace, m.name, err)
+		}
+	}
+	return true, e.dt.uploadBOM(ctx, name, version, nsUUID, *bom)
+}
+
+// collection returns the uuid of the collection project name:current,
+// creating it under parentUUID, or setting its collection logic, when needed.
+func (e *Exporter) collection(ctx context.Context, name, parentUUID, logic string) (string, error) {
+	e.mu.Lock()
+	uuid, ok := e.collections[name]
+	e.mu.Unlock()
+	if ok {
+		return uuid, nil
+	}
+
+	p, err := e.dt.lookup(ctx, name, collectionVersion)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case p == nil:
+		if p, err = e.dt.createCollection(ctx, name, collectionVersion, parentUUID, logic); err != nil {
+			return "", err
+		}
+		logger.L().Info("created Dependency-Track collection project", helpers.String("project", name), helpers.String("collectionLogic", logic))
+	case p.CollectionLogic != logic:
+		if err := e.dt.patch(ctx, p.UUID, map[string]any{"collectionLogic": logic}); err != nil {
+			return "", err
+		}
+		logger.L().Info("set collection logic of Dependency-Track project", helpers.String("project", name), helpers.String("collectionLogic", logic))
+	}
+
+	e.mu.Lock()
+	e.collections[name] = p.UUID
+	e.mu.Unlock()
+	return p.UUID, nil
+}
+
+// logFailure logs a failed export of image, at project name:version. A refused
+// API key fails every image the same way, so it is logged once per resync.
+func (e *Exporter) logFailure(ctx context.Context, err error, image, name, version string) {
+	fields := []helpers.IDetails{helpers.String("image", image), helpers.String("project", name), helpers.String("version", version), helpers.Error(err)}
+	if isAuthError(err) {
+		if e.stats.authLogged.Swap(true) {
+			return
+		}
+		fields = append(fields, helpers.String("hint", "the API key's team needs BOM_UPLOAD, PROJECT_CREATION_UPLOAD, VIEW_PORTFOLIO and PORTFOLIO_MANAGEMENT (on 5.x: PORTFOLIO_MANAGEMENT_CREATE and PORTFOLIO_MANAGEMENT_UPDATE)"))
+	}
+	logger.L().Ctx(ctx).Error("failed to export SBOM to Dependency-Track", fields...)
+}
+
+// stats counts what the exporter did between two resyncs.
+type stats struct {
+	sent, unchanged, skipped, failed atomic.Int64
+	authLogged                       atomic.Bool // a refused API key was logged
+}
+
+// takeFields returns the counts as log fields and resets them.
+func (s *stats) takeFields() []helpers.IDetails {
+	s.authLogged.Store(false)
+	return []helpers.IDetails{
+		helpers.Int("sent", int(s.sent.Swap(0))),
+		helpers.Int("unchanged", int(s.unchanged.Swap(0))),
+		helpers.Int("skippedNoReadySBOM", int(s.skipped.Swap(0))),
+		helpers.Int("failed", int(s.failed.Swap(0))),
+	}
+}

@@ -34,6 +34,7 @@ type Capabilities struct {
 	VulnerabilityScan    string `json:"vulnerabilityScan"`
 	AdmissionController  string `json:"admissionController"`
 	RiskAcceptance       string `json:"riskAcceptance"`
+	SBOMExport           string `json:"sbomExport"`
 }
 
 type Components struct {
@@ -156,6 +157,27 @@ type Config struct {
 	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
 	SkipProfilesWithoutInstances  bool                           `mapstructure:"skipProfilesWithoutInstances"`
 	NodeAgentAutoscaler           NodeAgentAutoscalerConfig      `mapstructure:"nodeAgentAutoscaler"`
+	SBOMExport                    SBOMExportConfig               `mapstructure:"sbomExport"`
+}
+
+// SBOMExportConfig configures the export of node SBOMs to Dependency-Track,
+// turned on by the sbomExport capability.
+type SBOMExportConfig struct {
+	// ResyncInterval is how often the exporter compares what runs in the
+	// cluster with what Dependency-Track holds.
+	ResyncInterval  time.Duration         `mapstructure:"resyncInterval"`
+	DependencyTrack DependencyTrackConfig `mapstructure:"dependencyTrack"`
+}
+
+// DependencyTrackConfig is where the exporter sends the SBOMs.
+type DependencyTrackConfig struct {
+	// URL is the base URL of the Dependency-Track API server.
+	URL string `mapstructure:"url"`
+	// APIKeyFile is the file the API key is read from, on every request, so a
+	// rotated Secret needs no restart.
+	APIKeyFile string `mapstructure:"apiKeyFile"`
+	// RootProject is the root of the project tree; empty means the cluster name.
+	RootProject string `mapstructure:"rootProject"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -170,6 +192,8 @@ type IConfig interface {
 	ContinuousScanEnabled() bool
 	NodeSbomGenerationEnabled() bool
 	RiskAcceptanceEnabled() bool
+	SBOMExportEnabled() bool
+	SBOMExportConfig() SBOMExportConfig
 	CleanUpRoutineInterval() time.Duration
 	MatchingRulesFilename() string
 	TriggerSecurityFramework() bool
@@ -248,6 +272,16 @@ func (c *OperatorConfig) AdmissionControllerEnabled() bool {
 
 func (c *OperatorConfig) NodeSbomGenerationEnabled() bool {
 	return c.components.Capabilities.NodeSbomGeneration == "enable"
+}
+
+// SBOMExportEnabled reports whether the sbomExport capability is on.
+func (c *OperatorConfig) SBOMExportEnabled() bool {
+	return c.components.Capabilities.SBOMExport == "enable"
+}
+
+// SBOMExportConfig returns where and how often to export SBOMs.
+func (c *OperatorConfig) SBOMExportConfig() SBOMExportConfig {
+	return c.serviceConfig.SBOMExport
 }
 
 // RiskAcceptanceEnabled reports whether the riskAcceptance capability is on. The
@@ -431,6 +465,10 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("nodeAgentAutoscaler.goMemLimitPercentage", 0.8)
 	viper.SetDefault("nodeAgentAutoscaler.seLinuxType", "spc_t")
 	viper.SetDefault("nodeAgentAutoscaler.bottlerocketAutoDetect", true)
+
+	// SBOM export defaults
+	viper.SetDefault("sbomExport.resyncInterval", time.Hour)
+	viper.SetDefault("sbomExport.dependencyTrack.apiKeyFile", "/etc/sbom-export/api-key")
 
 	viper.AutomaticEnv()
 

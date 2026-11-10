@@ -151,17 +151,28 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	commandWatchHandler := watcher.NewCommandWatchHandler(mainHandler.k8sAPI, mainHandler.config)
 	operatorCommandsHandler := watcher.NewOperatorCommandsHandler(ctx, mainHandler.eventWorkerPool, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
 
-	if mainHandler.config.Components().Kubevuln.Enabled {
+	kubevulnEnabled := mainHandler.config.Components().Kubevuln.Enabled
+	sbomExporter := mainHandler.newSBOMExporter()
+	if kubevulnEnabled || sbomExporter != nil {
 		eventQueue := watcher.NewCooldownQueue()
 		watchHandler := watcher.NewWatchHandler(mainHandler.config, mainHandler.k8sAPI, mainHandler.ksStorageClient, eventQueue)
 
-		registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
-		go registryCommandsHandler.Start()
+		if sbomExporter != nil {
+			watchHandler.SetSBOMObserver(sbomExporter)
+			go sbomExporter.Start(ctx)
+		}
 
-		// wait for the kubevuln component to be ready
-		logger.L().Info("Waiting for vuln scan to be ready")
-		waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
-		waitFunc(mainHandler.config)
+		if kubevulnEnabled {
+			registryCommandsHandler := watcher.NewRegistryCommandsHandler(ctx, mainHandler.k8sAPI, commandWatchHandler, mainHandler.config)
+			go registryCommandsHandler.Start()
+
+			// wait for the kubevuln component to be ready
+			logger.L().Info("Waiting for vuln scan to be ready")
+			waitFunc := isActionNeedToWait(apis.Command{CommandName: apis.TypeScanImages})
+			waitFunc(mainHandler.config)
+		} else {
+			watchHandler.DisableImageScans()
+		}
 
 		// start watching
 		if mainHandler.config.NodeSbomGenerationEnabled() {
@@ -169,7 +180,9 @@ func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 		} else {
 			go watchHandler.PodWatch(ctx, mainHandler.eventWorkerPool)
 		}
-		go watchHandler.ContainerProfileWatch(ctx, mainHandler.eventWorkerPool)
+		if kubevulnEnabled {
+			go watchHandler.ContainerProfileWatch(ctx, mainHandler.eventWorkerPool)
+		}
 	}
 
 	// Watch SecurityException/ClusterSecurityException CRDs and rescan on
