@@ -15,7 +15,9 @@ import (
 	"github.com/kubescape/operator/utils"
 	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
+	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -420,4 +422,33 @@ func TestHandleSBOMEvents_WlidNeverArrives_ExhaustsRetries(t *testing.T) {
 	key := sbom.Namespace + "/" + sbom.Name
 	_, exists := wh.sbomRetryAttempts.Load(key)
 	assert.False(t, exists, "retry counter must be cleared on exhaustion")
+}
+
+// TestSBOMWatch_LearnsWorkloadsWithoutBackend covers a cluster with no backend, where the
+// chart leaves ServiceDiscovery disabled. HandleSBOMEvents drops any SBOM whose Wlid it
+// cannot find, and only pod events supply that Wlid, so the pods must be watched there too.
+func TestSBOMWatch_LearnsWorkloadsWithoutBackend(t *testing.T) {
+	wh := newTestHandler(t)
+	assert.False(t, wh.cfg.Components().ServiceDiscovery.Enabled)
+	wh.eventQueue = NewCooldownQueueWithParams(50*time.Millisecond, 10*time.Millisecond)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "nginx", Namespace: "default"},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Name: testContainerName, ImageID: testImageID}},
+		},
+	}
+	_, err := wh.k8sAPI.KubernetesClient.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	pool, err := ants.NewPoolWithFunc(1, func(interface{}) {})
+	assert.NoError(t, err)
+	defer pool.Release()
+
+	go wh.SBOMWatch(context.Background(), pool)
+
+	assert.Eventuallyf(t, func() bool {
+		return wh.ImageToContainerData.Get(testImageHashOnly).Wlid != ""
+	}, 3*time.Second, 20*time.Millisecond, "the Wlid of image %s was never learned from its pod", testImageHashOnly)
 }
