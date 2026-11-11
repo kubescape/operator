@@ -18,7 +18,7 @@ const testAPIKey = "test-api-key"
 
 // fakeDT is an in-memory Dependency-Track that serves the calls dtClient
 // makes: project lookup, get by UUID, create, patch (including a move), BOM
-// upload with autoCreate and projectTags, and project properties.
+// upload to an existing project, and project properties.
 type fakeDT struct {
 	mu             sync.Mutex
 	now            func() time.Time
@@ -26,6 +26,7 @@ type fakeDT struct {
 	parents        map[string]string            // project uuid → parent uuid
 	properties     map[string]map[string]string // project uuid → "group/name" → value
 	uploads        []string                     // "name:version" of every BOM upload
+	patches        map[string]int               // project uuid → PATCH requests
 	nextID         int
 	fail           int    // answer the next fail requests with 503
 	failProperties int    // answer the next property writes with 503
@@ -41,7 +42,7 @@ func newFakeDT(t *testing.T, now func() time.Time) (*fakeDT, *httptest.Server, s
 	if err := os.WriteFile(keyFile, []byte(testAPIKey+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeDT{now: now, projects: map[string]*project{}, parents: map[string]string{}, properties: map[string]map[string]string{}, keyFile: keyFile}
+	f := &fakeDT{now: now, projects: map[string]*project{}, parents: map[string]string{}, properties: map[string]map[string]string{}, patches: map[string]int{}, keyFile: keyFile}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	return f, srv, keyFile
@@ -115,9 +116,13 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Tags            *[]tag
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.patches[uuid]++
 		if req.IsLatest != nil {
 			p.IsLatest = *req.IsLatest
 		}
+		// Like Dependency-Track 4.14, a PATCH without collectionLogic sets it
+		// to NONE.
+		p.CollectionLogic = "NONE"
 		if req.CollectionLogic != nil {
 			p.CollectionLogic = *req.CollectionLogic
 		}
@@ -233,6 +238,13 @@ func (f *fakeDT) addProject(name, version, parentUUID string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.addLocked(name, version, parentUUID, nil).UUID
+}
+
+// patchCount returns how many PATCH requests the project with uuid got.
+func (f *fakeDT) patchCount(uuid string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.patches[uuid]
 }
 
 // project returns a copy of name:version, and the name of its parent.

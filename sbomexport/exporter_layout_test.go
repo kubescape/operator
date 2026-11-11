@@ -265,14 +265,17 @@ func TestExporterMovesItsParentWhenOnlyTheRootChanges(t *testing.T) {
 	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
 	require.NoError(t, te.resync(context.Background()))
 	require.Empty(t, te.drain())
-	_, root, _ := te.dt.project("cluster/payments", "current")
+	parent, root, _ := te.dt.project("cluster/payments", "current")
 	require.Equal(t, "cluster", root)
+	patches := te.dt.patchCount(parent.UUID)
 
 	te.updateNamespace(t, namespace("payments", map[string]string{AnnotationRootProject: "Finance:current", AnnotationRootProjectCreate: "false"}))
 	require.Empty(t, te.drain())
 
-	_, root, _ = te.dt.project("cluster/payments", "current")
+	parent, root, _ = te.dt.project("cluster/payments", "current")
 	assert.Equal(t, "Finance", root)
+	assert.Equal(t, parentLogic, parent.CollectionLogic)
+	assert.Equal(t, 1, te.dt.patchCount(parent.UUID)-patches, "one PATCH moves it and keeps its collection logic")
 	finance, _, _ := te.dt.project("Finance", "current")
 	assert.Empty(t, finance.Tags, "the root itself is not changed")
 }

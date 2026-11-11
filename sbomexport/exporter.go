@@ -636,7 +636,11 @@ func (e *Exporter) reconcileCollection(ctx context.Context, p *project, logic st
 	if len(fields) == 0 {
 		return nil
 	}
-	if err := e.dt.patch(ctx, p.UUID, fields); err != nil {
+	// Dependency-Track sets the collection logic to NONE on a PATCH that
+	// leaves it out, so moving a collection sends its logic too.
+	body := maps.Clone(fields)
+	body["collectionLogic"] = logic
+	if err := e.dt.patch(ctx, p.UUID, body); err != nil {
 		return err
 	}
 	logger.L().Info("updated Dependency-Track collection project", helpers.String("project", p.Name+":"+p.Version), helpers.Interface("changes", fields))
