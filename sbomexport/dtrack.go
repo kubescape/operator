@@ -15,6 +15,17 @@ import (
 	"time"
 )
 
+const (
+	// managedTag marks the projects the exporter created. It changes no other
+	// project: no collection logic, no BOM, no move.
+	managedTag = "managed-by:kubescape"
+
+	// The project property that records which image digest a project's BOM
+	// came from, so two images cannot overwrite each other's project.
+	digestPropertyGroup = "kubescape"
+	digestPropertyName  = "image-digest"
+)
+
 // project is the part of a Dependency-Track project the exporter reads.
 type project struct {
 	UUID            string      `json:"uuid"`
@@ -23,6 +34,21 @@ type project struct {
 	IsLatest        bool        `json:"isLatest"`
 	CollectionLogic string      `json:"collectionLogic"`
 	LastBOMImport   epochMillis `json:"lastBomImport"`
+	Tags            []tag       `json:"tags"`
+}
+
+type tag struct {
+	Name string `json:"name"`
+}
+
+// managed reports whether the exporter created p.
+func (p *project) managed() bool {
+	for _, t := range p.Tags {
+		if strings.EqualFold(t.Name, managedTag) {
+			return true
+		}
+	}
+	return false
 }
 
 // epochMillis is a Dependency-Track timestamp. It decodes from epoch
@@ -160,10 +186,33 @@ func (c *dtClient) lookup(ctx context.Context, name, version string) (*project, 
 	return &p, nil
 }
 
+// getByUUID returns the project with uuid, or nil when it does not exist.
+// Dependency-Track answers 400 for some UUIDs it does not know.
+func (c *dtClient) getByUUID(ctx context.Context, uuid string) (*project, error) {
+	var p project
+	status, err := c.do(ctx, http.MethodGet, "/api/v1/project/"+url.PathEscape(uuid), nil, &p, http.StatusOK, http.StatusNotFound, http.StatusBadRequest)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, nil
+	}
+	return &p, nil
+}
+
+// find returns the project ref points at, or nil when it does not exist.
+func (c *dtClient) find(ctx context.Context, ref projectRef) (*project, error) {
+	if ref.uuid != "" {
+		return c.getByUUID(ctx, ref.uuid)
+	}
+	return c.lookup(ctx, ref.name, ref.version)
+}
+
 // createCollection creates the collection project name:version with the given
-// collection logic, under parentUUID unless it is empty.
+// collection logic, under parentUUID unless it is empty, tagged as created by
+// the exporter.
 func (c *dtClient) createCollection(ctx context.Context, name, version, parentUUID, logic string) (*project, error) {
-	body := map[string]any{"name": name, "version": version, "collectionLogic": logic}
+	body := map[string]any{"name": name, "version": version, "collectionLogic": logic, "tags": []tag{{Name: managedTag}}}
 	if parentUUID != "" {
 		body["parent"] = map[string]string{"uuid": parentUUID}
 	}
@@ -182,19 +231,56 @@ func (c *dtClient) patch(ctx context.Context, uuid string, fields map[string]any
 }
 
 // uploadBOM uploads bom as the latest version of name:version, creating the
-// project under parentUUID when it does not exist. Dependency-Track processes
-// the BOM asynchronously after answering.
+// project under parentUUID, tagged as created by the exporter, when it does
+// not exist. Dependency-Track processes the BOM asynchronously after answering.
 func (c *dtClient) uploadBOM(ctx context.Context, name, version, parentUUID string, bom []byte) error {
 	body := map[string]any{
 		"projectName":    name,
 		"projectVersion": version,
 		"autoCreate":     true,
 		"isLatest":       true,
+		"projectTags":    []tag{{Name: managedTag}},
 		"bom":            base64.StdEncoding.EncodeToString(bom),
 	}
 	if parentUUID != "" {
 		body["parentUUID"] = parentUUID
 	}
 	_, err := c.do(ctx, http.MethodPut, "/api/v1/bom", body, nil, http.StatusOK)
+	return err
+}
+
+// projectProperty is a Dependency-Track project property.
+type projectProperty struct {
+	GroupName     string `json:"groupName"`
+	PropertyName  string `json:"propertyName"`
+	PropertyValue string `json:"propertyValue"`
+	PropertyType  string `json:"propertyType"`
+}
+
+// digestOwner returns the image digest recorded on the project with uuid, or
+// "" when none is.
+func (c *dtClient) digestOwner(ctx context.Context, uuid string) (string, error) {
+	var props []projectProperty
+	if _, err := c.do(ctx, http.MethodGet, "/api/v1/project/"+url.PathEscape(uuid)+"/property", nil, &props, http.StatusOK); err != nil {
+		return "", err
+	}
+	for _, p := range props {
+		if p.GroupName == digestPropertyGroup && p.PropertyName == digestPropertyName {
+			return p.PropertyValue, nil
+		}
+	}
+	return "", nil
+}
+
+// setDigestOwner records digest on the project with uuid: PUT creates the
+// property, and answers 409 when it exists, which POST then updates.
+func (c *dtClient) setDigestOwner(ctx context.Context, uuid, digest string) error {
+	body := projectProperty{GroupName: digestPropertyGroup, PropertyName: digestPropertyName, PropertyValue: digest, PropertyType: "STRING"}
+	path := "/api/v1/project/" + url.PathEscape(uuid) + "/property"
+	status, err := c.do(ctx, http.MethodPut, path, body, nil, http.StatusCreated, http.StatusOK, http.StatusConflict)
+	if err != nil || status != http.StatusConflict {
+		return err
+	}
+	_, err = c.do(ctx, http.MethodPost, path, body, nil, http.StatusOK, http.StatusNotModified)
 	return err
 }

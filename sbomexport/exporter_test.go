@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 )
 
 const (
@@ -74,40 +76,65 @@ type testExporter struct {
 	client *k8sfake.Clientset
 }
 
-// newTestExporter returns an Exporter with root project "cluster", a one-hour
-// resync and kube-system excluded, over a fake Dependency-Track, a fake SBOM
-// store and a fake clientset holding pods.
-func newTestExporter(t *testing.T, pods ...runtime.Object) *testExporter {
+// newTestExporter returns an Exporter for cluster "cluster" with the default
+// layout, a one-hour resync and kube-system excluded, over a fake
+// Dependency-Track, a fake SBOM store and a fake clientset holding objects
+// (pods and namespaces).
+func newTestExporter(t *testing.T, objects ...runtime.Object) *testExporter {
+	t.Helper()
+	return newTestExporterWith(t, func(*Options) {}, objects...)
+}
+
+// newTestExporterWith is newTestExporter with options changed by change.
+func newTestExporterWith(t *testing.T, change func(*Options), objects ...runtime.Object) *testExporter {
 	t.Helper()
 	clock := &fakeClock{t: time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)}
 	dt, srv, keyFile := newFakeDT(t, clock.now)
 	store := &fakeStore{}
-	client := k8sfake.NewClientset(pods...)
-	e, err := newExporter(Options{
+	client := k8sfake.NewClientset(objects...)
+	opts := Options{
 		URL:            srv.URL,
 		APIKeyFile:     keyFile,
-		RootProject:    "cluster",
+		Cluster:        "cluster",
+		Layout:         defaultLayout,
+		MaxSBOMSize:    10 << 20,
 		ResyncInterval: time.Hour,
 		SkipNamespace:  func(ns string) bool { return ns == "kube-system" },
-	}, client, store, srv.Client(), clock.now)
+	}
+	change(&opts)
+	e, err := newExporter(opts, client, store, srv.Client(), clock.now)
 	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	t.Cleanup(e.queue.ShutDown)
+	go e.namespaceInformer.Run(ctx.Done())
+	require.True(t, cache.WaitForCacheSync(ctx.Done(), e.namespaceInformer.HasSynced))
 	return &testExporter{Exporter: e, dt: dt, store: store, clock: clock, client: client}
 }
 
-// drain processes every queued image once, as Start's worker would, and
+// drain processes every queued item once, as Start's worker would, and
 // returns the errors.
 func (te *testExporter) drain() []error {
 	var errs []error
 	for te.queue.Len() > 0 {
-		digest, _ := te.queue.Get()
-		if err := te.process(context.Background(), digest); err != nil {
+		key, _ := te.queue.Get()
+		var err error
+		if ns, ok := strings.CutPrefix(key, moveKeyPrefix); ok {
+			err = te.move(context.Background(), ns)
+		} else {
+			err = te.process(context.Background(), key)
+		}
+		if err != nil {
 			errs = append(errs, err)
 		}
-		te.queue.Forget(digest)
-		te.queue.Done(digest)
+		te.queue.Forget(key)
+		te.queue.Done(key)
 	}
 	return errs
+}
+
+func namespace(name string, annotations map[string]string) *corev1.Namespace {
+	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Annotations: annotations}}
 }
 
 func runningPod(namespace, name, imageID string) *corev1.Pod {
@@ -135,8 +162,16 @@ func sbomObject(imageID, imageTag, status string, created time.Time) *spdxv1beta
 	}
 }
 
+// defaultLayout is the operator's default: <cluster>/<namespace>/<repository>:<tag>.
+var defaultLayout = Layout{
+	Root:    Collection{Name: "{{ .Cluster }}", Version: "current", Create: true},
+	Parent:  Collection{Name: "{{ .Cluster }}/{{ .Namespace }}", Version: "current", Create: true},
+	Name:    "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}",
+	Version: "{{ .Tag }}",
+}
+
 func TestNewRejectsAnInvalidConfiguration(t *testing.T) {
-	valid := Options{URL: "https://dtrack.example.com", APIKeyFile: "/etc/sbom-export/api-key", RootProject: "cluster", ResyncInterval: time.Hour}
+	valid := Options{URL: "https://dtrack.example.com", APIKeyFile: "/etc/sbom-export/api-key", Cluster: "cluster", Layout: defaultLayout, MaxSBOMSize: 10 << 20, ResyncInterval: time.Hour}
 	tt := []struct {
 		name   string
 		change func(*Options)
@@ -144,7 +179,10 @@ func TestNewRejectsAnInvalidConfiguration(t *testing.T) {
 		{"no URL", func(o *Options) { o.URL = "" }},
 		{"a URL without a scheme", func(o *Options) { o.URL = "dtrack.example.com" }},
 		{"no API key file", func(o *Options) { o.APIKeyFile = "" }},
-		{"no root project", func(o *Options) { o.RootProject = "" }},
+		{"no cluster name for the default root project", func(o *Options) { o.Cluster = "" }},
+		{"a template that does not parse", func(o *Options) { o.Layout.Name = "{{ .Namespace" }},
+		{"a template with an unknown field", func(o *Options) { o.Layout.Version = "{{ .Digest }}" }},
+		{"no size limit", func(o *Options) { o.MaxSBOMSize = 0 }},
 		{"no resync interval", func(o *Options) { o.ResyncInterval = 0 }},
 	}
 	for _, tc := range tt {
@@ -179,12 +217,12 @@ func TestExporterSendsAnImageToTheProjectOfEveryNamespaceItRunsIn(t *testing.T) 
 	image, parent, _ := te.dt.project("cluster/apps/"+redisProject, "8")
 	assert.Equal(t, "cluster/apps", parent)
 	assert.True(t, image.IsLatest)
-	namespace, parent, _ := te.dt.project("cluster/apps", collectionVersion)
+	namespace, parent, _ := te.dt.project("cluster/apps", "current")
 	assert.Equal(t, "cluster", parent)
-	assert.Equal(t, namespaceLogic, namespace.CollectionLogic)
-	root, parent, _ := te.dt.project("cluster", collectionVersion)
+	assert.Equal(t, parentLogic, namespace.CollectionLogic)
+	root, parent, _ := te.dt.project("cluster", "current")
 	assert.Empty(t, parent)
-	assert.Equal(t, clusterLogic, root.CollectionLogic)
+	assert.Equal(t, rootLogic, root.CollectionLogic)
 }
 
 func TestExporterSendsAnSBOMAgainOnlyWhenItIsNewerThanTheLastImport(t *testing.T) {

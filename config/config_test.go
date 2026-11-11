@@ -181,8 +181,15 @@ func TestLoadConfig(t *testing.T) {
 				},
 				SBOMExport: SBOMExportConfig{
 					ResyncInterval: time.Hour,
+					MaxSBOMSize:    10 << 20,
 					DependencyTrack: DependencyTrackConfig{
-						APIKeyFile: "/etc/sbom-export/api-key",
+						APIKeyFile:  "/etc/sbom-export/api-key",
+						RootProject: DTCollectionConfig{Name: "{{ .Cluster }}", Version: "current", Create: true},
+						Project: DTProjectConfig{
+							Name:    "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}",
+							Version: "{{ .Tag }}",
+							Parent:  DTCollectionConfig{Name: "{{ .Cluster }}/{{ .Namespace }}", Version: "current", Create: true},
+						},
 					},
 				},
 			},
@@ -657,9 +664,15 @@ func TestLoadConfigSBOMExportDefaults(t *testing.T) {
 	cfg, err := LoadConfig(dir)
 	require.NoError(t, err)
 	assert.Equal(t, time.Hour, cfg.SBOMExport.ResyncInterval)
+	assert.Equal(t, int64(10<<20), cfg.SBOMExport.MaxSBOMSize)
 	assert.Equal(t, "/etc/sbom-export/api-key", cfg.SBOMExport.DependencyTrack.APIKeyFile)
 	assert.Empty(t, cfg.SBOMExport.DependencyTrack.URL)
-	assert.Empty(t, cfg.SBOMExport.DependencyTrack.RootProject)
+	assert.Equal(t, DTCollectionConfig{Name: "{{ .Cluster }}", Version: "current", Create: true}, cfg.SBOMExport.DependencyTrack.RootProject)
+	assert.Equal(t, DTProjectConfig{
+		Name:    "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}",
+		Version: "{{ .Tag }}",
+		Parent:  DTCollectionConfig{Name: "{{ .Cluster }}/{{ .Namespace }}", Version: "current", Create: true},
+	}, cfg.SBOMExport.DependencyTrack.Project)
 }
 
 func TestLoadConfigSBOMExport(t *testing.T) {
@@ -669,17 +682,29 @@ func TestLoadConfigSBOMExport(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
 		"sbomExport": {
 			"resyncInterval": "30m",
-			"dependencyTrack": {"url": "https://dtrack.example.com", "apiKeyFile": "/keys/dtrack", "rootProject": "prod"}
+			"maxSBOMSize": 5242880,
+			"dependencyTrack": {
+				"url": "https://dtrack.example.com",
+				"apiKeyFile": "/keys/dtrack",
+				"rootProject": {"name": "Finance", "version": "current", "create": false},
+				"project": {"name": "{{ .Repository }}", "parent": {"name": "Payments Team", "create": false}}
+			}
 		}
 	}`), 0600))
 	cfg, err := LoadConfig(dir)
 	require.NoError(t, err)
 	assert.Equal(t, SBOMExportConfig{
 		ResyncInterval: 30 * time.Minute,
+		MaxSBOMSize:    5 << 20,
 		DependencyTrack: DependencyTrackConfig{
 			URL:         "https://dtrack.example.com",
 			APIKeyFile:  "/keys/dtrack",
-			RootProject: "prod",
+			RootProject: DTCollectionConfig{Name: "Finance", Version: "current", Create: false},
+			Project: DTProjectConfig{
+				Name:    "{{ .Repository }}",
+				Version: "{{ .Tag }}",
+				Parent:  DTCollectionConfig{Name: "Payments Team", Version: "current", Create: false},
+			},
 		},
-	}, cfg.SBOMExport)
+	}, cfg.SBOMExport, "unset fields keep their defaults")
 }

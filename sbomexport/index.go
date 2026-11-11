@@ -102,6 +102,27 @@ func (x *index) namespaces(digest string) []string {
 	return out
 }
 
+// digestsIn returns, sorted, the digests that run in ns or ran there less than
+// a grace period ago.
+func (x *index) digestsIn(ns string) []string {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.pruneLocked()
+	var out []string
+	for d, r := range x.refs {
+		if r[ns] > 0 {
+			out = append(out, d)
+		}
+	}
+	for d, e := range x.ended {
+		if _, ok := e[ns]; ok {
+			out = append(out, d)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // digests returns every digest that namespaces would return a namespace for.
 func (x *index) digests() []string {
 	x.mu.Lock()

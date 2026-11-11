@@ -28,17 +28,21 @@ func (mainHandler *MainHandler) newSBOMExporter() *sbomexport.Exporter {
 }
 
 // sbomExportOptions reads the exporter's options from the operator
-// configuration. The root project defaults to the cluster name.
+// configuration.
 func sbomExportOptions(cfg config.IConfig) sbomexport.Options {
 	export := cfg.SBOMExportConfig()
-	rootProject := export.DependencyTrack.RootProject
-	if rootProject == "" {
-		rootProject = cfg.ClusterName()
-	}
+	dt := export.DependencyTrack
 	return sbomexport.Options{
-		URL:            export.DependencyTrack.URL,
-		APIKeyFile:     export.DependencyTrack.APIKeyFile,
-		RootProject:    rootProject,
+		URL:        dt.URL,
+		APIKeyFile: dt.APIKeyFile,
+		Cluster:    cfg.ClusterName(),
+		Layout: sbomexport.Layout{
+			Root:    sbomexport.Collection{Name: dt.RootProject.Name, Version: dt.RootProject.Version, Create: dt.RootProject.Create},
+			Parent:  sbomexport.Collection{Name: dt.Project.Parent.Name, Version: dt.Project.Parent.Version, Create: dt.Project.Parent.Create},
+			Name:    dt.Project.Name,
+			Version: dt.Project.Version,
+		},
+		MaxSBOMSize:    export.MaxSBOMSize,
 		ResyncInterval: export.ResyncInterval,
 		SkipNamespace:  cfg.SkipNamespace,
 	}

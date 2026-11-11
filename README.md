@@ -324,9 +324,11 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `excludeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to exclude |
 | `namespaceFilterConfigMapName` | `""` | Optional ConfigMap name in the operator namespace for live namespace filtering |
 | `sbomExport.resyncInterval` | `1h` | How often the [SBOM export](docs/features/sbom-export.md) compares every running image with Dependency-Track |
+| `sbomExport.maxSBOMSize` | `10485760` | Largest SBOM, in bytes, the SBOM export converts |
 | `sbomExport.dependencyTrack.url` | `""` | Dependency-Track API server the SBOM export sends to |
 | `sbomExport.dependencyTrack.apiKeyFile` | `/etc/sbom-export/api-key` | File holding the Dependency-Track API key, read on every request |
-| `sbomExport.dependencyTrack.rootProject` | cluster name | Root of the SBOM export's project tree in Dependency-Track |
+| `sbomExport.dependencyTrack.rootProject` | `{{ .Cluster }}` | Root project, where created parents go; see [changing the layout](docs/features/sbom-export.md#changing-the-layout) |
+| `sbomExport.dependencyTrack.project` | `{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}` : `{{ .Tag }}`, parent `{{ .Cluster }}/{{ .Namespace }}` | Where each image goes; namespaces can override it with `kubescape.io/dtrack-*` annotations |
 
 ### Exclude controls from posture scans
 
@@ -815,7 +817,7 @@ When enabled, the Operator runs an HTTPS webhook server on port `8443` that inte
 
 ### SBOM Export to Dependency-Track
 
-The Operator sends the SBOM of every running image, as node-agent built it, to [Dependency-Track](https://dependencytrack.org): one project per image and namespace, kept current as workloads change. It needs `nodeSbomGeneration`, but neither kubevuln nor registry access.
+The Operator sends the SBOM of every running image, as node-agent built it, to [Dependency-Track](https://dependencytrack.org): one project per image and namespace, kept current as workloads change. It needs `nodeSbomGeneration`, but neither kubevuln nor registry access. Where projects go is configurable, and namespaces can send their images under projects that already exist with `kubescape.io/dtrack-*` annotations.
 
 **Enable via Helm**, with the API key in a Secret you create in the Kubescape namespace:
 ```bash
@@ -827,7 +829,7 @@ helm upgrade kubescape kubescape/kubescape-operator \
   --set sbomExport.dependencyTrack.apiKeySecret.name=dependency-track
 ```
 
-See [SBOM export to Dependency-Track](docs/features/sbom-export.md) for the project tree, the settings and the permissions the API key needs.
+See [SBOM export to Dependency-Track](docs/features/sbom-export.md) for the project layout and its annotations, the size limit, the settings and the permissions the API key needs.
 
 ---
 

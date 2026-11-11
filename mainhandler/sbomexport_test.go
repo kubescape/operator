@@ -7,6 +7,7 @@ import (
 	"github.com/armosec/utils-k8s-go/armometadata"
 	beUtils "github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/sbomexport"
 	"github.com/kubescape/operator/utils"
 	kssfake "github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
@@ -28,8 +29,18 @@ func sbomExportConfig(t *testing.T, capabilities config.Capabilities, export con
 
 func TestNewSBOMExporter(t *testing.T) {
 	valid := config.SBOMExportConfig{
-		ResyncInterval:  time.Hour,
-		DependencyTrack: config.DependencyTrackConfig{URL: "https://dtrack.example.com", APIKeyFile: "/etc/sbom-export/api-key"},
+		ResyncInterval: time.Hour,
+		MaxSBOMSize:    10 << 20,
+		DependencyTrack: config.DependencyTrackConfig{
+			URL:         "https://dtrack.example.com",
+			APIKeyFile:  "/etc/sbom-export/api-key",
+			RootProject: config.DTCollectionConfig{Name: "{{ .Cluster }}", Version: "current", Create: true},
+			Project: config.DTProjectConfig{
+				Name:    "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}",
+				Version: "{{ .Tag }}",
+				Parent:  config.DTCollectionConfig{Name: "{{ .Cluster }}/{{ .Namespace }}", Version: "current", Create: true},
+			},
+		},
 	}
 	tt := []struct {
 		name         string
@@ -71,17 +82,31 @@ func TestNewSBOMExporter(t *testing.T) {
 	}
 }
 
-func TestSBOMExportOptionsDefaultTheRootProjectToTheClusterName(t *testing.T) {
+func TestSBOMExportOptionsCarryTheLayoutAndTheClusterName(t *testing.T) {
 	export := config.SBOMExportConfig{
-		ResyncInterval:  30 * time.Minute,
-		DependencyTrack: config.DependencyTrackConfig{URL: "https://dtrack.example.com", APIKeyFile: "/keys/dtrack"},
+		ResyncInterval: 30 * time.Minute,
+		MaxSBOMSize:    5 << 20,
+		DependencyTrack: config.DependencyTrackConfig{
+			URL:         "https://dtrack.example.com",
+			APIKeyFile:  "/keys/dtrack",
+			RootProject: config.DTCollectionConfig{Name: "{{ .Cluster }}", Version: "current", Create: true},
+			Project: config.DTProjectConfig{
+				Name:    "{{ .Repository }}",
+				Version: "{{ .Tag }}",
+				Parent:  config.DTCollectionConfig{Name: "Payments Team", Version: "current", Create: false},
+			},
+		},
 	}
 	opts := sbomExportOptions(sbomExportConfig(t, config.Capabilities{}, export))
-	assert.Equal(t, "prod-cluster", opts.RootProject)
+	assert.Equal(t, "prod-cluster", opts.Cluster)
 	assert.Equal(t, "https://dtrack.example.com", opts.URL)
 	assert.Equal(t, "/keys/dtrack", opts.APIKeyFile)
+	assert.Equal(t, int64(5<<20), opts.MaxSBOMSize)
 	assert.Equal(t, 30*time.Minute, opts.ResyncInterval)
-
-	export.DependencyTrack.RootProject = "prod"
-	assert.Equal(t, "prod", sbomExportOptions(sbomExportConfig(t, config.Capabilities{}, export)).RootProject)
+	assert.Equal(t, sbomexport.Layout{
+		Root:    sbomexport.Collection{Name: "{{ .Cluster }}", Version: "current", Create: true},
+		Parent:  sbomexport.Collection{Name: "Payments Team", Version: "current", Create: false},
+		Name:    "{{ .Repository }}",
+		Version: "{{ .Tag }}",
+	}, opts.Layout)
 }

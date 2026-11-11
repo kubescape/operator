@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	helpersv1 "github.com/kubescape/k8s-interface/instanceidhandler/v1/helpers"
@@ -22,6 +23,7 @@ type sbomMeta struct {
 	imageTag        string
 	status          string
 	created         time.Time
+	size            int64 // bytes, from the kubescape.io/resource-size annotation; 0 when unknown
 }
 
 // ready reports whether the SBOM is complete: the statuses the operator's
@@ -42,7 +44,9 @@ func metaOf(obj *spdxv1beta1.SBOMSyft) (sbomMeta, bool) {
 	if imageID == "" || imageTag == "" {
 		return sbomMeta{}, false
 	}
+	size, _ := strconv.ParseInt(ann[helpersv1.ResourceSizeMetadataKey], 10, 64)
 	return sbomMeta{
+		size:      size,
 		namespace: obj.GetNamespace(),
 		name:      obj.GetName(),
 		digest:    digestOf(imageID),

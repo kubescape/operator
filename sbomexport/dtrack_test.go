@@ -23,16 +23,16 @@ func TestDTClientLooksUpCreatesAndPatchesProjects(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, p, "a missing project is not an error")
 
-	root, err := c.createCollection(ctx, "cluster", "current", "", clusterLogic)
+	root, err := c.createCollection(ctx, "cluster", "current", "", rootLogic)
 	require.NoError(t, err)
-	ns, err := c.createCollection(ctx, "cluster/apps", "current", root.UUID, namespaceLogic)
+	ns, err := c.createCollection(ctx, "cluster/apps", "current", root.UUID, parentLogic)
 	require.NoError(t, err)
-	require.NoError(t, c.patch(ctx, ns.UUID, map[string]any{"collectionLogic": clusterLogic}))
+	require.NoError(t, c.patch(ctx, ns.UUID, map[string]any{"collectionLogic": rootLogic}))
 
 	got, parent, ok := f.project("cluster/apps", "current")
 	require.True(t, ok)
 	assert.Equal(t, "cluster", parent)
-	assert.Equal(t, clusterLogic, got.CollectionLogic)
+	assert.Equal(t, rootLogic, got.CollectionLogic)
 
 	p, err = c.lookup(ctx, "cluster/apps", "current")
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestDTClientUploadsTheBOMUnderItsParent(t *testing.T) {
 	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
 	f, srv, keyFile := newFakeDT(t, func() time.Time { return now })
 	c := &dtClient{baseURL: srv.URL, apiKeyFile: keyFile, http: srv.Client()}
-	ns, err := c.createCollection(ctx, "cluster/apps", "current", "", namespaceLogic)
+	ns, err := c.createCollection(ctx, "cluster/apps", "current", "", parentLogic)
 	require.NoError(t, err)
 
 	require.NoError(t, c.uploadBOM(ctx, "cluster/apps/redis", "8", ns.UUID, curlCycloneDX))
