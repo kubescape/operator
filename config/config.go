@@ -449,6 +449,7 @@ func (c *OperatorConfig) NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig {
 	return c.serviceConfig.NodeAgentAutoscaler
 }
 
+// LoadConfig reads config.json from path over the defaults set here.
 func LoadConfig(path string) (Config, error) {
 	viper.AddConfigPath(path)
 	viper.SetConfigName("config")

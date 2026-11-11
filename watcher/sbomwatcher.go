@@ -145,6 +145,8 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 
 }
 
+// HandleSBOMEvents passes SBOMSyft events to the SBOM observer, if any, and,
+// unless image scans are disabled, turns them into vulnerability scan commands.
 func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(errorCh)
 

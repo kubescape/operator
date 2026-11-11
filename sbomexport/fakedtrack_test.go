@@ -30,6 +30,7 @@ type fakeDT struct {
 	nextID         int
 	fail           int    // answer the next fail requests with 503
 	failProperties int    // answer the next property writes with 503
+	failUploads    int    // answer the next BOM uploads with 503
 	onPatch        func() // called before a PATCH is applied, without the lock
 	keyFile        string // holds testAPIKey
 }
@@ -48,6 +49,7 @@ func newFakeDT(t *testing.T, now func() time.Time) (*fakeDT, *httptest.Server, s
 	return f, srv, keyFile
 }
 
+// ServeHTTP answers the Dependency-Track API calls dtClient makes.
 func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPatch {
 		f.mu.Lock()
@@ -140,6 +142,9 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.Tags = *req.Tags
 		}
 		writeJSON(w, http.StatusOK, p)
+	case r.Method == http.MethodPut && path == "/api/v1/bom" && f.failUploads > 0:
+		f.failUploads--
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 	case r.Method == http.MethodPut && path == "/api/v1/bom":
 		var req struct {
 			ProjectName, ProjectVersion, BOM string
@@ -172,6 +177,8 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// serveProperty lists, creates (PUT) and updates (POST) the properties of
+// the project with uuid, like Dependency-Track does.
 func (f *fakeDT) serveProperty(w http.ResponseWriter, r *http.Request, uuid string) {
 	if f.projects[uuid] == nil {
 		http.Error(w, "The project could not be found.", http.StatusNotFound)
@@ -212,6 +219,7 @@ func (f *fakeDT) serveProperty(w http.ResponseWriter, r *http.Request, uuid stri
 	}
 }
 
+// byNameLocked returns the project name:version, or nil.
 func (f *fakeDT) byNameLocked(name, version string) *project {
 	for _, p := range f.projects {
 		if p.Name == name && p.Version == version {
@@ -221,6 +229,8 @@ func (f *fakeDT) byNameLocked(name, version string) *project {
 	return nil
 }
 
+// addLocked creates a project under parentUUID, or at the top when it is
+// empty, and returns it.
 func (f *fakeDT) addLocked(name, version, parentUUID string, tags []tag) *project {
 	f.nextID++
 	p := &project{UUID: fmt.Sprintf("00000000-0000-0000-0000-%012d", f.nextID), Name: name, Version: version, Tags: tags}
@@ -262,6 +272,13 @@ func (f *fakeDT) project(name, version string) (project, string, bool) {
 	return *p, parent, true
 }
 
+// propertyForTest returns the exporter's property name on the project with uuid.
+func (f *fakeDT) propertyForTest(uuid, name string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.properties[uuid][propertyGroup+"/"+name]
+}
+
 // digestOwnerForTest returns the image digest recorded on the project with uuid.
 func (f *fakeDT) digestOwnerForTest(uuid string) (string, error) {
 	f.mu.Lock()
@@ -269,7 +286,7 @@ func (f *fakeDT) digestOwnerForTest(uuid string) (string, error) {
 	if f.projects[uuid] == nil {
 		return "", fmt.Errorf("no project %s", uuid)
 	}
-	return f.properties[uuid][digestPropertyGroup+"/"+digestPropertyName], nil
+	return f.properties[uuid][propertyGroup+"/"+digestProperty], nil
 }
 
 // count returns how many projects exist.

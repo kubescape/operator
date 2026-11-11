@@ -94,6 +94,8 @@ func TestDTClientErrorCarriesTheStatusAndTheStartOfTheBody(t *testing.T) {
 	assert.False(t, isAuthError(err))
 }
 
+// A Dependency-Track timestamp decodes from epoch milliseconds, RFC 3339, null
+// or nothing.
 func TestEpochMillisDecodesNumbersAndRFC3339(t *testing.T) {
 	tt := []struct {
 		name string

@@ -27,6 +27,8 @@ func sbomExportConfig(t *testing.T, capabilities config.Capabilities, export con
 	return cfg
 }
 
+// TestNewSBOMExporter checks when the operator starts the export and when it
+// runs without it.
 func TestNewSBOMExporter(t *testing.T) {
 	valid := config.SBOMExportConfig{
 		ResyncInterval: time.Hour,

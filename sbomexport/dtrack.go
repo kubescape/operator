@@ -20,10 +20,15 @@ const (
 	// project: no collection logic, no BOM, no move.
 	managedTag = "managed-by:kubescape"
 
-	// The project property that records which image digest a project's BOM
-	// came from, so two images cannot overwrite each other's project.
-	digestPropertyGroup = "kubescape"
-	digestPropertyName  = "image-digest"
+	// propertyGroup holds the project properties the exporter keeps on the
+	// image projects it creates.
+	propertyGroup = "kubescape"
+	// digestProperty records which image digest a project's BOM came from, so
+	// two images cannot overwrite each other's project.
+	digestProperty = "image-digest"
+	// toolVersionProperty records the node-agent version that built the SBOM
+	// last uploaded, so an SBOM node-agent rebuilt in place is sent again.
+	toolVersionProperty = "sbom-tool-version"
 )
 
 // project is the part of a Dependency-Track project the exporter reads.
@@ -278,25 +283,27 @@ type projectProperty struct {
 	PropertyType  string `json:"propertyType"`
 }
 
-// digestOwner returns the image digest recorded on the project with uuid, or
-// "" when none is.
-func (c *dtClient) digestOwner(ctx context.Context, uuid string) (string, error) {
+// properties returns the exporter's properties of the project with uuid, by
+// name.
+func (c *dtClient) properties(ctx context.Context, uuid string) (map[string]string, error) {
 	var props []projectProperty
 	if _, err := c.do(ctx, http.MethodGet, "/api/v1/project/"+url.PathEscape(uuid)+"/property", nil, &props, http.StatusOK); err != nil {
-		return "", err
+		return nil, err
 	}
+	out := map[string]string{}
 	for _, p := range props {
-		if p.GroupName == digestPropertyGroup && p.PropertyName == digestPropertyName {
-			return p.PropertyValue, nil
+		if p.GroupName == propertyGroup {
+			out[p.PropertyName] = p.PropertyValue
 		}
 	}
-	return "", nil
+	return out, nil
 }
 
-// setDigestOwner records digest on the project with uuid: PUT creates the
-// property, and answers 409 when it exists, which POST then updates.
-func (c *dtClient) setDigestOwner(ctx context.Context, uuid, digest string) error {
-	body := projectProperty{GroupName: digestPropertyGroup, PropertyName: digestPropertyName, PropertyValue: digest, PropertyType: "STRING"}
+// setProperty records the exporter's property name on the project with uuid:
+// PUT creates the property, and answers 409 when it exists, which POST then
+// updates.
+func (c *dtClient) setProperty(ctx context.Context, uuid, name, value string) error {
+	body := projectProperty{GroupName: propertyGroup, PropertyName: name, PropertyValue: value, PropertyType: "STRING"}
 	path := "/api/v1/project/" + url.PathEscape(uuid) + "/property"
 	status, err := c.do(ctx, http.MethodPut, path, body, nil, http.StatusCreated, http.StatusOK, http.StatusConflict)
 	if err != nil || status != http.StatusConflict {

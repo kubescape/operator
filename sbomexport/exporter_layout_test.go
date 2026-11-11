@@ -68,6 +68,8 @@ func TestExporterCreatesTheParentUnderAnExistingRoot(t *testing.T) {
 	assert.Equal(t, "Payments Team", imageParent)
 }
 
+// A namespace whose root or parent is missing and may not be created is
+// skipped, and nothing is created for it.
 func TestExporterSkipsANamespaceWhoseProjectIsMissingAndMayNotBeCreated(t *testing.T) {
 	tt := []struct {
 		name        string
@@ -154,6 +156,18 @@ func TestExporterSkipsAnSBOMLargerThanTheLimit(t *testing.T) {
 		assert.Empty(t, te.dt.takeUploads())
 		assert.Zero(t, te.store.documentReads())
 		assert.Equal(t, int64(1), te.stats.tooLarge.Load())
+	})
+	t.Run("by the object it reads, when the annotation is missing", func(t *testing.T) {
+		te := newTestExporter(t, runningPod("apps", "web", redisImageID))
+		te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+		te.store.tooLarge = true
+
+		require.NoError(t, te.resync(context.Background()))
+		require.Empty(t, te.drain())
+
+		assert.Empty(t, te.dt.takeUploads())
+		assert.Equal(t, int64(1), te.stats.tooLarge.Load())
+		assert.Equal(t, int64(10<<20+objectOverhead), te.store.lastLimit())
 	})
 	t.Run("by its document, when the annotation is missing", func(t *testing.T) {
 		te := newTestExporterWith(t, func(o *Options) { o.MaxSBOMSize = 1000 }, runningPod("apps", "web", redisImageID))
@@ -304,4 +318,60 @@ func TestExporterKeepsALayoutChangeThatComesInDuringAMove(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, before.UUID, after.UUID)
 	assert.Equal(t, "Team C", parent)
+}
+
+// A move whose parent is missing and may not be created waits, and is done at
+// a resync once the parent exists.
+func TestExporterKeepsAMoveWhoseParentIsMissingUntilItExists(t *testing.T) {
+	te := newTestExporter(t, namespace("payments", nil), runningPod("payments", "api", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	before, _, _ := te.dt.project("cluster/payments/"+redisProject, "8")
+
+	te.updateNamespace(t, namespace("payments", map[string]string{AnnotationParent: "Team B:current", AnnotationParentCreate: "false"}))
+	require.Empty(t, te.drain())
+	_, parent, _ := te.dt.project("cluster/payments/"+redisProject, "8")
+	require.Equal(t, "cluster/payments", parent, "Team B does not exist yet")
+
+	te.dt.addProject("Team B", "current", "")
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+
+	after, parent, _ := te.dt.project("cluster/payments/"+redisProject, "8")
+	assert.Equal(t, before.UUID, after.UUID)
+	assert.Equal(t, "Team B", parent)
+	assert.Equal(t, int64(1), te.stats.moved.Load())
+
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	assert.Zero(t, te.stats.moved.Load(), "the move is done, not tried again")
+}
+
+// A root-only change moves the parent also when no image of the namespace
+// can be exported, and waits while the new root is missing.
+func TestExporterMovesTheParentWhenNoImageCanBeExported(t *testing.T) {
+	te := newTestExporter(t, namespace("payments", nil), runningPod("payments", "api", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	big := sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t)
+	big.Annotations[helpersv1.ResourceSizeMetadataKey] = strconv.Itoa(11 << 20)
+	te.store.set(big)
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+
+	te.updateNamespace(t, namespace("payments", map[string]string{AnnotationRootProject: "Finance:current", AnnotationRootProjectCreate: "false"}))
+	require.Empty(t, te.drain())
+	_, root, _ := te.dt.project("cluster/payments", "current")
+	require.Equal(t, "cluster", root, "Finance does not exist yet")
+
+	te.dt.addProject("Finance", "current", "")
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+
+	parent, root, _ := te.dt.project("cluster/payments", "current")
+	assert.Equal(t, "Finance", root)
+	assert.Equal(t, parentLogic, parent.CollectionLogic)
+	assert.Empty(t, te.dt.takeUploads()[1:], "the SBOM is still too large")
 }

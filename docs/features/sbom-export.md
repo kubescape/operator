@@ -19,11 +19,17 @@ default), which compares every running image with Dependency-Track. The resync
 catches up after Dependency-Track was unreachable or the operator restarted.
 
 For each namespace the image runs in, the exporter looks up its project. If the
-project's last BOM import is not older than the `SBOMSyft`, the image is only
-marked as the project's latest version. Otherwise the exporter reads the
-`SBOMSyft`, converts its syft document to CycloneDX JSON (1.6) with syft, the
-way `syft convert` does, and uploads it. An image that runs in several
-namespaces is converted once.
+project's last BOM import is not older than the `SBOMSyft`, and node-agent has
+not rebuilt the SBOM since, the image is only marked as the project's latest
+version. Otherwise the exporter reads the `SBOMSyft`, converts its syft
+document to CycloneDX JSON (1.6) with syft, the way `syft convert` does, and
+uploads it. An image that runs in several namespaces is converted once.
+
+node-agent rebuilds the SBOM of a running image when its own version changes,
+and replaces the document in the same `SBOMSyft`. The exporter records the
+node-agent version of each upload (`kubescape.io/tool-version`) in the project
+property `kubescape/sbom-tool-version`, and sends the SBOM again when it
+differs.
 
 An image stays counted as running in a namespace for one resync interval after
 its last pod there ended, so the image of a short Job is still exported once
@@ -99,7 +105,7 @@ Rules:
 | A project exists that the operator did not create | Uses it, but never changes it: no collection logic, no BOM, no move. The operator tags what it creates with `managed-by:kubescape`; to let it take over projects created another way, for example by an earlier exporter, add that tag to them. |
 | The image's project exists and was not created by the operator | Skips the image and logs a conflict, instead of replacing someone's BOM. |
 | Two running images resolve to the same project and version | Uploads the first and skips the second, logging a conflict: one project version holds one BOM. The operator records each project's image digest in the project property `kubescape/image-digest`. When the first image stops running, the second takes the project over. |
-| A namespace's labels or `kubescape.io/dtrack-*` annotations change | Moves the projects it created for that namespace's running images to their new place with a PATCH, so their history in Dependency-Track goes with them. A change made while the operator is not running is not seen; those images start new projects. |
+| A namespace's labels or `kubescape.io/dtrack-*` annotations change | Moves the projects it created for that namespace's running images to their new place with a PATCH, so their history in Dependency-Track goes with them. When only the root changes, it moves the namespace's parent, also when none of its images can be exported. When the new place names a project that is missing and may not be created, the move waits and is tried again at every resync. A change made while the operator is not running is not seen; those images start new projects. |
 | A template or annotation cannot be used (a typo, an unknown field, an empty result, a create flag that is not `true` or `false`) | Logs it once per resync and skips that namespace's images. Invalid default templates in `config.json` turn the export off at startup, with the reason in the log. |
 
 ## SBOM size
@@ -112,7 +118,8 @@ a `GOMEMLIMIT`.
 
 SBOMs larger than `sbomExport.maxSBOMSize` (10 MiB by default) are skipped and
 logged once per resync. The operator checks the `kubescape.io/resource-size`
-annotation before it reads the SBOM, and the document's length after.
+annotation before it reads the SBOM, stops reading an `SBOMSyft` that is more
+than 1 MiB over the limit, and checks the document's length after.
 
 node-agent has its own `maxSBOMSize`, 20 MiB by default: it marks a larger SBOM
 `too-large` and stores it without its content, so there is nothing to export.

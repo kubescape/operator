@@ -120,6 +120,7 @@ func TestLoadCapabilities(t *testing.T) {
 	}
 }
 
+// TestLoadConfig loads ../configuration/config.json and compares the result.
 func TestLoadConfig(t *testing.T) {
 	type args struct {
 		path string
@@ -633,6 +634,7 @@ func TestNewOperatorConfig_RegexValidation(t *testing.T) {
 	})
 }
 
+// TestSBOMExportEnabled checks that only "enable" turns the export on.
 func TestSBOMExportEnabled(t *testing.T) {
 	tests := []struct {
 		value string

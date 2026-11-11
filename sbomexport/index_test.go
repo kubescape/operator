@@ -85,7 +85,7 @@ func TestIndexReplaceStartsTheGracePeriodOfWhatStopped(t *testing.T) {
 	x.replace(map[string]podEntry{
 		"apps/web": {namespace: "apps", digests: []string{"sha256:a"}},
 		"apps/api": {namespace: "apps", digests: []string{"sha256:c"}},
-	})
+	}, nil)
 	assert.Equal(t, []string{"sha256:a", "sha256:b", "sha256:c"}, x.digests())
 
 	clock.t = clock.t.Add(time.Hour)

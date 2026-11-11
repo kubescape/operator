@@ -70,17 +70,21 @@ func (x *index) removePod(key string) {
 	x.removeLocked(key)
 }
 
-// replace rebuilds the index from a full list of running pods. An image that
-// no longer runs in a namespace starts its grace period there.
-func (x *index) replace(pods map[string]podEntry) {
+// replace rebuilds the index from a full list of running pods, except for the
+// pods in keep, whose recorded state stays. An image that no longer runs in a
+// namespace starts its grace period there.
+func (x *index) replace(pods map[string]podEntry, keep map[string]bool) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	for key := range x.pods {
-		if _, ok := pods[key]; !ok {
+		if _, ok := pods[key]; !ok && !keep[key] {
 			x.removeLocked(key)
 		}
 	}
 	for key, p := range pods {
+		if keep[key] {
+			continue
+		}
 		x.removeLocked(key)
 		x.pods[key] = p
 		for _, d := range p.digests {

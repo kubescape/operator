@@ -141,6 +141,9 @@ func (mainHandler *MainHandler) SetupContinuousScanning(ctx context.Context) err
 	return nil
 }
 
+// HandleWatchers starts the watchers the enabled components need: commands,
+// SBOMs or pods for image scans and the SBOM export, container profiles and
+// security exceptions.
 func (mainHandler *MainHandler) HandleWatchers(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {

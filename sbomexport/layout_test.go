@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestParseRef checks the project references namespace annotations accept.
 func TestParseRef(t *testing.T) {
 	tt := []struct {
 		in      string
@@ -90,6 +91,7 @@ func TestLayoutTemplatesSeeTheNamespaceLabels(t *testing.T) {
 	assert.Equal(t, projectRef{name: "prod/payments", version: "current"}, p.parent)
 }
 
+// Each layout annotation replaces only the setting it names.
 func TestLayoutAnnotationsOverrideOneSettingEach(t *testing.T) {
 	l, err := newLayout("prod", defaultLayout)
 	require.NoError(t, err)
@@ -135,6 +137,7 @@ func TestLayoutAnnotationsOverrideOneSettingEach(t *testing.T) {
 	}
 }
 
+// An annotation that cannot be used fails resolve, so the namespace is skipped.
 func TestLayoutRejectsAnnotationsItCannotUse(t *testing.T) {
 	l, err := newLayout("prod", defaultLayout)
 	require.NoError(t, err)

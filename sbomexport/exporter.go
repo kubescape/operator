@@ -27,6 +27,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -58,6 +59,10 @@ const (
 	maxRetries = 5
 
 	requestTimeout = 2 * time.Minute
+
+	// objectOverhead is room, on top of MaxSBOMSize, for the rest of an
+	// SBOMSyft object around its syft document when the object is read.
+	objectOverhead = 1 << 20
 
 	// moveKeyPrefix marks queue items that move a namespace's projects after
 	// its layout changed; every other item is an image digest.
@@ -123,6 +128,10 @@ type Exporter struct {
 	pendingMoves map[string]*pendingMove // namespace → where its move starts
 	moveSeq      uint64                  // counts namespace layout changes
 	logged       map[string]bool         // problems logged since the last resync
+	// While resync lists, these hold the pods and SBOM digests that events
+	// changed meanwhile. Their state from the events is newer than the
+	// lists', so resync keeps it. nil when no resync is listing.
+	touchedPods, touchedSBOMs map[string]bool
 
 	stats stats
 }
@@ -186,15 +195,24 @@ func (e *Exporter) ObservePod(eventType watch.EventType, pod *corev1.Pod) {
 		return
 	}
 	key := pod.Namespace + "/" + pod.Name
+	var ready []string
+	e.mu.Lock()
+	if e.touchedPods != nil {
+		e.touchedPods[key] = true
+	}
 	switch eventType {
 	case watch.Added, watch.Modified:
 		for _, d := range e.running.setPod(key, pod.Namespace, runningDigests(pod)) {
-			if m, ok := e.sbom(d); ok && m.ready() {
-				e.queue.Add(d)
+			if m, ok := e.sbomByImage[d]; ok && m.ready() {
+				ready = append(ready, d)
 			}
 		}
 	case watch.Deleted:
 		e.running.removePod(key)
+	}
+	e.mu.Unlock()
+	for _, d := range ready {
+		e.queue.Add(d)
 	}
 }
 
@@ -204,20 +222,21 @@ func (e *Exporter) ObserveSBOM(eventType watch.EventType, obj *spdxv1beta1.SBOMS
 	if !ok {
 		return
 	}
+	e.mu.Lock()
+	if e.touchedSBOMs != nil {
+		e.touchedSBOMs[m.digest] = true
+	}
 	switch eventType {
 	case watch.Added, watch.Modified:
-		e.mu.Lock()
 		e.sbomByImage[m.digest] = m
-		e.mu.Unlock()
-		if m.ready() {
-			e.queue.Add(m.digest)
-		}
 	case watch.Deleted:
-		e.mu.Lock()
 		if cur, ok := e.sbomByImage[m.digest]; ok && cur.name == m.name && cur.namespace == m.namespace {
 			delete(e.sbomByImage, m.digest)
 		}
-		e.mu.Unlock()
+	}
+	e.mu.Unlock()
+	if eventType != watch.Deleted && m.ready() {
+		e.queue.Add(m.digest)
 	}
 }
 
@@ -332,13 +351,20 @@ func (e *Exporter) work(ctx context.Context) {
 }
 
 // resync rebuilds the running index from one paged list of running pods and
-// the SBOM metadata from one list of SBOMSyft objects, then queues every
-// running image. If either list fails, nothing changes.
+// the SBOM metadata from one list of SBOMSyft objects, keeping what events
+// changed while it listed, then queues the pending moves and every running
+// image. If either list fails, nothing changes.
 func (e *Exporter) resync(ctx context.Context) error {
 	logger.L().Info("SBOM export since the last resync", e.stats.takeFields()...)
 	e.mu.Lock()
 	e.logged = map[string]bool{}
+	e.touchedPods, e.touchedSBOMs = map[string]bool{}, map[string]bool{}
 	e.mu.Unlock()
+	defer func() {
+		e.mu.Lock()
+		e.touchedPods, e.touchedSBOMs = nil, nil
+		e.mu.Unlock()
+	}()
 
 	pods := map[string]podEntry{}
 	err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
@@ -361,16 +387,29 @@ func (e *Exporter) resync(ctx context.Context) error {
 		return fmt.Errorf("list SBOMSyft objects: %w", err)
 	}
 
-	e.running.replace(pods)
 	byImage := make(map[string]sbomMeta, len(sboms))
 	for _, m := range sboms {
 		byImage[m.digest] = m
 	}
 	e.mu.Lock()
+	e.running.replace(pods, e.touchedPods)
+	for d := range e.touchedSBOMs {
+		if m, ok := e.sbomByImage[d]; ok {
+			byImage[d] = m
+		} else {
+			delete(byImage, d)
+		}
+	}
+	e.touchedPods, e.touchedSBOMs = nil, nil
 	e.sbomByImage = byImage
 	e.projects = map[projectRef]string{}
+	moves := slices.Sorted(maps.Keys(e.pendingMoves))
 	e.mu.Unlock()
 
+	// Moves go first, so an image is moved before it is exported again.
+	for _, ns := range moves {
+		e.queue.Add(moveKeyPrefix + ns)
+	}
 	for _, d := range e.running.digests() {
 		e.queue.Add(d)
 	}
@@ -449,18 +488,18 @@ func (e *Exporter) process(ctx context.Context, digest string) error {
 }
 
 // exportTo makes p's project hold m's SBOM as its latest version. An image
-// whose project imported a BOM no older than its SBOMSyft is only marked
-// latest. It never uploads to a project it did not create, nor to one that
-// holds the BOM of another image that still runs. Before it uploads, it
-// creates a missing project and records m's digest on it, so a second image
-// can never take a project whose upload went through but whose owner was not
-// recorded.
+// whose project imported a BOM no older than its SBOMSyft, built by the same
+// node-agent version, is only marked latest. It never uploads to a project it
+// did not create, nor to one that holds the BOM of another image that still
+// runs. Before it uploads, it creates a missing project and records m's digest
+// on it, so a second image can never take a project whose upload went through
+// but whose owner was not recorded.
 func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placement, bom *[]byte) (result, error) {
 	target, err := e.dt.lookup(ctx, p.name, p.version)
 	if err != nil {
 		return 0, err
 	}
-	owner, parentUUID := "", ""
+	owner, sentVersion, parentUUID := "", "", ""
 	if target != nil {
 		if !target.managed() {
 			e.logOnce(ctx, "conflict/"+p.name+":"+p.version, "a Dependency-Track project with this name and version exists and was not created by Kubescape, skipping the image",
@@ -476,16 +515,21 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 			}
 			e.logMissing(ctx, missing, ns)
 		}
-		if owner, err = e.dt.digestOwner(ctx, target.UUID); err != nil {
+		props, err := e.dt.properties(ctx, target.UUID)
+		if err != nil {
 			return 0, err
 		}
+		owner, sentVersion = props[digestProperty], props[toolVersionProperty]
 		if owner != "" && owner != m.digest && len(e.running.namespaces(owner)) > 0 {
 			e.logOnce(ctx, "conflict/"+p.name+":"+p.version, "two running images map to the same Dependency-Track project and version, skipping the second; include the repository in the project name template",
 				helpers.String("project", p.name), helpers.String("version", p.version), helpers.String("image", m.imageTag), helpers.String("namespace", ns),
 				helpers.String("ownerDigest", owner), helpers.String("digest", m.digest))
 			return resultConflict, nil
 		}
-		if owner == m.digest && !target.LastBOMImport.Time().Before(m.created) {
+		// node-agent rebuilds an SBOM in place when its version changes, so
+		// the creation time alone does not show a new document.
+		rebuilt := m.toolVersion != "" && m.toolVersion != sentVersion
+		if owner == m.digest && !rebuilt && !target.LastBOMImport.Time().Before(m.created) {
 			if !target.IsLatest {
 				if err := e.dt.patch(ctx, target.UUID, map[string]any{"isLatest": true}); err != nil {
 					return 0, err
@@ -506,7 +550,12 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 	}
 
 	if *bom == nil {
-		doc, err := e.sboms.syftDocument(ctx, m.namespace, m.name)
+		doc, err := e.sboms.syftDocument(ctx, m.namespace, m.name, e.opts.MaxSBOMSize+objectOverhead)
+		var tooLarge *tooLargeError
+		if errors.As(err, &tooLarge) {
+			e.logTooLarge(ctx, m, tooLarge.read)
+			return resultTooLarge, nil
+		}
 		if err != nil {
 			return 0, err
 		}
@@ -524,11 +573,21 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 		}
 	}
 	if owner != m.digest {
-		if err := e.dt.setDigestOwner(ctx, target.UUID, m.digest); err != nil {
+		if err := e.dt.setProperty(ctx, target.UUID, digestProperty, m.digest); err != nil {
 			return 0, err
 		}
 	}
-	return resultSent, e.dt.uploadBOM(ctx, p.name, p.version, *bom)
+	if err := e.dt.uploadBOM(ctx, p.name, p.version, *bom); err != nil {
+		return 0, err
+	}
+	// Recorded after the upload: when this fails, the next pass sends the SBOM
+	// again rather than skip a document Dependency-Track never got.
+	if m.toolVersion != "" && m.toolVersion != sentVersion {
+		if err := e.dt.setProperty(ctx, target.UUID, toolVersionProperty, m.toolVersion); err != nil {
+			return 0, err
+		}
+	}
+	return resultSent, nil
 }
 
 // logMissing logs, once per resync, a project the layout names that is
@@ -651,7 +710,10 @@ func (e *Exporter) reconcileCollection(ctx context.Context, p *project, logic st
 // namespace's previous labels and annotations put them to where the current
 // ones do, so their history in Dependency-Track moves with them. It moves only
 // projects the exporter created, and never onto a project that exists; the
-// images are then exported as usual. A change made while the operator was not
+// images are then exported as usual. When only the root changes, it moves the
+// namespace's parent collection, also when none of its images can be exported.
+// A move whose destination is missing and may not be created stays pending and
+// is tried again at every resync. A change made while the operator was not
 // running is not seen, so those images start new projects.
 func (e *Exporter) move(ctx context.Context, ns string) error {
 	e.mu.Lock()
@@ -661,12 +723,17 @@ func (e *Exporter) move(ctx context.Context, ns string) error {
 	if ok {
 		before, seq = pm.from, pm.seq
 	}
+	// The collection cache is dropped, so the move and the exports after it
+	// find, and reconcile, the collections of the new layout.
+	e.projects = map[projectRef]string{}
 	e.mu.Unlock()
 	if !ok {
 		return nil
 	}
 	now := e.namespaceInfo(ns)
 	digests := e.running.digestsIn(ns)
+	parents := map[projectRef]bool{} // parents whose root was handled
+	waiting := false
 	var errs []error
 	for _, d := range digests {
 		m, ok := e.sbom(d)
@@ -676,22 +743,34 @@ func (e *Exporter) move(ctx context.Context, ns string) error {
 		repository, tag := splitRef(m.imageTag)
 		from, err1 := e.layout.resolve(before, repository, tag)
 		to, err2 := e.layout.resolve(now, repository, tag)
-		if err1 != nil || err2 != nil || (from.name == to.name && from.version == to.version && from.parent == to.parent) {
+		if err1 != nil || err2 != nil {
 			continue
 		}
-		if err := e.moveProject(ctx, ns, from, to); err != nil {
+		var done bool
+		var err error
+		if from.name == to.name && from.version == to.version && from.parent == to.parent {
+			if parents[to.parent] {
+				continue
+			}
+			parents[to.parent] = true
+			done, err = e.moveParent(ctx, ns, from, to)
+		} else {
+			done, err = e.moveProject(ctx, ns, from, to)
+		}
+		switch {
+		case err != nil:
 			errs = append(errs, err)
+		case !done:
+			waiting = true
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
-	// A change that came in meanwhile moves on from where this one ended. The
-	// collection cache is dropped, so the exports below find, and reconcile,
-	// the collections of the new layout.
+	// A waiting move keeps the state it started from. Otherwise a change that
+	// came in meanwhile moves on from where this one ended.
 	e.mu.Lock()
-	e.projects = map[projectRef]string{}
-	if cur, ok := e.pendingMoves[ns]; ok {
+	if cur, ok := e.pendingMoves[ns]; ok && !waiting {
 		if cur.seq == seq {
 			delete(e.pendingMoves, ns)
 		} else {
@@ -708,32 +787,70 @@ func (e *Exporter) move(ctx context.Context, ns string) error {
 // moveProject moves the exporter's project at from to to: its name, version
 // and parent. When only the parent changes, the project found at to is the
 // same one, and only its parent changes. A different project at to is left
-// alone.
-func (e *Exporter) moveProject(ctx context.Context, ns string, from, to placement) error {
+// alone. It reports false when to's parent, or its root, is missing and may
+// not be created, so the move waits.
+func (e *Exporter) moveProject(ctx context.Context, ns string, from, to placement) (bool, error) {
 	p, err := e.dt.lookup(ctx, from.name, from.version)
 	if err != nil || p == nil || !p.managed() {
-		return err
+		return true, err
 	}
 	target, err := e.dt.lookup(ctx, to.name, to.version)
 	if err != nil || (target != nil && target.UUID != p.UUID) {
-		return err
+		return true, err
 	}
 	parentUUID, err := e.parent(ctx, to)
 	var missing *missingProjectError
 	if errors.As(err, &missing) {
 		e.logMissing(ctx, missing, ns)
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
+	}
+	if target != nil {
+		// Only the parent changes. An earlier try of a waiting move may have
+		// moved this project already; a lookup by name leaves the parent out.
+		full, err := e.dt.getByUUID(ctx, p.UUID)
+		if err != nil {
+			return false, err
+		}
+		if full != nil && full.Parent != nil && full.Parent.UUID == parentUUID {
+			return true, nil
+		}
 	}
 	if err := e.dt.patch(ctx, p.UUID, map[string]any{"name": to.name, "version": to.version, "parent": map[string]string{"uuid": parentUUID}}); err != nil {
-		return err
+		return false, err
 	}
 	e.stats.moved.Add(1)
 	logger.L().Info("moved Dependency-Track project after the namespace's layout changed",
 		helpers.String("namespace", ns), helpers.String("from", from.name+":"+from.version), helpers.String("to", to.name+":"+to.version))
-	return nil
+	return true, nil
+}
+
+// moveParent moves to's parent collection under to's root when only the root
+// changed. Exports move it too, but only for images they can export, so a
+// namespace whose SBOMs are all too large or not ready would keep its parent
+// under the old root. A parent the exporter did not create, or none yet, is
+// left alone. It reports false when the root is missing and may not be
+// created, so the move waits.
+func (e *Exporter) moveParent(ctx context.Context, ns string, from, to placement) (bool, error) {
+	if from.root == to.root && from.rootCreate == to.rootCreate {
+		return true, nil
+	}
+	parent, err := e.dt.find(ctx, to.parent)
+	if err != nil || parent == nil || !parent.managed() {
+		return true, err
+	}
+	rootUUID, err := e.collection(ctx, to.root, to.rootCreate, rootLogic, nil)
+	var missing *missingProjectError
+	if errors.As(err, &missing) {
+		e.logMissing(ctx, missing, ns)
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, e.reconcileCollection(ctx, parent, parentLogic, func() (string, error) { return rootUUID, nil })
 }
 
 // logTooLarge logs, once per resync, that the SBOM of m is over MaxSBOMSize.

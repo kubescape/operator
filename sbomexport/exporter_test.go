@@ -32,27 +32,41 @@ const (
 // fakeStore serves SBOMSyft objects from memory; every document is the curl
 // fixture.
 type fakeStore struct {
-	mu    sync.Mutex
-	sboms []*spdxv1beta1.SBOMSyft
-	gets  int
+	mu       sync.Mutex
+	sboms    []*spdxv1beta1.SBOMSyft
+	gets     int
+	tooLarge bool   // answer every document read with a *tooLargeError
+	limit    int64  // the limit of the last document read
+	onList   func() // called after listSBOMs took its snapshot, without the lock
 }
 
+// listSBOMs returns the metadata of the objects set, then calls onList.
 func (s *fakeStore) listSBOMs(context.Context) ([]sbomMeta, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	var out []sbomMeta
 	for _, obj := range s.sboms {
 		if m, ok := metaOf(obj); ok {
 			out = append(out, m)
 		}
 	}
+	hook := s.onList
+	s.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	return out, nil
 }
 
-func (s *fakeStore) syftDocument(context.Context, string, string) ([]byte, error) {
+// syftDocument counts the read and returns the curl fixture, or a
+// *tooLargeError when tooLarge is set.
+func (s *fakeStore) syftDocument(_ context.Context, _, _ string, limit int64) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gets++
+	s.limit = limit
+	if s.tooLarge {
+		return nil, &tooLargeError{read: limit + 1}
+	}
 	return curlSyftJSON, nil
 }
 
@@ -60,6 +74,13 @@ func (s *fakeStore) set(sboms ...*spdxv1beta1.SBOMSyft) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sboms = sboms
+}
+
+// lastLimit returns the limit of the last document read.
+func (s *fakeStore) lastLimit() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.limit
 }
 
 func (s *fakeStore) documentReads() int {
@@ -186,6 +207,7 @@ var defaultLayout = Layout{
 	Version: "{{ .Tag }}",
 }
 
+// New refuses options the exporter cannot run with.
 func TestNewRejectsAnInvalidConfiguration(t *testing.T) {
 	valid := Options{URL: "https://dtrack.example.com", APIKeyFile: "/etc/sbom-export/api-key", Cluster: "cluster", Layout: defaultLayout, MaxSBOMSize: 10 << 20, ResyncInterval: time.Hour}
 	tt := []struct {
@@ -331,6 +353,7 @@ func TestExporterResyncKeepsWhatItKnewWhenThePodListFails(t *testing.T) {
 	assert.Equal(t, []string{"apps"}, te.running.namespaces(digestOf(redisImageID)))
 }
 
+// Start exports the running images and returns once its context ends.
 func TestStartExportsUntilTheContextEnds(t *testing.T) {
 	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
 	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
@@ -372,4 +395,89 @@ func TestExporterCountsARefusedAPIKeyAsAFailureAndLogsItOncePerResync(t *testing
 
 	te.stats.takeFields()
 	assert.False(t, te.stats.authLogged.Load(), "the next resync logs it again")
+}
+
+// node-agent rebuilds the SBOM of a running image in place when its own
+// version changes: the creation time stays and the tool version changes.
+func TestExporterSendsAnSBOMAgainWhenNodeAgentRebuiltIt(t *testing.T) {
+	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
+	sbom := sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour))
+	sbom.Annotations[helpersv1.ToolVersionMetadataKey] = "v0.3.38"
+	te.store.set(sbom)
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	require.Len(t, te.dt.takeUploads(), 1)
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	require.Empty(t, te.dt.takeUploads(), "same node-agent version: unchanged")
+
+	rebuilt := sbom.DeepCopy()
+	rebuilt.Annotations[helpersv1.ToolVersionMetadataKey] = "v0.3.39"
+	te.store.set(rebuilt)
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	assert.Len(t, te.dt.takeUploads(), 1, "rebuilt by another node-agent version")
+
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	assert.Empty(t, te.dt.takeUploads())
+	p, _, _ := te.dt.project("cluster/apps/"+redisProject, "8")
+	assert.Equal(t, "v0.3.39", te.dt.propertyForTest(p.UUID, toolVersionProperty))
+}
+
+// The tool version is recorded only after the upload, so a failed upload of a
+// rebuilt SBOM is tried again instead of being taken as sent.
+func TestExporterSendsARebuiltSBOMAgainAfterAFailedUpload(t *testing.T) {
+	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
+	sbom := sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour))
+	sbom.Annotations[helpersv1.ToolVersionMetadataKey] = "v0.3.38"
+	te.store.set(sbom)
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	require.Len(t, te.dt.takeUploads(), 1)
+
+	rebuilt := sbom.DeepCopy()
+	rebuilt.Annotations[helpersv1.ToolVersionMetadataKey] = "v0.3.39"
+	te.store.set(rebuilt)
+	te.dt.mu.Lock()
+	te.dt.failUploads = 1
+	te.dt.mu.Unlock()
+	require.NoError(t, te.resync(context.Background()))
+	require.Len(t, te.drain(), 1)
+	require.Empty(t, te.dt.takeUploads())
+
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	assert.Len(t, te.dt.takeUploads(), 1)
+}
+
+// An SBOM that becomes ready while resync lists the SBOMSyft objects is not
+// replaced by the older state the list returned.
+func TestResyncKeepsAnSBOMThatBecameReadyWhileItListed(t *testing.T) {
+	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
+	created := te.clock.t.Add(-time.Hour)
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Initializing, created))
+	te.store.onList = func() {
+		te.ObserveSBOM(watch.Modified, sbomObject(redisImageID, redisTag, helpersv1.Learning, created))
+	}
+
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+
+	assert.Len(t, te.dt.takeUploads(), 1)
+}
+
+// A pod that starts while resync lists the pods stays running instead of
+// starting its grace period because the list missed it.
+func TestResyncKeepsAPodThatStartedWhileItListed(t *testing.T) {
+	te := newTestExporter(t)
+	te.client.PrependReactor("list", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
+		te.ObservePod(watch.Added, runningPod("apps", "web", redisImageID))
+		return false, nil, nil
+	})
+
+	require.NoError(t, te.resync(context.Background()))
+
+	te.clock.t = te.clock.t.Add(2 * time.Hour)
+	assert.Equal(t, []string{"apps"}, te.running.namespaces(digestOf(redisImageID)))
 }

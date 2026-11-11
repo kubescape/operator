@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
@@ -24,6 +25,10 @@ type sbomMeta struct {
 	status          string
 	created         time.Time
 	size            int64 // bytes, from the kubescape.io/resource-size annotation; 0 when unknown
+	// toolVersion is the node-agent version that built the SBOM. node-agent
+	// rebuilds the SBOM of a running image when its version changes and
+	// replaces the document in place, so the creation time stays the same.
+	toolVersion string
 }
 
 // ready reports whether the SBOM is complete: the statuses the operator's
@@ -46,13 +51,14 @@ func metaOf(obj *spdxv1beta1.SBOMSyft) (sbomMeta, bool) {
 	}
 	size, _ := strconv.ParseInt(ann[helpersv1.ResourceSizeMetadataKey], 10, 64)
 	return sbomMeta{
-		size:      size,
-		namespace: obj.GetNamespace(),
-		name:      obj.GetName(),
-		digest:    digestOf(imageID),
-		imageTag:  imageTag,
-		status:    ann[helpersv1.StatusMetadataKey],
-		created:   obj.GetCreationTimestamp().Time,
+		size:        size,
+		namespace:   obj.GetNamespace(),
+		name:        obj.GetName(),
+		digest:      digestOf(imageID),
+		imageTag:    imageTag,
+		status:      ann[helpersv1.StatusMetadataKey],
+		created:     obj.GetCreationTimestamp().Time,
+		toolVersion: ann[helpersv1.ToolVersionMetadataKey],
 	}, true
 }
 
@@ -60,8 +66,19 @@ func metaOf(obj *spdxv1beta1.SBOMSyft) (sbomMeta, bool) {
 type sbomStore interface {
 	// listSBOMs returns the metadata of every SBOMSyft.
 	listSBOMs(ctx context.Context) ([]sbomMeta, error)
-	// syftDocument returns the `.spec.syft` of one SBOMSyft as JSON.
-	syftDocument(ctx context.Context, namespace, name string) ([]byte, error)
+	// syftDocument returns the `.spec.syft` of one SBOMSyft as JSON. It reads
+	// at most limit bytes of the object and returns a *tooLargeError past that.
+	syftDocument(ctx context.Context, namespace, name string, limit int64) ([]byte, error)
+}
+
+// tooLargeError is an SBOMSyft object larger than the limit it was read with.
+type tooLargeError struct {
+	read int64 // bytes read before the limit stopped the read
+}
+
+// Error says how much of the object was read.
+func (e *tooLargeError) Error() string {
+	return fmt.Sprintf("SBOMSyft object is larger than the %d bytes read", e.read)
 }
 
 // storageSBOMs reads SBOMSyft objects from Kubescape's storage.
@@ -87,13 +104,23 @@ func (s storageSBOMs) listSBOMs(ctx context.Context) ([]sbomMeta, error) {
 // client: the document goes to syft's own decoder, and the storage types this
 // module builds against may lack fields that a newer node-agent writes. The
 // operator's storage client asks for protobuf, so this request asks for JSON.
-func (s storageSBOMs) syftDocument(ctx context.Context, namespace, name string) ([]byte, error) {
-	raw, err := s.client.SpdxV1beta1().RESTClient().Get().
+// The response is read up to limit, so an object without a size annotation
+// cannot make the operator buffer more than that.
+func (s storageSBOMs) syftDocument(ctx context.Context, namespace, name string, limit int64) ([]byte, error) {
+	body, err := s.client.SpdxV1beta1().RESTClient().Get().
 		Namespace(namespace).Resource("sbomsyfts").Name(name).
 		SetHeader("Accept", "application/json").
-		Do(ctx).Raw()
+		Stream(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get SBOMSyft %s/%s: %w", namespace, name, err)
+	}
+	defer func() { _ = body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read SBOMSyft %s/%s: %w", namespace, name, err)
+	}
+	if int64(len(raw)) > limit {
+		return nil, &tooLargeError{read: int64(len(raw))}
 	}
 	var obj struct {
 		Spec struct {

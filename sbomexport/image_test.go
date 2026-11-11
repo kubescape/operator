@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// TestSplitRef checks how image references split into repository and version.
 func TestSplitRef(t *testing.T) {
 	tt := []struct {
 		ref        string
@@ -35,6 +36,7 @@ func TestDigestOf(t *testing.T) {
 	assert.Equal(t, "sha256:abc", digestOf("sha256:abc"))
 }
 
+// TestRunningDigests checks which containers of a pod count as running an image.
 func TestRunningDigests(t *testing.T) {
 	running := corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
 	terminated := corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}}
