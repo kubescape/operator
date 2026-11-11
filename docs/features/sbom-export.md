@@ -27,8 +27,10 @@ namespaces is converted once.
 
 An image stays counted as running in a namespace for one resync interval after
 its last pod there ended, so the image of a short Job is still exported once
-its SBOM is ready. Namespaces the operator skips (`excludeNamespaces`,
-`includeNamespaces`, their regex forms) are not exported.
+its SBOM is ready. The operator keeps this in memory: the image of a Job that
+ended shortly before an operator restart is not exported, unless it runs again.
+Namespaces the operator skips (`excludeNamespaces`, `includeNamespaces`, their
+regex forms) are not exported.
 
 ## Projects in Dependency-Track
 
