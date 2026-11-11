@@ -133,6 +133,22 @@ func (te *testExporter) drain() []error {
 	return errs
 }
 
+// updateNamespace replaces ns and waits until the exporter has queued its move.
+func (te *testExporter) updateNamespace(t *testing.T, ns *corev1.Namespace) {
+	t.Helper()
+	seq := te.moveSeqForTest()
+	_, err := te.client.CoreV1().Namespaces().Update(context.Background(), ns, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return te.moveSeqForTest() > seq }, 5*time.Second, 10*time.Millisecond)
+}
+
+// moveSeqForTest returns how many namespace layout changes the exporter saw.
+func (te *testExporter) moveSeqForTest() uint64 {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	return te.moveSeq
+}
+
 func namespace(name string, annotations map[string]string) *corev1.Namespace {
 	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Annotations: annotations}}
 }
@@ -179,7 +195,6 @@ func TestNewRejectsAnInvalidConfiguration(t *testing.T) {
 		{"no URL", func(o *Options) { o.URL = "" }},
 		{"a URL without a scheme", func(o *Options) { o.URL = "dtrack.example.com" }},
 		{"no API key file", func(o *Options) { o.APIKeyFile = "" }},
-		{"no cluster name for the default root project", func(o *Options) { o.Cluster = "" }},
 		{"a template that does not parse", func(o *Options) { o.Layout.Name = "{{ .Namespace" }},
 		{"a template with an unknown field", func(o *Options) { o.Layout.Version = "{{ .Digest }}" }},
 		{"no size limit", func(o *Options) { o.MaxSBOMSize = 0 }},

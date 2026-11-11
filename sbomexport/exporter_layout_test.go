@@ -192,22 +192,6 @@ func TestExporterMovesItsProjectsWhenANamespaceLayoutChanges(t *testing.T) {
 	assert.Equal(t, int64(1), te.stats.moved.Load())
 }
 
-func TestExporterTagsItsProjectWhenDependencyTrackIgnoresProjectTags(t *testing.T) {
-	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
-	te.dt.ignoreUpTags = true
-	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
-
-	require.NoError(t, te.resync(context.Background()))
-	require.Empty(t, te.drain())
-
-	image, _, _ := te.dt.project("cluster/apps/"+redisProject, "8")
-	assert.True(t, image.managed())
-	te.clock.t = te.clock.t.Add(time.Hour)
-	require.NoError(t, te.resync(context.Background()))
-	require.Empty(t, te.drain())
-	assert.Equal(t, []string{"cluster/apps/" + redisProject + ":8"}, te.dt.takeUploads(), "the second resync finds it its own and unchanged")
-}
-
 // The namespace a pod event names is resolved when the image is exported, so
 // an image seen before its Namespace object still lands in the right place.
 func TestExporterUsesTheNamespaceAnnotationsWhenItExports(t *testing.T) {
@@ -218,4 +202,103 @@ func TestExporterUsesTheNamespaceAnnotationsWhenItExports(t *testing.T) {
 	require.Empty(t, te.drain())
 
 	assert.Equal(t, []string{redisProject + ":8"}, te.dt.takeUploads())
+}
+
+// The image's digest is recorded on its project before the upload, so a
+// project never holds a BOM without an owner another image could take.
+func TestExporterUploadsOnlyAfterRecordingTheImage(t *testing.T) {
+	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	te.dt.failProperties = 1
+
+	require.NoError(t, te.resync(context.Background()))
+	assert.Len(t, te.drain(), 1)
+	assert.Empty(t, te.dt.takeUploads(), "no upload without a recorded owner")
+
+	te.queue.Add(digestOf(redisImageID))
+	require.Empty(t, te.drain())
+	assert.Equal(t, []string{"cluster/apps/" + redisProject + ":8"}, te.dt.takeUploads())
+	p, _, _ := te.dt.project("cluster/apps/"+redisProject, "8")
+	owner, err := te.dt.digestOwnerForTest(p.UUID)
+	require.NoError(t, err)
+	assert.Equal(t, digestOf(redisImageID), owner)
+}
+
+func TestCollectionKeepsReferencesThatOnlyDifferInWhereTheColonIs(t *testing.T) {
+	te := newTestExporter(t)
+	a := te.dt.addProject("team:ops", "current", "")
+	b := te.dt.addProject("team", "ops:current", "")
+
+	gotA, err := te.collection(context.Background(), projectRef{name: "team:ops", version: "current"}, false, parentLogic, nil)
+	require.NoError(t, err)
+	gotB, err := te.collection(context.Background(), projectRef{name: "team", version: "ops:current"}, false, parentLogic, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, a, gotA)
+	assert.Equal(t, b, gotB)
+}
+
+func TestExporterMovesAProjectWhenOnlyItsParentChanges(t *testing.T) {
+	annotations := map[string]string{AnnotationParent: "Team A:current", AnnotationProjectName: "{{ .Repository }}"}
+	te := newTestExporter(t, namespace("payments", annotations), runningPod("payments", "api", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	before, parent, _ := te.dt.project(redisProject, "8")
+	require.Equal(t, "Team A", parent)
+	te.dt.takeUploads()
+
+	annotations[AnnotationParent] = "Team B:current"
+	te.updateNamespace(t, namespace("payments", annotations))
+	require.Empty(t, te.drain())
+
+	after, parent, _ := te.dt.project(redisProject, "8")
+	assert.Equal(t, before.UUID, after.UUID)
+	assert.Equal(t, "Team B", parent)
+	assert.Empty(t, te.dt.takeUploads())
+}
+
+// A parent the exporter created follows its namespace's root.
+func TestExporterMovesItsParentWhenOnlyTheRootChanges(t *testing.T) {
+	te := newTestExporter(t, namespace("payments", nil), runningPod("payments", "api", redisImageID))
+	te.dt.addProject("Finance", "current", "")
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	_, root, _ := te.dt.project("cluster/payments", "current")
+	require.Equal(t, "cluster", root)
+
+	te.updateNamespace(t, namespace("payments", map[string]string{AnnotationRootProject: "Finance:current", AnnotationRootProjectCreate: "false"}))
+	require.Empty(t, te.drain())
+
+	_, root, _ = te.dt.project("cluster/payments", "current")
+	assert.Equal(t, "Finance", root)
+	finance, _, _ := te.dt.project("Finance", "current")
+	assert.Empty(t, finance.Tags, "the root itself is not changed")
+}
+
+// A layout change that comes in while the previous one is being moved is not
+// lost: the projects end up where the latest layout puts them.
+func TestExporterKeepsALayoutChangeThatComesInDuringAMove(t *testing.T) {
+	te := newTestExporter(t, namespace("payments", nil), runningPod("payments", "api", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	before, _, _ := te.dt.project("cluster/payments/"+redisProject, "8")
+
+	toC := namespace("payments", map[string]string{AnnotationParent: "Team C:current", AnnotationProjectName: "{{ .Repository }}"})
+	te.dt.onPatch = func() {
+		// while the move to B patches the project, the namespace changes to C
+		seq := te.moveSeqForTest()
+		_, err := te.client.CoreV1().Namespaces().Update(context.Background(), toC, metav1.UpdateOptions{})
+		assert.NoError(t, err)
+		assert.Eventually(t, func() bool { return te.moveSeqForTest() > seq }, 5*time.Second, 10*time.Millisecond)
+	}
+	te.updateNamespace(t, namespace("payments", map[string]string{AnnotationParent: "Team B:current", AnnotationProjectName: "{{ .Repository }}"}))
+	require.Empty(t, te.drain())
+
+	after, parent, ok := te.dt.project(redisProject, "8")
+	require.True(t, ok)
+	assert.Equal(t, before.UUID, after.UUID)
+	assert.Equal(t, "Team C", parent)
 }

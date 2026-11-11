@@ -324,7 +324,7 @@ The Operator reads configuration from `/etc/config/`. When running locally, set 
 | `excludeNamespacesRegex` | `""` | Comma-separated string or array of RE2 regex patterns for namespaces to exclude |
 | `namespaceFilterConfigMapName` | `""` | Optional ConfigMap name in the operator namespace for live namespace filtering |
 | `sbomExport.resyncInterval` | `1h` | How often the [SBOM export](docs/features/sbom-export.md) compares every running image with Dependency-Track |
-| `sbomExport.maxSBOMSize` | `10485760` | Largest SBOM, in bytes, the SBOM export converts |
+| `sbomExport.maxSBOMSize` | `10485760` | Largest SBOM, in bytes, the SBOM export converts; the operator needs about nine times this in memory, see [SBOM size](docs/features/sbom-export.md#sbom-size) |
 | `sbomExport.dependencyTrack.url` | `""` | Dependency-Track API server the SBOM export sends to |
 | `sbomExport.dependencyTrack.apiKeyFile` | `/etc/sbom-export/api-key` | File holding the Dependency-Track API key, read on every request |
 | `sbomExport.dependencyTrack.rootProject` | `{{ .Cluster }}` | Root project, where created parents go; see [changing the layout](docs/features/sbom-export.md#changing-the-layout) |

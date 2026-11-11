@@ -39,7 +39,7 @@ func TestDTClientLooksUpCreatesAndPatchesProjects(t *testing.T) {
 	assert.Equal(t, ns.UUID, p.UUID)
 }
 
-func TestDTClientUploadsTheBOMUnderItsParent(t *testing.T) {
+func TestDTClientCreatesAProjectUnderItsParentAndUploadsItsBOM(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
 	f, srv, keyFile := newFakeDT(t, func() time.Time { return now })
@@ -47,7 +47,9 @@ func TestDTClientUploadsTheBOMUnderItsParent(t *testing.T) {
 	ns, err := c.createCollection(ctx, "cluster/apps", "current", "", parentLogic)
 	require.NoError(t, err)
 
-	require.NoError(t, c.uploadBOM(ctx, "cluster/apps/redis", "8", ns.UUID, curlCycloneDX))
+	_, err = c.createProject(ctx, "cluster/apps/redis", "8", ns.UUID)
+	require.NoError(t, err)
+	require.NoError(t, c.uploadBOM(ctx, "cluster/apps/redis", "8", curlCycloneDX))
 
 	got, parent, ok := f.project("cluster/apps/redis", "8")
 	require.True(t, ok)
@@ -84,7 +86,7 @@ func TestDTClientErrorCarriesTheStatusAndTheStartOfTheBody(t *testing.T) {
 	require.NoError(t, os.WriteFile(keyFile, []byte(testAPIKey), 0600))
 	c := &dtClient{baseURL: srv.URL, apiKeyFile: keyFile, http: srv.Client()}
 
-	err := c.uploadBOM(context.Background(), "cluster/apps/redis", "8", "", curlCycloneDX)
+	err := c.uploadBOM(context.Background(), "cluster/apps/redis", "8", curlCycloneDX)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "PUT /api/v1/bom: HTTP 500: "+strings.Repeat("x", errBody))

@@ -50,6 +50,34 @@ func TestLayoutDefaultsBuildTheClusterNamespaceTree(t *testing.T) {
 	}, p)
 }
 
+// A template that needs a label is valid; a namespace without the label cannot
+// be placed, and only that namespace is skipped.
+func TestLayoutAcceptsATemplateThatNeedsANamespaceLabel(t *testing.T) {
+	for _, text := range []string{`{{ index .Labels "team" }}`, `{{ .Labels.team }}`} {
+		t.Run(text, func(t *testing.T) {
+			byTeam := defaultLayout
+			byTeam.Parent.Name = text
+			l, err := newLayout("prod", byTeam)
+			require.NoError(t, err)
+
+			_, err = l.resolve(namespaceInfo{name: "apps"}, "docker.io/library/redis", "8")
+			assert.Error(t, err, "no team label")
+			p, err := l.resolve(namespaceInfo{name: "apps", labels: map[string]string{"team": "payments"}}, "docker.io/library/redis", "8")
+			require.NoError(t, err)
+			assert.Equal(t, projectRef{name: "payments", version: "current"}, p.parent)
+		})
+	}
+}
+
+func TestNewLayoutRejectsATemplateWithAnUnknownField(t *testing.T) {
+	bad := defaultLayout
+	bad.Parent.Name = "{{ .Cluster }}/{{ .Team }}"
+
+	_, err := newLayout("prod", bad)
+
+	assert.ErrorContains(t, err, "project.parent.name")
+}
+
 func TestLayoutTemplatesSeeTheNamespaceLabels(t *testing.T) {
 	byTeam := defaultLayout
 	byTeam.Parent.Name = `{{ .Cluster }}/{{ index .Labels "team" }}`

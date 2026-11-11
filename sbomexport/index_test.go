@@ -29,6 +29,16 @@ func TestIndexListsEveryNamespaceAnImageRunsIn(t *testing.T) {
 	assert.Equal(t, []string{"sha256:a", "sha256:b"}, x.digests())
 }
 
+// A Modified event for a pod that keeps its images must not queue them again.
+func TestIndexDoesNotReportAnUnchangedPodAsStarted(t *testing.T) {
+	x, _ := newTestIndex()
+	assert.Equal(t, []string{"sha256:a"}, x.setPod("apps/web", "apps", []string{"sha256:a"}))
+
+	assert.Empty(t, x.setPod("apps/web", "apps", []string{"sha256:a"}))
+	assert.Equal(t, []string{"sha256:b"}, x.setPod("apps/web", "apps", []string{"sha256:a", "sha256:b"}))
+	assert.Equal(t, []string{"apps"}, x.namespaces("sha256:a"))
+}
+
 func TestIndexKeepsANamespaceForOneGracePeriodAfterItsLastPod(t *testing.T) {
 	x, clock := newTestIndex()
 	x.setPod("apps/web", "apps", []string{"sha256:a"})

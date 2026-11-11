@@ -105,10 +105,33 @@ Rules:
 ## SBOM size
 
 Converting an SBOM takes about nine times its size in memory, one image at a
-time. SBOMs larger than `maxSBOMSize` (10 MiB by default) are skipped and
+time. Measured with node-agent's cataloger settings, the SBOM of
+`nvcr.io/nvidia/pytorch:26.10-py3` (24.9 MiB) peaked at 176 MiB of heap and the
+one of `quay.io/jupyter/all-spark-notebook` (33.9 MiB) at 291 MiB, both without
+a `GOMEMLIMIT`.
+
+SBOMs larger than `sbomExport.maxSBOMSize` (10 MiB by default) are skipped and
 logged once per resync. The operator checks the `kubescape.io/resource-size`
-annotation before it reads the SBOM, and the document's length after. node-agent
-itself stores SBOMs up to 20 MiB.
+annotation before it reads the SBOM, and the document's length after.
+
+node-agent has its own `maxSBOMSize`, 20 MiB by default: it marks a larger SBOM
+`too-large` and stores it without its content, so there is nothing to export.
+To export bigger SBOMs, raise three settings together:
+
+1. node-agent's `maxSBOMSize`, so it keeps them;
+2. `sbomExport.maxSBOMSize`, so the operator converts them;
+3. the operator's memory limit, to at least nine times `sbomExport.maxSBOMSize`
+   plus 64 MiB for the rest of the operator. The Helm chart sets `GOMEMLIMIT`
+   from the limit (`operator.gomemlimitPercentage`, 80% by default).
+
+| `sbomExport.maxSBOMSize` | Memory limit it needs | Operator limit |
+|--------------------------|-----------------------|----------------|
+| 10 MiB (default) | 154 MiB | 300Mi, the chart's default |
+| 20 MiB | 244 MiB | 300Mi, the chart's default |
+| 32 MiB | 352 MiB | 512Mi |
+
+The Helm chart warns in the `ks-capabilities` ConfigMap when the operator's
+memory limit is below this rule.
 
 ## Configuration
 
@@ -147,7 +170,7 @@ itself stores SBOMs up to 20 MiB.
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `sbomExport.resyncInterval` | `1h` | How often every running image is compared with Dependency-Track; also how long an image counts as running after its last pod ended |
-| `sbomExport.maxSBOMSize` | `10485760` (10 MiB) | Largest SBOM, in bytes, the operator converts |
+| `sbomExport.maxSBOMSize` | `10485760` (10 MiB) | Largest SBOM, in bytes, the operator converts; see [SBOM size](#sbom-size) for the memory it needs |
 | `sbomExport.dependencyTrack.url` | *required* | Base URL of the Dependency-Track API server |
 | `sbomExport.dependencyTrack.apiKeyFile` | `/etc/sbom-export/api-key` | File holding the API key, read on every request, so a rotated Secret needs no restart |
 | `sbomExport.dependencyTrack.rootProject.{name,version,create}` | `{{ .Cluster }}`, `current`, `true` | The root project, where created parents go |
@@ -159,11 +182,13 @@ logs why and runs without the export.
 
 ## Permissions in Dependency-Track
 
-The team that owns the API key needs `BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`
-and `VIEW_PORTFOLIO` to upload. To create root and parent projects, set their
+The team that owns the API key needs `VIEW_PORTFOLIO` to look projects up,
+`BOM_UPLOAD` to upload, and `PORTFOLIO_MANAGEMENT` to create projects, set the
 collection logic, mark the running version latest, record the image digest and
-move projects, it also needs `PORTFOLIO_MANAGEMENT`; on Dependency-Track 5,
-`PORTFOLIO_MANAGEMENT_CREATE` and `PORTFOLIO_MANAGEMENT_UPDATE` replace it. With
+move projects; on Dependency-Track 5, `PORTFOLIO_MANAGEMENT_CREATE` and
+`PORTFOLIO_MANAGEMENT_UPDATE` replace it. The operator creates each image's
+project before it uploads the BOM, so `PROJECT_CREATION_UPLOAD` is not needed,
+also when the layout only names existing root and parent projects. With
 portfolio access control on, the team also needs access to the existing
 projects the layout names. A refused call is logged with the reason
 Dependency-Track gave.

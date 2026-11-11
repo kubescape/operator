@@ -35,6 +35,13 @@ type project struct {
 	CollectionLogic string      `json:"collectionLogic"`
 	LastBOMImport   epochMillis `json:"lastBomImport"`
 	Tags            []tag       `json:"tags"`
+	// Parent is set in a GET by UUID; a lookup by name leaves it out.
+	Parent *projectParent `json:"parent,omitempty"`
+}
+
+// projectParent is a project's parent, by UUID.
+type projectParent struct {
+	UUID string `json:"uuid"`
 }
 
 type tag struct {
@@ -55,6 +62,7 @@ func (p *project) managed() bool {
 // milliseconds or from an RFC 3339 string.
 type epochMillis int64
 
+// UnmarshalJSON decodes a number of milliseconds, an RFC 3339 string, or null.
 func (m *epochMillis) UnmarshalJSON(b []byte) error {
 	if string(b) == "null" {
 		*m = 0
@@ -126,14 +134,16 @@ func (c *dtClient) do(ctx context.Context, method, path string, body any, out an
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	// errors name the path without its query, which can hold a project name
+	errPath, _, _ := strings.Cut(path, "?")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("%s %s: %w", method, path, err)
+		return 0, fmt.Errorf("%s %s: %w", method, errPath, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return resp.StatusCode, fmt.Errorf("%s %s: read response: %w", method, path, err)
+		return resp.StatusCode, fmt.Errorf("%s %s: read response: %w", method, errPath, err)
 	}
 
 	for _, s := range ok {
@@ -142,7 +152,7 @@ func (c *dtClient) do(ctx context.Context, method, path string, body any, out an
 		}
 		if out != nil && len(data) > 0 && resp.StatusCode < 300 { // a 404 body is plain text
 			if err := json.Unmarshal(data, out); err != nil {
-				return resp.StatusCode, fmt.Errorf("%s %s: decode response: %w", method, path, err)
+				return resp.StatusCode, fmt.Errorf("%s %s: decode response: %w", method, errPath, err)
 			}
 		}
 		return resp.StatusCode, nil
@@ -151,7 +161,7 @@ func (c *dtClient) do(ctx context.Context, method, path string, body any, out an
 	if len(msg) > errBody {
 		msg = msg[:errBody]
 	}
-	return resp.StatusCode, &httpError{method: method, path: path, status: resp.StatusCode, body: msg}
+	return resp.StatusCode, &httpError{method: method, path: errPath, status: resp.StatusCode, body: msg}
 }
 
 // httpError is a response with an unexpected status.
@@ -161,6 +171,7 @@ type httpError struct {
 	body         string
 }
 
+// Error names the request and quotes the start of the response body.
 func (e *httpError) Error() string {
 	return fmt.Sprintf("%s %s: HTTP %d: %s", e.method, e.path, e.status, e.body)
 }
@@ -230,20 +241,30 @@ func (c *dtClient) patch(ctx context.Context, uuid string, fields map[string]any
 	return err
 }
 
-// uploadBOM uploads bom as the latest version of name:version, creating the
-// project under parentUUID, tagged as created by the exporter, when it does
-// not exist. Dependency-Track processes the BOM asynchronously after answering.
-func (c *dtClient) uploadBOM(ctx context.Context, name, version, parentUUID string, bom []byte) error {
+// createProject creates the project name:version under parentUUID, tagged as
+// created by the exporter.
+func (c *dtClient) createProject(ctx context.Context, name, version, parentUUID string) (*project, error) {
+	body := map[string]any{"name": name, "version": version, "tags": []tag{{Name: managedTag}}}
+	if parentUUID != "" {
+		body["parent"] = map[string]string{"uuid": parentUUID}
+	}
+	var p project
+	if _, err := c.do(ctx, http.MethodPut, "/api/v1/project", body, &p, http.StatusCreated, http.StatusOK); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// uploadBOM uploads bom as the latest version of the existing project
+// name:version. Dependency-Track processes the BOM asynchronously after
+// answering.
+func (c *dtClient) uploadBOM(ctx context.Context, name, version string, bom []byte) error {
 	body := map[string]any{
 		"projectName":    name,
 		"projectVersion": version,
-		"autoCreate":     true,
+		"autoCreate":     false,
 		"isLatest":       true,
-		"projectTags":    []tag{{Name: managedTag}},
 		"bom":            base64.StdEncoding.EncodeToString(bom),
-	}
-	if parentUUID != "" {
-		body["parentUUID"] = parentUUID
 	}
 	_, err := c.do(ctx, http.MethodPut, "/api/v1/bom", body, nil, http.StatusOK)
 	return err

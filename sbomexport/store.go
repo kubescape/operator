@@ -69,6 +69,7 @@ type storageSBOMs struct {
 	client kssc.Interface
 }
 
+// listSBOMs pages through every SBOMSyft and keeps the ones metaOf accepts.
 func (s storageSBOMs) listSBOMs(ctx context.Context) ([]sbomMeta, error) {
 	var out []sbomMeta
 	err := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {

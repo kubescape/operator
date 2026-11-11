@@ -85,6 +85,7 @@ type Options struct {
 	SkipNamespace func(namespace string) bool
 }
 
+// validate checks the options that need no Dependency-Track call.
 func (o Options) validate() error {
 	u, err := url.Parse(o.URL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
@@ -117,10 +118,11 @@ type Exporter struct {
 	namespaceLister   corelisters.NamespaceLister
 
 	mu           sync.Mutex
-	sbomByImage  map[string]sbomMeta      // digest → its SBOMSyft
-	projects     map[string]string        // collection reference → uuid, emptied on every resync
-	pendingMoves map[string]namespaceInfo // namespace → what it was before its layout changed
-	logged       map[string]bool          // problems logged since the last resync
+	sbomByImage  map[string]sbomMeta     // digest → its SBOMSyft
+	projects     map[projectRef]string   // collection → uuid, emptied on every resync
+	pendingMoves map[string]*pendingMove // namespace → where its move starts
+	moveSeq      uint64                  // counts namespace layout changes
+	logged       map[string]bool         // problems logged since the last resync
 
 	stats stats
 }
@@ -131,6 +133,8 @@ func New(opts Options, pods kubernetes.Interface, storage kssc.Interface) (*Expo
 	return newExporter(opts, pods, storageSBOMs{client: storage}, &http.Client{Timeout: requestTimeout}, time.Now)
 }
 
+// newExporter is New with the SBOM store, the HTTP client and the clock
+// replaceable, for tests.
 func newExporter(opts Options, pods kubernetes.Interface, sboms sbomStore, httpClient *http.Client, now func() time.Time) (*Exporter, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
@@ -157,8 +161,8 @@ func newExporter(opts Options, pods kubernetes.Interface, sboms sbomStore, httpC
 		namespaceInformer: informer,
 		namespaceLister:   corelisters.NewNamespaceLister(informer.GetIndexer()),
 		sbomByImage:       map[string]sbomMeta{},
-		projects:          map[string]string{},
-		pendingMoves:      map[string]namespaceInfo{},
+		projects:          map[projectRef]string{},
+		pendingMoves:      map[string]*pendingMove{},
 		logged:            map[string]bool{},
 	}
 	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -217,21 +221,33 @@ func (e *Exporter) ObserveSBOM(eventType watch.EventType, obj *spdxv1beta1.SBOMS
 	}
 }
 
+// pendingMove is a namespace whose layout changed: its projects still sit
+// where from put them. seq tells whether another change came in since.
+type pendingMove struct {
+	from namespaceInfo
+	seq  uint64
+}
+
 // namespaceChanged queues a move of the namespace's projects when a change of
 // its labels or of its kubescape.io/dtrack-* annotations can change where its
-// images go. The first state before the move runs is the one moved from.
+// images go. The state before the first pending change is the one moved from.
 func (e *Exporter) namespaceChanged(oldNS, newNS *corev1.Namespace) {
 	if maps.Equal(oldNS.Labels, newNS.Labels) && maps.Equal(layoutAnnotations(oldNS), layoutAnnotations(newNS)) {
 		return
 	}
 	e.mu.Lock()
-	if _, ok := e.pendingMoves[newNS.Name]; !ok {
-		e.pendingMoves[newNS.Name] = infoOf(oldNS)
+	pm, ok := e.pendingMoves[newNS.Name]
+	if !ok {
+		pm = &pendingMove{from: infoOf(oldNS)}
+		e.pendingMoves[newNS.Name] = pm
 	}
+	e.moveSeq++
+	pm.seq = e.moveSeq
 	e.mu.Unlock()
 	e.queue.Add(moveKeyPrefix + newNS.Name)
 }
 
+// layoutAnnotations returns the kubescape.io/dtrack-* annotations of ns.
 func layoutAnnotations(ns *corev1.Namespace) map[string]string {
 	out := map[string]string{}
 	for k, v := range ns.Annotations {
@@ -242,6 +258,7 @@ func layoutAnnotations(ns *corev1.Namespace) map[string]string {
 	return out
 }
 
+// infoOf copies what the layout needs from ns.
 func infoOf(ns *corev1.Namespace) namespaceInfo {
 	return namespaceInfo{name: ns.Name, labels: maps.Clone(ns.Labels), annotations: maps.Clone(ns.Annotations)}
 }
@@ -286,6 +303,8 @@ func (e *Exporter) Start(ctx context.Context) {
 	}
 }
 
+// work drains the queue: image digests are exported, namespace keys moved.
+// A failed item is retried with backoff, then left to the next resync.
 func (e *Exporter) work(ctx context.Context) {
 	for {
 		key, shutdown := e.queue.Get()
@@ -349,7 +368,7 @@ func (e *Exporter) resync(ctx context.Context) error {
 	}
 	e.mu.Lock()
 	e.sbomByImage = byImage
-	e.projects = map[string]string{}
+	e.projects = map[projectRef]string{}
 	e.mu.Unlock()
 
 	for _, d := range e.running.digests() {
@@ -358,6 +377,7 @@ func (e *Exporter) resync(ctx context.Context) error {
 	return nil
 }
 
+// sbom returns the metadata of digest's SBOMSyft, if one is known.
 func (e *Exporter) sbom(digest string) (sbomMeta, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -431,21 +451,32 @@ func (e *Exporter) process(ctx context.Context, digest string) error {
 // exportTo makes p's project hold m's SBOM as its latest version. An image
 // whose project imported a BOM no older than its SBOMSyft is only marked
 // latest. It never uploads to a project it did not create, nor to one that
-// holds the BOM of another image that still runs.
+// holds the BOM of another image that still runs. Before it uploads, it
+// creates a missing project and records m's digest on it, so a second image
+// can never take a project whose upload went through but whose owner was not
+// recorded.
 func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placement, bom *[]byte) (result, error) {
-	existing, err := e.dt.lookup(ctx, p.name, p.version)
+	target, err := e.dt.lookup(ctx, p.name, p.version)
 	if err != nil {
 		return 0, err
 	}
-	parentUUID := ""
-	if existing != nil {
-		if !existing.managed() {
+	owner, parentUUID := "", ""
+	if target != nil {
+		if !target.managed() {
 			e.logOnce(ctx, "conflict/"+p.name+":"+p.version, "a Dependency-Track project with this name and version exists and was not created by Kubescape, skipping the image",
 				helpers.String("project", p.name), helpers.String("version", p.version), helpers.String("image", m.imageTag), helpers.String("namespace", ns))
 			return resultConflict, nil
 		}
-		owner, err := e.dt.digestOwner(ctx, existing.UUID)
-		if err != nil {
+		// Resolve the parent of an existing project too, so a collection the
+		// exporter created follows a changed root.
+		if _, err := e.parent(ctx, p); err != nil {
+			var missing *missingProjectError
+			if !errors.As(err, &missing) {
+				return 0, err
+			}
+			e.logMissing(ctx, missing, ns)
+		}
+		if owner, err = e.dt.digestOwner(ctx, target.UUID); err != nil {
 			return 0, err
 		}
 		if owner != "" && owner != m.digest && len(e.running.namespaces(owner)) > 0 {
@@ -454,9 +485,9 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 				helpers.String("ownerDigest", owner), helpers.String("digest", m.digest))
 			return resultConflict, nil
 		}
-		if owner == m.digest && !existing.LastBOMImport.Time().Before(m.created) {
-			if !existing.IsLatest {
-				if err := e.dt.patch(ctx, existing.UUID, map[string]any{"isLatest": true}); err != nil {
+		if owner == m.digest && !target.LastBOMImport.Time().Before(m.created) {
+			if !target.IsLatest {
+				if err := e.dt.patch(ctx, target.UUID, map[string]any{"isLatest": true}); err != nil {
 					return 0, err
 				}
 			}
@@ -466,8 +497,7 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 		parentUUID, err = e.parent(ctx, p)
 		var missing *missingProjectError
 		if errors.As(err, &missing) {
-			e.logOnce(ctx, "missing/"+missing.ref.String(), "a Dependency-Track project the layout names does not exist and may not be created, skipping the namespace's images",
-				helpers.String("project", missing.ref.String()), helpers.String("reason", missing.reason), helpers.String("namespace", ns))
+			e.logMissing(ctx, missing, ns)
 			return resultSkipped, nil
 		}
 		if err != nil {
@@ -488,25 +518,24 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 			return 0, fmt.Errorf("convert SBOMSyft %s/%s: %w", m.namespace, m.name, err)
 		}
 	}
-	if err := e.dt.uploadBOM(ctx, p.name, p.version, parentUUID, *bom); err != nil {
-		return 0, err
-	}
-
-	// Record which image the project holds. The upload created the project
-	// when it was missing; tag it in case Dependency-Track ignored projectTags.
-	uploaded, err := e.dt.lookup(ctx, p.name, p.version)
-	if err != nil {
-		return 0, err
-	}
-	if uploaded == nil {
-		return 0, fmt.Errorf("project %s:%s is missing after the upload", p.name, p.version)
-	}
-	if !uploaded.managed() {
-		if err := e.dt.patch(ctx, uploaded.UUID, map[string]any{"tags": append(uploaded.Tags, tag{Name: managedTag})}); err != nil {
+	if target == nil {
+		if target, err = e.dt.createProject(ctx, p.name, p.version, parentUUID); err != nil {
 			return 0, err
 		}
 	}
-	return resultSent, e.dt.setDigestOwner(ctx, uploaded.UUID, m.digest)
+	if owner != m.digest {
+		if err := e.dt.setDigestOwner(ctx, target.UUID, m.digest); err != nil {
+			return 0, err
+		}
+	}
+	return resultSent, e.dt.uploadBOM(ctx, p.name, p.version, *bom)
+}
+
+// logMissing logs, once per resync, a project the layout names that is
+// missing and may not be created.
+func (e *Exporter) logMissing(ctx context.Context, missing *missingProjectError, ns string) {
+	e.logOnce(ctx, "missing/"+missing.ref.String(), "a Dependency-Track project the layout names does not exist and may not be created, skipping the namespace's images",
+		helpers.String("project", missing.ref.String()), helpers.String("reason", missing.reason), helpers.String("namespace", ns))
 }
 
 // missingProjectError is a project the layout names that does not exist and
@@ -516,6 +545,7 @@ type missingProjectError struct {
 	reason string
 }
 
+// Error describes the missing project.
 func (e *missingProjectError) Error() string {
 	return fmt.Sprintf("project %s %s", e.ref, e.reason)
 }
@@ -530,11 +560,13 @@ func (e *Exporter) parent(ctx context.Context, p placement) (string, error) {
 
 // collection returns the uuid of the collection project ref names. A missing
 // one is created, under the project parentOf returns, only when create allows
-// it. The collection logic is set only on projects the exporter created.
+// it. A collection the exporter created keeps its collection logic and, when
+// parentOf is given, its place under the project parentOf returns, so a
+// changed root takes the collection along. Other collections are never
+// changed.
 func (e *Exporter) collection(ctx context.Context, ref projectRef, create bool, logic string, parentOf func() (string, error)) (string, error) {
-	key := ref.String()
 	e.mu.Lock()
-	uuid, ok := e.projects[key]
+	uuid, ok := e.projects[ref]
 	e.mu.Unlock()
 	if ok {
 		return uuid, nil
@@ -545,13 +577,11 @@ func (e *Exporter) collection(ctx context.Context, ref projectRef, create bool, 
 		return "", err
 	}
 	switch {
-	case p != nil:
-		if p.managed() && p.CollectionLogic != logic {
-			if err := e.dt.patch(ctx, p.UUID, map[string]any{"collectionLogic": logic}); err != nil {
-				return "", err
-			}
-			logger.L().Info("set collection logic of Dependency-Track project", helpers.String("project", key), helpers.String("collectionLogic", logic))
+	case p != nil && p.managed():
+		if err := e.reconcileCollection(ctx, p, logic, parentOf); err != nil {
+			return "", err
 		}
+	case p != nil:
 	case ref.uuid != "":
 		return "", &missingProjectError{ref: ref, reason: "does not exist; a project named by UUID is never created"}
 	case !create:
@@ -566,13 +596,51 @@ func (e *Exporter) collection(ctx context.Context, ref projectRef, create bool, 
 		if p, err = e.dt.createCollection(ctx, ref.name, ref.version, parentUUID, logic); err != nil {
 			return "", err
 		}
-		logger.L().Info("created Dependency-Track collection project", helpers.String("project", key), helpers.String("collectionLogic", logic))
+		logger.L().Info("created Dependency-Track collection project", helpers.String("project", ref.String()), helpers.String("collectionLogic", logic))
 	}
 
 	e.mu.Lock()
-	e.projects[key] = p.UUID
+	e.projects[ref] = p.UUID
 	e.mu.Unlock()
 	return p.UUID, nil
+}
+
+// reconcileCollection sets the collection logic of a collection the exporter
+// created and, when parentOf is given, moves it under the project parentOf
+// returns. When that project is missing and may not be created, the
+// collection stays where it is.
+func (e *Exporter) reconcileCollection(ctx context.Context, p *project, logic string, parentOf func() (string, error)) error {
+	fields := map[string]any{}
+	if p.CollectionLogic != logic {
+		fields["collectionLogic"] = logic
+	}
+	if parentOf != nil {
+		want, err := parentOf()
+		var missing *missingProjectError
+		switch {
+		case errors.As(err, &missing):
+			e.logMissing(ctx, missing, "")
+		case err != nil:
+			return err
+		default:
+			// a lookup by name leaves the parent out; a GET by UUID has it
+			full, err := e.dt.getByUUID(ctx, p.UUID)
+			if err != nil {
+				return err
+			}
+			if full != nil && (full.Parent == nil || full.Parent.UUID != want) {
+				fields["parent"] = map[string]string{"uuid": want}
+			}
+		}
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	if err := e.dt.patch(ctx, p.UUID, fields); err != nil {
+		return err
+	}
+	logger.L().Info("updated Dependency-Track collection project", helpers.String("project", p.Name+":"+p.Version), helpers.Interface("changes", fields))
+	return nil
 }
 
 // move moves the projects of the images running in ns from where the
@@ -583,7 +651,12 @@ func (e *Exporter) collection(ctx context.Context, ref projectRef, create bool, 
 // running is not seen, so those images start new projects.
 func (e *Exporter) move(ctx context.Context, ns string) error {
 	e.mu.Lock()
-	before, ok := e.pendingMoves[ns]
+	pm, ok := e.pendingMoves[ns]
+	var before namespaceInfo
+	var seq uint64
+	if ok {
+		before, seq = pm.from, pm.seq
+	}
 	e.mu.Unlock()
 	if !ok {
 		return nil
@@ -609,8 +682,18 @@ func (e *Exporter) move(ctx context.Context, ns string) error {
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
+	// A change that came in meanwhile moves on from where this one ended. The
+	// collection cache is dropped, so the exports below find, and reconcile,
+	// the collections of the new layout.
 	e.mu.Lock()
-	delete(e.pendingMoves, ns)
+	e.projects = map[projectRef]string{}
+	if cur, ok := e.pendingMoves[ns]; ok {
+		if cur.seq == seq {
+			delete(e.pendingMoves, ns)
+		} else {
+			cur.from = now
+		}
+	}
 	e.mu.Unlock()
 	for _, d := range digests {
 		e.queue.Add(d)
@@ -618,20 +701,23 @@ func (e *Exporter) move(ctx context.Context, ns string) error {
 	return nil
 }
 
+// moveProject moves the exporter's project at from to to: its name, version
+// and parent. When only the parent changes, the project found at to is the
+// same one, and only its parent changes. A different project at to is left
+// alone.
 func (e *Exporter) moveProject(ctx context.Context, ns string, from, to placement) error {
 	p, err := e.dt.lookup(ctx, from.name, from.version)
 	if err != nil || p == nil || !p.managed() {
 		return err
 	}
 	target, err := e.dt.lookup(ctx, to.name, to.version)
-	if err != nil || target != nil {
+	if err != nil || (target != nil && target.UUID != p.UUID) {
 		return err
 	}
 	parentUUID, err := e.parent(ctx, to)
 	var missing *missingProjectError
 	if errors.As(err, &missing) {
-		e.logOnce(ctx, "missing/"+missing.ref.String(), "a Dependency-Track project the layout names does not exist and may not be created, skipping the namespace's images",
-			helpers.String("project", missing.ref.String()), helpers.String("reason", missing.reason), helpers.String("namespace", ns))
+		e.logMissing(ctx, missing, ns)
 		return nil
 	}
 	if err != nil {
@@ -646,6 +732,7 @@ func (e *Exporter) moveProject(ctx context.Context, ns string, from, to placemen
 	return nil
 }
 
+// logTooLarge logs, once per resync, that the SBOM of m is over MaxSBOMSize.
 func (e *Exporter) logTooLarge(ctx context.Context, m sbomMeta, size int64) {
 	e.logOnce(ctx, "too-large/"+m.digest, "SBOM is larger than sbomExport.maxSBOMSize, skipping it",
 		helpers.String("image", m.imageTag), helpers.Int("size", int(size)), helpers.Int("maxSBOMSize", int(e.opts.MaxSBOMSize)))
@@ -671,7 +758,7 @@ func (e *Exporter) logFailure(ctx context.Context, err error, image, name, versi
 		if e.stats.authLogged.Swap(true) {
 			return
 		}
-		fields = append(fields, helpers.String("hint", "the API key's team needs BOM_UPLOAD, PROJECT_CREATION_UPLOAD and VIEW_PORTFOLIO, plus PORTFOLIO_MANAGEMENT (on 5.x: PORTFOLIO_MANAGEMENT_CREATE and PORTFOLIO_MANAGEMENT_UPDATE) to create and update projects; with portfolio access control on, access to the projects the layout names"))
+		fields = append(fields, helpers.String("hint", "the API key's team needs VIEW_PORTFOLIO, BOM_UPLOAD and PORTFOLIO_MANAGEMENT (on 5.x: PORTFOLIO_MANAGEMENT_CREATE and PORTFOLIO_MANAGEMENT_UPDATE); with portfolio access control on, access to the projects the layout names"))
 	}
 	logger.L().Ctx(ctx).Error("failed to export SBOM to Dependency-Track", fields...)
 }

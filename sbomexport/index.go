@@ -28,6 +28,7 @@ type index struct {
 	ended map[string]map[string]time.Time // digest → namespace → when its last pod ended
 }
 
+// newIndex returns an empty index that keeps ended namespaces for grace.
 func newIndex(grace time.Duration, now func() time.Time) *index {
 	return &index{
 		grace: grace,
@@ -44,18 +45,21 @@ func newIndex(grace time.Duration, now func() time.Time) *index {
 func (x *index) setPod(key, namespace string, digests []string) []string {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	x.removeLocked(key)
 	if len(digests) == 0 {
+		x.removeLocked(key)
 		return nil
 	}
 	digests = slices.Compact(slices.Sorted(slices.Values(digests)))
-	x.pods[key] = podEntry{namespace: namespace, digests: digests}
+	// Count the new digests before dropping the old entry, so a digest the pod
+	// keeps never falls to zero and is not reported as started again.
 	var started []string
 	for _, d := range digests {
 		if x.incLocked(d, namespace) {
 			started = append(started, d)
 		}
 	}
+	x.removeLocked(key)
+	x.pods[key] = podEntry{namespace: namespace, digests: digests}
 	return started
 }
 
@@ -141,6 +145,7 @@ func (x *index) digests() []string {
 	return out
 }
 
+// removeLocked forgets the pod with key and uncounts its digests.
 func (x *index) removeLocked(key string) {
 	p, ok := x.pods[key]
 	if !ok {
@@ -168,6 +173,8 @@ func (x *index) incLocked(digest, ns string) bool {
 	return x.refs[digest][ns] == 1
 }
 
+// decLocked counts one less pod running digest in ns, and starts the grace
+// period of ns when it was the last.
 func (x *index) decLocked(digest, ns string) {
 	r := x.refs[digest]
 	if r == nil || r[ns] == 0 {
@@ -187,6 +194,7 @@ func (x *index) decLocked(digest, ns string) {
 	x.ended[digest][ns] = x.now()
 }
 
+// pruneLocked drops the namespaces whose grace period is over.
 func (x *index) pruneLocked() {
 	now := x.now()
 	for d, e := range x.ended {

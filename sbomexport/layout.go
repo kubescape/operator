@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -61,6 +62,7 @@ type projectRef struct {
 	name, version string
 }
 
+// String returns the UUID, or name:version.
 func (r projectRef) String() string {
 	if r.uuid != "" {
 		return r.uuid
@@ -112,6 +114,9 @@ type layout struct {
 	nameByText map[string]*template.Template // parsed AnnotationProjectName values
 }
 
+// parseTemplate parses text as the template for field. A missing map key is an
+// error, so {{ .Labels.team }} fails for a namespace without that label instead
+// of rendering "<no value>".
 func parseTemplate(field, text string) (*template.Template, error) {
 	t, err := template.New(field).Option("missingkey=error").Parse(text)
 	if err != nil {
@@ -146,10 +151,17 @@ func newLayout(cluster string, l Layout) (*layout, error) {
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
+	// Catch unknown fields now. A missing label or an empty result is not an
+	// error here: a template like {{ .Labels.team }} renders only for
+	// namespaces that have the label, and resolve rejects it for the others.
 	sample := TemplateData{Cluster: cluster, Namespace: "default", Repository: "docker.io/library/nginx", Tag: "1.27", Labels: map[string]string{}}
 	for _, t := range []*template.Template{x.root[0], x.root[1], x.parent[0], x.parent[1], x.project[0], x.project[1]} {
-		if _, err := render(t, sample); err != nil {
-			errs = append(errs, err)
+		c, err := t.Clone()
+		if err == nil {
+			err = c.Option("missingkey=zero").Execute(io.Discard, sample)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("render %s: %w", t.Name(), err))
 		}
 	}
 	return x, errors.Join(errs...)
@@ -168,6 +180,7 @@ func render(t *template.Template, data TemplateData) (string, error) {
 	return out, nil
 }
 
+// projectNameTemplate parses an AnnotationProjectName value once and reuses it.
 func (x *layout) projectNameTemplate(text string) (*template.Template, error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()

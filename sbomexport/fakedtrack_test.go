@@ -20,16 +20,17 @@ const testAPIKey = "test-api-key"
 // makes: project lookup, get by UUID, create, patch (including a move), BOM
 // upload with autoCreate and projectTags, and project properties.
 type fakeDT struct {
-	mu           sync.Mutex
-	now          func() time.Time
-	projects     map[string]*project          // uuid → project
-	parents      map[string]string            // project uuid → parent uuid
-	properties   map[string]map[string]string // project uuid → "group/name" → value
-	uploads      []string                     // "name:version" of every BOM upload
-	nextID       int
-	fail         int    // answer the next fail requests with 503
-	ignoreUpTags bool   // drop projectTags on upload, as a Dependency-Track that does not support them
-	keyFile      string // holds testAPIKey
+	mu             sync.Mutex
+	now            func() time.Time
+	projects       map[string]*project          // uuid → project
+	parents        map[string]string            // project uuid → parent uuid
+	properties     map[string]map[string]string // project uuid → "group/name" → value
+	uploads        []string                     // "name:version" of every BOM upload
+	nextID         int
+	fail           int    // answer the next fail requests with 503
+	failProperties int    // answer the next property writes with 503
+	onPatch        func() // called before a PATCH is applied, without the lock
+	keyFile        string // holds testAPIKey
 }
 
 // newFakeDT starts a fakeDT and returns it with an API key file holding
@@ -47,6 +48,15 @@ func newFakeDT(t *testing.T, now func() time.Time) (*fakeDT, *httptest.Server, s
 }
 
 func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPatch {
+		f.mu.Lock()
+		hook := f.onPatch
+		f.onPatch = nil
+		f.mu.Unlock()
+		if hook != nil {
+			hook()
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if r.Header.Get("X-Api-Key") != testAPIKey {
@@ -119,6 +129,7 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Parent != nil {
 			f.parents[uuid] = req.Parent.UUID
+			p.Parent = &projectParent{UUID: req.Parent.UUID}
 		}
 		if req.Tags != nil {
 			p.Tags = *req.Tags
@@ -126,23 +137,19 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, p)
 	case r.Method == http.MethodPut && path == "/api/v1/bom":
 		var req struct {
-			ProjectName, ProjectVersion, ParentUUID, BOM string
-			AutoCreate, IsLatest                         bool
-			ProjectTags                                  []tag
+			ProjectName, ProjectVersion, BOM string
+			AutoCreate, IsLatest             bool
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		bom, err := base64.StdEncoding.DecodeString(req.BOM)
-		if err != nil || !json.Valid(bom) || !req.AutoCreate {
+		if err != nil || !json.Valid(bom) {
 			http.Error(w, "bad BOM upload", http.StatusBadRequest)
 			return
 		}
 		p := f.byNameLocked(req.ProjectName, req.ProjectVersion)
 		if p == nil {
-			tags := req.ProjectTags
-			if f.ignoreUpTags {
-				tags = nil
-			}
-			p = f.addLocked(req.ProjectName, req.ProjectVersion, req.ParentUUID, tags)
+			http.Error(w, "The project could not be found.", http.StatusNotFound)
+			return
 		}
 		if req.IsLatest {
 			for _, other := range f.projects {
@@ -172,6 +179,11 @@ func (f *fakeDT) serveProperty(w http.ResponseWriter, r *http.Request, uuid stri
 			out = append(out, projectProperty{GroupName: group, PropertyName: name, PropertyValue: v, PropertyType: "STRING"})
 		}
 		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	if f.failProperties > 0 {
+		f.failProperties--
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	var p projectProperty
@@ -207,6 +219,9 @@ func (f *fakeDT) byNameLocked(name, version string) *project {
 func (f *fakeDT) addLocked(name, version, parentUUID string, tags []tag) *project {
 	f.nextID++
 	p := &project{UUID: fmt.Sprintf("00000000-0000-0000-0000-%012d", f.nextID), Name: name, Version: version, Tags: tags}
+	if parentUUID != "" {
+		p.Parent = &projectParent{UUID: parentUUID}
+	}
 	f.projects[p.UUID] = p
 	f.parents[p.UUID] = parentUUID
 	return p
