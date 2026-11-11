@@ -91,6 +91,12 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 			if !ok {
 				continue
 			}
+			if wh.sbomObserver != nil {
+				wh.sbomObserver.ObservePod(event.Type, pod)
+			}
+			if wh.imageScansDisabled {
+				continue
+			}
 			wlid, err := utils.GetParentIDForPod(wh.k8sAPI, pod, wh.cfg.ClusterName())
 			if err != nil {
 				logger.L().Ctx(ctx).Error("failed to get wlid for pod", helpers.Error(err), helpers.String("pod", pod.Name), helpers.String("namespace", pod.Namespace))
@@ -139,6 +145,8 @@ func (wh *WatchHandler) SBOMWatch(ctx context.Context, workerPool *ants.PoolWith
 
 }
 
+// HandleSBOMEvents passes SBOMSyft events to the SBOM observer, if any, and,
+// unless image scans are disabled, turns them into vulnerability scan commands.
 func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedCommands chan<- *apis.Command, errorCh chan<- error) {
 	defer close(errorCh)
 
@@ -146,6 +154,14 @@ func (wh *WatchHandler) HandleSBOMEvents(eventQueue *CooldownQueue, producedComm
 		obj, ok := e.Object.(*spdxv1beta1.SBOMSyft)
 		if !ok {
 			errorCh <- ErrUnsupportedObject
+			continue
+		}
+
+		// a re-enqueued event (waiting for its Wlid below) was observed already
+		if wh.sbomObserver != nil && wh.sbomRetryAttempts.Get(obj.Namespace+"/"+obj.Name) == 0 {
+			wh.sbomObserver.ObserveSBOM(e.Type, obj)
+		}
+		if wh.imageScansDisabled {
 			continue
 		}
 

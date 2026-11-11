@@ -34,6 +34,7 @@ type Capabilities struct {
 	VulnerabilityScan    string `json:"vulnerabilityScan"`
 	AdmissionController  string `json:"admissionController"`
 	RiskAcceptance       string `json:"riskAcceptance"`
+	SBOMExport           string `json:"sbomExport"`
 }
 
 type Components struct {
@@ -156,6 +157,51 @@ type Config struct {
 	RulesUpdateConfig             rulesupdate.RulesUpdaterConfig `mapstructure:"rulesUpdateConfig"`
 	SkipProfilesWithoutInstances  bool                           `mapstructure:"skipProfilesWithoutInstances"`
 	NodeAgentAutoscaler           NodeAgentAutoscalerConfig      `mapstructure:"nodeAgentAutoscaler"`
+	SBOMExport                    SBOMExportConfig               `mapstructure:"sbomExport"`
+}
+
+// SBOMExportConfig configures the export of node SBOMs to Dependency-Track,
+// turned on by the sbomExport capability.
+type SBOMExportConfig struct {
+	// ResyncInterval is how often the exporter compares what runs in the
+	// cluster with what Dependency-Track holds.
+	ResyncInterval time.Duration `mapstructure:"resyncInterval"`
+	// MaxSBOMSize is the largest SBOM, in bytes, the exporter converts; larger
+	// ones are skipped, which bounds the operator's memory.
+	MaxSBOMSize     int64                 `mapstructure:"maxSBOMSize"`
+	DependencyTrack DependencyTrackConfig `mapstructure:"dependencyTrack"`
+}
+
+// DependencyTrackConfig is where the exporter sends the SBOMs, and where in
+// Dependency-Track's project tree they go. Names and versions are Go
+// templates over the cluster, the namespace, its labels, and the image's
+// repository and tag; Namespace annotations can override them.
+type DependencyTrackConfig struct {
+	// URL is the base URL of the Dependency-Track API server.
+	URL string `mapstructure:"url"`
+	// APIKeyFile is the file the API key is read from, on every request, so a
+	// rotated Secret needs no restart.
+	APIKeyFile string `mapstructure:"apiKeyFile"`
+	// RootProject is where the exporter creates the parents it creates.
+	RootProject DTCollectionConfig `mapstructure:"rootProject"`
+	// Project is the project of one image in one namespace.
+	Project DTProjectConfig `mapstructure:"project"`
+}
+
+// DTCollectionConfig is a collection project: the root, or an image's parent.
+type DTCollectionConfig struct {
+	Name    string `mapstructure:"name"`
+	Version string `mapstructure:"version"`
+	// Create lets the exporter create the project when it is missing. Without
+	// it the project must exist, and the exporter never changes it.
+	Create bool `mapstructure:"create"`
+}
+
+// DTProjectConfig is the project an image is uploaded to, and its parent.
+type DTProjectConfig struct {
+	Name    string             `mapstructure:"name"`
+	Version string             `mapstructure:"version"`
+	Parent  DTCollectionConfig `mapstructure:"parent"`
 }
 
 // IConfig is an interface for all config types used in the operator
@@ -170,6 +216,8 @@ type IConfig interface {
 	ContinuousScanEnabled() bool
 	NodeSbomGenerationEnabled() bool
 	RiskAcceptanceEnabled() bool
+	SBOMExportEnabled() bool
+	SBOMExportConfig() SBOMExportConfig
 	CleanUpRoutineInterval() time.Duration
 	MatchingRulesFilename() string
 	TriggerSecurityFramework() bool
@@ -248,6 +296,16 @@ func (c *OperatorConfig) AdmissionControllerEnabled() bool {
 
 func (c *OperatorConfig) NodeSbomGenerationEnabled() bool {
 	return c.components.Capabilities.NodeSbomGeneration == "enable"
+}
+
+// SBOMExportEnabled reports whether the sbomExport capability is on.
+func (c *OperatorConfig) SBOMExportEnabled() bool {
+	return c.components.Capabilities.SBOMExport == "enable"
+}
+
+// SBOMExportConfig returns where and how often to export SBOMs.
+func (c *OperatorConfig) SBOMExportConfig() SBOMExportConfig {
+	return c.serviceConfig.SBOMExport
 }
 
 // RiskAcceptanceEnabled reports whether the riskAcceptance capability is on. The
@@ -391,6 +449,7 @@ func (c *OperatorConfig) NodeAgentAutoscalerConfig() NodeAgentAutoscalerConfig {
 	return c.serviceConfig.NodeAgentAutoscaler
 }
 
+// LoadConfig reads config.json from path over the defaults set here.
 func LoadConfig(path string) (Config, error) {
 	viper.AddConfigPath(path)
 	viper.SetConfigName("config")
@@ -431,6 +490,19 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("nodeAgentAutoscaler.goMemLimitPercentage", 0.8)
 	viper.SetDefault("nodeAgentAutoscaler.seLinuxType", "spc_t")
 	viper.SetDefault("nodeAgentAutoscaler.bottlerocketAutoDetect", true)
+
+	// SBOM export defaults: the project tree is <cluster>/<namespace>/<repository>:<tag>
+	viper.SetDefault("sbomExport.resyncInterval", time.Hour)
+	viper.SetDefault("sbomExport.maxSBOMSize", 10<<20)
+	viper.SetDefault("sbomExport.dependencyTrack.apiKeyFile", "/etc/sbom-export/api-key")
+	viper.SetDefault("sbomExport.dependencyTrack.rootProject.name", "{{ .Cluster }}")
+	viper.SetDefault("sbomExport.dependencyTrack.rootProject.version", "current")
+	viper.SetDefault("sbomExport.dependencyTrack.rootProject.create", true)
+	viper.SetDefault("sbomExport.dependencyTrack.project.name", "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}")
+	viper.SetDefault("sbomExport.dependencyTrack.project.version", "{{ .Tag }}")
+	viper.SetDefault("sbomExport.dependencyTrack.project.parent.name", "{{ .Cluster }}/{{ .Namespace }}")
+	viper.SetDefault("sbomExport.dependencyTrack.project.parent.version", "current")
+	viper.SetDefault("sbomExport.dependencyTrack.project.parent.create", true)
 
 	viper.AutomaticEnv()
 

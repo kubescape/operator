@@ -120,6 +120,7 @@ func TestLoadCapabilities(t *testing.T) {
 	}
 }
 
+// TestLoadConfig loads ../configuration/config.json and compares the result.
 func TestLoadConfig(t *testing.T) {
 	type args struct {
 		path string
@@ -178,6 +179,19 @@ func TestLoadConfig(t *testing.T) {
 					GoMemLimitPercentage:   0.8,
 					SELinuxType:            "spc_t",
 					BottlerocketAutoDetect: true,
+				},
+				SBOMExport: SBOMExportConfig{
+					ResyncInterval: time.Hour,
+					MaxSBOMSize:    10 << 20,
+					DependencyTrack: DependencyTrackConfig{
+						APIKeyFile:  "/etc/sbom-export/api-key",
+						RootProject: DTCollectionConfig{Name: "{{ .Cluster }}", Version: "current", Create: true},
+						Project: DTProjectConfig{
+							Name:    "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}",
+							Version: "{{ .Tag }}",
+							Parent:  DTCollectionConfig{Name: "{{ .Cluster }}/{{ .Namespace }}", Version: "current", Create: true},
+						},
+					},
 				},
 			},
 		},
@@ -618,4 +632,81 @@ func TestNewOperatorConfig_RegexValidation(t *testing.T) {
 		require.NotNil(t, opCfg)
 		assert.False(t, opCfg.SkipNamespace("default"))
 	})
+}
+
+// TestSBOMExportEnabled checks that only "enable" turns the export on.
+func TestSBOMExportEnabled(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"enable", true},
+		{"disable", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			cfg, err := NewOperatorConfig(
+				CapabilitiesConfig{Capabilities: Capabilities{SBOMExport: tt.value}},
+				armometadata.ClusterConfig{},
+				&utils.Credentials{},
+				Config{},
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.SBOMExportEnabled())
+		})
+	}
+}
+
+func TestLoadConfigSBOMExportDefaults(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0600))
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, time.Hour, cfg.SBOMExport.ResyncInterval)
+	assert.Equal(t, int64(10<<20), cfg.SBOMExport.MaxSBOMSize)
+	assert.Equal(t, "/etc/sbom-export/api-key", cfg.SBOMExport.DependencyTrack.APIKeyFile)
+	assert.Empty(t, cfg.SBOMExport.DependencyTrack.URL)
+	assert.Equal(t, DTCollectionConfig{Name: "{{ .Cluster }}", Version: "current", Create: true}, cfg.SBOMExport.DependencyTrack.RootProject)
+	assert.Equal(t, DTProjectConfig{
+		Name:    "{{ .Cluster }}/{{ .Namespace }}/{{ .Repository }}",
+		Version: "{{ .Tag }}",
+		Parent:  DTCollectionConfig{Name: "{{ .Cluster }}/{{ .Namespace }}", Version: "current", Create: true},
+	}, cfg.SBOMExport.DependencyTrack.Project)
+}
+
+func TestLoadConfigSBOMExport(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
+		"sbomExport": {
+			"resyncInterval": "30m",
+			"maxSBOMSize": 5242880,
+			"dependencyTrack": {
+				"url": "https://dtrack.example.com",
+				"apiKeyFile": "/keys/dtrack",
+				"rootProject": {"name": "Finance", "version": "current", "create": false},
+				"project": {"name": "{{ .Repository }}", "parent": {"name": "Payments Team", "create": false}}
+			}
+		}
+	}`), 0600))
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, SBOMExportConfig{
+		ResyncInterval: 30 * time.Minute,
+		MaxSBOMSize:    5 << 20,
+		DependencyTrack: DependencyTrackConfig{
+			URL:         "https://dtrack.example.com",
+			APIKeyFile:  "/keys/dtrack",
+			RootProject: DTCollectionConfig{Name: "Finance", Version: "current", Create: false},
+			Project: DTProjectConfig{
+				Name:    "{{ .Repository }}",
+				Version: "{{ .Tag }}",
+				Parent:  DTCollectionConfig{Name: "Payments Team", Version: "current", Create: false},
+			},
+		},
+	}, cfg.SBOMExport, "unset fields keep their defaults")
 }

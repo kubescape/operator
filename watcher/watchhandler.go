@@ -10,7 +10,10 @@ import (
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
+	spdxv1beta1 "github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	kssc "github.com/kubescape/storage/pkg/generated/clientset/versioned"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 const retryInterval = 1 * time.Second
@@ -35,6 +38,26 @@ type WatchHandler struct {
 	cfg                  config.IConfig
 	k8sAPI               *k8sinterface.KubernetesApi
 	eventQueue           *CooldownQueue
+	sbomObserver         SBOMObserver // also told about SBOMWatch's events, when set
+	imageScansDisabled   bool         // SBOMWatch sends no scan commands (kubevuln is off)
+}
+
+// SBOMObserver is told about the pod and SBOM events SBOMWatch receives, such
+// as the SBOM exporter.
+type SBOMObserver interface {
+	ObservePod(eventType watch.EventType, pod *corev1.Pod)
+	ObserveSBOM(eventType watch.EventType, sbom *spdxv1beta1.SBOMSyft)
+}
+
+// SetSBOMObserver makes SBOMWatch pass its pod and SBOM events to o.
+func (wh *WatchHandler) SetSBOMObserver(o SBOMObserver) {
+	wh.sbomObserver = o
+}
+
+// DisableImageScans stops SBOMWatch from sending scan commands, for when it
+// runs only for an SBOMObserver.
+func (wh *WatchHandler) DisableImageScans() {
+	wh.imageScansDisabled = true
 }
 
 // NewWatchHandler creates a new WatchHandler, initializes the maps and returns it
