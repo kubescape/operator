@@ -471,6 +471,7 @@ func LoadConfig(path string) (Config, error) {
 	viper.SetDefault("rulesUpdateConfig.enabled", false)
 	viper.SetDefault("rulesUpdateConfig.interval", 5*time.Minute)
 	viper.SetDefault("rulesUpdateConfig.namespace", "default")
+	viper.SetDefault("rulesUpdateConfig.excludeClusterObjects", false)
 
 	// Node agent autoscaler defaults
 	viper.SetDefault("nodeAgentAutoscaler.enabled", false)

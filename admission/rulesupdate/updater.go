@@ -31,6 +31,10 @@ type RulesUpdaterConfig struct {
 	Interval  time.Duration `mapstructure:"interval"`
 	Namespace string        `mapstructure:"namespace"`
 	Enabled   bool          `mapstructure:"enabled"`
+	// ExcludeClusterObjects stops admission rules from being evaluated
+	// against cluster-scoped objects while Enabled makes the admission
+	// controller ignore rule bindings and run every rule.
+	ExcludeClusterObjects bool `mapstructure:"excludeClusterObjects"`
 }
 
 func NewRulesUpdator(ctx context.Context, k8sClient *k8sinterface.KubernetesApi, config RulesUpdaterConfig) *RulesUpdater {

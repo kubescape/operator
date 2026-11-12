@@ -19,6 +19,11 @@ import (
 )
 
 const (
+	// IncludeClusterObjects is a label on a RuntimeRuleAlertBinding. A binding
+	// labelled includeClusterObjects: "false" applies to namespaced objects
+	// only; without the label it also applies to cluster-scoped objects. It is
+	// read from the binding, never from the admitted object, so whoever
+	// creates a cluster-scoped object cannot turn off its evaluation.
 	IncludeClusterObjects = "includeClusterObjects"
 )
 
@@ -34,15 +39,19 @@ type RBCache struct {
 	notifiers      []*chan rulebindingmanager.RuleBindingNotify
 	// when true, skip rule binding filtering and return all rules
 	ignoreRuleBindings bool
+	// when true and rule bindings are ignored, return no rules for
+	// cluster-scoped objects. Set from the operator config.
+	excludeClusterObjects bool
 }
 
-func NewCache(k8sClient k8sclient.K8sClientInterface, ruleCreator rules.RuleCreator, ignoreRuleBindings bool) *RBCache {
+func NewCache(k8sClient k8sclient.K8sClientInterface, ruleCreator rules.RuleCreator, ignoreRuleBindings, excludeClusterObjects bool) *RBCache {
 	return &RBCache{
-		k8sClient:          k8sClient,
-		ruleCreator:        ruleCreator,
-		rbNameToRB:         maps.SafeMap[string, typesv1.RuntimeAlertRuleBinding]{},
-		watchResources:     resourcesToWatch(),
-		ignoreRuleBindings: ignoreRuleBindings,
+		k8sClient:             k8sClient,
+		ruleCreator:           ruleCreator,
+		rbNameToRB:            maps.SafeMap[string, typesv1.RuntimeAlertRuleBinding]{},
+		watchResources:        resourcesToWatch(),
+		ignoreRuleBindings:    ignoreRuleBindings,
+		excludeClusterObjects: excludeClusterObjects,
 	}
 }
 
@@ -62,14 +71,14 @@ func (c *RBCache) WatchResources() []watcher.WatchResource {
 // ------------------ rulebindingmanager.RuleBindingCache methods -----------------------
 
 func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.Unstructured) []rules.RuleEvaluator {
+	clusterObject := object.GetNamespace() == ""
+
 	if c.ignoreRuleBindings {
-		// rules update is enabled, apply all rules regardless of bindings, but still respect
-		// cluster object opt-out label to avoid surprising cluster-level enforcement.
-		if object.GetNamespace() == "" {
-			includeClusterObjects, ok := object.GetLabels()[IncludeClusterObjects]
-			if ok && includeClusterObjects == "false" {
-				return []rules.RuleEvaluator{}
-			}
+		// rules update is enabled, apply all rules regardless of bindings. The
+		// operator config, not the admitted object, decides whether cluster
+		// objects are evaluated.
+		if clusterObject && c.excludeClusterObjects {
+			return []rules.RuleEvaluator{}
 		}
 		return c.ruleCreator.CreateAllRules()
 	}
@@ -79,18 +88,12 @@ func (c *RBCache) ListRulesForObject(ctx context.Context, object *unstructured.U
 
 	for _, rb := range c.rbNameToRB.Values() {
 		rbName := uniqueName(&rb)
-		// check if the object is cluster object
-		if object.GetNamespace() == "" {
-			includeClusterObjects, ok := object.GetLabels()[IncludeClusterObjects]
-			if !ok {
-				includeClusterObjects = "true"
+		// the binding, not the admitted object, decides whether it applies to
+		// cluster objects
+		if clusterObject {
+			if bindingIncludesClusterObjects(&rb) {
+				rbNames = append(rbNames, rbName)
 			}
-
-			if includeClusterObjects == "false" {
-				continue
-			}
-
-			rbNames = append(rbNames, rbName)
 			continue
 		}
 

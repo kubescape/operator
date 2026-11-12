@@ -106,6 +106,35 @@ Rules that target cluster-scoped or non-pod resources need a backend change
 (an admission-request identity in incident correlation) before they can
 produce incidents.
 
+## Cluster-Scoped Objects
+
+`RBCache.ListRulesForObject` does not match `podSelector` or
+`namespaceSelector` for cluster-scoped objects (ClusterRoleBinding,
+ClusterRole, Namespace, webhook configurations, ...). Every
+`RuntimeRuleAlertBinding` applies to them unless the binding is labelled
+`includeClusterObjects: "false"`:
+
+```yaml
+apiVersion: kubescape.io/v1
+kind: RuntimeRuleAlertBinding
+metadata:
+  name: namespaced-only
+  labels:
+    includeClusterObjects: "false"
+spec:
+  rules:
+    - ruleID: "R2000"
+```
+
+When `rulesUpdateConfig.enabled` is set, the operator ignores bindings and runs
+every rule on every object. Set `rulesUpdateConfig.excludeClusterObjects` to
+`true` in the operator's `config.json` to skip cluster-scoped objects in that
+mode. It defaults to `false`.
+
+The label is read from the binding and the setting from the operator config,
+never from the admitted object. A label on a ClusterRoleBinding or Namespace
+has no effect, so whoever creates the object cannot turn off its evaluation.
+
 ## Event Type Constant
 
 `admission/cel/cel.go` defines:

@@ -257,7 +257,7 @@ func main() {
 		dWatcher := dynamicwatcher.NewWatchHandler(k8sApi, ksStorageClient.SpdxV1beta1(), operatorConfig.SkipNamespace)
 
 		// create ruleBinding cache with injected rule creator
-		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi, celRuleCreator, operatorConfig.RulesUpdateEnabled())
+		ruleBindingCache := rulebindingcachev1.NewCache(k8sApi, celRuleCreator, operatorConfig.RulesUpdateEnabled(), cfg.RulesUpdateConfig.ExcludeClusterObjects)
 		dWatcher.AddAdaptor(ruleBindingCache)
 
 		// Rules watcher — syncs k8s-admission rules from CRDs to the creator

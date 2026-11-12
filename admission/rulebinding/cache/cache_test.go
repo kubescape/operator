@@ -36,7 +36,7 @@ func TestNewCache(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			k8sAPI := utils.NewK8sInterfaceFake(nil)
-			cache := NewCache(k8sAPI, &rules.RuleCreatorMock{}, false)
+			cache := NewCache(k8sAPI, &rules.RuleCreatorMock{}, false, false)
 
 			assert.NotNil(t, cache)
 			assert.Equal(t, k8sAPI, cache.k8sClient)
@@ -52,7 +52,7 @@ func TestCacheConcurrentAccess(t *testing.T) {
 		new  func() *RBCache
 	}{
 		{name: "constructor", new: func() *RBCache {
-			return NewCache(nil, &rules.RuleCreatorMock{}, false)
+			return NewCache(nil, &rules.RuleCreatorMock{}, false, false)
 		}},
 		{name: "partial literal", new: func() *RBCache {
 			return &RBCache{ruleCreator: &rules.RuleCreatorMock{}}
@@ -312,44 +312,131 @@ func TestHandlersIgnoreNonRuleBindingKinds(t *testing.T) {
 }
 
 func TestListRulesForObjectIgnoreBindings(t *testing.T) {
-	c := &RBCache{
-		k8sClient:          k8sinterface.NewKubernetesApiMock(),
-		ruleCreator:        &rules.RuleCreatorMock{},
-		rbNameToRules:      maps.SafeMap[string, []rules.RuleEvaluator]{},
-		ignoreRuleBindings: true,
+	newCache := func(excludeClusterObjects bool) *RBCache {
+		return NewCache(k8sinterface.NewKubernetesApiMock(), &rules.RuleCreatorMock{}, true, excludeClusterObjects)
+	}
+	namespacedObject := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name":      "any",
+				"namespace": "ns",
+			},
+		},
+	}
+	labelledClusterObject := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name": "cluster-obj",
+				"labels": map[string]interface{}{
+					IncludeClusterObjects: "false",
+				},
+			},
+		},
 	}
 
 	t.Run("namespaced object returns all rules", func(t *testing.T) {
-		obj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name":      "any",
-					"namespace": "ns",
-				},
-			},
-		}
-
-		ruleEvaluators := c.ListRulesForObject(context.Background(), obj)
-		assert.Len(t, ruleEvaluators, 2)
-		assert.Equal(t, "rule-1", ruleEvaluators[0].ID())
-		assert.Equal(t, "rule-2", ruleEvaluators[1].ID())
+		assert.Equal(t, []string{"rule-1", "rule-2"}, ruleIDs(newCache(false).ListRulesForObject(context.Background(), namespacedObject)))
 	})
 
-	t.Run("cluster object respects includeClusterObjects=false", func(t *testing.T) {
-		obj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "cluster-obj",
-					"labels": map[string]interface{}{
-						"includeClusterObjects": "false",
-					},
-				},
+	t.Run("cluster object label does not opt out", func(t *testing.T) {
+		assert.Equal(t, []string{"rule-1", "rule-2"}, ruleIDs(newCache(false).ListRulesForObject(context.Background(), labelledClusterObject)))
+	})
+
+	t.Run("operator config excludes cluster objects", func(t *testing.T) {
+		c := newCache(true)
+		clusterObject := &unstructured.Unstructured{}
+		clusterObject.SetName("cluster-obj")
+		assert.Empty(t, c.ListRulesForObject(context.Background(), clusterObject))
+		assert.Equal(t, []string{"rule-1", "rule-2"}, ruleIDs(c.ListRulesForObject(context.Background(), namespacedObject)))
+	})
+}
+
+// TestListRulesForClusterObject verifies that the RuleBinding, not the
+// admitted object, decides whether a binding applies to cluster-scoped objects.
+func TestListRulesForClusterObject(t *testing.T) {
+	binding := func(name string, labels map[string]string, ruleID string) typesv1.RuntimeAlertRuleBinding {
+		return typesv1.RuntimeAlertRuleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+			Spec: typesv1.RuntimeAlertRuleBindingSpec{
+				Rules: []typesv1.RuntimeAlertRuleBindingRule{{RuleID: ruleID}},
 			},
 		}
+	}
+	clusterObject := func(labels map[string]interface{}) *unstructured.Unstructured {
+		metadata := map[string]interface{}{"name": "cluster-admin-binding"}
+		if labels != nil {
+			metadata["labels"] = labels
+		}
+		return &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "rbac.authorization.k8s.io/v1",
+			"kind":       "ClusterRoleBinding",
+			"metadata":   metadata,
+		}}
+	}
+	optOut := map[string]string{IncludeClusterObjects: "false"}
 
-		ruleEvaluators := c.ListRulesForObject(context.Background(), obj)
-		assert.Len(t, ruleEvaluators, 0)
+	tests := []struct {
+		name     string
+		bindings []typesv1.RuntimeAlertRuleBinding
+		object   *unstructured.Unstructured
+		expected []string
+	}{
+		{
+			name:     "binding applies to cluster objects by default",
+			bindings: []typesv1.RuntimeAlertRuleBinding{binding("all", nil, "R2000")},
+			object:   clusterObject(nil),
+			expected: []string{"R2000"},
+		},
+		{
+			name:     "object label does not opt the object out",
+			bindings: []typesv1.RuntimeAlertRuleBinding{binding("all", nil, "R2000")},
+			object:   clusterObject(map[string]interface{}{IncludeClusterObjects: "false"}),
+			expected: []string{"R2000"},
+		},
+		{
+			name: "binding label opts that binding out",
+			bindings: []typesv1.RuntimeAlertRuleBinding{
+				binding("all", nil, "R2000"),
+				binding("namespaced-only", optOut, "R2001"),
+			},
+			object:   clusterObject(nil),
+			expected: []string{"R2000"},
+		},
+		{
+			name:     "binding label true keeps cluster objects",
+			bindings: []typesv1.RuntimeAlertRuleBinding{binding("all", map[string]string{IncludeClusterObjects: "true"}, "R2000")},
+			object:   clusterObject(map[string]interface{}{IncludeClusterObjects: "false"}),
+			expected: []string{"R2000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCacheMock()
+			for i := range tt.bindings {
+				c.addRuleBinding(&tt.bindings[i])
+			}
+			assert.ElementsMatch(t, tt.expected, ruleIDs(c.ListRulesForObject(context.Background(), tt.object)))
+		})
+	}
+
+	t.Run("opted-out binding still applies to namespaced objects", func(t *testing.T) {
+		c := NewCacheMock()
+		rb := binding("namespaced-only", optOut, "R2001")
+		c.addRuleBinding(&rb)
+		pod := &unstructured.Unstructured{}
+		pod.SetName("pod")
+		pod.SetNamespace("default")
+		assert.Equal(t, []string{"R2001"}, ruleIDs(c.ListRulesForObject(context.Background(), pod)))
 	})
+}
+
+func ruleIDs(evaluators []rules.RuleEvaluator) []string {
+	ids := make([]string, 0, len(evaluators))
+	for _, e := range evaluators {
+		ids = append(ids, e.ID())
+	}
+	return ids
 }
 
 func TestCreateRule(t *testing.T) {
