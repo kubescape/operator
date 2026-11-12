@@ -31,6 +31,12 @@ func namespaceListHasName(list *corev1.NamespaceList, name string) bool {
 // other CRDs (notably Rules) before attempting type conversion.
 const ruleBindingKind = "RuntimeRuleAlertBinding"
 
+// bindingIncludesClusterObjects reports whether rb applies to cluster-scoped
+// objects: it does unless the binding is labelled includeClusterObjects: "false".
+func bindingIncludesClusterObjects(rb *typesv1.RuntimeAlertRuleBinding) bool {
+	return rb.GetLabels()[IncludeClusterObjects] != "false"
+}
+
 func uniqueName(obj metav1.Object) string {
 	return utils.CreateK8sPodID(obj.GetNamespace(), obj.GetName())
 }
