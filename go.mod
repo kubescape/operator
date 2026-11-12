@@ -1,6 +1,6 @@
 module github.com/kubescape/operator
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/anchore/syft v1.55.0
