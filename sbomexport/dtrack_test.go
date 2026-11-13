@@ -54,7 +54,7 @@ func TestDTClientCreatesAProjectUnderItsParentAndUploadsItsBOM(t *testing.T) {
 	got, parent, ok := f.project("cluster/apps/redis", "8")
 	require.True(t, ok)
 	assert.Equal(t, "cluster/apps", parent)
-	assert.True(t, got.IsLatest)
+	assert.False(t, got.IsLatest, "the exporter marks it latest only after its upload went through")
 	assert.Equal(t, now, got.LastBOMImport.Time().UTC())
 }
 

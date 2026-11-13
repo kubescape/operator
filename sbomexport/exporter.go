@@ -477,6 +477,28 @@ func (e *Exporter) sbom(digest string) (sbomMeta, bool) {
 	return m, ok
 }
 
+// runsAt reports whether the image with digest still runs in a namespace where
+// it resolves to p's project and version. Only there does it hold p: running
+// in another namespace, under another project, doesn't keep a newer image of
+// the same tag out of p. When digest's SBOM or a namespace's layout can't be
+// resolved, it counts as running at p, so a project is never taken over by
+// guess.
+func (e *Exporter) runsAt(digest string, p placement) bool {
+	namespaces := e.running.namespaces(digest)
+	m, ok := e.sbom(digest)
+	if !ok {
+		return len(namespaces) > 0
+	}
+	repository, tag := splitRef(m.imageTag)
+	for _, ns := range namespaces {
+		q, err := e.layout.resolve(e.namespaceInfo(ns), repository, tag)
+		if err != nil || (q.name == p.name && q.version == p.version) {
+			return true
+		}
+	}
+	return false
+}
+
 // result is what exporting one image to one place did.
 type result int
 
@@ -573,7 +595,7 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 			return 0, err
 		}
 		owner, sentVersion = props[digestProperty], props[toolVersionProperty]
-		if owner != "" && owner != m.digest && len(e.running.namespaces(owner)) > 0 {
+		if owner != "" && owner != m.digest && e.runsAt(owner, p) {
 			e.logOnce(ctx, "conflict/"+p.name+":"+p.version, "two running images map to the same Dependency-Track project and version, skipping the second; include the repository in the project name template",
 				helpers.String("project", p.name), helpers.String("version", p.version), helpers.String("image", m.imageTag), helpers.String("namespace", ns),
 				helpers.String("ownerDigest", owner), helpers.String("digest", m.digest))
@@ -632,6 +654,15 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 	}
 	if err := e.dt.uploadBOM(ctx, p.name, p.version, *bom); err != nil {
 		return 0, err
+	}
+	// Marked latest only now that its BOM is in: a failed upload leaves the
+	// previous latest version counted by the namespace collection, which only
+	// counts the latest version of each image. The upload itself doesn't mark
+	// a project latest (see uploadBOM).
+	if !target.IsLatest {
+		if err := e.dt.patch(ctx, target.UUID, map[string]any{"isLatest": true}); err != nil {
+			return 0, err
+		}
 	}
 	// Recorded after the upload: when this fails, the next pass sends the SBOM
 	// again rather than skip a document Dependency-Track never got.

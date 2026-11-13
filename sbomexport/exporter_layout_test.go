@@ -207,6 +207,45 @@ func TestExporterKeepsTwoRunningImagesFromSharingOneProject(t *testing.T) {
 	assert.Equal(t, other, owner)
 }
 
+// With a mutable tag, each namespace has its own project for the same tag. A
+// new build rolled out in one namespace takes over that namespace's project
+// even while another namespace, with its own project, still runs the old
+// build.
+func TestExporterTakesOverAProjectWhoseOwnerOnlyRunsElsewhere(t *testing.T) {
+	const (
+		oldID = "docker.io/library/app@sha256:aaaa"
+		newID = "docker.io/library/app@sha256:bbbb"
+		tag   = "docker.io/library/app:main"
+	)
+	ctx := context.Background()
+	te := newTestExporter(t, runningPod("staging", "web", oldID), runningPod("prod", "web", oldID))
+	oldSBOM := sbomObject(oldID, tag, helpersv1.Learning, te.clock.t.Add(-time.Hour))
+	te.store.set(oldSBOM)
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+	require.Len(t, te.dt.takeUploads(), 2)
+
+	// staging rolls out a new build of the same tag; prod keeps the old one
+	_, err := te.client.CoreV1().Pods("staging").Update(ctx, runningPod("staging", "web", newID), metav1.UpdateOptions{})
+	require.NoError(t, err)
+	te.store.set(oldSBOM, sbomObject(newID, tag, helpersv1.Learning, te.clock.t))
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+	te.clock.t = te.clock.t.Add(2 * time.Hour) // the old build's grace period in staging is over
+	te.stats.takeFields()
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+
+	require.Equal(t, []string{"prod"}, te.running.namespaces("sha256:aaaa"))
+	assert.Equal(t, []string{"cluster/staging/docker.io/library/app:main"}, te.dt.takeUploads())
+	assert.Zero(t, te.stats.conflicts.Load())
+	p, _, ok := te.dt.project("cluster/staging/docker.io/library/app", "main")
+	require.True(t, ok)
+	owner, err := te.dt.digestOwnerForTest(p.UUID)
+	require.NoError(t, err)
+	assert.Equal(t, "sha256:bbbb", owner)
+}
+
 func TestExporterSkipsAnSBOMLargerThanTheLimit(t *testing.T) {
 	t.Run("by its size annotation, without reading it", func(t *testing.T) {
 		te := newTestExporter(t, runningPod("apps", "web", redisImageID))
