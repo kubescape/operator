@@ -133,6 +133,11 @@ type Exporter struct {
 	// lists', so resync keeps it. nil when no resync is listing.
 	touchedPods, touchedSBOMs map[string]bool
 
+	// goneNamespaces keeps the last labels and annotations of deleted
+	// namespaces whose images still count as running there (for the index's
+	// grace period), so their layout stays the one the namespace named.
+	goneNamespaces map[string]namespaceInfo
+
 	stats stats
 }
 
@@ -172,9 +177,27 @@ func newExporter(opts Options, pods kubernetes.Interface, sboms sbomStore, httpC
 		sbomByImage:       map[string]sbomMeta{},
 		projects:          map[projectRef]string{},
 		pendingMoves:      map[string]*pendingMove{},
+		goneNamespaces:    map[string]namespaceInfo{},
 		logged:            map[string]bool{},
 	}
 	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj any) {
+			if ns, ok := obj.(*corev1.Namespace); ok {
+				e.mu.Lock()
+				delete(e.goneNamespaces, ns.Name)
+				e.mu.Unlock()
+			}
+		},
+		DeleteFunc: func(obj any) {
+			if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+				obj = tombstone.Obj
+			}
+			if ns, ok := obj.(*corev1.Namespace); ok {
+				e.mu.Lock()
+				e.goneNamespaces[ns.Name] = infoOf(ns)
+				e.mu.Unlock()
+			}
+		},
 		UpdateFunc: func(oldObj, newObj any) {
 			oldNS, oldOK := oldObj.(*corev1.Namespace)
 			newNS, newOK := newObj.(*corev1.Namespace)
@@ -282,11 +305,17 @@ func infoOf(ns *corev1.Namespace) namespaceInfo {
 	return namespaceInfo{name: ns.Name, labels: maps.Clone(ns.Labels), annotations: maps.Clone(ns.Annotations)}
 }
 
-// namespaceInfo returns the namespace's labels and annotations, or none when
-// it is not known (yet).
+// namespaceInfo returns the namespace's labels and annotations, the last ones
+// it had when it was deleted, or none when it is not known (yet).
 func (e *Exporter) namespaceInfo(name string) namespaceInfo {
 	if ns, err := e.namespaceLister.Get(name); err == nil {
 		return infoOf(ns)
+	}
+	e.mu.Lock()
+	info, gone := e.goneNamespaces[name]
+	e.mu.Unlock()
+	if gone {
+		return info
 	}
 	return namespaceInfo{name: name}
 }
@@ -393,6 +422,11 @@ func (e *Exporter) resync(ctx context.Context) error {
 	}
 	e.mu.Lock()
 	e.running.replace(pods, e.touchedPods)
+	for ns := range e.goneNamespaces {
+		if len(e.running.digestsIn(ns)) == 0 {
+			delete(e.goneNamespaces, ns)
+		}
+	}
 	for d := range e.touchedSBOMs {
 		if m, ok := e.sbomByImage[d]; ok {
 			byImage[d] = m

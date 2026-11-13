@@ -107,6 +107,42 @@ func TestExporterNeverUploadsToAProjectItDidNotCreate(t *testing.T) {
 	assert.Equal(t, int64(1), te.stats.conflicts.Load())
 }
 
+// A deleted namespace's images still count as running there for a grace
+// period. Until it ends, they must stay in the projects the namespace's
+// annotations named, not fall back to the default layout.
+func TestExporterKeepsTheLayoutOfADeletedNamespace(t *testing.T) {
+	ctx := context.Background()
+	ns := namespace("team-a", map[string]string{AnnotationProjectName: "teams/{{ .Namespace }}/{{ .Repository }}"})
+	te := newTestExporter(t, ns, runningPod("team-a", "job", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+	require.Equal(t, []string{"teams/team-a/" + redisProject + ":8"}, te.dt.takeUploads())
+
+	// the namespace is deleted: its pods first, then the namespace itself
+	require.NoError(t, te.client.CoreV1().Pods("team-a").Delete(ctx, "job", metav1.DeleteOptions{}))
+	require.NoError(t, te.client.CoreV1().Namespaces().Delete(ctx, "team-a", metav1.DeleteOptions{}))
+	require.Eventually(t, func() bool { _, err := te.namespaceLister.Get("team-a"); return err != nil }, 5*time.Second, 10*time.Millisecond)
+
+	te.clock.t = te.clock.t.Add(time.Minute) // the next resync, within the grace period
+	te.stats.takeFields()
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+
+	_, _, created := te.dt.project("cluster/team-a/"+redisProject, "8")
+	assert.False(t, created, "nothing goes to the default layout's project")
+	assert.Empty(t, te.dt.takeUploads())
+	assert.Equal(t, int64(1), te.stats.unchanged.Load(), "the namespace's own project is up to date")
+
+	te.clock.t = te.clock.t.Add(2 * time.Hour) // the grace period is over
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+	te.mu.Lock()
+	gone := len(te.goneNamespaces)
+	te.mu.Unlock()
+	assert.Zero(t, gone, "a deleted namespace is forgotten once no image runs there")
+}
+
 // Two images whose layout gives the same project and version would overwrite
 // each other's BOM. The second is skipped while the first runs, and takes the
 // project over once the first stopped.
