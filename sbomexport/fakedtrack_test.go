@@ -83,6 +83,7 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPut && path == "/api/v1/project":
 		var req struct {
 			Name, Version, CollectionLogic string
+			IsLatest                       bool
 			Parent                         *struct{ UUID string }
 			Tags                           []tag
 		}
@@ -93,6 +94,9 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		p := f.addLocked(req.Name, req.Version, parent, req.Tags)
 		p.CollectionLogic = req.CollectionLogic
+		if req.IsLatest {
+			f.makeLatestLocked(p)
+		}
 		writeJSON(w, http.StatusCreated, p)
 	case strings.HasSuffix(path, "/property") && strings.HasPrefix(path, "/api/v1/project/"):
 		f.serveProperty(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/api/v1/project/"), "/property"))
@@ -119,8 +123,10 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		f.patches[uuid]++
-		if req.IsLatest != nil {
-			p.IsLatest = *req.IsLatest
+		if req.IsLatest != nil && *req.IsLatest {
+			f.makeLatestLocked(p)
+		} else if req.IsLatest != nil {
+			p.IsLatest = false
 		}
 		// Like Dependency-Track 4.14, a PATCH without collectionLogic sets it
 		// to NONE.
@@ -146,9 +152,10 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.failUploads--
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 	case r.Method == http.MethodPut && path == "/api/v1/bom":
+		// Like Dependency-Track (BomResource), isLatest is only read when the
+		// upload creates the project (autoCreate), so it's ignored here.
 		var req struct {
 			ProjectName, ProjectVersion, BOM string
-			AutoCreate, IsLatest             bool
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		bom, err := base64.StdEncoding.DecodeString(req.BOM)
@@ -160,14 +167,6 @@ func (f *fakeDT) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if p == nil {
 			http.Error(w, "The project could not be found.", http.StatusNotFound)
 			return
-		}
-		if req.IsLatest {
-			for _, other := range f.projects {
-				if other.Name == p.Name {
-					other.IsLatest = false
-				}
-			}
-			p.IsLatest = true
 		}
 		p.LastBOMImport = epochMillis(f.now().UnixMilli())
 		f.uploads = append(f.uploads, req.ProjectName+":"+req.ProjectVersion)
@@ -220,6 +219,18 @@ func (f *fakeDT) serveProperty(w http.ResponseWriter, r *http.Request, uuid stri
 }
 
 // byNameLocked returns the project name:version, or nil.
+// makeLatestLocked marks p the latest version of its name and clears the flag
+// on the others, as Dependency-Track does when it creates or updates a project
+// with isLatest.
+func (f *fakeDT) makeLatestLocked(p *project) {
+	for _, other := range f.projects {
+		if other.Name == p.Name {
+			other.IsLatest = false
+		}
+	}
+	p.IsLatest = true
+}
+
 func (f *fakeDT) byNameLocked(name, version string) *project {
 	for _, p := range f.projects {
 		if p.Name == name && p.Version == version {

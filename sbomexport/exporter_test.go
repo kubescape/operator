@@ -281,6 +281,30 @@ func TestExporterSendsAnSBOMAgainOnlyWhenItIsNewerThanTheLastImport(t *testing.T
 	assert.Equal(t, []string{"cluster/apps/" + redisProject + ":8"}, te.dt.takeUploads(), "the SBOMSyft is newer than the last import")
 }
 
+// Dependency-Track ignores isLatest on a BOM upload to an existing project, so
+// an upload alone doesn't bring an image back into its namespace collection.
+func TestExporterMarksAnExistingProjectLatestWhenItSendsANewSBOM(t *testing.T) {
+	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	te.dt.takeUploads()
+
+	// another version of the image became the latest one, then node-agent
+	// rebuilt this one's SBOM
+	p, _, _ := te.dt.project("cluster/apps/"+redisProject, "8")
+	require.NoError(t, te.dt.patchForTest(p.UUID, false))
+	te.clock.t = te.clock.t.Add(time.Hour)
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Minute)))
+	te.clock.t = te.clock.t.Add(time.Hour)
+
+	require.NoError(t, te.resync(context.Background()))
+	require.Empty(t, te.drain())
+	assert.Equal(t, []string{"cluster/apps/" + redisProject + ":8"}, te.dt.takeUploads(), "the SBOMSyft is newer than the last import")
+	p, _, _ = te.dt.project("cluster/apps/"+redisProject, "8")
+	assert.True(t, p.IsLatest)
+}
+
 func TestExporterMarksTheRunningTagAsLatestWithoutSendingIt(t *testing.T) {
 	te := newTestExporter(t, runningPod("apps", "web", redisImageID))
 	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
