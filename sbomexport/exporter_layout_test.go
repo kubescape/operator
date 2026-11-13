@@ -138,9 +138,37 @@ func TestExporterKeepsTheLayoutOfADeletedNamespace(t *testing.T) {
 	require.NoError(t, te.resync(ctx))
 	require.Empty(t, te.drain())
 	te.mu.Lock()
-	gone := len(te.goneNamespaces)
+	_, known := te.knownNamespaces["team-a"]
 	te.mu.Unlock()
-	assert.Zero(t, gone, "a deleted namespace is forgotten once no image runs there")
+	assert.False(t, known, "a deleted namespace is forgotten once no image runs there")
+}
+
+// The informer drops a deleted namespace from its lister before the delete
+// handler runs. A resync in between must still see the namespace's
+// annotations, not fall back to the default layout. Removing the namespace
+// from the informer's store directly, with no notification, is that state.
+func TestExporterKeepsTheLayoutOfANamespaceTheListerAlreadyDropped(t *testing.T) {
+	ctx := context.Background()
+	ns := namespace("team-a", map[string]string{AnnotationProjectName: "teams/{{ .Namespace }}/{{ .Repository }}"})
+	te := newTestExporter(t, ns, runningPod("team-a", "job", redisImageID))
+	te.store.set(sbomObject(redisImageID, redisTag, helpersv1.Learning, te.clock.t.Add(-time.Hour)))
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+	require.Equal(t, []string{"teams/team-a/" + redisProject + ":8"}, te.dt.takeUploads())
+
+	require.NoError(t, te.namespaceInformer.GetIndexer().Delete(ns))
+	_, err := te.namespaceLister.Get("team-a")
+	require.Error(t, err, "the lister no longer has the namespace")
+
+	te.clock.t = te.clock.t.Add(time.Minute)
+	te.stats.takeFields()
+	require.NoError(t, te.resync(ctx))
+	require.Empty(t, te.drain())
+
+	_, _, created := te.dt.project("cluster/team-a/"+redisProject, "8")
+	assert.False(t, created, "nothing goes to the default layout's project")
+	assert.Empty(t, te.dt.takeUploads())
+	assert.Equal(t, int64(1), te.stats.unchanged.Load())
 }
 
 // Two images whose layout gives the same project and version would overwrite
