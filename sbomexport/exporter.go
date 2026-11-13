@@ -602,6 +602,15 @@ func (e *Exporter) exportTo(ctx context.Context, m sbomMeta, ns string, p placem
 	if err := e.dt.uploadBOM(ctx, p.name, p.version, *bom); err != nil {
 		return 0, err
 	}
+	// Marked latest only now that its BOM is in: a failed upload leaves the
+	// previous latest version counted by the namespace collection, which only
+	// counts the latest version of each image. The upload itself doesn't mark
+	// a project latest (see uploadBOM).
+	if !target.IsLatest {
+		if err := e.dt.patch(ctx, target.UUID, map[string]any{"isLatest": true}); err != nil {
+			return 0, err
+		}
+	}
 	// Recorded after the upload: when this fails, the next pass sends the SBOM
 	// again rather than skip a document Dependency-Track never got.
 	if m.toolVersion != "" && m.toolVersion != sentVersion {

@@ -247,7 +247,9 @@ func (c *dtClient) patch(ctx context.Context, uuid string, fields map[string]any
 }
 
 // createProject creates the project name:version under parentUUID, tagged as
-// created by the exporter.
+// created by the exporter. It isn't marked latest yet: that would demote the
+// current latest version before the new one has a BOM, so the exporter marks
+// it once its upload went through.
 func (c *dtClient) createProject(ctx context.Context, name, version, parentUUID string) (*project, error) {
 	body := map[string]any{"name": name, "version": version, "tags": []tag{{Name: managedTag}}}
 	if parentUUID != "" {
@@ -260,9 +262,9 @@ func (c *dtClient) createProject(ctx context.Context, name, version, parentUUID 
 	return &p, nil
 }
 
-// uploadBOM uploads bom as the latest version of the existing project
-// name:version. Dependency-Track processes the BOM asynchronously after
-// answering.
+// uploadBOM uploads bom to the existing project name:version. Dependency-Track
+// processes the BOM asynchronously after answering. It ignores isLatest here
+// because the project already exists, so the exporter marks it latest itself.
 func (c *dtClient) uploadBOM(ctx context.Context, name, version string, bom []byte) error {
 	body := map[string]any{
 		"projectName":    name,
