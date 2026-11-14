@@ -275,6 +275,19 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"pod spec $patch: replace on Pod", "Pod", `{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}`},
 		{"pod spec $patch: delete on Pod", "Pod", `{"spec":{"$patch":"delete"}}`},
 		{"pod spec $retainKeys on Pod", "Pod", `{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}`},
+		// Pod-level securityContext root-execution configurations and null-deletions
+		{"pod securityContext runAsUser=0 on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0}}}}}`},
+		{"pod securityContext runAsUser nulled on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":null}}}}}`},
+		{"pod securityContext runAsNonRoot=false on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":false}}}}}`},
+		{"pod securityContext runAsNonRoot nulled on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":null}}}}}`},
+		{"pod securityContext nulled entirely on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":null}}}}`},
+		{"pod securityContext runAsUser=0 on Pod", "Pod", `{"spec":{"securityContext":{"runAsUser":0}}}`},
+		{"pod securityContext runAsUser nulled on Pod", "Pod", `{"spec":{"securityContext":{"runAsUser":null}}}`},
+		{"pod securityContext runAsNonRoot=false on Pod", "Pod", `{"spec":{"securityContext":{"runAsNonRoot":false}}}`},
+		{"pod securityContext runAsNonRoot nulled on Pod", "Pod", `{"spec":{"securityContext":{"runAsNonRoot":null}}}`},
+		{"pod securityContext nulled entirely on Pod", "Pod", `{"spec":{"securityContext":null}}`},
+		{"pod securityContext runAsUser=0 on StatefulSet", "StatefulSet", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0}}}}}`},
+		{"pod securityContext runAsUser=0 on DaemonSet", "DaemonSet", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0}}}}}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -311,35 +324,75 @@ func TestPatchPlan_AllowsNonRootSecurityContext(t *testing.T) {
 	assert.NotEmpty(t, plan.Patch)
 }
 
+func TestPatchPlan_AllowsNonRootPodSecurityContext(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":10001,"runAsNonRoot":true}}}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
+func TestPatchPlan_AllowsNonRootPodSecurityContextOnPod(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Pod", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"securityContext":{"runAsUser":10001,"runAsNonRoot":true}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
 func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T) {
 	cases := []struct {
-		name  string
-		patch string
+		name   string
+		target Target
+		patch  string
 	}{
-		{"hostNetwork", `{"spec":{"template":{"spec":{"hostNetwork":true}}}}`},
-		{"runAsUser 0", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":0}}]}}}}`},
-		{"runAsUser null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
-		{"runAsNonRoot false", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
-		{"runAsNonRoot null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":null}}]}}}}`},
-		{"securityContext $patch replace", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"replace","readOnlyRootFilesystem":true}}]}}}}`},
-		{"securityContext $patch delete", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"delete"}}]}}}}`},
-		{"securityContext $retainKeys", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$retainKeys":["readOnlyRootFilesystem"]}}]}}}}`},
-		{"container $patch replace", `{"spec":{"template":{"spec":{"containers":[{"$patch":"replace","name":"api"}]}}}}`},
-		{"container $patch delete", `{"spec":{"template":{"spec":{"containers":[{"$patch":"delete","name":"api"}]}}}}`},
-		{"container $retainKeys", `{"spec":{"template":{"spec":{"containers":[{"$retainKeys":["name"],"name":"api"}]}}}}`},
-		{"pod spec $patch replace", `{"spec":{"template":{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}}}`},
-		{"pod spec $patch delete", `{"spec":{"template":{"spec":{"$patch":"delete"}}}}`},
-		{"pod spec $retainKeys", `{"spec":{"template":{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}}}`},
+		{name: "hostNetwork", patch: `{"spec":{"template":{"spec":{"hostNetwork":true}}}}`},
+		{name: "runAsUser 0", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":0}}]}}}}`},
+		{name: "runAsUser null", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
+		{name: "runAsNonRoot false", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
+		{name: "runAsNonRoot null", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":null}}]}}}}`},
+		{name: "securityContext $patch replace", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"replace","readOnlyRootFilesystem":true}}]}}}}`},
+		{name: "securityContext $patch delete", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"delete"}}]}}}}`},
+		{name: "securityContext $retainKeys", patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$retainKeys":["readOnlyRootFilesystem"]}}]}}}}`},
+		{name: "container $patch replace", patch: `{"spec":{"template":{"spec":{"containers":[{"$patch":"replace","name":"api"}]}}}}`},
+		{name: "container $patch delete", patch: `{"spec":{"template":{"spec":{"containers":[{"$patch":"delete","name":"api"}]}}}}`},
+		{name: "container $retainKeys", patch: `{"spec":{"template":{"spec":{"containers":[{"$retainKeys":["name"],"name":"api"}]}}}}`},
+		{name: "pod spec $patch replace", patch: `{"spec":{"template":{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}}}`},
+		{name: "pod spec $patch delete", patch: `{"spec":{"template":{"spec":{"$patch":"delete"}}}}`},
+		{name: "pod spec $retainKeys", patch: `{"spec":{"template":{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}}}`},
+		{name: "pod securityContext runAsUser 0 on Deployment", patch: `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0}}}}}`},
+		{name: "pod securityContext runAsUser null on Deployment", patch: `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":null}}}}}`},
+		{name: "pod securityContext runAsNonRoot false on Deployment", patch: `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":false}}}}}`},
+		{name: "pod securityContext runAsNonRoot null on Deployment", patch: `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":null}}}}}`},
+		{name: "pod securityContext null on Deployment", patch: `{"spec":{"template":{"spec":{"securityContext":null}}}}`},
+		{name: "pod securityContext runAsUser 0 on Pod", target: Target{Kind: "Pod", Namespace: "payments", Name: "api"}, patch: `{"spec":{"securityContext":{"runAsUser":0}}}`},
+		{name: "pod securityContext runAsUser null on Pod", target: Target{Kind: "Pod", Namespace: "payments", Name: "api"}, patch: `{"spec":{"securityContext":{"runAsUser":null}}}`},
+		{name: "pod securityContext runAsNonRoot false on Pod", target: Target{Kind: "Pod", Namespace: "payments", Name: "api"}, patch: `{"spec":{"securityContext":{"runAsNonRoot":false}}}`},
+		{name: "pod securityContext runAsNonRoot null on Pod", target: Target{Kind: "Pod", Namespace: "payments", Name: "api"}, patch: `{"spec":{"securityContext":{"runAsNonRoot":null}}}`},
+		{name: "pod securityContext null on Pod", target: Target{Kind: "Pod", Namespace: "payments", Name: "api"}, patch: `{"spec":{"securityContext":null}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+			target := tc.target
+			if target.Kind == "" {
+				target = Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+			}
+			var client *k8sfake.Clientset
+			if strings.EqualFold(target.Kind, "pod") {
+				client = k8sfake.NewClientset(podForPatch("payments", "api"))
+			} else {
+				client = k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+			}
 			r := NewPatchRemediator(client)
 			// A Plan built out of band (bypassing Plan()) must still be rejected by
 			// Apply — validation belongs at the boundary that performs the write.
 			_, err := r.Apply(context.Background(), Plan{
 				Action: string(apis.OperatorActionPatch),
-				Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+				Target: target,
 				Patch:  tc.patch,
 			}, false)
 			require.Error(t, err)
