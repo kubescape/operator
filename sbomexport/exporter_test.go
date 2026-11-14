@@ -129,7 +129,7 @@ func newTestExporterWith(t *testing.T, change func(*Options), objects ...runtime
 	t.Cleanup(cancel)
 	t.Cleanup(e.queue.ShutDown)
 	go e.namespaceInformer.Run(ctx.Done())
-	require.True(t, cache.WaitForCacheSync(ctx.Done(), e.namespaceInformer.HasSynced))
+	require.True(t, cache.WaitForCacheSync(ctx.Done(), e.namespaceInformer.HasSynced, e.namespacesSynced))
 	return &testExporter{Exporter: e, dt: dt, store: store, clock: clock, client: client}
 }
 
