@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"sync"
@@ -330,7 +331,7 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 				Extra:  convertExtra(parsed.Request.UserInfo.Extra),
 			})
 
-		err = wh.validator.Validate(context.TODO(), attrs, wh.objectInferfaces)
+		err = wh.validator.Validate(req.Context(), attrs, wh.objectInferfaces)
 	}
 
 	response := wh.reviewResponse(
@@ -399,7 +400,8 @@ const maxAdmissionReviewBytes = 16 << 20
 
 // parseRequest extracts an AdmissionReview from an http.Request if possible
 func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {
-	if r.Header.Get("Content-Type") != "application/json" {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
 		return nil, fmt.Errorf("Content-Type: %q should be %q",
 			r.Header.Get("Content-Type"), "application/json")
 	}
