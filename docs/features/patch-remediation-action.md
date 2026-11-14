@@ -46,9 +46,11 @@ hand-constructed `Plan` cannot skip it):
   `hostIPC`, `serviceAccountName`/`serviceAccount`, `volumes`, `nodeName`,
   `metadata.ownerReferences`, `metadata.finalizers`, a container's
   `securityContext.privileged`/`allowPrivilegeEscalation`/
-  `capabilities.add`, or a container's `image`. This is defense-in-depth
-  against a patch escalating from "fix a workload's config" to node or
-  cluster compromise.
+  `capabilities.add`/`runAsUser: 0`/`runAsNonRoot: false` (including JSON-Merge
+  null-deletions and strategic-merge directives such as `$patch` or
+  `$retainKeys` on `securityContext`, `container`, or `pod spec`), or a container's
+  `image`. This is defense-in-depth against a patch escalating from "fix a
+  workload's config" to root execution, node, or cluster compromise.
 
 ## Revert
 
