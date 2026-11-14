@@ -255,6 +255,26 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"container securityContext nulled entirely", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":null}]}}}}`},
 		{"container allowPrivilegeEscalation nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"allowPrivilegeEscalation":null}}]}}}}`},
 		{"container capabilities nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":null}}]}}}}`},
+		{"container runAsUser=0", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":0}}]}}}}`},
+		{"container runAsUser nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
+		{"container runAsNonRoot=false", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
+		{"container runAsNonRoot nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":null}}]}}}}`},
+		// Strategic-merge directives ($patch: replace, $patch: delete, $retainKeys)
+		// can replace or clear maps without naming protected fields, dropping
+		// protections like runAsUser / runAsNonRoot. They must be rejected on
+		// securityContext, container, and pod-spec maps.
+		{"container securityContext $patch: replace", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"replace","readOnlyRootFilesystem":true}}]}}}}`},
+		{"container securityContext $patch: delete", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"delete"}}]}}}}`},
+		{"container securityContext $retainKeys", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$retainKeys":["readOnlyRootFilesystem"]}}]}}}}`},
+		{"container $patch: replace", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"$patch":"replace","name":"api"}]}}}}`},
+		{"container $patch: delete", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"$patch":"delete","name":"api"}]}}}}`},
+		{"container $retainKeys", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"$retainKeys":["name"],"name":"api"}]}}}}`},
+		{"pod spec $patch: replace on Deployment", "Deployment", `{"spec":{"template":{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}}}`},
+		{"pod spec $patch: delete on Deployment", "Deployment", `{"spec":{"template":{"spec":{"$patch":"delete"}}}}`},
+		{"pod spec $retainKeys on Deployment", "Deployment", `{"spec":{"template":{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}}}`},
+		{"pod spec $patch: replace on Pod", "Pod", `{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}`},
+		{"pod spec $patch: delete on Pod", "Pod", `{"spec":{"$patch":"delete"}}`},
+		{"pod spec $retainKeys on Pod", "Pod", `{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -281,15 +301,106 @@ func TestPatchPlan_AllowsNonEscalationFields(t *testing.T) {
 	assert.NotEmpty(t, plan.Patch)
 }
 
-func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T) {
-	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
-	r := NewPatchRemediator(client)
-	// A Plan built out of band (bypassing Plan()) must still be rejected by
-	// Apply — validation belongs at the boundary that performs the write.
-	_, err := r.Apply(context.Background(), Plan{
-		Action: string(apis.OperatorActionPatch),
+func TestPatchPlan_AllowsNonRootSecurityContext(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
 		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
-		Patch:  `{"spec":{"template":{"spec":{"hostNetwork":true}}}}`,
-	}, false)
-	require.Error(t, err)
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":10001,"runAsNonRoot":true}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
+func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T) {
+	cases := []struct {
+		name  string
+		patch string
+	}{
+		{"hostNetwork", `{"spec":{"template":{"spec":{"hostNetwork":true}}}}`},
+		{"runAsUser 0", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":0}}]}}}}`},
+		{"runAsUser null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
+		{"runAsNonRoot false", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
+		{"runAsNonRoot null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":null}}]}}}}`},
+		{"securityContext $patch replace", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"replace","readOnlyRootFilesystem":true}}]}}}}`},
+		{"securityContext $patch delete", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"delete"}}]}}}}`},
+		{"securityContext $retainKeys", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$retainKeys":["readOnlyRootFilesystem"]}}]}}}}`},
+		{"container $patch replace", `{"spec":{"template":{"spec":{"containers":[{"$patch":"replace","name":"api"}]}}}}`},
+		{"container $patch delete", `{"spec":{"template":{"spec":{"containers":[{"$patch":"delete","name":"api"}]}}}}`},
+		{"container $retainKeys", `{"spec":{"template":{"spec":{"containers":[{"$retainKeys":["name"],"name":"api"}]}}}}`},
+		{"pod spec $patch replace", `{"spec":{"template":{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}}}`},
+		{"pod spec $patch delete", `{"spec":{"template":{"spec":{"$patch":"delete"}}}}`},
+		{"pod spec $retainKeys", `{"spec":{"template":{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+			r := NewPatchRemediator(client)
+			// A Plan built out of band (bypassing Plan()) must still be rejected by
+			// Apply — validation belongs at the boundary that performs the write.
+			_, err := r.Apply(context.Background(), Plan{
+				Action: string(apis.OperatorActionPatch),
+				Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+				Patch:  tc.patch,
+			}, false)
+			require.Error(t, err)
+			assert.Empty(t, client.Actions(), "no client patch call should be made when validation fails")
+		})
+	}
+}
+
+func TestPatchPlan_RejectsDirectives(t *testing.T) {
+	cases := []struct {
+		name        string
+		kind        string
+		patch       string
+		expectedErr string
+	}{
+		{
+			name:        "securityContext $patch directive",
+			kind:        "Deployment",
+			patch:       `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"replace","readOnlyRootFilesystem":true}}]}}}}`,
+			expectedErr: `patch: securityContext directive "$patch" is not allowed in a remediation patch`,
+		},
+		{
+			name:        "securityContext $retainKeys directive",
+			kind:        "Deployment",
+			patch:       `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$retainKeys":["readOnlyRootFilesystem"]}}]}}}}`,
+			expectedErr: `patch: securityContext directive "$retainKeys" is not allowed in a remediation patch`,
+		},
+		{
+			name:        "container $patch directive",
+			kind:        "Deployment",
+			patch:       `{"spec":{"template":{"spec":{"containers":[{"$patch":"replace","name":"api"}]}}}}`,
+			expectedErr: `patch: container directive "$patch" is not allowed in a remediation patch`,
+		},
+		{
+			name:        "container $retainKeys directive",
+			kind:        "Deployment",
+			patch:       `{"spec":{"template":{"spec":{"containers":[{"$retainKeys":["name"],"name":"api"}]}}}}`,
+			expectedErr: `patch: container directive "$retainKeys" is not allowed in a remediation patch`,
+		},
+		{
+			name:        "pod spec $patch directive",
+			kind:        "Deployment",
+			patch:       `{"spec":{"template":{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}}}`,
+			expectedErr: `patch: pod spec directive "$patch" is not allowed in a remediation patch`,
+		},
+		{
+			name:        "pod spec $retainKeys directive",
+			kind:        "Deployment",
+			patch:       `{"spec":{"template":{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}}}`,
+			expectedErr: `patch: pod spec directive "$retainKeys" is not allowed in a remediation patch`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := NewPatchRemediator(k8sfake.NewClientset())
+			_, err := r.Plan(context.Background(), Request{
+				Target: Target{Kind: tc.kind, Namespace: "payments", Name: "api"},
+				Patch:  tc.patch,
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.expectedErr)
+		})
+	}
 }

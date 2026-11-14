@@ -236,7 +236,10 @@ func podSpecPath(kind string) []string {
 // rejectEscalation rejects a patch that touches a field this action treats as
 // escalation-relevant (see escalationPaths/escalationMetadataPaths), at either
 // the pod-spec level (hostNetwork, volumes, serviceAccountName, ...) or the
-// container level (privileged, added capabilities, image).
+// container level (privileged, added capabilities, image). It also rejects
+// strategic-merge patch directives ($-prefixed keys such as $patch or
+// $retainKeys) on pod-spec and container ancestors that could replace or clear
+// securityContext or other protected settings.
 func rejectEscalation(kind string, obj map[string]any) error {
 	for _, p := range escalationMetadataPaths {
 		if hasPath(obj, append([]string{"metadata"}, p...)) {
@@ -244,6 +247,29 @@ func rejectEscalation(kind string, obj map[string]any) error {
 		}
 	}
 	podSpec := podSpecPath(kind)
+	for i := 1; i <= len(podSpec); i++ {
+		prefix := podSpec[:i]
+		if val, ok := valueAtPath(obj, prefix); ok {
+			if m, ok := val.(map[string]any); ok {
+				for key := range m {
+					if strings.HasPrefix(key, "$") {
+						return fmt.Errorf("patch: pod spec directive %q is not allowed in a remediation patch", key)
+					}
+				}
+			}
+		}
+	}
+	if podSpecVal, ok := valueAtPath(obj, podSpec); ok {
+		if podSpecMap, ok := podSpecVal.(map[string]any); ok {
+			if pscVal, ok := podSpecMap["securityContext"]; ok {
+				if psc, ok := pscVal.(map[string]any); ok {
+					if d, found := hasDirective(psc); found {
+						return fmt.Errorf("patch: securityContext directive %q is not allowed in a remediation patch", d)
+					}
+				}
+			}
+		}
+	}
 	for _, p := range escalationPaths {
 		if hasPath(obj, append(append([]string{}, podSpec...), p...)) {
 			return fmt.Errorf("patch: field %q is not allowed in a remediation patch", strings.Join(podSpec, ".")+"."+strings.Join(p, "."))
@@ -272,9 +298,10 @@ func rejectEscalation(kind string, obj map[string]any) error {
 }
 
 // rejectContainerEscalation rejects an image change (a remediation patch
-// fixes configuration, not workload content) and container-level
+// fixes configuration, not workload content), container-level
 // securityContext escalations (privileged, added capabilities, or explicitly
-// enabling privilege escalation).
+// enabling privilege escalation), and root-execution configurations
+// (runAsUser: 0 or runAsNonRoot: false).
 //
 // Under a JSON Merge Patch, a field set to null deletes that field from the
 // live object rather than setting it to null — so nulling out an explicit
@@ -284,7 +311,19 @@ func rejectEscalation(kind string, obj map[string]any) error {
 // lets that through (a JSON null decodes to a Go nil, which fails the
 // assertion with ok=false), so presence-with-null is checked explicitly for
 // every field this function protects, not just its value.
+//
+// Similarly, strategic-merge patch directives (such as "$patch": "replace",
+// "$patch": "delete", or "$retainKeys") inside securityContext or on the
+// container itself can replace or clear the map without naming protected
+// fields, dropping existing protections (like runAsUser or runAsNonRoot).
+// Any $-prefixed directive keys are therefore rejected.
 func rejectContainerEscalation(container map[string]any) error {
+	for key := range container {
+		if strings.HasPrefix(key, "$") {
+			return fmt.Errorf("patch: container directive %q is not allowed in a remediation patch", key)
+		}
+	}
+
 	if _, ok := container["image"]; ok {
 		return fmt.Errorf("patch: field \"image\" is not allowed in a remediation patch")
 	}
@@ -299,6 +338,9 @@ func rejectContainerEscalation(container map[string]any) error {
 	sc, ok := scVal.(map[string]any)
 	if !ok {
 		return nil
+	}
+	if d, found := hasDirective(sc); found {
+		return fmt.Errorf("patch: securityContext directive %q is not allowed in a remediation patch", d)
 	}
 	if privileged, ok := sc["privileged"].(bool); ok && privileged {
 		return fmt.Errorf("patch: securityContext.privileged=true is not allowed in a remediation patch")
@@ -321,7 +363,68 @@ func rejectContainerEscalation(container map[string]any) error {
 			}
 		}
 	}
+	if v, present := sc["runAsUser"]; present {
+		if v == nil {
+			return fmt.Errorf("patch: securityContext.runAsUser=null is not allowed in a remediation patch")
+		}
+		if isZeroUID(v) {
+			return fmt.Errorf("patch: securityContext.runAsUser=0 is not allowed in a remediation patch")
+		}
+	}
+	if v, present := sc["runAsNonRoot"]; present {
+		if v == nil {
+			return fmt.Errorf("patch: securityContext.runAsNonRoot=null is not allowed in a remediation patch")
+		}
+		if b, ok := v.(bool); ok && !b {
+			return fmt.Errorf("patch: securityContext.runAsNonRoot=false is not allowed in a remediation patch")
+		}
+	}
 	return nil
+}
+
+func isZeroUID(v any) bool {
+	switch val := v.(type) {
+	case float64:
+		return val == 0
+	case float32:
+		return val == 0
+	case int:
+		return val == 0
+	case int64:
+		return val == 0
+	case int32:
+		return val == 0
+	case uint:
+		return val == 0
+	case uint64:
+		return val == 0
+	case uint32:
+		return val == 0
+	case json.Number:
+		n, err := val.Int64()
+		return err == nil && n == 0
+	case string:
+		return strings.TrimSpace(val) == "0"
+	default:
+		return false
+	}
+}
+
+// hasDirective reports whether m or any nested map contains a key prefixed
+// with "$", which indicates a strategic-merge patch directive (e.g. $patch,
+// $retainKeys). If found, it returns the directive key.
+func hasDirective(m map[string]any) (string, bool) {
+	for k, v := range m {
+		if strings.HasPrefix(k, "$") {
+			return k, true
+		}
+		if nested, ok := v.(map[string]any); ok {
+			if d, found := hasDirective(nested); found {
+				return d, true
+			}
+		}
+	}
+	return "", false
 }
 
 // hasPath reports whether path resolves to any value (including null) in m.
