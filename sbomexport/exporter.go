@@ -262,8 +262,11 @@ func (e *Exporter) namespaceChanged(oldNS, newNS *corev1.Namespace) {
 	}
 	e.moveSeq++
 	pm.seq = e.moveSeq
-	e.mu.Unlock()
+	// Queued before the lock is released, so a layout change counted in
+	// moveSeq is always in the queue too: whoever sees moveSeq move (the tests
+	// wait on it, then drain) finds the move to process.
 	e.queue.Add(moveKeyPrefix + newNS.Name)
+	e.mu.Unlock()
 }
 
 // layoutAnnotations returns the kubescape.io/dtrack-* annotations of ns.
