@@ -404,3 +404,102 @@ func TestPatchPlan_RejectsDirectives(t *testing.T) {
 		})
 	}
 }
+
+// ephemeralContainers are subject to the same container-level escalation
+// checks as containers/initContainers. The API server only accepts them via a
+// subresource, so this denylist coverage is defense-in-depth.
+func TestPatchPlan_RejectsEphemeralContainerEscalation(t *testing.T) {
+	cases := []struct {
+		name  string
+		patch string
+	}{
+		{"ephemeral privileged", `{"spec":{"template":{"spec":{"ephemeralContainers":[{"name":"dbg","securityContext":{"privileged":true}}]}}}}`},
+		{"ephemeral allowPrivilegeEscalation", `{"spec":{"template":{"spec":{"ephemeralContainers":[{"name":"dbg","securityContext":{"allowPrivilegeEscalation":true}}]}}}}`},
+		{"ephemeral added capabilities", `{"spec":{"template":{"spec":{"ephemeralContainers":[{"name":"dbg","securityContext":{"capabilities":{"add":["SYS_ADMIN"]}}}]}}}}`},
+		{"ephemeral image", `{"spec":{"template":{"spec":{"ephemeralContainers":[{"name":"dbg","image":"attacker/img"}]}}}}`},
+		{"ephemeral securityContext nulled", `{"spec":{"template":{"spec":{"ephemeralContainers":[{"name":"dbg","securityContext":null}]}}}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := NewPatchRemediator(k8sfake.NewClientset())
+			_, err := r.Plan(context.Background(), Request{
+				Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+				Patch:  c.patch,
+			})
+			require.Error(t, err, "escalation-relevant ephemeral-container field must be rejected")
+			assert.Contains(t, err.Error(), "not allowed")
+		})
+	}
+}
+
+// Pod-level securityContext changes that relax the run-as identity or MAC
+// confinement must be rejected, on controller kinds and a bare Pod, for both
+// an explicit dangerous value and a null deletion of a hardening field.
+func TestPatchPlan_RejectsPodSecurityContextEscalation(t *testing.T) {
+	cases := []struct {
+		name  string
+		kind  string
+		patch string
+	}{
+		{"runAsUser 0 on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0}}}}}`},
+		{"runAsUser 0 on Pod", "Pod", `{"spec":{"securityContext":{"runAsUser":0}}}`},
+		{"runAsGroup 0 on Deployment", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsGroup":0}}}}}`},
+		{"runAsNonRoot false on StatefulSet", "StatefulSet", `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":false}}}}}`},
+		{"runAsUser nulled", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":null}}}}}`},
+		{"runAsGroup nulled", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsGroup":null}}}}}`},
+		{"runAsNonRoot nulled", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":null}}}}}`},
+		{"whole securityContext nulled", "Deployment", `{"spec":{"template":{"spec":{"securityContext":null}}}}`},
+		{"seLinuxOptions on Pod", "Pod", `{"spec":{"securityContext":{"seLinuxOptions":{"type":"spc_t"}}}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := NewPatchRemediator(k8sfake.NewClientset())
+			_, err := r.Plan(context.Background(), Request{
+				Target: Target{Kind: c.kind, Namespace: "payments", Name: "api"},
+				Patch:  c.patch,
+			})
+			require.Error(t, err, "escalation-relevant pod securityContext field must be rejected")
+			assert.Contains(t, err.Error(), "not allowed")
+		})
+	}
+}
+
+// Safe, hardening pod-level securityContext patches must remain accepted: the
+// guard rejects only escalating values, not the whole field.
+func TestPatchPlan_AllowsSafePodSecurityContext(t *testing.T) {
+	cases := []struct {
+		name  string
+		patch string
+	}{
+		{"non-root runAsUser", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":10001}}}}}`},
+		{"non-root runAsUser+runAsGroup", `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":10001,"runAsGroup":10001}}}}}`},
+		{"runAsNonRoot true", `{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":true}}}}}`},
+		{"pod seccompProfile RuntimeDefault", `{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":{"type":"RuntimeDefault"}}}}}}`},
+		{"safe sysctl is not blocked", `{"spec":{"template":{"spec":{"securityContext":{"sysctls":[{"name":"net.ipv4.ping_group_range","value":"0 0"}]}}}}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := NewPatchRemediator(k8sfake.NewClientset())
+			plan, err := r.Plan(context.Background(), Request{
+				Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+				Patch:  c.patch,
+			})
+			require.NoError(t, err, "safe hardening securityContext patch must be accepted")
+			assert.NotEmpty(t, plan.Patch)
+		})
+	}
+}
+
+// The pod-level guard must also hold at the Apply boundary, not only in Plan,
+// for a handcrafted plan that bypasses Plan().
+func TestPatchApply_RejectsPodSecurityContextEscalationEvenWithHandcraftedPlan(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	r := NewPatchRemediator(client)
+	_, err := r.Apply(context.Background(), Plan{
+		Action: string(apis.OperatorActionPatch),
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0}}}}}`,
+	}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
+}
