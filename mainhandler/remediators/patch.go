@@ -235,11 +235,12 @@ func podSpecPath(kind string) []string {
 
 // rejectEscalation rejects a patch that touches a field this action treats as
 // escalation-relevant (see escalationPaths/escalationMetadataPaths), at either
-// the pod-spec level (hostNetwork, volumes, serviceAccountName, ...) or the
-// container level (privileged, added capabilities, image). It also rejects
-// strategic-merge patch directives ($-prefixed keys such as $patch or
-// $retainKeys) on pod-spec and container ancestors that could replace or clear
-// securityContext or other protected settings.
+// the pod-spec level (hostNetwork, volumes, serviceAccountName, pod-level
+// securityContext root execution, ...) or the container level (privileged,
+// added capabilities, image, container-level securityContext root execution).
+// It also rejects strategic-merge patch directives ($-prefixed keys such as
+// $patch or $retainKeys) on pod-spec, container, and securityContext maps that
+// could replace or clear securityContext or other protected settings.
 func rejectEscalation(kind string, obj map[string]any) error {
 	for _, p := range escalationMetadataPaths {
 		if hasPath(obj, append([]string{"metadata"}, p...)) {
@@ -279,6 +280,15 @@ func rejectEscalation(kind string, obj map[string]any) error {
 		if podSpecMap, ok := podSpecVal.(map[string]any); ok {
 			if err := rejectPodSecurityContextEscalation(podSpecMap, strings.Join(podSpec, ".")); err != nil {
 				return err
+			}
+		}
+	}
+	if !strings.EqualFold(kind, "pod") {
+		if specVal, ok := valueAtPath(obj, []string{"spec"}); ok {
+			if specMap, ok := specVal.(map[string]any); ok {
+				if err := rejectPodSecurityContextEscalation(specMap, "spec"); err != nil {
+					return err
+				}
 			}
 		}
 	}
