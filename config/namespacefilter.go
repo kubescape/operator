@@ -45,10 +45,12 @@ func (l *namespaceList) UnmarshalJSON(data []byte) error {
 	}
 	switch v := value.(type) {
 	case string:
-		if v == "" {
-			*l = namespaceList{}
-		} else {
-			*l = strings.Split(v, ",")
+		items := strings.Split(v, ",")
+		*l = make(namespaceList, 0, len(items))
+		for _, item := range items {
+			if s := strings.TrimSpace(item); s != "" {
+				*l = append(*l, s)
+			}
 		}
 	case []interface{}:
 		*l = make(namespaceList, 0, len(v))
@@ -57,7 +59,9 @@ func (l *namespaceList) UnmarshalJSON(data []byte) error {
 			if !ok {
 				return fmt.Errorf("namespace list entries must be strings")
 			}
-			*l = append(*l, s)
+			if s = strings.TrimSpace(s); s != "" {
+				*l = append(*l, s)
+			}
 		}
 	default:
 		return fmt.Errorf("namespace list must be a string or an array of strings")
