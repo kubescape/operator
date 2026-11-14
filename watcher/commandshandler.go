@@ -28,7 +28,7 @@ type OperatorCommandsHandler struct {
 }
 
 func NewOperatorCommandsHandler(ctx context.Context, pool *ants.PoolWithFunc, k8sAPI *k8sinterface.KubernetesApi, commandsWatcher *CommandWatchHandler, config config.IConfig) *OperatorCommandsHandler {
-	return &OperatorCommandsHandler{
+	handler := &OperatorCommandsHandler{
 		pool:            pool,
 		ctx:             ctx,
 		k8sAPI:          k8sAPI,
@@ -36,11 +36,14 @@ func NewOperatorCommandsHandler(ctx context.Context, pool *ants.PoolWithFunc, k8
 		commandsWatcher: commandsWatcher,
 		config:          config,
 	}
+	// The startup list can be processed as soon as CommandWatch starts. Register
+	// before its goroutine launches so unfinished commands are not dropped.
+	commandsWatcher.RegisterForCommands(handler.commands)
+	return handler
 }
 
 func (ch *OperatorCommandsHandler) Start() {
 	logger.L().Info("starting OperatorCommandsHandler")
-	ch.commandsWatcher.RegisterForCommands(ch.commands)
 
 	for {
 		select {
@@ -60,6 +63,9 @@ func (ch *OperatorCommandsHandler) Start() {
 
 func (ch *OperatorCommandsHandler) invokeCommand(ctx context.Context, opcmd v1alpha1.OperatorCommand) {
 	startedAt := time.Now()
+	if opcmd.Status.Started && !opcmd.Status.Completed && opcmd.Status.StartedAt != nil {
+		startedAt = opcmd.Status.StartedAt.Time
+	}
 	var cmd apis.Command
 
 	sessionObj := utils.NewSessionObj(ctx, ch.config, &cmd, "", opcmd.Spec.GUID)

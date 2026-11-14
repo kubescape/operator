@@ -34,6 +34,7 @@ type OperatorCommandDetails struct {
 type patchStatus struct {
 	errors  []error
 	success bool
+	pending bool
 	payload []byte
 }
 
@@ -61,10 +62,16 @@ func WithSuccess() func(*patchStatus) {
 	}
 }
 
-func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...func(*patchStatus)) {
+func WithPending() func(*patchStatus) {
+	return func(s *patchStatus) {
+		s.pending = true
+	}
+}
+
+func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...func(*patchStatus)) error {
 	// if the command was not created by an OperatorCommand CRD, do nothing
 	if s.ParentCommandDetails == nil {
-		return
+		return nil
 	}
 
 	ps := &patchStatus{}
@@ -73,12 +80,14 @@ func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...fu
 	}
 
 	status := v1alpha1.OperatorCommandStatus{
-		Executer:    "operator",
-		Started:     true,
-		StartedAt:   &metav1.Time{Time: s.ParentCommandDetails.StartedAt},
-		Completed:   true,
-		CompletedAt: &metav1.Time{Time: time.Now()},
-		Payload:     ps.payload,
+		Executer:  "operator",
+		Started:   true,
+		StartedAt: &metav1.Time{Time: s.ParentCommandDetails.StartedAt},
+		Completed: !ps.pending,
+		Payload:   ps.payload,
+	}
+	if !ps.pending {
+		status.CompletedAt = &metav1.Time{Time: time.Now()}
 	}
 
 	if len(ps.errors) == 1 {
@@ -95,7 +104,7 @@ func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...fu
 		// Marshal []string to JSON
 		payload, err := json.Marshal(errorMessages)
 		if err != nil {
-			return
+			return err
 		}
 		status.Payload = payload
 	}
@@ -103,7 +112,7 @@ func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...fu
 	patchBytes, err := json.Marshal(map[string]v1alpha1.OperatorCommandStatus{"status": status})
 	if err != nil {
 		logger.L().Error("patchCommandStatus - failed to marshal status patch", helpers.Error(err))
-		return
+		return err
 	}
 
 	_, err = s.ParentCommandDetails.Client.GetDynamicClient().Resource(v1alpha1.SchemaGroupVersionResource).Namespace(s.ParentCommandDetails.Command.Namespace).Patch(
@@ -116,9 +125,10 @@ func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...fu
 	)
 	if err != nil {
 		logger.L().Error("patchCommandStatus - failed to patch command status", helpers.Error(err))
-		return
+		return err
 	}
 	logger.L().Info("patchCommandStatus: command status patched successfully")
+	return nil
 }
 
 type ContainerData struct {
