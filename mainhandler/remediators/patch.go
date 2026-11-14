@@ -235,11 +235,12 @@ func podSpecPath(kind string) []string {
 
 // rejectEscalation rejects a patch that touches a field this action treats as
 // escalation-relevant (see escalationPaths/escalationMetadataPaths), at either
-// the pod-spec level (hostNetwork, volumes, serviceAccountName, ...) or the
-// container level (privileged, added capabilities, image). It also rejects
-// strategic-merge patch directives ($-prefixed keys such as $patch or
-// $retainKeys) on pod-spec and container ancestors that could replace or clear
-// securityContext or other protected settings.
+// the pod-spec level (hostNetwork, volumes, serviceAccountName, pod-level
+// securityContext root execution, ...) or the container level (privileged,
+// added capabilities, image, container-level securityContext root execution).
+// It also rejects strategic-merge patch directives ($-prefixed keys such as
+// $patch or $retainKeys) on pod-spec, container, and securityContext maps that
+// could replace or clear securityContext or other protected settings.
 func rejectEscalation(kind string, obj map[string]any) error {
 	for _, p := range escalationMetadataPaths {
 		if hasPath(obj, append([]string{"metadata"}, p...)) {
@@ -261,12 +262,17 @@ func rejectEscalation(kind string, obj map[string]any) error {
 	}
 	if podSpecVal, ok := valueAtPath(obj, podSpec); ok {
 		if podSpecMap, ok := podSpecVal.(map[string]any); ok {
-			if pscVal, ok := podSpecMap["securityContext"]; ok {
-				if psc, ok := pscVal.(map[string]any); ok {
-					if d, found := hasDirective(psc); found {
-						return fmt.Errorf("patch: securityContext directive %q is not allowed in a remediation patch", d)
-					}
+			if pscVal, scPresent := podSpecMap["securityContext"]; scPresent {
+				if err := rejectSecurityContextEscalation(pscVal); err != nil {
+					return err
 				}
+			}
+		}
+	}
+	if !strings.EqualFold(kind, "pod") {
+		if val, ok := valueAtPath(obj, []string{"spec", "securityContext"}); ok {
+			if err := rejectSecurityContextEscalation(val); err != nil {
+				return err
 			}
 		}
 	}
@@ -299,24 +305,7 @@ func rejectEscalation(kind string, obj map[string]any) error {
 
 // rejectContainerEscalation rejects an image change (a remediation patch
 // fixes configuration, not workload content), container-level
-// securityContext escalations (privileged, added capabilities, or explicitly
-// enabling privilege escalation), and root-execution configurations
-// (runAsUser: 0 or runAsNonRoot: false).
-//
-// Under a JSON Merge Patch, a field set to null deletes that field from the
-// live object rather than setting it to null — so nulling out an explicit
-// allowPrivilegeEscalation: false (or the whole securityContext) reverts the
-// container to its unset/permissive default just as effectively as setting
-// the field to true would. A plain `sc["x"].(bool)` type assertion silently
-// lets that through (a JSON null decodes to a Go nil, which fails the
-// assertion with ok=false), so presence-with-null is checked explicitly for
-// every field this function protects, not just its value.
-//
-// Similarly, strategic-merge patch directives (such as "$patch": "replace",
-// "$patch": "delete", or "$retainKeys") inside securityContext or on the
-// container itself can replace or clear the map without naming protected
-// fields, dropping existing protections (like runAsUser or runAsNonRoot).
-// Any $-prefixed directive keys are therefore rejected.
+// directives, and container-level securityContext escalations.
 func rejectContainerEscalation(container map[string]any) error {
 	for key := range container {
 		if strings.HasPrefix(key, "$") {
@@ -328,10 +317,21 @@ func rejectContainerEscalation(container map[string]any) error {
 		return fmt.Errorf("patch: field \"image\" is not allowed in a remediation patch")
 	}
 
-	scVal, scPresent := container["securityContext"]
-	if !scPresent {
-		return nil
+	if scVal, scPresent := container["securityContext"]; scPresent {
+		if err := rejectSecurityContextEscalation(scVal); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// rejectSecurityContextEscalation rejects root-execution configurations
+// (runAsUser: 0 or runAsNonRoot: false), null deletions under JSON Merge Patch
+// (which revert fields or the entire securityContext to permissive defaults),
+// container-level privilege escalations (privileged, allowPrivilegeEscalation,
+// added capabilities), and strategic-merge patch directives ($patch, $retainKeys).
+// It applies identically to pod-level and container-level security contexts.
+func rejectSecurityContextEscalation(scVal any) error {
 	if scVal == nil {
 		return fmt.Errorf("patch: securityContext=null is not allowed in a remediation patch")
 	}

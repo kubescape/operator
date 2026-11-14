@@ -44,13 +44,14 @@ hand-constructed `Plan` cannot skip it):
   empty objects (`{}`), and JSON Patch arrays are rejected.
 - **Escalation denylist** — a patch may not touch: `hostNetwork`, `hostPID`,
   `hostIPC`, `serviceAccountName`/`serviceAccount`, `volumes`, `nodeName`,
-  `metadata.ownerReferences`, `metadata.finalizers`, a container's
-  `securityContext.privileged`/`allowPrivilegeEscalation`/
-  `capabilities.add`/`runAsUser: 0`/`runAsNonRoot: false` (including JSON-Merge
-  null-deletions and strategic-merge directives such as `$patch` or
-  `$retainKeys` on `securityContext`, `container`, or `pod spec`), or a container's
-  `image`. This is defense-in-depth against a patch escalating from "fix a
-  workload's config" to root execution, node, or cluster compromise.
+  `metadata.ownerReferences`, `metadata.finalizers`, a pod's or container's
+  `securityContext` root-execution configurations (`runAsUser: 0`,
+  `runAsNonRoot: false`, including JSON-Merge null-deletions and strategic-merge
+  directives such as `$patch` or `$retainKeys` on `securityContext`, `container`,
+  or `pod spec`), a container's `securityContext.privileged`/
+  `allowPrivilegeEscalation`/`capabilities.add`, or a container's `image`.
+  This is defense-in-depth against a patch escalating from "fix a workload's config"
+  to root execution, node, or cluster compromise.
 
 ## Revert
 
