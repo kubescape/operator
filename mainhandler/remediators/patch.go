@@ -361,6 +361,14 @@ func rejectContainerEscalation(container map[string]any) error {
 			if _, ok := capabilities["add"]; ok {
 				return fmt.Errorf("patch: securityContext.capabilities.add is not allowed in a remediation patch")
 			}
+			// The drop list is replaced whole under either patch type, so a
+			// null (deleted) or empty drop gives back every capability the
+			// container dropped, just as capabilities: null does.
+			if drop, present := capabilities["drop"]; present {
+				if list, ok := drop.([]any); drop == nil || (ok && len(list) == 0) {
+					return fmt.Errorf("patch: an empty or null securityContext.capabilities.drop is not allowed in a remediation patch")
+				}
+			}
 		}
 	}
 	if v, present := sc["runAsUser"]; present {
