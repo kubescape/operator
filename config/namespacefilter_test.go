@@ -41,6 +41,8 @@ func TestNamespaceFilterUpdates(t *testing.T) {
 		{`{"includeNamespaces":[],"excludeNamespaces":[],"includeNamespacesRegex":["^pay.*$"]}`, false, true},
 		{`{"includeNamespaces":[],"excludeNamespaces":[],"excludeNamespacesRegex":"^pay.*$"}`, true, false},
 		{`{"includeNamespaces":"","excludeNamespaces":""}`, false, false},
+		{`{"includeNamespaces":"  payments  ","excludeNamespaces":" payments ,  system , , "}`, false, true},
+		{`{"includeNamespaces":[" payments ", " ", ""],"excludeNamespaces":["  system  ", ""]}`, false, true},
 	} {
 		changed, err := cfg.UpdateNamespaceFilters([]byte(tt.doc))
 		require.NoError(t, err)
@@ -51,6 +53,53 @@ func TestNamespaceFilterUpdates(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, changed)
 	}
+}
+
+func TestUpdateNamespaceFiltersWhitespaceSanitization(t *testing.T) {
+	cfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, nil, Config{})
+	require.NoError(t, err)
+
+	// Comma-separated strings with irregular whitespace and empty entries
+	docString := `{"includeNamespaces":"default,  kube-system , ,  staging ","excludeNamespaces":"  production  , , test "}`
+	changed, err := cfg.UpdateNamespaceFilters([]byte(docString))
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	require.Equal(t, []string{"default", "kube-system", "staging"}, cfg.IncludeNamespaces())
+	require.Equal(t, []string{"production", "test"}, cfg.ExcludeNamespaces())
+
+	// Verifying that SkipNamespace matches accurately after trimming
+	// Included namespaces should not be skipped
+	require.False(t, cfg.SkipNamespace("default"))
+	require.False(t, cfg.SkipNamespace("kube-system"))
+	require.False(t, cfg.SkipNamespace("staging"))
+	// Non-included namespaces should be skipped
+	require.True(t, cfg.SkipNamespace("production"))
+	require.True(t, cfg.SkipNamespace("other"))
+	require.True(t, cfg.SkipNamespace(""))
+
+	// Slices containing entries with surrounding spaces and empty strings
+	docSlice := `{"includeNamespaces":["  default  ", " ", "  kube-system ", "", "staging  "],"excludeNamespaces":[" production ", "  "]}`
+	changed, err = cfg.UpdateNamespaceFilters([]byte(docSlice))
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	require.Equal(t, []string{"default", "kube-system", "staging"}, cfg.IncludeNamespaces())
+	require.Equal(t, []string{"production"}, cfg.ExcludeNamespaces())
+
+	require.False(t, cfg.SkipNamespace("default"))
+	require.False(t, cfg.SkipNamespace("kube-system"))
+	require.False(t, cfg.SkipNamespace("staging"))
+	require.True(t, cfg.SkipNamespace("production"))
+	require.True(t, cfg.SkipNamespace("other"))
+
+	// Whitespace-only string and array should result in empty slices
+	docEmpty := `{"includeNamespaces":"  ,  ,  ","excludeNamespaces":["  ", ""]}`
+	changed, err = cfg.UpdateNamespaceFilters([]byte(docEmpty))
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Empty(t, cfg.IncludeNamespaces())
+	require.Empty(t, cfg.ExcludeNamespaces())
 }
 
 func TestNamespaceFilterRejectsInvalidReplacement(t *testing.T) {
