@@ -203,3 +203,116 @@ func TestPodToContainerData_EphemeralContainer(t *testing.T) {
 	assert.Equal(t, "busybox@sha256:33333", debugData.ImageID)
 	assert.Equal(t, "ephemeralContainer", debugData.ContainerType)
 }
+
+func TestPodHasParent(t *testing.T) {
+	tests := []struct {
+		name     string
+		pod      *corev1.Pod
+		expected bool
+	}{
+		{
+			name:     "nil pod",
+			pod:      nil,
+			expected: false,
+		},
+		{
+			name: "naked pod without ownerReferences or hash",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "naked-pod",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "pod with apps/v1 ownerReference at index 0",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "deployment-pod",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "apps/v1",
+							Kind:       "ReplicaSet",
+							Name:       "my-deploy-rs",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pod with batch/v1 ownerReference at index 0",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "job-pod",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "batch/v1",
+							Kind:       "Job",
+							Name:       "my-job",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pod with non-workload ownerReference at index 0 and apps/v1 ownerReference at index 1",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "multi-owner-pod",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "custom.io/v1",
+							Kind:       "CustomResource",
+							Name:       "custom",
+						},
+						{
+							APIVersion: "apps/v1",
+							Kind:       "ReplicaSet",
+							Name:       "my-deploy-rs",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pod with non-workload ownerReference at index 0 but has pod-template-hash label",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "custom-owner-with-hash",
+					Labels: map[string]string{
+						"pod-template-hash": "5d5885c7b4",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "custom.io/v1",
+							Kind:       "CustomResource",
+							Name:       "custom",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pod without ownerReferences but has pod-template-hash label",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "hash-pod",
+					Labels: map[string]string{
+						"pod-template-hash": "5d5885c7b4",
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, PodHasParent(tt.pod))
+		})
+	}
+}
