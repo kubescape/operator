@@ -85,7 +85,7 @@ func TestHandleWebhookValidate(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-	admissionController := New(":8443", "testdata/cert.pem", "testdata/key.pem", runtime.NewScheme(), &MockValidator{}, watcher.NewWatcherMock())
+	admissionController := New(":8443", "testdata/cert.pem", "testdata/key.pem", "", runtime.NewScheme(), &MockValidator{}, watcher.NewWatcherMock())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
