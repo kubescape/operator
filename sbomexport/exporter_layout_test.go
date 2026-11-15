@@ -123,6 +123,11 @@ func TestExporterKeepsTheLayoutOfADeletedNamespace(t *testing.T) {
 	require.NoError(t, te.client.CoreV1().Pods("team-a").Delete(ctx, "job", metav1.DeleteOptions{}))
 	require.NoError(t, te.client.CoreV1().Namespaces().Delete(ctx, "team-a", metav1.DeleteOptions{}))
 	require.Eventually(t, func() bool { _, err := te.namespaceLister.Get("team-a"); return err != nil }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		te.mu.Lock()
+		defer te.mu.Unlock()
+		return te.deletedNamespaces["team-a"]
+	}, 5*time.Second, 10*time.Millisecond)
 
 	te.clock.t = te.clock.t.Add(time.Minute) // the next resync, within the grace period
 	te.stats.takeFields()
