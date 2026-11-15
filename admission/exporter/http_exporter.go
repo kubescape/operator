@@ -2,6 +2,7 @@ package exporters
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -224,7 +225,7 @@ func (exporter *HTTPExporter) SendRegistryStatus(guid string, status apitypes.Re
 
 func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
 	bodyReader := bytes.NewReader(bodyBytes)
-	req, err := http.NewRequest(exporter.config.Method, fmt.Sprintf("%s/v1/%s", exporter.config.URL, path), bodyReader)
+	req, err := http.NewRequestWithContext(context.TODO(), exporter.config.Method, fmt.Sprintf("%s/v1/%s", exporter.config.URL, path), bodyReader)
 	if err != nil {
 		logger.L().Error("failed to create HTTP request", helpers.Error(err))
 		return
@@ -241,7 +242,11 @@ func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		logger.L().Error("Received non-2xx status code", helpers.Int("status", resp.StatusCode))
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		logger.L().Error("Received non-2xx status code from alert endpoint", helpers.Int("status", resp.StatusCode), helpers.String("response", string(bodyBytes)))
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			logger.L().Error("failed to clear response body", helpers.Error(err))
+		}
 		return
 	}
 

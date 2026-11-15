@@ -7,13 +7,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	apitypes "github.com/armosec/armoapi-go/armotypes"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/admission/rules"
 	rulesv1 "github.com/kubescape/operator/admission/rules/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitHTTPExporter_ClusterUID(t *testing.T) {
@@ -138,4 +141,132 @@ func TestHTTPExporter_SendsBearerFromTokenFile(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("exporter did not POST the alert")
 	}
+}
+
+func TestHTTPExporter_Non2xxErrorDiagnosticsAndDrain(t *testing.T) {
+	logger.InitLogger("pretty")
+	logFile, err := os.Create(filepath.Join(t.TempDir(), "operator.log"))
+	require.NoError(t, err)
+	defer logFile.Close()
+	logger.L().SetWriter(logFile)
+	defer logger.L().SetWriter(os.Stderr)
+
+	const errorPayload = `{"error":"bad_request","message":"invalid alert payload"}`
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(errorPayload))
+	}))
+	defer srv.Close()
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{URL: srv.URL, Method: "POST"}, "test-cluster", nil, "test-cluster-uid")
+	require.NoError(t, err)
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "Privileged pod", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	logged, err := os.ReadFile(logFile.Name())
+	require.NoError(t, err)
+	logOutput := string(logged)
+
+	assert.Contains(t, logOutput, "Received non-2xx status code from alert endpoint")
+	assert.Contains(t, logOutput, "400")
+	assert.Contains(t, logOutput, errorPayload)
+	assert.Equal(t, 1, requestCount)
+}
+
+func TestHTTPExporter_Non2xxTruncatesLargeBodyAndDrains(t *testing.T) {
+	logger.InitLogger("pretty")
+	logFile, err := os.Create(filepath.Join(t.TempDir(), "operator.log"))
+	require.NoError(t, err)
+	defer logFile.Close()
+	logger.L().SetWriter(logFile)
+	defer logger.L().SetWriter(os.Stderr)
+
+	// Generate a response body larger than 4 KiB (e.g., 8 KiB)
+	largeBody := strings.Repeat("A", 8192)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(largeBody))
+	}))
+	defer srv.Close()
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{URL: srv.URL, Method: "POST"}, "test-cluster", nil, "test-cluster-uid")
+	require.NoError(t, err)
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "Privileged pod", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	logged, err := os.ReadFile(logFile.Name())
+	require.NoError(t, err)
+	logOutput := string(logged)
+
+	assert.Contains(t, logOutput, "Received non-2xx status code from alert endpoint")
+	assert.Contains(t, logOutput, "500")
+	// The logged output should contain 4096 'A's but not 4097 'A's
+	assert.Contains(t, logOutput, strings.Repeat("A", 4096))
+	assert.NotContains(t, logOutput, strings.Repeat("A", 4097))
+}
+
+func TestHTTPExporter_SendRegistryStatus_Non2xxLoggedAndDrained(t *testing.T) {
+	logger.InitLogger("pretty")
+	logFile, err := os.Create(filepath.Join(t.TempDir(), "operator.log"))
+	require.NoError(t, err)
+	defer logFile.Close()
+	logger.L().SetWriter(logFile)
+	defer logger.L().SetWriter(os.Stderr)
+
+	const errorMsg = "service unavailable"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(errorMsg))
+	}))
+	defer srv.Close()
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{URL: srv.URL, Method: "POST"}, "test-cluster", nil, "test-cluster-uid")
+	require.NoError(t, err)
+
+	exporter.SendRegistryStatus("guid-123", apitypes.RegistryScanStatus("Success"), "completed", time.Now())
+
+	logged, err := os.ReadFile(logFile.Name())
+	require.NoError(t, err)
+	logOutput := string(logged)
+
+	assert.Contains(t, logOutput, "Received non-2xx status code from alert endpoint")
+	assert.Contains(t, logOutput, "503")
+	assert.Contains(t, logOutput, errorMsg)
+}
+
+func TestHTTPExporter_ConnectionReuseOnConsecutiveFailures(t *testing.T) {
+	logger.InitLogger("pretty")
+	logFile, err := os.Create(filepath.Join(t.TempDir(), "operator.log"))
+	require.NoError(t, err)
+	defer logFile.Close()
+	logger.L().SetWriter(logFile)
+	defer logger.L().SetWriter(os.Stderr)
+
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"bad_request"}`))
+	}))
+	defer srv.Close()
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{URL: srv.URL, Method: "POST"}, "test-cluster", nil, "test-cluster-uid")
+	require.NoError(t, err)
+
+	for i := 0; i < 3; i++ {
+		exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+			BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "Privileged pod", UniqueID: "ns/pod"},
+			RuleID:           "R2003",
+		})
+	}
+
+	assert.Equal(t, 3, requestCount)
 }
