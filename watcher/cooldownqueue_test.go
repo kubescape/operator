@@ -131,6 +131,32 @@ func TestCooldownQueue_StopIdempotent(t *testing.T) {
 	assert.Nil(t, q.seenEvents)
 }
 
+func TestCooldownQueue_StopWithoutReceiver(t *testing.T) {
+	// Expiration is fast so eviction fires and attempts to send on unbuffered channel
+	// while no receiver is active.
+	q := NewCooldownQueueWithParams(10*time.Millisecond, 5*time.Millisecond)
+	q.Enqueue(podAdded)
+
+	// Wait past expiration so callback is triggered and attempts to send with no receiver.
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop must not hang waiting on the blocked eviction send.
+	stopped := make(chan struct{})
+	go func() {
+		q.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("Stop() hung waiting on blocked eviction send")
+	}
+
+	assert.True(t, q.Closed())
+	assert.Nil(t, q.seenEvents)
+}
+
 // key is only based on the UID of the object
 func Test_makeEventKey(t *testing.T) {
 	tests := []struct {

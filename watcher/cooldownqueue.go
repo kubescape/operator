@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/kubescape/go-logger"
@@ -26,7 +25,8 @@ const (
 // again before the cooldown period is over, the event is overridden and the cooldown period is reset.
 type CooldownQueue struct {
 	closed     bool
-	isClosed   *atomic.Bool
+	stopOnce   sync.Once
+	stopCh     chan struct{}
 	mu         sync.Mutex  // mutex for closed
 	chanMu     *sync.Mutex // mutex for innerChan
 	seenEvents cache.ExpiringCache
@@ -42,18 +42,24 @@ func NewCooldownQueue() *CooldownQueue {
 func NewCooldownQueueWithParams(expiration, interval time.Duration) *CooldownQueue {
 	events := make(chan watch.Event)
 	chanMu := sync.Mutex{}
-	var isClosed atomic.Bool
+	stopCh := make(chan struct{})
 	callback := func(key, value any) {
 		chanMu.Lock()
 		defer chanMu.Unlock()
-		if isClosed.Load() {
+		select {
+		case <-stopCh:
 			return
+		default:
 		}
-		events <- value.(watch.Event)
+		select {
+		case <-stopCh:
+			return
+		case events <- value.(watch.Event):
+		}
 	}
 	c := cache.NewTTLWithCallback(expiration, interval, callback)
 	return &CooldownQueue{
-		isClosed:   &isClosed,
+		stopCh:     stopCh,
 		chanMu:     &chanMu,
 		seenEvents: c,
 		innerChan:  events,
@@ -93,6 +99,9 @@ func (q *CooldownQueue) Enqueue(e watch.Event) {
 }
 
 func (q *CooldownQueue) Stop() {
+	q.stopOnce.Do(func() {
+		close(q.stopCh)
+	})
 	q.chanMu.Lock()
 	defer q.chanMu.Unlock()
 	q.mu.Lock()
@@ -101,7 +110,6 @@ func (q *CooldownQueue) Stop() {
 		return
 	}
 	q.closed = true
-	q.isClosed.Store(true)
 	if q.seenEvents != nil {
 		q.seenEvents.RemoveAll()
 		q.seenEvents = nil
