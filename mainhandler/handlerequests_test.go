@@ -284,3 +284,106 @@ func TestHandleImageScanningScopedRequest_MultiContainerDoesNotDedupeAcrossConta
 	// skip the rest, so this count would drop below len(slugs) if that regression returned.
 	assert.Equal(t, len(slugs), scanner.requestCount(), "expected one dispatched scan per container, none dropped by dedup")
 }
+
+func TestGetNamespaces(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty or non-WLID command ID without designators lists all cluster namespaces", func(t *testing.T) {
+		k8sClient := k8sfake.NewSimpleClientset(
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "production"}},
+		)
+		handler := &MainHandler{
+			k8sAPI: utils.NewK8sInterfaceFake(k8sClient),
+		}
+
+		// Empty command ID
+		sessionObj := &utils.SessionObj{
+			Command: &apis.Command{
+				CommandName: apis.TypeScanImages,
+			},
+		}
+		namespaces, err := handler.getNamespaces(ctx, sessionObj)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"kube-system", "default", "production"}, namespaces)
+
+		// Non-WLID cluster-scoped command ID
+		sessionObjCluster := &utils.SessionObj{
+			Command: &apis.Command{
+				CommandName: apis.TypeScanImages,
+				WildWlid:    "wlid://cluster-mycluster",
+			},
+		}
+		namespaces, err = handler.getNamespaces(ctx, sessionObjCluster)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"kube-system", "default", "production"}, namespaces)
+	})
+
+	t.Run("valid WLID returns workload namespace", func(t *testing.T) {
+		k8sClient := k8sfake.NewSimpleClientset(
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		)
+		handler := &MainHandler{
+			k8sAPI: utils.NewK8sInterfaceFake(k8sClient),
+		}
+
+		sessionObj := &utils.SessionObj{
+			Command: &apis.Command{
+				CommandName: apis.TypeScanImages,
+				Wlid:        "wlid://cluster-mycluster/namespace-my-app-ns/deployment-my-deploy",
+			},
+		}
+		namespaces, err := handler.getNamespaces(ctx, sessionObj)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"my-app-ns"}, namespaces)
+	})
+
+	t.Run("designators with duplicate and empty namespaces", func(t *testing.T) {
+		k8sClient := k8sfake.NewSimpleClientset(
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+		)
+		handler := &MainHandler{
+			k8sAPI: utils.NewK8sInterfaceFake(k8sClient),
+		}
+
+		sessionObj := &utils.SessionObj{
+			Command: &apis.Command{
+				CommandName: apis.TypeScanImages,
+				Designators: []identifiers.PortalDesignator{
+					{Attributes: map[string]string{identifiers.AttributeNamespace: "frontend"}},
+					{Attributes: map[string]string{identifiers.AttributeNamespace: ""}},
+					{Attributes: map[string]string{identifiers.AttributeNamespace: "frontend"}},
+					{Attributes: map[string]string{identifiers.AttributeNamespace: "backend"}},
+				},
+			},
+		}
+		namespaces, err := handler.getNamespaces(ctx, sessionObj)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"frontend", "backend"}, namespaces)
+	})
+
+	t.Run("designators with only empty namespaces falls back to listing all cluster namespaces", func(t *testing.T) {
+		k8sClient := k8sfake.NewSimpleClientset(
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		)
+		handler := &MainHandler{
+			k8sAPI: utils.NewK8sInterfaceFake(k8sClient),
+		}
+
+		sessionObj := &utils.SessionObj{
+			Command: &apis.Command{
+				CommandName: apis.TypeScanImages,
+				Designators: []identifiers.PortalDesignator{
+					{Attributes: map[string]string{identifiers.AttributeNamespace: ""}},
+				},
+			},
+		}
+		namespaces, err := handler.getNamespaces(ctx, sessionObj)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"kube-system", "default"}, namespaces)
+	})
+}
+
