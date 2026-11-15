@@ -95,17 +95,30 @@ func TestCooldownQueue_StopWithPendingEvents(t *testing.T) {
 	q.Enqueue(podAdded)
 	q.Enqueue(deploymentAdded)
 
+	// Keep an active receiver so that if eviction fires before Stop() completes,
+	// the callback does not block on the unbuffered channel while holding chanMu.
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range q.ResultChan {
+		}
+	}()
+
 	assert.NotPanics(t, func() {
 		q.Stop()
 	})
 
-	// Ensure that after eviction expiration, the callback does not panic
-	// and the channel is closed.
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for ResultChan to close after Stop()")
+	}
 
-	_, ok := <-q.ResultChan
-	assert.False(t, ok, "expected ResultChan to be closed")
+	// Ensure that after eviction expiration, the callback does not panic
+	// and no sends occur after Stop().
+	time.Sleep(100 * time.Millisecond)
 	assert.True(t, q.Closed())
+	assert.Nil(t, q.seenEvents)
 }
 
 func TestCooldownQueue_StopIdempotent(t *testing.T) {
@@ -115,6 +128,7 @@ func TestCooldownQueue_StopIdempotent(t *testing.T) {
 		q.Stop()
 	})
 	assert.True(t, q.Closed())
+	assert.Nil(t, q.seenEvents)
 }
 
 // key is only based on the UID of the object
