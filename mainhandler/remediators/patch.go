@@ -275,7 +275,18 @@ func rejectEscalation(kind string, obj map[string]any) error {
 			return fmt.Errorf("patch: field %q is not allowed in a remediation patch", strings.Join(podSpec, ".")+"."+strings.Join(p, "."))
 		}
 	}
-	for _, containersField := range []string{"containers", "initContainers"} {
+	if podSpecVal, ok := valueAtPath(obj, podSpec); ok {
+		if podSpecMap, ok := podSpecVal.(map[string]any); ok {
+			if err := rejectPodSecurityContextEscalation(podSpecMap, strings.Join(podSpec, ".")); err != nil {
+				return err
+			}
+		}
+	}
+	// ephemeralContainers shares the container escalation checks. The API server
+	// only accepts them through the pods/ephemeralcontainers subresource (never
+	// a strategic/merge patch of the object), so this is defense-in-depth that
+	// keeps the denylist complete rather than relying on that server-side rule.
+	for _, containersField := range []string{"containers", "initContainers", "ephemeralContainers"} {
 		containers, ok := valueAtPath(obj, append(append([]string{}, podSpec...), containersField))
 		if !ok {
 			continue
@@ -433,6 +444,63 @@ func hasDirective(m map[string]any) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// rejectPodSecurityContextEscalation rejects a patch to the pod-level
+// securityContext that would relax the workload's run-as identity or its
+// mandatory-access-control confinement. specPath is the patch-relative pod-spec
+// path, used only to build a readable error (e.g. "spec.template.spec").
+//
+// Only escalating values are rejected, so legitimate hardening patches still
+// apply: runAsNonRoot: true, a non-root runAsUser/runAsGroup, and
+// seccompProfile.type: RuntimeDefault are all accepted. As with the
+// container-level checks, a field set to null is treated as a deletion (JSON
+// Merge Patch semantics) that reverts the live object to its permissive
+// default, and is rejected for the fields this guards. Strategic-merge $-prefixed
+// directives on the block are already rejected by rejectEscalation.
+//
+// sysctls are deliberately NOT rejected: the kubelet already enforces an
+// unsafe-sysctl allowlist, so a patch cannot set a dangerous sysctl this way,
+// and blocking safe sysctls would needlessly break legitimate tuning.
+func rejectPodSecurityContextEscalation(spec map[string]any, specPath string) error {
+	scVal, present := spec["securityContext"]
+	if !present {
+		return nil
+	}
+	field := func(name string) string { return specPath + ".securityContext." + name }
+	if scVal == nil {
+		return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", specPath+".securityContext")
+	}
+	sc, ok := scVal.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if v, present := sc["runAsNonRoot"]; present {
+		if v == nil {
+			return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", field("runAsNonRoot"))
+		}
+		if b, ok := v.(bool); ok && !b {
+			return fmt.Errorf("patch: field %q=false is not allowed in a remediation patch", field("runAsNonRoot"))
+		}
+	}
+	for _, idField := range []string{"runAsUser", "runAsGroup"} {
+		if v, present := sc[idField]; present {
+			if v == nil {
+				return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", field(idField))
+			}
+			if isZeroUID(v) {
+				return fmt.Errorf("patch: field %q=0 (root) is not allowed in a remediation patch", field(idField))
+			}
+		}
+	}
+	// seLinuxOptions can select a less-confined domain (e.g. an unconfined or
+	// spc_t type) and so weaken mandatory-access-control confinement; the
+	// operator cannot tell a hardening change from a weakening one, so the whole
+	// field is rejected, consistent with how volumes/serviceAccount are handled.
+	if _, present := sc["seLinuxOptions"]; present {
+		return fmt.Errorf("patch: field %q is not allowed in a remediation patch", field("seLinuxOptions"))
+	}
+	return nil
 }
 
 // hasPath reports whether path resolves to any value (including null) in m.
