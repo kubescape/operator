@@ -39,19 +39,21 @@ func NewCooldownQueue() *CooldownQueue {
 
 func NewCooldownQueueWithParams(expiration, interval time.Duration) *CooldownQueue {
 	events := make(chan watch.Event)
-	chanMu := sync.Mutex{}
-	callback := func(key, value any) {
-		chanMu.Lock()
-		defer chanMu.Unlock()
-		events <- value.(watch.Event)
-	}
-	c := cache.NewTTLWithCallback(expiration, interval, callback)
-	return &CooldownQueue{
-		chanMu:     &chanMu,
-		seenEvents: c,
+	q := &CooldownQueue{
+		chanMu:     &sync.Mutex{},
 		innerChan:  events,
 		ResultChan: events,
 	}
+	callback := func(key, value any) {
+		q.chanMu.Lock()
+		defer q.chanMu.Unlock()
+		if q.Closed() {
+			return
+		}
+		events <- value.(watch.Event)
+	}
+	q.seenEvents = cache.NewTTLWithCallback(expiration, interval, callback)
+	return q
 }
 
 // makeEventKey creates a unique key for an event from a watcher
@@ -90,6 +92,10 @@ func (q *CooldownQueue) Stop() {
 	defer q.chanMu.Unlock()
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	q.closed = true
+	q.seenEvents.RemoveAll()
 	close(q.innerChan)
 }

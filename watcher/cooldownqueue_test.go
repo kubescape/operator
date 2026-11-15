@@ -90,6 +90,33 @@ func TestCooldownQueue_Enqueue_InvalidObject(t *testing.T) {
 	}
 }
 
+func TestCooldownQueue_StopWithPendingEvents(t *testing.T) {
+	q := NewCooldownQueueWithParams(50*time.Millisecond, 10*time.Millisecond)
+	q.Enqueue(podAdded)
+	q.Enqueue(deploymentAdded)
+
+	assert.NotPanics(t, func() {
+		q.Stop()
+	})
+
+	// Ensure that after eviction expiration, the callback does not panic
+	// and the channel is closed.
+	time.Sleep(100 * time.Millisecond)
+
+	_, ok := <-q.ResultChan
+	assert.False(t, ok, "expected ResultChan to be closed")
+	assert.True(t, q.Closed())
+}
+
+func TestCooldownQueue_StopIdempotent(t *testing.T) {
+	q := NewCooldownQueueWithParams(50*time.Millisecond, 10*time.Millisecond)
+	assert.NotPanics(t, func() {
+		q.Stop()
+		q.Stop()
+	})
+	assert.True(t, q.Closed())
+}
+
 // key is only based on the UID of the object
 func Test_makeEventKey(t *testing.T) {
 	tests := []struct {
