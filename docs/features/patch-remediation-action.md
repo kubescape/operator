@@ -51,6 +51,9 @@ hand-constructed `Plan` cannot skip it):
   `$retainKeys` on `securityContext`, `container`, or `pod spec`), or a container's
   `image`. This is defense-in-depth against a patch escalating from "fix a
   workload's config" to root execution, node, or cluster compromise.
+- **Confinement profiles** — a `seccompProfile` or `appArmorProfile`, in the pod's
+  or a container's `securityContext`, may not be set to `Unconfined` or deleted
+  (`null`). `RuntimeDefault` and `Localhost` profiles are accepted.
 
 ## Revert
 
