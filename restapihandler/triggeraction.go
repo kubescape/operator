@@ -101,7 +101,12 @@ func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Req
 	}
 	if err != nil {
 		returnValue = []byte(err.Error())
-		httpStatus = http.StatusInternalServerError
+		if httpStatus == http.StatusOK {
+			httpStatus = http.StatusInternalServerError
+		}
+	}
+	if httpStatus == http.StatusMethodNotAllowed {
+		w.Header().Set("Allow", http.MethodPost)
 	}
 
 	w.WriteHeader(httpStatus)
