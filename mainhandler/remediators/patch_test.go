@@ -255,6 +255,9 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"container securityContext nulled entirely", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":null}]}}}}`},
 		{"container allowPrivilegeEscalation nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"allowPrivilegeEscalation":null}}]}}}}`},
 		{"container capabilities nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":null}}]}}}}`},
+		{"container capabilities.drop nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":null}}}]}}}}`},
+		{"container capabilities.drop emptied", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":[]}}}]}}}}`},
+		{"init container capabilities.drop nulled", "Deployment", `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"capabilities":{"drop":null}}}]}}}}`},
 		{"container runAsUser=0", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":0}}]}}}}`},
 		{"container runAsUser nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
 		{"container runAsNonRoot=false", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
@@ -311,6 +314,52 @@ func TestPatchPlan_AllowsNonRootSecurityContext(t *testing.T) {
 	assert.NotEmpty(t, plan.Patch)
 }
 
+// Dropping capabilities is what a capabilities remediation does, so a patch
+// that sets a non-empty drop list is still accepted.
+func TestPatchPlan_AllowsDroppingCapabilities(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["ALL"]}}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
+// A null or empty drop list replaces the live one whole rather than merging
+// with it, so a patch that got through would leave the container with the
+// runtime's default capabilities. It must never reach the workload.
+func TestPatch_DropRemovalNeverReachesTheWorkload(t *testing.T) {
+	for _, patch := range []string{
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":null}}}]}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":[]}}}]}}}}`,
+	} {
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "api", Image: "app", SecurityContext: &corev1.SecurityContext{
+					Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+				}}},
+			}}},
+		}
+		client := k8sfake.NewClientset(deploy)
+		r := NewPatchRemediator(client)
+		plan, err := r.Plan(context.Background(), Request{
+			Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+			Patch:  patch,
+		})
+		if err == nil {
+			_, err = r.Apply(context.Background(), plan, false)
+		}
+
+		got, getErr := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+		require.NoError(t, getErr)
+		assert.Equal(t, []corev1.Capability{"ALL"}, got.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop, "%s", patch)
+		require.Error(t, err, "%s", patch)
+		assert.Contains(t, err.Error(), "capabilities.drop")
+	}
+}
+
 func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -321,6 +370,7 @@ func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T)
 		{"runAsUser null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
 		{"runAsNonRoot false", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
 		{"runAsNonRoot null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":null}}]}}}}`},
+		{"capabilities.drop null", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":null}}}]}}}}`},
 		{"securityContext $patch replace", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"replace","readOnlyRootFilesystem":true}}]}}}}`},
 		{"securityContext $patch delete", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$patch":"delete"}}]}}}}`},
 		{"securityContext $retainKeys", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"$retainKeys":["readOnlyRootFilesystem"]}}]}}}}`},
