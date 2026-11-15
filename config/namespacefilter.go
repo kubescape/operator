@@ -19,19 +19,38 @@ type namespaceFilter struct {
 }
 
 func newNamespaceFilter(c Config) (*namespaceFilter, error) {
-	inc, err := compileRegexes(c.IncludeNamespacesRegex)
+	includePatterns, excludePatterns := cleanNamespaceList(c.IncludeNamespacesRegex), cleanNamespaceList(c.ExcludeNamespacesRegex)
+	inc, err := compileRegexes(includePatterns)
 	if err != nil {
 		return nil, fmt.Errorf("invalid includeNamespacesRegex: %w", err)
 	}
-	exc, err := compileRegexes(c.ExcludeNamespacesRegex)
+	exc, err := compileRegexes(excludePatterns)
 	if err != nil {
 		return nil, fmt.Errorf("invalid excludeNamespacesRegex: %w", err)
 	}
 	return &namespaceFilter{
-		include: slices.Clone(c.IncludeNamespaces), exclude: slices.Clone(c.ExcludeNamespaces),
-		includePatterns: slices.Clone(c.IncludeNamespacesRegex), excludePatterns: slices.Clone(c.ExcludeNamespacesRegex),
+		include: cleanNamespaceList(c.IncludeNamespaces), exclude: cleanNamespaceList(c.ExcludeNamespaces),
+		includePatterns: includePatterns, excludePatterns: excludePatterns,
 		includeRegex: inc, excludeRegex: exc,
 	}, nil
+}
+
+// cleanNamespaceList returns a copy of list with every entry trimmed and the empty
+// ones dropped. The startup configuration reaches here through viper, which splits a
+// comma-separated string without trimming ("kube-system, default," is
+// ["kube-system", " default", ""]), so this is done for every filter, not only for
+// the documents UpdateNamespaceFilters reads.
+func cleanNamespaceList(list []string) []string {
+	if list == nil {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, item := range list {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 // namespaceList accepts the same string/array forms as startup configuration,

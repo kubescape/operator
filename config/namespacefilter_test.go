@@ -102,6 +102,47 @@ func TestUpdateNamespaceFiltersWhitespaceSanitization(t *testing.T) {
 	require.Empty(t, cfg.ExcludeNamespaces())
 }
 
+// The startup configuration can hold the lists as comma-separated strings: the Helm
+// chart writes "includeNamespaces": "{{ .Values.includeNamespaces }}" when the live
+// filter is off. viper splits them without trimming, so they need the same cleaning
+// as a live update, or " default" never matches default and a trailing comma adds "",
+// the namespace of every cluster-scoped object.
+func TestLoadConfigNamespaceFiltersWhitespaceSanitization(t *testing.T) {
+	load := func(t *testing.T, doc string) *OperatorConfig {
+		t.Helper()
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(doc), 0600))
+		c, err := LoadConfig(dir)
+		require.NoError(t, err)
+		cfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, nil, c)
+		require.NoError(t, err)
+		return cfg
+	}
+
+	t.Run("include", func(t *testing.T) {
+		cfg := load(t, `{"includeNamespaces":"kube-system, default ,"}`)
+		require.Equal(t, []string{"kube-system", "default"}, cfg.IncludeNamespaces())
+		require.False(t, cfg.SkipNamespace("default"), "an included namespace is skipped")
+		require.True(t, cfg.SkipNamespace("other"))
+		require.True(t, cfg.SkipNamespace(""), "a trailing comma includes cluster-scoped objects")
+	})
+
+	t.Run("exclude", func(t *testing.T) {
+		cfg := load(t, `{"excludeNamespaces":"kubescape, kube-system,"}`)
+		require.Equal(t, []string{"kubescape", "kube-system"}, cfg.ExcludeNamespaces())
+		require.True(t, cfg.SkipNamespace("kube-system"), "an excluded namespace is scanned and can be remediated")
+		require.False(t, cfg.SkipNamespace(""), "a trailing comma excludes cluster-scoped objects")
+	})
+
+	t.Run("regex", func(t *testing.T) {
+		cfg := load(t, `{"excludeNamespacesRegex":"^temp-.*, ^test-.*,"}`)
+		require.Equal(t, []string{"^temp-.*", "^test-.*"}, cfg.ExcludeNamespacesRegex())
+		require.True(t, cfg.SkipNamespace("test-a"))
+	})
+}
+
 func TestNamespaceFilterRejectsInvalidReplacement(t *testing.T) {
 	cfg, err := NewOperatorConfig(CapabilitiesConfig{}, armometadata.ClusterConfig{}, nil, Config{ExcludeNamespaces: []string{"payments"}})
 	require.NoError(t, err)
