@@ -16,6 +16,7 @@ import (
 	"github.com/kubescape/operator/utils"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 func TestGetKubescapeV1ScanRequest(t *testing.T) {
@@ -205,6 +206,76 @@ func TestFixK8sNameLimit(t *testing.T) {
 		t.Errorf("invalid k8s:%s", res)
 	}
 
+	testCases := []struct {
+		name      string
+		input     string
+		nameLimit int
+		expected  string
+	}{
+		{
+			name:      "trailing non-alphanumeric converted to dash should be trimmed",
+			input:     "my-schedule_",
+			nameLimit: 52,
+			expected:  "my-schedule",
+		},
+		{
+			name:      "leading dash should be trimmed",
+			input:     "-my-schedule",
+			nameLimit: 52,
+			expected:  "my-schedule",
+		},
+		{
+			name:      "leading non-alphanumeric converted to dash should be trimmed",
+			input:     "_my-schedule",
+			nameLimit: 52,
+			expected:  "my-schedule",
+		},
+		{
+			name:      "leading and trailing dashes and invalid chars should be trimmed",
+			input:     "_--my-schedule--_",
+			nameLimit: 52,
+			expected:  "my-schedule",
+		},
+		{
+			name:      "trailing dot converted to dash should be trimmed",
+			input:     "scan.v1.",
+			nameLimit: 52,
+			expected:  "scan-v1",
+		},
+		{
+			name:      "truncation ending on character converted to dash should not leave trailing dash",
+			input:     "my-schedule_framework",
+			nameLimit: 12,
+			expected:  "my-schedule",
+		},
+		{
+			name:      "string with only non-alphanumeric characters falls back to default",
+			input:     "___",
+			nameLimit: 52,
+			expected:  "invalid-name-was-given",
+		},
+		{
+			name:      "empty string falls back to default",
+			input:     "",
+			nameLimit: 52,
+			expected:  "invalid-name-was-given",
+		},
+		{
+			name:      "string of only hyphens falls back to default",
+			input:     "---",
+			nameLimit: 52,
+			expected:  "invalid-name-was-given",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := fixK8sNameLimit(tc.input, tc.nameLimit)
+			assert.Equal(t, tc.expected, res)
+			errs := validation.IsDNS1123Subdomain(res)
+			assert.Empty(t, errs, "DNS subdomain validation failed for %q: %v", res, errs)
+		})
+	}
 }
 
 func TestGetKubescapeV1ScanURL(t *testing.T) {

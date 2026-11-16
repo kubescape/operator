@@ -28,19 +28,16 @@ func fixK8sCronJobNameLimit(jobName string) string {
 // convert to K8s valid name, lower-case, don't end with '-', maximum X characters
 // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
 func fixK8sNameLimit(jobName string, nameLimit int) string {
-	if len(jobName) > nameLimit {
-		jobName = jobName[:nameLimit]
-	}
-	lastIdx := len(jobName) - 1
-	for lastIdx >= 0 && jobName[lastIdx] == '-' {
-		jobName = jobName[:lastIdx]
-		lastIdx = len(jobName) - 1
-	}
-	if lastIdx == -1 {
-		jobName = "invalid name was given"
-	}
+	jobName = strings.ToLower(jobName)
 	jobName = k8sNamesRegex.ReplaceAllString(jobName, "-")
-	return strings.ToLower(jobName)
+	jobName = strings.Trim(jobName, "-")
+	if nameLimit > 0 && len(jobName) > nameLimit {
+		jobName = strings.TrimRight(jobName[:nameLimit], "-")
+	}
+	if jobName == "" {
+		jobName = "invalid-name-was-given"
+	}
+	return jobName
 }
 
 func getCronJobTemplate(k8sAPI *k8sinterface.KubernetesApi, name, namespace string) (*v1.CronJob, error) {
