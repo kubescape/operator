@@ -267,6 +267,10 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"init container capabilities.drop nulled", "Deployment", `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"capabilities":{"drop":null}}}]}}}}`},
 		{"container runAsUser=0", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":0}}]}}}}`},
 		{"container runAsUser nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsUser":null}}]}}}}`},
+		{"container runAsGroup=0", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsGroup":0}}]}}}}`},
+		{"container runAsGroup nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsGroup":null}}]}}}}`},
+		{"container seLinuxOptions", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"seLinuxOptions":{"type":"spc_t"}}}]}}}}`},
+		{"init container seLinuxOptions", "Deployment", `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"seLinuxOptions":{"type":"spc_t"}}}]}}}}`},
 		{"container runAsNonRoot=false", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":false}}]}}}}`},
 		{"container runAsNonRoot nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsNonRoot":null}}]}}}}`},
 		// Strategic-merge directives ($patch: replace, $patch: delete, $retainKeys)
@@ -354,6 +358,47 @@ func TestPatchPlan_AllowsDroppingCapabilities(t *testing.T) {
 // A null or empty drop list replaces the live one whole rather than merging
 // with it, so a patch that got through would leave the container with the
 // runtime's default capabilities. It must never reach the workload.
+// A container's runAsGroup overrides the pod's, so a patch that the pod-level check
+// refuses must not get through one level down: the pod runs as group 10001, and the
+// container would run as group 0.
+func TestPatch_ContainerRunAsGroupZeroNeverReachesTheWorkload(t *testing.T) {
+	group := int64(10001)
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			SecurityContext: &corev1.PodSecurityContext{RunAsGroup: &group},
+			Containers:      []corev1.Container{{Name: "api", Image: "app"}},
+		}}},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+	target := Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+
+	_, err := r.Plan(context.Background(), Request{Target: target, Patch: `{"spec":{"template":{"spec":{"securityContext":{"runAsGroup":0}}}}}`})
+	require.Error(t, err, "the pod-level patch is refused")
+
+	plan, err := r.Plan(context.Background(), Request{Target: target, Patch: `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsGroup":0}}]}}}}`})
+	if err == nil {
+		_, err = r.Apply(context.Background(), plan, false)
+	}
+	got, getErr := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, getErr)
+	assert.Nil(t, got.Spec.Template.Spec.Containers[0].SecurityContext, "the container's runAsGroup reached the workload")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "runAsGroup")
+}
+
+// A non-root group on a container is still a remediation the patch can make.
+func TestPatchPlan_AllowsANonRootContainerGroup(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"runAsGroup":10001}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
 func TestPatch_DropRemovalNeverReachesTheWorkload(t *testing.T) {
 	for _, patch := range []string{
 		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":null}}}]}}}}`,

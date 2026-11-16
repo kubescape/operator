@@ -382,13 +382,21 @@ func rejectContainerEscalation(container map[string]any) error {
 			}
 		}
 	}
-	if v, present := sc["runAsUser"]; present {
-		if v == nil {
-			return fmt.Errorf("patch: securityContext.runAsUser=null is not allowed in a remediation patch")
+	// A container's runAsGroup and seLinuxOptions take precedence over the pod's,
+	// so they are refused here for the same reasons the pod-level check
+	// (rejectPodSecurityContextEscalation) refuses them.
+	for _, idField := range []string{"runAsUser", "runAsGroup"} {
+		if v, present := sc[idField]; present {
+			if v == nil {
+				return fmt.Errorf("patch: securityContext.%s=null is not allowed in a remediation patch", idField)
+			}
+			if isZeroUID(v) {
+				return fmt.Errorf("patch: securityContext.%s=0 is not allowed in a remediation patch", idField)
+			}
 		}
-		if isZeroUID(v) {
-			return fmt.Errorf("patch: securityContext.runAsUser=0 is not allowed in a remediation patch")
-		}
+	}
+	if _, present := sc["seLinuxOptions"]; present {
+		return fmt.Errorf("patch: securityContext.seLinuxOptions is not allowed in a remediation patch")
 	}
 	if v, present := sc["runAsNonRoot"]; present {
 		if v == nil {
