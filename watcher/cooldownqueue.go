@@ -25,6 +25,8 @@ const (
 // again before the cooldown period is over, the event is overridden and the cooldown period is reset.
 type CooldownQueue struct {
 	closed     bool
+	stopOnce   sync.Once
+	stopCh     chan struct{}
 	mu         sync.Mutex  // mutex for closed
 	chanMu     *sync.Mutex // mutex for innerChan
 	seenEvents cache.ExpiringCache
@@ -40,13 +42,24 @@ func NewCooldownQueue() *CooldownQueue {
 func NewCooldownQueueWithParams(expiration, interval time.Duration) *CooldownQueue {
 	events := make(chan watch.Event)
 	chanMu := sync.Mutex{}
+	stopCh := make(chan struct{})
 	callback := func(key, value any) {
 		chanMu.Lock()
 		defer chanMu.Unlock()
-		events <- value.(watch.Event)
+		select {
+		case <-stopCh:
+			return
+		default:
+		}
+		select {
+		case <-stopCh:
+			return
+		case events <- value.(watch.Event):
+		}
 	}
 	c := cache.NewTTLWithCallback(expiration, interval, callback)
 	return &CooldownQueue{
+		stopCh:     stopCh,
 		chanMu:     &chanMu,
 		seenEvents: c,
 		innerChan:  events,
@@ -74,7 +87,7 @@ func (q *CooldownQueue) Closed() bool {
 func (q *CooldownQueue) Enqueue(e watch.Event) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.closed {
+	if q.closed || q.seenEvents == nil {
 		return
 	}
 	eventKey, err := makeEventKey(e)
@@ -86,10 +99,20 @@ func (q *CooldownQueue) Enqueue(e watch.Event) {
 }
 
 func (q *CooldownQueue) Stop() {
+	q.stopOnce.Do(func() {
+		close(q.stopCh)
+	})
 	q.chanMu.Lock()
 	defer q.chanMu.Unlock()
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	q.closed = true
+	if q.seenEvents != nil {
+		q.seenEvents.RemoveAll()
+		q.seenEvents = nil
+	}
 	close(q.innerChan)
 }

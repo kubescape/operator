@@ -90,6 +90,73 @@ func TestCooldownQueue_Enqueue_InvalidObject(t *testing.T) {
 	}
 }
 
+func TestCooldownQueue_StopWithPendingEvents(t *testing.T) {
+	q := NewCooldownQueueWithParams(50*time.Millisecond, 10*time.Millisecond)
+	q.Enqueue(podAdded)
+	q.Enqueue(deploymentAdded)
+
+	// Keep an active receiver so that if eviction fires before Stop() completes,
+	// the callback does not block on the unbuffered channel while holding chanMu.
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range q.ResultChan {
+		}
+	}()
+
+	assert.NotPanics(t, func() {
+		q.Stop()
+	})
+
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for ResultChan to close after Stop()")
+	}
+
+	// Ensure that after eviction expiration, the callback does not panic
+	// and no sends occur after Stop().
+	time.Sleep(100 * time.Millisecond)
+	assert.True(t, q.Closed())
+	assert.Nil(t, q.seenEvents)
+}
+
+func TestCooldownQueue_StopIdempotent(t *testing.T) {
+	q := NewCooldownQueueWithParams(50*time.Millisecond, 10*time.Millisecond)
+	assert.NotPanics(t, func() {
+		q.Stop()
+		q.Stop()
+	})
+	assert.True(t, q.Closed())
+	assert.Nil(t, q.seenEvents)
+}
+
+func TestCooldownQueue_StopWithoutReceiver(t *testing.T) {
+	// Expiration is fast so eviction fires and attempts to send on unbuffered channel
+	// while no receiver is active.
+	q := NewCooldownQueueWithParams(10*time.Millisecond, 5*time.Millisecond)
+	q.Enqueue(podAdded)
+
+	// Wait past expiration so callback is triggered and attempts to send with no receiver.
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop must not hang waiting on the blocked eviction send.
+	stopped := make(chan struct{})
+	go func() {
+		q.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("Stop() hung waiting on blocked eviction send")
+	}
+
+	assert.True(t, q.Closed())
+	assert.Nil(t, q.seenEvents)
+}
+
 // key is only based on the UID of the object
 func Test_makeEventKey(t *testing.T) {
 	tests := []struct {
