@@ -92,3 +92,27 @@ func TestActionRequestPreservesAsyncTraceContext(t *testing.T) {
 		t.Fatal("job not dispatched")
 	}
 }
+
+func TestActionRequest_MethodNotAllowed(t *testing.T) {
+	handler := &HTTPHandler{}
+	methods := []string{
+		http.MethodGet,
+		http.MethodPut,
+		http.MethodDelete,
+		http.MethodPatch,
+		http.MethodHead,
+	}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/v1/triggerAction", nil)
+			w := httptest.NewRecorder()
+
+			handler.ActionRequest(w, req)
+
+			assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+			assert.Equal(t, http.MethodPost, w.Header().Get("Allow"))
+			assert.Contains(t, w.Body.String(), "method '"+method+"' not allowed")
+		})
+	}
+}
