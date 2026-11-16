@@ -8,6 +8,8 @@ import (
 
 	"github.com/kubescape/operator/admission/rulebinding"
 	"github.com/kubescape/operator/admission/rules"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/admission"
@@ -405,5 +407,36 @@ func TestValidator_NilObjectIsDropped(t *testing.T) {
 	}
 	if len(av.jobs) != 0 {
 		t.Errorf("expected nil-object request to be dropped; queue len=%d", len(av.jobs))
+	}
+}
+
+func TestValidator_TypedObjectIsConvertedToUnstructured(t *testing.T) {
+	cache := &recordingRuleBindingCache{objects: make(chan *unstructured.Unstructured, 1)}
+	av := newTestValidator(cache)
+	av.SetWorkerPool(1, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	av.Start(ctx)
+
+	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	typed := &appsv1.Deployment{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+	}
+	attrs := admission.NewAttributesRecord(typed, nil, gvk, "default", "web", gvr, "",
+		admission.Create, nil, false, &user.DefaultInfo{Name: "kubernetes-admin"})
+
+	if err := av.Validate(ctx, attrs, nil); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+
+	select {
+	case object := <-cache.objects:
+		if object.GetName() != "web" {
+			t.Errorf("got object name %q, want 'web'", object.GetName())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("typed object evaluation timed out; was likely dropped")
 	}
 }

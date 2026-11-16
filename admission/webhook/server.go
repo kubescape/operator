@@ -260,7 +260,16 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 				failure(err, http.StatusBadRequest)
 				return
 			default:
-				oldObject = obj
+				if u, ok := obj.(*unstructured.Unstructured); ok {
+					oldObject = u
+				} else {
+					uMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+					if err != nil {
+						failure(err, http.StatusInternalServerError)
+						return
+					}
+					oldObject = &unstructured.Unstructured{Object: uMap}
+				}
 			}
 		}
 
@@ -285,7 +294,16 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 				failure(err, http.StatusBadRequest)
 				return
 			default:
-				object = obj
+				if u, ok := obj.(*unstructured.Unstructured); ok {
+					object = u
+				} else {
+					uMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+					if err != nil {
+						failure(err, http.StatusInternalServerError)
+						return
+					}
+					object = &unstructured.Unstructured{Object: uMap}
+				}
 			}
 		}
 
@@ -306,7 +324,18 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 			return res
 		}
 
-		//!TODO: Parse options as v1.CreateOptions, v1.DeleteOptions, or v1.PatchOptions
+		var dryRun bool
+		if parsed.Request.DryRun != nil {
+			dryRun = *parsed.Request.DryRun
+		}
+
+		var operationOptions runtime.Object
+		if len(parsed.Request.Options.Raw) > 0 {
+			var optsUnstructured unstructured.Unstructured
+			if err := json.Unmarshal(parsed.Request.Options.Raw, &optsUnstructured); err == nil {
+				operationOptions = &optsUnstructured
+			}
+		}
 
 		attrs = admission.NewAttributesRecord(
 			object,
@@ -321,8 +350,8 @@ func (wh *webhook) handleWebhookValidate(w http.ResponseWriter, req *http.Reques
 			},
 			parsed.Request.SubResource,
 			admission.Operation(parsed.Request.Operation),
-			nil, // operation options?
-			false,
+			operationOptions,
+			dryRun,
 			&user.DefaultInfo{
 				Name:   parsed.Request.UserInfo.Username,
 				UID:    parsed.Request.UserInfo.UID,

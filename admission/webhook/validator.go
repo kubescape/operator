@@ -16,6 +16,7 @@ import (
 	"github.com/kubescape/operator/telemetry"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/client-go/kubernetes"
@@ -291,9 +292,14 @@ func (av *AdmissionValidator) evaluate(ctx context.Context, attrs admission.Attr
 		}
 		un, ok := admitted.(*unstructured.Unstructured)
 		if !ok {
-			logger.L().Warning("admission worker: object is not unstructured",
-				helpers.String("kind", attrs.GetKind().Kind))
-			return
+			uMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(admitted)
+			if err != nil {
+				logger.L().Warning("admission worker: object cannot be converted to unstructured",
+					helpers.String("kind", attrs.GetKind().Kind),
+					helpers.Error(err))
+				return
+			}
+			un = &unstructured.Unstructured{Object: uMap}
 		}
 		object = un
 	}
