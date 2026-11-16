@@ -87,6 +87,47 @@ func TestGenerateDaemonSetNameIsValidForLongLabelValues(t *testing.T) {
 	}
 }
 
+func TestResolveNameCollisions_LongNamesDoNotExceedDNSLimit(t *testing.T) {
+	t.Run("hash suffix disambiguation on long colliding names", func(t *testing.T) {
+		label1 := "gke-prod-cluster-default-pool-highmem-preemptible-v2-west-pool1"
+		label2 := "gke-prod-cluster-default-pool-highmem-preemptible-v2-west-pool2"
+
+		groups := []NodeGroup{
+			{LabelValue: label1, SanitizedName: sanitizeName(label1)},
+			{LabelValue: label2, SanitizedName: sanitizeName(label2)},
+		}
+
+		resolved := resolveNameCollisions(groups)
+		require.Len(t, resolved, 2)
+		assert.NotEqual(t, resolved[0].SanitizedName, resolved[1].SanitizedName)
+
+		for _, g := range resolved {
+			dsName := GenerateDaemonSetName(g)
+			assert.Empty(t, validation.IsDNS1123Subdomain(dsName), "DaemonSet name %q is invalid", dsName)
+			assert.LessOrEqual(t, len(dsName), 63, "DaemonSet name %q exceeds 63 characters (length: %d)", dsName, len(dsName))
+		}
+	})
+
+	t.Run("numeric suffix disambiguation on long assigned names", func(t *testing.T) {
+		longName := "gke-prod-cluster-default-pool-highmem-preemptible"
+		// Simulate two groups sharing the same long SanitizedName reaching the secondary resolution
+		groups := []NodeGroup{
+			{LabelValue: "pool-a", SanitizedName: longName},
+			{LabelValue: "pool-b", SanitizedName: longName},
+		}
+
+		resolved := resolveNameCollisions(groups)
+		require.Len(t, resolved, 2)
+		assert.NotEqual(t, resolved[0].SanitizedName, resolved[1].SanitizedName)
+
+		for _, g := range resolved {
+			dsName := GenerateDaemonSetName(g)
+			assert.Empty(t, validation.IsDNS1123Subdomain(dsName), "DaemonSet name %q is invalid", dsName)
+			assert.LessOrEqual(t, len(dsName), 63, "DaemonSet name %q exceeds 63 characters (length: %d)", dsName, len(dsName))
+		}
+	})
+}
+
 func TestCalculatePercentage(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -300,7 +300,13 @@ func resolveNameCollisions(groups []NodeGroup) []NodeGroup {
 				if groups[idx].IsDefault {
 					hashInput = defaultGroupKey + hashInput
 				}
-				groups[idx].SanitizedName = sanitized + "-" + shortHash(hashInput)
+				suffix := "-" + shortHash(hashInput)
+				maxBaseLen := 50 - len(suffix)
+				base := sanitized
+				if len(base) > maxBaseLen {
+					base = strings.TrimRight(base[:maxBaseLen], "-")
+				}
+				groups[idx].SanitizedName = base + suffix
 			}
 		}
 	}
@@ -325,12 +331,14 @@ func resolveNameCollisions(groups []NodeGroup) []NodeGroup {
 	for _, idx := range indices {
 		name := groups[idx].SanitizedName
 		if assigned[name] {
-			base := name
-			if len(base) > 50 {
-				base = base[:50]
-			}
 			for suffix := 1; ; suffix++ {
-				candidate := base + "-" + strconv.Itoa(suffix)
+				suffixStr := "-" + strconv.Itoa(suffix)
+				maxBaseLen := 50 - len(suffixStr)
+				base := name
+				if len(base) > maxBaseLen {
+					base = strings.TrimRight(base[:maxBaseLen], "-")
+				}
+				candidate := base + suffixStr
 				if !used[candidate] {
 					name = candidate
 					used[name] = true
