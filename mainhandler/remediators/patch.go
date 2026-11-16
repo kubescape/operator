@@ -398,6 +398,30 @@ func rejectContainerEscalation(container map[string]any) error {
 			return fmt.Errorf("patch: securityContext.runAsNonRoot=false is not allowed in a remediation patch")
 		}
 	}
+	return rejectUnconfinedProfiles(sc, "securityContext.")
+}
+
+// rejectUnconfinedProfiles refuses a seccompProfile or appArmorProfile that a patch
+// sets to Unconfined, or deletes (null), which leaves the workload without the
+// profile it had: the kubelet's default for seccomp is Unconfined unless it runs with
+// --seccomp-default. The Pod Security Standards' baseline level does not allow
+// either profile to be Unconfined. RuntimeDefault and Localhost are left to the patch.
+// prefix is the path of the securityContext the profiles are in, for the error.
+func rejectUnconfinedProfiles(sc map[string]any, prefix string) error {
+	for _, name := range []string{"seccompProfile", "appArmorProfile"} {
+		v, present := sc[name]
+		if !present {
+			continue
+		}
+		if v == nil {
+			return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", prefix+name)
+		}
+		if profile, ok := v.(map[string]any); ok {
+			if t, ok := profile["type"].(string); ok && t == "Unconfined" {
+				return fmt.Errorf("patch: field %q=Unconfined is not allowed in a remediation patch", prefix+name+".type")
+			}
+		}
+	}
 	return nil
 }
 
@@ -500,7 +524,7 @@ func rejectPodSecurityContextEscalation(spec map[string]any, specPath string) er
 	if _, present := sc["seLinuxOptions"]; present {
 		return fmt.Errorf("patch: field %q is not allowed in a remediation patch", field("seLinuxOptions"))
 	}
-	return nil
+	return rejectUnconfinedProfiles(sc, specPath+".securityContext.")
 }
 
 // hasPath reports whether path resolves to any value (including null) in m.

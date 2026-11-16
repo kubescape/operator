@@ -255,6 +255,13 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"container securityContext nulled entirely", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":null}]}}}}`},
 		{"container allowPrivilegeEscalation nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"allowPrivilegeEscalation":null}}]}}}}`},
 		{"container capabilities nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":null}}]}}}}`},
+		{"pod seccompProfile Unconfined", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":{"type":"Unconfined"}}}}}}`},
+		{"pod seccompProfile nulled", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":null}}}}}`},
+		{"pod appArmorProfile Unconfined", "Deployment", `{"spec":{"template":{"spec":{"securityContext":{"appArmorProfile":{"type":"Unconfined"}}}}}}`},
+		{"pod seccompProfile Unconfined on Pod", "Pod", `{"spec":{"securityContext":{"seccompProfile":{"type":"Unconfined"}}}}`},
+		{"container seccompProfile Unconfined", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}}}}`},
+		{"container appArmorProfile Unconfined", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"appArmorProfile":{"type":"Unconfined"}}}]}}}}`},
+		{"init container seccompProfile nulled", "Deployment", `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"seccompProfile":null}}]}}}}`},
 		{"container capabilities.drop nulled", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":null}}}]}}}}`},
 		{"container capabilities.drop emptied", "Deployment", `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":[]}}}]}}}}`},
 		{"init container capabilities.drop nulled", "Deployment", `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"capabilities":{"drop":null}}}]}}}}`},
@@ -302,6 +309,24 @@ func TestPatchPlan_AllowsNonEscalationFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, plan.Patch)
+}
+
+// Setting a confining profile is what a seccomp or AppArmor remediation does, at
+// either level, so RuntimeDefault and Localhost are still accepted.
+func TestPatchPlan_AllowsConfiningProfiles(t *testing.T) {
+	for _, patch := range []string{
+		`{"spec":{"template":{"spec":{"securityContext":{"appArmorProfile":{"type":"RuntimeDefault"}}}}}}`,
+		`{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":{"type":"Localhost","localhostProfile":"profiles/audit.json"}}}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"appArmorProfile":{"type":"Localhost","localhostProfile":"k8s-apparmor-example"}}}]}}}}`,
+	} {
+		r := NewPatchRemediator(k8sfake.NewClientset())
+		plan, err := r.Plan(context.Background(), Request{
+			Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+			Patch:  patch,
+		})
+		require.NoError(t, err, patch)
+		assert.NotEmpty(t, plan.Patch)
+	}
 }
 
 func TestPatchPlan_AllowsNonRootSecurityContext(t *testing.T) {
