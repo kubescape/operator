@@ -2,6 +2,7 @@ package servicehandler
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	dynamicFake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes"
 	kubernetesFake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/utils/ptr"
 )
 
@@ -368,4 +370,49 @@ func serviceExtractor(ctx context.Context, regularClient kubernetes.Interface) (
 	}
 	return currentServiceList, metadataList
 
+}
+
+func TestDiscoveryService_ListServicesError_DoesNotDeleteCRDs(t *testing.T) {
+	ctx := context.Background()
+	testSchema := runtime.NewScheme()
+	dynamicClient := dynamicFake.NewSimpleDynamicClientWithCustomListKinds(testSchema, map[schema.GroupVersionResource]string{
+		ServiceScanSchema: "ServiceScanList",
+	})
+
+	// Pre-populate an existing ServiceScanResult CRD
+	existingCRD := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "kubescape.io/v1",
+			"kind":       "ServiceScanResult",
+			"metadata": map[string]interface{}{
+				"name":      "existing-service",
+				"namespace": "prod",
+			},
+			"spec": map[string]interface{}{
+				"clusterIP": "10.0.0.1",
+				"ports": []interface{}{
+					map[string]interface{}{
+						"port":     int64(80),
+						"protocol": "TCP",
+					},
+				},
+			},
+		},
+	}
+	_, err := dynamicClient.Resource(ServiceScanSchema).Namespace("prod").Create(ctx, existingCRD, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	// Create fake clientset and inject an error when listing services
+	regClient := kubernetesFake.NewSimpleClientset()
+	regClient.PrependReactor("list", "services", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("api server connection timeout")
+	})
+
+	err = discoveryService(ctx, regClient, dynamicClient)
+	assert.Error(t, err, "discoveryService should return an error when listing services fails")
+
+	// Ensure the existing CRD was NOT deleted
+	crds, listErr := dynamicClient.Resource(ServiceScanSchema).List(ctx, metav1.ListOptions{})
+	require.NoError(t, listErr)
+	assert.Len(t, crds.Items, 1, "existing ServiceScanResult CRD should not be deleted when service listing fails")
 }

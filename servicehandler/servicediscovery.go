@@ -139,9 +139,10 @@ func discoveryService(ctx context.Context, regularClient kubernetes.Interface, d
 	if err != nil {
 		return fmt.Errorf("failed to create a pool of workers: %w", err)
 	}
+	defer p.Release()
 
 	currentServices := mapset.NewSet[string]()
-	_ = pager.New(func(ctx context.Context, opts metav1.ListOptions) (k8sruntime.Object, error) {
+	listErr := pager.New(func(ctx context.Context, opts metav1.ListOptions) (k8sruntime.Object, error) {
 		return regularClient.CoreV1().Services("").List(ctx, opts)
 	}).EachListItem(ctx, serviceListOptions, func(obj k8sruntime.Object) error {
 		scanWg.Add(1)
@@ -156,12 +157,16 @@ func discoveryService(ctx context.Context, regularClient kubernetes.Interface, d
 		currentServices.Add(service.Namespace + "/" + service.Name)
 		err := p.Invoke(sra)
 		if err != nil {
+			scanWg.Done()
 			logger.L().Ctx(ctx).Error(err.Error())
 		}
 		return nil
 	})
 	scanWg.Wait()
-	p.Release()
+
+	if listErr != nil {
+		return fmt.Errorf("failed to list services: %w", listErr)
+	}
 
 	deleteServices(ctx, dynamicClient.Resource(ServiceScanSchema), currentServices)
 	return nil
