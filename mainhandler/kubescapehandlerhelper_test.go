@@ -266,6 +266,18 @@ func TestFixK8sNameLimit(t *testing.T) {
 			nameLimit: 52,
 			expected:  "invalid-name-was-given",
 		},
+		{
+			name:      "fallback name respects small positive nameLimit",
+			input:     "_",
+			nameLimit: 1,
+			expected:  "i",
+		},
+		{
+			name:      "fallback name respects positive nameLimit cutting at hyphen",
+			input:     "___",
+			nameLimit: 8,
+			expected:  "invalid",
+		},
 	}
 
 	for _, tc := range testCases {
