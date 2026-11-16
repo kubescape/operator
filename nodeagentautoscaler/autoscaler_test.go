@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,17 +111,26 @@ func TestResolveNameCollisions_LongNamesDoNotExceedDNSLimit(t *testing.T) {
 
 	t.Run("numeric suffix disambiguation on long assigned names", func(t *testing.T) {
 		longName := "gke-prod-cluster-default-pool-highmem-preemptible"
-		// Simulate two groups sharing the same long SanitizedName reaching the secondary resolution
+		// A third group whose literal SanitizedName matches the hash-suffixed name
+		// generated for pool-a, forcing a collision after the hash pass.
+		hashSuffix := shortHash("pool-a")
+		base := strings.TrimRight(longName[:50-len("-"+hashSuffix)], "-")
+		collidingName := base + "-" + hashSuffix
+
 		groups := []NodeGroup{
 			{LabelValue: "pool-a", SanitizedName: longName},
 			{LabelValue: "pool-b", SanitizedName: longName},
+			{LabelValue: "pool-c", SanitizedName: collidingName},
 		}
 
 		resolved := resolveNameCollisions(groups)
-		require.Len(t, resolved, 2)
-		assert.NotEqual(t, resolved[0].SanitizedName, resolved[1].SanitizedName)
+		require.Len(t, resolved, 3)
 
+		seen := make(map[string]bool)
 		for _, g := range resolved {
+			assert.False(t, seen[g.SanitizedName], "duplicate SanitizedName %q", g.SanitizedName)
+			seen[g.SanitizedName] = true
+			assert.LessOrEqual(t, len(g.SanitizedName), 50, "SanitizedName %q exceeds 50 characters", g.SanitizedName)
 			dsName := GenerateDaemonSetName(g)
 			assert.Empty(t, validation.IsDNS1123Subdomain(dsName), "DaemonSet name %q is invalid", dsName)
 			assert.LessOrEqual(t, len(dsName), 63, "DaemonSet name %q exceeds 63 characters (length: %d)", dsName, len(dsName))
