@@ -309,3 +309,74 @@ func TestMigrateScheduleCronJobsReportsTheFirstFailureAfterTryingEverySchedule(t
 	require.NoError(t, getErr)
 	assert.Equal(t, "quay.io/kubescape/kubectl:v1.31.0", after.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image, "the other schedule is still migrated")
 }
+
+// withPodMetadata is a template as the chart renders it with kubescapeScheduler.podLabels and
+// podAnnotations (or the kubevuln and registry equivalents) set.
+func withPodMetadata(t *testing.T, template, tier string, labels, annotations map[string]string) *corev1.ConfigMap {
+	t.Helper()
+	cronJob := parseTemplate(t, template, tier)
+	pod := &cronJob.Spec.JobTemplate.Spec.Template
+	for key, value := range labels {
+		pod.Labels[key] = value
+	}
+	pod.Annotations = annotations
+	data, err := yaml.Marshal(cronJob)
+	require.NoError(t, err)
+	configMap := templateConfigMap(t, template, tier)
+	configMap.Data[cronjobTemplateName] = string(data)
+	return configMap
+}
+
+func TestMigrateScheduleCronJobsAppliesTheTemplatePodMetadataToExistingSchedules(t *testing.T) {
+	labels := map[string]string{"team": "platform"}
+	annotations := map[string]string{"sidecar.istio.io/inject": "false"}
+	var objects []runtime.Object
+	for tier := range scheduleTemplates {
+		stale := schedule(t, opsToolTemplate, tier, "stale-"+tier)
+		stale.Spec.JobTemplate.Spec.Template.Annotations["sidecar.istio.io/inject"] = "true"
+		objects = append(objects,
+			withPodMetadata(t, opsToolTemplate, tier, labels, annotations),
+			schedule(t, opsToolTemplate, tier, "current-"+tier),
+			stale,
+			schedule(t, commandTemplate, tier, "script-"+tier),
+		)
+	}
+	api, client := newMigrationAPI(objects...)
+
+	require.NoError(t, MigrateScheduleCronJobs(context.Background(), api, "kubescape"))
+
+	var want []string
+	for tier := range scheduleTemplates {
+		want = append(want, "current-"+tier, "script-"+tier, "stale-"+tier)
+	}
+	sort.Strings(want)
+	assert.Equal(t, want, updatedNames(client))
+	for tier := range scheduleTemplates {
+		for _, prefix := range []string{"current-", "stale-", "script-"} {
+			name := prefix + tier
+			after, err := client.BatchV1().CronJobs("kubescape").Get(context.Background(), name, metav1.GetOptions{})
+			require.NoError(t, err)
+			pod := after.Spec.JobTemplate.Spec.Template
+			assert.Equal(t, "false", pod.Annotations["sidecar.istio.io/inject"], name)
+			assert.Equal(t, "platform", pod.Labels["team"], name)
+			assert.Equal(t, tier, pod.Labels[scheduleTierLabel], name)
+			assert.Equal(t, "job-"+name, pod.Annotations[armotypes.CronJobTemplateAnnotationJobIDKey], "%s keeps its job ID", name)
+			assert.Equal(t, "team", pod.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKey], "%s keeps its namespace", name)
+			assert.Equal(t, renderedPodSpec(parseTemplate(t, opsToolTemplate, tier), name), pod.Spec, name)
+		}
+	}
+}
+
+func TestMigrateScheduleCronJobsLeavesSchedulesWithTheTemplatePodMetadataAlone(t *testing.T) {
+	labels := map[string]string{"team": "platform"}
+	annotations := map[string]string{"sidecar.istio.io/inject": "false"}
+	current := schedule(t, opsToolTemplate, "vuln-scan", "current")
+	current.Spec.JobTemplate.Spec.Template.Labels["team"] = "platform"
+	current.Spec.JobTemplate.Spec.Template.Labels["extra"] = "kept"
+	current.Spec.JobTemplate.Spec.Template.Annotations["sidecar.istio.io/inject"] = "false"
+	api, client := newMigrationAPI(withPodMetadata(t, opsToolTemplate, "vuln-scan", labels, annotations), current)
+
+	require.NoError(t, MigrateScheduleCronJobs(context.Background(), api, "kubescape"))
+
+	assert.Empty(t, updatedNames(client))
+}

@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/kubescape/go-logger"
@@ -31,10 +32,13 @@ var scheduleTemplates = map[string]string{
 // helm-charts#964 it posts to the operator's trigger port, which the chart's NetworkPolicy
 // no longer admits, and after a later template change it can need a ConfigMap or image the
 // chart no longer ships. A schedule whose containers differ from the template's is
-// re-rendered. Only the pod spec changes: name, schedule, labels, annotations and the
-// request ConfigMap stay. A CronJob that the operator did not create, such as the chart's
-// own scheduler with the same tier label, and a template that is not installed leave the
-// CronJob alone. The first failed update is returned once every schedule was tried.
+// re-rendered. Only the pod spec changes: name, schedule and the request ConfigMap stay.
+// The pod labels and annotations the template sets, such as the chart's podLabels and
+// podAnnotations, are applied to every schedule, and the ones the template does not set,
+// such as the job ID the backend gave the schedule, stay. A CronJob that the operator did
+// not create, such as the chart's own scheduler with the same tier label, and a template
+// that is not installed leave the CronJob alone. The first failed update is returned once
+// every schedule was tried.
 func MigrateScheduleCronJobs(ctx context.Context, k8sAPI *k8sinterface.KubernetesApi, namespace string) error {
 	cronJobs, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -63,11 +67,20 @@ func MigrateScheduleCronJobs(ctx context.Context, k8sAPI *k8sinterface.Kubernete
 			}
 			templates[templateName] = template
 		}
+		pod := &cronJob.Spec.JobTemplate.Spec.Template
+		templatePod := &template.Spec.JobTemplate.Spec.Template
 		podSpec := renderedPodSpec(template, cronJob.Name)
-		if sameContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers, podSpec.Containers) {
+		sameSpec := sameContainers(pod.Spec.Containers, podSpec.Containers)
+		labels, labelsChanged := withTemplateMetadata(pod.Labels, templatePod.Labels)
+		annotations, annotationsChanged := withTemplateMetadata(pod.Annotations, templatePod.Annotations)
+		if sameSpec && !labelsChanged && !annotationsChanged {
 			continue
 		}
-		cronJob.Spec.JobTemplate.Spec.Template.Spec = podSpec
+		if !sameSpec {
+			pod.Spec = podSpec
+		}
+		pod.Labels = labels
+		pod.Annotations = annotations
 		if _, err := k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).Update(ctx, cronJob, metav1.UpdateOptions{}); err != nil {
 			logger.L().Ctx(ctx).Error("failed to migrate the schedule", helpers.String("name", cronJob.Name), helpers.Error(err))
 			if firstErr == nil {
@@ -107,4 +120,26 @@ func renderedPodSpec(template *batchv1.CronJob, name string) corev1.PodSpec {
 		}
 	}
 	return spec
+}
+
+// withTemplateMetadata returns the schedule's pod labels or annotations with every key the
+// template sets taken from the template, and reports whether that changed any of them. Keys
+// the template does not set are kept, so the operator's per-schedule annotations survive.
+func withTemplateMetadata(current, template map[string]string) (map[string]string, bool) {
+	changed := false
+	for key, value := range template {
+		if existing, ok := current[key]; !ok || existing != value {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return current, false
+	}
+	merged := maps.Clone(current)
+	if merged == nil {
+		merged = make(map[string]string, len(template))
+	}
+	maps.Copy(merged, template)
+	return merged, true
 }
