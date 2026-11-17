@@ -100,7 +100,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	}
 
 	for i := range req.TargetNames {
-		name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%s-%d", "ks-scheduled-scan", req.TargetNames[i], rand.NewSource(time.Now().UnixNano()).Int63()))
+		name := scheduledScanName(req.TargetNames[i], rand.NewSource(time.Now().UnixNano()).Int63())
 
 		// create config map
 		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, actionHandler.config.Namespace(), name, req); err != nil {

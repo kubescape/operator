@@ -25,6 +25,14 @@ func fixK8sCronJobNameLimit(jobName string) string {
 	return fixK8sNameLimit(jobName, 52)
 }
 
+// scheduledScanName names the CronJob of a scheduled scan of target. The random
+// number at the end is what keeps two schedules of the same target apart, so a
+// long target is cut to make room for it rather than the number being cut off.
+func scheduledScanName(target string, random int64) string {
+	suffix := fmt.Sprintf("-%d", random)
+	return fixK8sNameLimit("ks-scheduled-scan-"+target, 52-len(suffix)) + suffix
+}
+
 // convert to K8s valid name, lower-case, don't end with '-', maximum X characters
 // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
 func fixK8sNameLimit(jobName string, nameLimit int) string {
