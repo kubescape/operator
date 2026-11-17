@@ -15,6 +15,7 @@ import (
 	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/utils"
+	"github.com/kubescape/operator/watcher"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -321,4 +322,46 @@ func TestLaunch_InvalidMatchingRules(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+type testCustomHandler struct {
+	handleFunc func(ctx context.Context, e watch.Event) error
+}
+
+func (m *testCustomHandler) Handle(ctx context.Context, e watch.Event) error {
+	if m.handleFunc != nil {
+		return m.handleFunc(ctx, e)
+	}
+	return nil
+}
+
+func TestServiceWork_NonMetaObjectAndNil(t *testing.T) {
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+	require.NoError(t, err)
+
+	events := make(chan watch.Event, 3)
+	events <- watch.Event{Type: watch.Added, Object: nil}
+	events <- watch.Event{Type: watch.Error, Object: &metav1.Status{Status: "Failure", Message: "something went wrong"}}
+	events <- watch.Event{Type: watch.Added, Object: makePod("default", "test-pod", "")}
+	close(events)
+
+	var handledEvents []watch.Event
+	mockHandler := &testCustomHandler{
+		handleFunc: func(ctx context.Context, e watch.Event) error {
+			handledEvents = append(handledEvents, e)
+			return nil
+		},
+	}
+
+	s := &ContinuousScanningService{
+		cfg:           cfg,
+		eventQueue:    &watcher.CooldownQueue{ResultChan: events},
+		workDone:      make(chan struct{}),
+		eventHandlers: []EventHandler{mockHandler},
+	}
+
+	assert.NotPanics(t, func() {
+		s.work(context.Background())
+	})
+	assert.Len(t, handledEvents, 3)
 }

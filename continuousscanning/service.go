@@ -44,13 +44,18 @@ func (s *ContinuousScanningService) listen(ctx context.Context) error {
 
 		for {
 			select {
-			case e := <-resourceEventsCh:
+			case e, ok := <-resourceEventsCh:
+				if !ok {
+					return
+				}
 				logger.L().Debug(
 					"got event from channel",
 					helpers.Interface("event", e),
 				)
-				if s.cfg.SkipNamespace(e.Object.(metav1.Object).GetNamespace()) {
-					continue
+				if metaObj, ok := e.Object.(metav1.Object); ok {
+					if s.cfg.SkipNamespace(metaObj.GetNamespace()) {
+						continue
+					}
 				}
 				out.Enqueue(e)
 			case <-shutdownCh:
@@ -65,8 +70,10 @@ func (s *ContinuousScanningService) listen(ctx context.Context) error {
 
 func (s *ContinuousScanningService) work(ctx context.Context) {
 	for e := range s.eventQueue.ResultChan {
-		if s.cfg.SkipNamespace(e.Object.(metav1.Object).GetNamespace()) {
-			continue
+		if metaObj, ok := e.Object.(metav1.Object); ok {
+			if s.cfg.SkipNamespace(metaObj.GetNamespace()) {
+				continue
+			}
 		}
 		logger.L().Debug(
 			"got an event to process",
