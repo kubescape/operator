@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	utilsmetadata "github.com/armosec/utils-k8s-go/armometadata"
@@ -339,8 +340,10 @@ func TestServiceWork_NonMetaObjectAndNil(t *testing.T) {
 	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
 	require.NoError(t, err)
 
-	events := make(chan watch.Event, 3)
+	var typedNilUnstructured *unstructured.Unstructured
+	events := make(chan watch.Event, 4)
 	events <- watch.Event{Type: watch.Added, Object: nil}
+	events <- watch.Event{Type: watch.Added, Object: typedNilUnstructured}
 	events <- watch.Event{Type: watch.Error, Object: &metav1.Status{Status: "Failure", Message: "something went wrong"}}
 	events <- watch.Event{Type: watch.Added, Object: makePod("default", "test-pod", "")}
 	close(events)
@@ -363,5 +366,46 @@ func TestServiceWork_NonMetaObjectAndNil(t *testing.T) {
 	assert.NotPanics(t, func() {
 		s.work(context.Background())
 	})
-	assert.Len(t, handledEvents, 3)
+	// literal nil and typed-nil objects are dropped; status and valid pod are handled
+	assert.Len(t, handledEvents, 2)
+}
+
+func TestServiceListen_DropsNilAndTypedNilObjects(t *testing.T) {
+	cfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, utilsmetadata.ClusterConfig{}, &beUtils.Credentials{}, config.Config{Namespace: "kubescape"})
+	require.NoError(t, err)
+
+	q := watcher.NewCooldownQueueWithParams(20*time.Millisecond, 10*time.Millisecond)
+	defer q.Stop()
+
+	resourceEventsCh := make(chan watch.Event, 10)
+	shutdownCh := make(chan struct{})
+	defer close(shutdownCh)
+
+	s := &ContinuousScanningService{
+		cfg: cfg,
+	}
+
+	go s.listenEvents(shutdownCh, resourceEventsCh, q)
+
+	var typedNilUnstructured *unstructured.Unstructured
+	var typedNilPod *corev1.Pod
+
+	resourceEventsCh <- watch.Event{Type: watch.Added, Object: nil}
+	resourceEventsCh <- watch.Event{Type: watch.Added, Object: typedNilUnstructured}
+	resourceEventsCh <- watch.Event{Type: watch.Added, Object: typedNilPod}
+	resourceEventsCh <- watch.Event{Type: watch.Added, Object: makePod("default", "valid-pod", "")}
+
+	select {
+	case e := <-q.ResultChan:
+		assert.Equal(t, "valid-pod", e.Object.(metav1.Object).GetName())
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for event from cooldown queue")
+	}
+
+	// Ensure no extra events reach the queue
+	select {
+	case extra := <-q.ResultChan:
+		t.Fatalf("unexpected extra event received: %v", extra)
+	case <-time.After(50 * time.Millisecond):
+	}
 }

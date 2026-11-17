@@ -58,6 +58,20 @@ func TestEventToUnstructured(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
+
+	t.Run("returns error when event object is typed-nil unstructured", func(t *testing.T) {
+		var u *unstructured.Unstructured
+		res, err := eventToUnstructured(watch.Event{Type: watch.Added, Object: u})
+		assert.Error(t, err)
+		assert.Nil(t, res)
+	})
+
+	t.Run("returns error when event object is typed-nil pod", func(t *testing.T) {
+		var pod *corev1.Pod
+		res, err := eventToUnstructured(watch.Event{Type: watch.Added, Object: pod})
+		assert.Error(t, err)
+		assert.Nil(t, res)
+	})
 }
 
 func TestHandlersWithTypedAndNilObjects(t *testing.T) {
@@ -92,6 +106,13 @@ func TestHandlersWithTypedAndNilObjects(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	t.Run("poolInvokerHandler returns error on typed-nil unstructured without panic", func(t *testing.T) {
+		h := NewTriggeringHandler(wp, cfg)
+		var u *unstructured.Unstructured
+		err := h.Handle(context.Background(), watch.Event{Type: watch.Added, Object: u})
+		assert.Error(t, err)
+	})
+
 	t.Run("deletedCleanerHandler handles typed object without panic", func(t *testing.T) {
 		h := NewDeletedCleanerHandler(wp, cfg, storageClient)
 		pod := &corev1.Pod{
@@ -111,6 +132,13 @@ func TestHandlersWithTypedAndNilObjects(t *testing.T) {
 	t.Run("deletedCleanerHandler returns error on nil object without panic", func(t *testing.T) {
 		h := NewDeletedCleanerHandler(wp, cfg, storageClient)
 		err := h.Handle(context.Background(), watch.Event{Type: watch.Deleted, Object: nil})
+		assert.Error(t, err)
+	})
+
+	t.Run("deletedCleanerHandler returns error on typed-nil unstructured without panic", func(t *testing.T) {
+		h := NewDeletedCleanerHandler(wp, cfg, storageClient)
+		var u *unstructured.Unstructured
+		err := h.Handle(context.Background(), watch.Event{Type: watch.Deleted, Object: u})
 		assert.Error(t, err)
 	})
 }
