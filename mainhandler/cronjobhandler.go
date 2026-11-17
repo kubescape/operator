@@ -31,11 +31,11 @@ func fixK8sNameLimit(jobName string, nameLimit int) string {
 	jobName = strings.ToLower(jobName)
 	jobName = k8sNamesRegex.ReplaceAllString(jobName, "-")
 	jobName = strings.Trim(jobName, "-")
-	if nameLimit > 0 && len(jobName) > nameLimit {
-		jobName = strings.TrimRight(jobName[:nameLimit], "-")
-	}
 	if jobName == "" {
 		jobName = "invalid-name-was-given"
+	}
+	if nameLimit > 0 && len(jobName) > nameLimit {
+		jobName = strings.TrimRight(jobName[:nameLimit], "-")
 	}
 	return jobName
 }
