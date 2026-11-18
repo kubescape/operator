@@ -78,11 +78,14 @@ func makeScanCommand(clusterName string, uObject *unstructured.Unstructured, isD
 
 // eventToUnstructured converts a K8s event to an unstructured.Unstructured object
 func eventToUnstructured(e watch.Event) (*unstructured.Unstructured, error) {
-	if e.Object == nil {
+	if isNilObject(e.Object) {
 		return nil, errors.New("event object is nil")
 	}
 
 	if u, ok := e.Object.(*unstructured.Unstructured); ok {
+		if u == nil {
+			return nil, errors.New("event object is nil")
+		}
 		return u, nil
 	}
 

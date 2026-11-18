@@ -3,15 +3,25 @@ package continuousscanning
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/operator/config"
 	"github.com/kubescape/operator/watcher"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 )
+
+func isNilObject(obj runtime.Object) bool {
+	if obj == nil {
+		return true
+	}
+	v := reflect.ValueOf(obj)
+	return v.Kind() == reflect.Ptr && v.IsNil()
+}
 
 type ContinuousScanningService struct {
 	cfg               config.IConfig
@@ -39,37 +49,44 @@ func (s *ContinuousScanningService) listen(ctx context.Context) error {
 	wp.Run(ctx, resourceEventsCh)
 	logger.L().Info("ran watch pool")
 
-	go func(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *watcher.CooldownQueue) {
-		defer out.Stop()
-
-		for {
-			select {
-			case e, ok := <-resourceEventsCh:
-				if !ok {
-					return
-				}
-				logger.L().Debug(
-					"got event from channel",
-					helpers.Interface("event", e),
-				)
-				if metaObj, ok := e.Object.(metav1.Object); ok {
-					if s.cfg.SkipNamespace(metaObj.GetNamespace()) {
-						continue
-					}
-				}
-				out.Enqueue(e)
-			case <-shutdownCh:
-				return
-			}
-		}
-
-	}(s.shutdownRequested, resourceEventsCh, s.eventQueue)
+	go s.listenEvents(s.shutdownRequested, resourceEventsCh, s.eventQueue)
 
 	return nil
 }
 
+func (s *ContinuousScanningService) listenEvents(shutdownCh <-chan struct{}, resourceEventsCh <-chan watch.Event, out *watcher.CooldownQueue) {
+	defer out.Stop()
+
+	for {
+		select {
+		case e, ok := <-resourceEventsCh:
+			if !ok {
+				return
+			}
+			logger.L().Debug(
+				"got event from channel",
+				helpers.Interface("event", e),
+			)
+			if isNilObject(e.Object) {
+				continue
+			}
+			if metaObj, ok := e.Object.(metav1.Object); ok {
+				if s.cfg.SkipNamespace(metaObj.GetNamespace()) {
+					continue
+				}
+			}
+			out.Enqueue(e)
+		case <-shutdownCh:
+			return
+		}
+	}
+}
+
 func (s *ContinuousScanningService) work(ctx context.Context) {
 	for e := range s.eventQueue.ResultChan {
+		if isNilObject(e.Object) {
+			continue
+		}
 		if metaObj, ok := e.Object.(metav1.Object); ok {
 			if s.cfg.SkipNamespace(metaObj.GetNamespace()) {
 				continue
