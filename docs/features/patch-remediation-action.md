@@ -46,7 +46,9 @@ hand-constructed `Plan` cannot skip it):
   `hostIPC`, `serviceAccountName`/`serviceAccount`, `volumes`, `nodeName`,
   `metadata.ownerReferences`, `metadata.finalizers`, a container's
   `securityContext.privileged`/`allowPrivilegeEscalation`/
-  `capabilities.add`/an empty `capabilities.drop`/`runAsUser: 0`/`runAsGroup: 0`/
+  `capabilities.add`/an empty or narrowed `capabilities.drop` (dropping fewer
+  capabilities than the container's live configuration, or omitting `ALL` when
+  the live container drops `ALL`)/`runAsUser: 0`/`runAsGroup: 0`/
   `runAsNonRoot: false`/`seLinuxOptions` (including JSON-Merge
   null-deletions and strategic-merge directives such as `$patch` or
   `$retainKeys` on `securityContext`, `container`, or `pod spec`), or a container's
