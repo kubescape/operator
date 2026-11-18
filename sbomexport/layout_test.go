@@ -15,11 +15,19 @@ func TestParseRef(t *testing.T) {
 		wantErr bool
 	}{
 		{in: "Payments Team:current", want: projectRef{name: "Payments Team", version: "current"}},
+		{in: "Payments Team: current", want: projectRef{name: "Payments Team", version: "current"}},
+		{in: " Payments Team : current ", want: projectRef{name: "Payments Team", version: "current"}},
 		{in: "a:b:c", want: projectRef{name: "a:b", version: "c"}},
+		{in: "a : b : c", want: projectRef{name: "a : b", version: "c"}},
 		{in: "0A1B2C3D-0000-4000-8000-000000000001", want: projectRef{uuid: "0a1b2c3d-0000-4000-8000-000000000001"}},
+		{in: " Payments Team ", wantErr: true},
 		{in: "Payments Team", wantErr: true},
 		{in: ":current", wantErr: true},
+		{in: " : current ", wantErr: true},
 		{in: "Payments Team:", wantErr: true},
+		{in: " Payments Team : ", wantErr: true},
+		{in: " : ", wantErr: true},
+		{in: "", wantErr: true},
 	}
 	for _, tc := range tt {
 		t.Run(tc.in, func(t *testing.T) {
@@ -74,9 +82,10 @@ func TestNewLayoutRejectsATemplateWithAnUnknownField(t *testing.T) {
 	bad := defaultLayout
 	bad.Parent.Name = "{{ .Cluster }}/{{ .Team }}"
 
-	_, err := newLayout("prod", bad)
+	l, err := newLayout("prod", bad)
 
 	assert.ErrorContains(t, err, "project.parent.name")
+	assert.Nil(t, l)
 }
 
 func TestLayoutTemplatesSeeTheNamespaceLabels(t *testing.T) {

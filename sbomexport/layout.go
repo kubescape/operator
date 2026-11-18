@@ -99,7 +99,12 @@ func parseRef(s string) (projectRef, error) {
 	if i <= 0 || i == len(s)-1 {
 		return projectRef{}, fmt.Errorf("%q is neither a project UUID nor name:version", s)
 	}
-	return projectRef{name: s[:i], version: s[i+1:]}, nil
+	name := strings.TrimSpace(s[:i])
+	version := strings.TrimSpace(s[i+1:])
+	if name == "" || version == "" {
+		return projectRef{}, fmt.Errorf("%q is neither a project UUID nor name:version", s)
+	}
+	return projectRef{name: name, version: version}, nil
 }
 
 // layout resolves placements from the default Layout and namespace annotations.
@@ -164,7 +169,10 @@ func newLayout(cluster string, l Layout) (*layout, error) {
 			errs = append(errs, fmt.Errorf("render %s: %w", t.Name(), err))
 		}
 	}
-	return x, errors.Join(errs...)
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // render executes t and rejects an empty result.
