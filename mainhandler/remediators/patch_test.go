@@ -823,3 +823,13 @@ func TestPatch_DropNarrowingNeverReachesTheWorkload(t *testing.T) {
 	require.NoError(t, getErr)
 	assert.Equal(t, []corev1.Capability{"ALL"}, got.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop)
 }
+
+func TestPatchPlan_CanonicalizesCapabilityDropNames(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["cap_net_raw","  all  "]}}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW","ALL"]}}}]}}}}`, plan.Patch)
+}

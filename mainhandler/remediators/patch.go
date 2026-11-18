@@ -242,7 +242,12 @@ func canonicalizePatch(kind, raw string) (string, error) {
 	if err := rejectEscalation(kind, obj); err != nil {
 		return "", err
 	}
-	return string(jsonBytes), nil
+	canonicalizeCapabilitiesDrop(kind, obj)
+	canonBytes, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	return string(canonBytes), nil
 }
 
 // podSpecPath is the patch-relative path to the pod spec for kind: nested
@@ -692,6 +697,64 @@ func findLiveSecurityContext(spec *corev1.PodSpec, listField, name string) *core
 		}
 	}
 	return nil
+}
+
+// canonicalizeCapabilitiesDrop canonicalizes capability drop names to their
+// standard uppercase, prefix-stripped forms (e.g. "CAP_NET_RAW" -> "NET_RAW",
+// "all" -> "ALL") so that emitted patches use canonical Kubernetes names that
+// container runtimes match reliably.
+func canonicalizeCapabilitiesDrop(kind string, obj map[string]any) {
+	podSpec := podSpecPath(kind)
+	for _, containersField := range []string{"containers", "initContainers", "ephemeralContainers"} {
+		containers, ok := valueAtPath(obj, append(append([]string{}, podSpec...), containersField))
+		if !ok {
+			continue
+		}
+		list, ok := containers.([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range list {
+			container, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			scVal, scPresent := container["securityContext"]
+			if !scPresent || scVal == nil {
+				continue
+			}
+			sc, ok := scVal.(map[string]any)
+			if !ok {
+				continue
+			}
+			capVal, capPresent := sc["capabilities"]
+			if !capPresent || capVal == nil {
+				continue
+			}
+			capabilities, ok := capVal.(map[string]any)
+			if !ok {
+				continue
+			}
+			dropVal, dropPresent := capabilities["drop"]
+			if !dropPresent || dropVal == nil {
+				continue
+			}
+			rawDrops, ok := dropVal.([]any)
+			if !ok {
+				continue
+			}
+			canonicalDrops := make([]any, 0, len(rawDrops))
+			for _, d := range rawDrops {
+				s, ok := d.(string)
+				if !ok {
+					canonicalDrops = append(canonicalDrops, d)
+					continue
+				}
+				canonicalDrops = append(canonicalDrops, normalizeCapability(s))
+			}
+			capabilities["drop"] = canonicalDrops
+		}
+	}
 }
 
 // normalizeCapability returns a canonical uppercase capability name stripped of
