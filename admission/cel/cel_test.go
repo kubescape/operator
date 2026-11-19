@@ -323,3 +323,117 @@ func TestCompileFailure_ReturnsErrorEveryCall(t *testing.T) {
 		t.Error("EvaluateStringExpression: expected compile error, got nil")
 	}
 }
+
+func TestOptionalTypesAndExtensions(t *testing.T) {
+	engine, err := NewAdmissionCEL()
+	if err != nil {
+		t.Fatalf("NewAdmissionCEL: %v", err)
+	}
+
+	evalCtx := map[string]any{
+		"object": map[string]any{
+			"spec": map[string]any{
+				"containers": []any{
+					map[string]any{
+						"name":  "app-container",
+						"image": "my-registry.io/app:v1.2.3",
+						"securityContext": map[string]any{
+							"privileged": true,
+						},
+						"ports": []any{
+							map[string]any{"containerPort": 8080},
+							map[string]any{"containerPort": 8443},
+						},
+					},
+				},
+			},
+			"metadata": map[string]any{
+				"labels": map[string]any{
+					"environment": "production",
+					"tier":        "backend",
+				},
+			},
+		},
+		"params": map[string]any{
+			"requiredLabels": []any{"environment", "tier"},
+			"allowedTiers":   []any{"frontend", "backend"},
+			"allowedCIDR":    "10.0.0.0/16",
+		},
+	}
+
+	tests := []struct {
+		name       string
+		expression string
+		want       bool
+	}{
+		{
+			name:       "OptionalTypes_SafeTraversalAndOrValue",
+			expression: `object.?spec.?containers.orValue([]).exists(c, c.?securityContext.?privileged.orValue(false))`,
+			want:       true,
+		},
+		{
+			name:       "OptionalTypes_MissingFieldFallsBack",
+			expression: `object.?spec.?nonExistentField.orValue("fallback") == "fallback"`,
+			want:       true,
+		},
+		{
+			name:       "Sets_IntersectsAndContains",
+			expression: `sets.contains(params.allowedTiers, [object.metadata.labels["tier"]]) && sets.intersects(params.requiredLabels, ["tier", "other"])`,
+			want:       true,
+		},
+		{
+			name:       "Sets_Equivalent",
+			expression: `sets.equivalent(["a", "b"], ["b", "a"])`,
+			want:       true,
+		},
+		{
+			name:       "Lists_FlattenSliceSortDistinctRange",
+			expression: `[[1, 2], [3]].flatten() == [1, 2, 3] && [10, 20, 30].slice(1, 2) == [20] && lists.range(3) == [0, 1, 2] && [3, 1, 2].sort() == [1, 2, 3] && [1, 2, 2].distinct() == [1, 2]`,
+			want:       true,
+		},
+		{
+			name:       "Math_ExtFunctions",
+			expression: `math.greatest(10, 50, 20) == 50 && math.least(10, 50, 20) == 10 && math.ceil(1.2) == 2.0 && math.floor(1.8) == 1.0 && math.abs(-42) == 42`,
+			want:       true,
+		},
+		{
+			name:       "TwoVarComprehensions_MapAndList",
+			expression: `object.metadata.labels.exists(k, v, k == "environment" && v == "production") && [10, 20, 30].exists(i, v, i == 1 && v == 20)`,
+			want:       true,
+		},
+		{
+			name:       "Bindings_CelBind",
+			expression: `cel.bind(c, object.spec.containers[0], c.name == "app-container" && c.image.startsWith("my-registry.io"))`,
+			want:       true,
+		},
+		{
+			name:       "Encoders_Base64",
+			expression: `base64.encode(b"hello world") == "aGVsbG8gd29ybGQ=" && base64.decode("aGVsbG8gd29ybGQ=") == b"hello world"`,
+			want:       true,
+		},
+		{
+			name:       "Regex_ReplaceAndExtract",
+			expression: `regex.replace("app-v1-2", "v\\d+", "v2") == "app-v2-2" && regex.extract("pod-12345", "\\d+") == optional.of("12345")`,
+			want:       true,
+		},
+		{
+			name:       "Network_IPAndCIDR",
+			expression: `isIP("10.0.1.5") && isCIDR(string(params.allowedCIDR)) && cidr(string(params.allowedCIDR)).containsIP("10.0.1.5") && ip("10.0.1.5").family() == 4`,
+			want:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := engine.EvaluateRuleWithContext(evalCtx, armotypes.EventTypeK8sAdmission, []armotypes.RuleExpression{
+				{EventType: armotypes.EventTypeK8sAdmission, Expression: tt.expression},
+			})
+			if err != nil {
+				t.Fatalf("EvaluateRuleWithContext(%q): %v", tt.expression, err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v for expression %q", got, tt.want, tt.expression)
+			}
+		})
+	}
+}

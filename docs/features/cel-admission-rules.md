@@ -35,6 +35,19 @@ Variables available in expressions:
 | `object`    | `map[string]any`            | Incoming object (new state)        |
 | `oldObject` | `map[string]any`            | Previous object (for UPDATE)       |
 | `options`   | `map[string]any`            | Admission options                  |
+| `params`    | `map[string]any`            | Per-binding parameter overrides    |
+
+Standard CEL extensions and libraries enabled:
+
+- **Optional Types**: Safe field traversal via `.?` and `.orValue(...)` (e.g. `c.?securityContext.?privileged.orValue(false)`).
+- **Sets (`ext.Sets`)**: Set comparisons such as `sets.contains`, `sets.intersects`, and `sets.equivalent`.
+- **Lists (`ext.Lists`)**: List utilities including `.flatten()`, `.slice()`, `.sort()`, `.distinct()`, and `lists.range()`.
+- **Math (`ext.Math`)**: Numerical functions including `math.greatest`, `math.least`, `math.ceil`, `math.floor`, `math.round`, and `math.abs`.
+- **Two-Variable Comprehensions (`ext.TwoVarComprehensions`)**: Map and list comprehensions with key/index and value (e.g. `object.metadata.labels.exists(k, v, ...)`).
+- **Bindings (`ext.Bindings`)**: Local variable definitions via `cel.bind(var, expr, body)`.
+- **Encoders (`ext.Encoders`)**: Base64 encoding/decoding via `base64.encode` and `base64.decode`.
+- **Regex (`ext.Regex`)**: Extended regular expressions via `regex.replace`, `regex.extract`, and `regex.extractAll`.
+- **Network (`ext.Network`)**: IP and CIDR address parsing and inspection (`ip`, `cidr`, `isIP`, `isCIDR`, `.containsIP`).
 
 ### CelRuleCreator (`admission/rules/cel/creator.go`)
 
