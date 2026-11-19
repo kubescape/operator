@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/armosec/armoapi-go/apis"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -117,6 +119,16 @@ func (r *PatchRemediator) Plan(ctx context.Context, req Request) (Plan, error) {
 		return Plan{}, fmt.Errorf("patch: invalid patch payload: %w", err)
 	}
 
+	liveSpec, err := r.getLivePodSpec(ctx, req.Target)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return Plan{}, fmt.Errorf("patch: reading live target: %w", err)
+	}
+	if liveSpec != nil {
+		if err := validateLivePodCapabilities(req.Target.Kind, liveSpec, canonical); err != nil {
+			return Plan{}, err
+		}
+	}
+
 	return Plan{
 		Action:      string(apis.OperatorActionPatch),
 		Target:      req.Target,
@@ -138,6 +150,16 @@ func (r *PatchRemediator) Apply(ctx context.Context, p Plan, dryRun bool) (Resul
 	}
 	if _, err := canonicalizePatch(p.Target.Kind, p.Patch); err != nil {
 		return Result{}, fmt.Errorf("patch: invalid patch payload: %w", err)
+	}
+
+	liveSpec, err := r.getLivePodSpec(ctx, p.Target)
+	if err != nil {
+		return Result{}, fmt.Errorf("patch: reading live target: %w", err)
+	}
+	if liveSpec != nil {
+		if err := validateLivePodCapabilities(p.Target.Kind, liveSpec, p.Patch); err != nil {
+			return Result{}, err
+		}
 	}
 
 	opts := metav1.PatchOptions{}
@@ -220,7 +242,12 @@ func canonicalizePatch(kind, raw string) (string, error) {
 	if err := rejectEscalation(kind, obj); err != nil {
 		return "", err
 	}
-	return string(jsonBytes), nil
+	canonicalizeCapabilitiesDrop(kind, obj)
+	canonBytes, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	return string(canonBytes), nil
 }
 
 // podSpecPath is the patch-relative path to the pod spec for kind: nested
@@ -561,4 +588,265 @@ func valueAtPath(m map[string]any, path []string) (any, bool) {
 		cur = next
 	}
 	return nil, false
+}
+
+// getLivePodSpec retrieves the live PodSpec for the target object from the cluster.
+// If r.client is nil, it returns nil, nil.
+func (r *PatchRemediator) getLivePodSpec(ctx context.Context, t Target) (*corev1.PodSpec, error) {
+	if r.client == nil {
+		return nil, nil
+	}
+	switch strings.ToLower(t.Kind) {
+	case "deployment":
+		o, err := r.client.AppsV1().Deployments(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return &o.Spec.Template.Spec, nil
+	case "statefulset":
+		o, err := r.client.AppsV1().StatefulSets(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return &o.Spec.Template.Spec, nil
+	case "daemonset":
+		o, err := r.client.AppsV1().DaemonSets(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return &o.Spec.Template.Spec, nil
+	case "pod":
+		o, err := r.client.CoreV1().Pods(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return &o.Spec, nil
+	default:
+		return nil, fmt.Errorf("patch: unsupported target kind %q (supported: Deployment, StatefulSet, DaemonSet, Pod)", t.Kind)
+	}
+}
+
+// validateLivePodCapabilities ensures that the patch does not drop fewer
+// capabilities than any existing container in the live object already drops.
+func validateLivePodCapabilities(kind string, liveSpec *corev1.PodSpec, patchJSON string) error {
+	if liveSpec == nil {
+		return nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(patchJSON), &obj); err != nil {
+		return err
+	}
+	podSpec := podSpecPath(kind)
+	for _, containersField := range []string{"containers", "initContainers", "ephemeralContainers"} {
+		containers, ok := valueAtPath(obj, append(append([]string{}, podSpec...), containersField))
+		if !ok {
+			continue
+		}
+		list, ok := containers.([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range list {
+			container, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := container["name"].(string)
+			liveSC := findLiveSecurityContext(liveSpec, containersField, name)
+			if err := rejectCapabilitiesDropNarrowing(name, liveSC, container); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// findLiveSecurityContext looks up the securityContext of a container by name
+// in the live PodSpec's containers, initContainers, or ephemeralContainers list.
+func findLiveSecurityContext(spec *corev1.PodSpec, listField, name string) *corev1.SecurityContext {
+	if spec == nil {
+		return nil
+	}
+	switch listField {
+	case "containers":
+		if name == "" && len(spec.Containers) == 1 {
+			return spec.Containers[0].SecurityContext
+		}
+		for i := range spec.Containers {
+			if spec.Containers[i].Name == name {
+				return spec.Containers[i].SecurityContext
+			}
+		}
+	case "initContainers":
+		if name == "" && len(spec.InitContainers) == 1 {
+			return spec.InitContainers[0].SecurityContext
+		}
+		for i := range spec.InitContainers {
+			if spec.InitContainers[i].Name == name {
+				return spec.InitContainers[i].SecurityContext
+			}
+		}
+	case "ephemeralContainers":
+		if name == "" && len(spec.EphemeralContainers) == 1 {
+			return spec.EphemeralContainers[0].SecurityContext
+		}
+		for i := range spec.EphemeralContainers {
+			if spec.EphemeralContainers[i].Name == name {
+				return spec.EphemeralContainers[i].SecurityContext
+			}
+		}
+	}
+	return nil
+}
+
+// canonicalizeCapabilitiesDrop canonicalizes capability drop names to their
+// standard uppercase, prefix-stripped forms (e.g. "CAP_NET_RAW" -> "NET_RAW",
+// "all" -> "ALL") so that emitted patches use canonical Kubernetes names that
+// container runtimes match reliably.
+func canonicalizeCapabilitiesDrop(kind string, obj map[string]any) {
+	podSpec := podSpecPath(kind)
+	for _, containersField := range []string{"containers", "initContainers", "ephemeralContainers"} {
+		containers, ok := valueAtPath(obj, append(append([]string{}, podSpec...), containersField))
+		if !ok {
+			continue
+		}
+		list, ok := containers.([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range list {
+			container, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			scVal, scPresent := container["securityContext"]
+			if !scPresent || scVal == nil {
+				continue
+			}
+			sc, ok := scVal.(map[string]any)
+			if !ok {
+				continue
+			}
+			capVal, capPresent := sc["capabilities"]
+			if !capPresent || capVal == nil {
+				continue
+			}
+			capabilities, ok := capVal.(map[string]any)
+			if !ok {
+				continue
+			}
+			dropVal, dropPresent := capabilities["drop"]
+			if !dropPresent || dropVal == nil {
+				continue
+			}
+			rawDrops, ok := dropVal.([]any)
+			if !ok {
+				continue
+			}
+			canonicalDrops := make([]any, 0, len(rawDrops))
+			for _, d := range rawDrops {
+				s, ok := d.(string)
+				if !ok {
+					canonicalDrops = append(canonicalDrops, d)
+					continue
+				}
+				canonicalDrops = append(canonicalDrops, normalizeCapability(s))
+			}
+			capabilities["drop"] = canonicalDrops
+		}
+	}
+}
+
+// normalizeCapability returns a canonical uppercase capability name stripped of
+// any "CAP_" prefix, preserving "ALL" as "ALL".
+func normalizeCapability(c string) string {
+	upper := strings.ToUpper(strings.TrimSpace(c))
+	if upper == "ALL" {
+		return "ALL"
+	}
+	return strings.TrimPrefix(upper, "CAP_")
+}
+
+// rejectCapabilitiesDropNarrowing checks whether patchContainer defines a drop
+// list that drops fewer capabilities than liveSC already drops.
+func rejectCapabilitiesDropNarrowing(containerName string, liveSC *corev1.SecurityContext, patchContainer map[string]any) error {
+	if liveSC == nil || liveSC.Capabilities == nil || len(liveSC.Capabilities.Drop) == 0 {
+		return nil
+	}
+	scVal, scPresent := patchContainer["securityContext"]
+	if !scPresent || scVal == nil {
+		return nil
+	}
+	sc, ok := scVal.(map[string]any)
+	if !ok {
+		return nil
+	}
+	capVal, capPresent := sc["capabilities"]
+	if !capPresent || capVal == nil {
+		return nil
+	}
+	capabilities, ok := capVal.(map[string]any)
+	if !ok {
+		return nil
+	}
+	dropVal, dropPresent := capabilities["drop"]
+	if !dropPresent || dropVal == nil {
+		return nil
+	}
+	rawDrops, ok := dropVal.([]any)
+	if !ok {
+		return nil
+	}
+
+	displayName := containerName
+	if displayName == "" {
+		displayName = "<anonymous>"
+	}
+
+	var patchDrops []string
+	patchHasAll := false
+	for _, d := range rawDrops {
+		s, ok := d.(string)
+		if !ok {
+			continue
+		}
+		norm := normalizeCapability(s)
+		if norm == "ALL" {
+			patchHasAll = true
+		}
+		patchDrops = append(patchDrops, norm)
+	}
+
+	// If the patch drops ALL, every capability is dropped — no narrowing occurs.
+	if patchHasAll {
+		return nil
+	}
+
+	liveDrops := make(map[string]struct{}, len(liveSC.Capabilities.Drop))
+	liveHasAll := false
+	for _, d := range liveSC.Capabilities.Drop {
+		norm := normalizeCapability(string(d))
+		if norm == "ALL" {
+			liveHasAll = true
+		}
+		liveDrops[norm] = struct{}{}
+	}
+
+	// If the live container dropped ALL, any replacement drop list that does not include ALL narrows it.
+	if liveHasAll {
+		return fmt.Errorf("patch: container %q narrows dropped capabilities: live container drops ALL, but patch drop list does not include ALL", displayName)
+	}
+
+	patchDropSet := make(map[string]struct{}, len(patchDrops))
+	for _, p := range patchDrops {
+		patchDropSet[p] = struct{}{}
+	}
+
+	for liveCap := range liveDrops {
+		if _, found := patchDropSet[liveCap]; !found {
+			return fmt.Errorf("patch: container %q narrows dropped capabilities: live container drops %q, which is missing from patch drop list", displayName, liveCap)
+		}
+	}
+
+	return nil
 }

@@ -623,3 +623,213 @@ func TestPatchApply_RejectsPodSecurityContextEscalationEvenWithHandcraftedPlan(t
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not allowed")
 }
+
+func TestPatchPlan_RejectsNarrowingCapabilitiesDropWhenLiveDropsALL(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app", SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			}}},
+		}}},
+	}
+	r := NewPatchRemediator(k8sfake.NewClientset(deploy))
+	target := Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+
+	// Patches that drop a subset (narrowing) must be rejected.
+	for _, patch := range []string{
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW","SYS_ADMIN"]}}}]}}}}`,
+	} {
+		_, err := r.Plan(context.Background(), Request{Target: target, Patch: patch})
+		require.Error(t, err, "%s", patch)
+		assert.Contains(t, err.Error(), "narrows dropped capabilities")
+		assert.Contains(t, err.Error(), "live container drops ALL")
+	}
+
+	// Patches that still drop ALL must be accepted.
+	for _, patch := range []string{
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["ALL"]}}}]}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["all"]}}}]}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["ALL","NET_RAW"]}}}]}}}}`,
+	} {
+		plan, err := r.Plan(context.Background(), Request{Target: target, Patch: patch})
+		require.NoError(t, err, "%s", patch)
+		assert.NotEmpty(t, plan.Patch)
+	}
+}
+
+func TestPatchPlan_RejectsNarrowingCapabilitiesDropWhenLiveDropsSubset(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app", SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"NET_RAW", "SYS_TIME"}},
+			}}},
+		}}},
+	}
+	r := NewPatchRemediator(k8sfake.NewClientset(deploy))
+	target := Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+
+	// Dropping only NET_RAW un-drops SYS_TIME -> must be rejected.
+	_, err := r.Plan(context.Background(), Request{
+		Target: target,
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}}}`,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "narrows dropped capabilities")
+	assert.Contains(t, err.Error(), "SYS_TIME")
+
+	// Dropping only SYS_TIME un-drops NET_RAW -> must be rejected.
+	_, err = r.Plan(context.Background(), Request{
+		Target: target,
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["SYS_TIME"]}}}]}}}}`,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "narrows dropped capabilities")
+	assert.Contains(t, err.Error(), "NET_RAW")
+
+	// Patches retaining both (or dropping ALL) must be accepted.
+	for _, patch := range []string{
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["ALL"]}}}]}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW","SYS_TIME","CHOWN"]}}}]}}}}`,
+		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["cap_net_raw","cap_sys_time"]}}}]}}}}`,
+	} {
+		plan, err := r.Plan(context.Background(), Request{Target: target, Patch: patch})
+		require.NoError(t, err, "%s", patch)
+		assert.NotEmpty(t, plan.Patch)
+	}
+}
+
+func TestPatchPlan_AllowsDroppingCapabilitiesWhenLiveDropsNothing(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app"}},
+		}}},
+	}
+	r := NewPatchRemediator(k8sfake.NewClientset(deploy))
+	target := Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+
+	plan, err := r.Plan(context.Background(), Request{
+		Target: target,
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
+func TestPatchPlan_RejectsNarrowingCapabilitiesDropOnInitContainers(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{{Name: "init", Image: "init-app", SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			}}},
+			Containers: []corev1.Container{{Name: "api", Image: "app"}},
+		}}},
+	}
+	r := NewPatchRemediator(k8sfake.NewClientset(deploy))
+	target := Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+
+	// Narrowing init container drop must be rejected.
+	_, err := r.Plan(context.Background(), Request{
+		Target: target,
+		Patch:  `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}}}`,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "narrows dropped capabilities")
+	assert.Contains(t, err.Error(), "init")
+
+	// Keeping ALL on init container must be accepted.
+	plan, err := r.Plan(context.Background(), Request{
+		Target: target,
+		Patch:  `{"spec":{"template":{"spec":{"initContainers":[{"name":"init","securityContext":{"capabilities":{"drop":["ALL"]}}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan.Patch)
+}
+
+func TestPatchPlan_RejectsNarrowingCapabilitiesDropOnEphemeralContainers(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app"}},
+			EphemeralContainers: []corev1.EphemeralContainer{{
+				EphemeralContainerCommon: corev1.EphemeralContainerCommon{
+					Name: "debug",
+					SecurityContext: &corev1.SecurityContext{
+						Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+					},
+				},
+			}},
+		},
+	}
+	r := NewPatchRemediator(k8sfake.NewClientset(pod))
+	target := Target{Kind: "Pod", Namespace: "payments", Name: "api"}
+
+	_, err := r.Plan(context.Background(), Request{
+		Target: target,
+		Patch:  `{"spec":{"ephemeralContainers":[{"name":"debug","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}`,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "narrows dropped capabilities")
+	assert.Contains(t, err.Error(), "debug")
+}
+
+func TestPatchApply_RejectsNarrowingCapabilitiesDropEvenWithHandcraftedPlan(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app", SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			}}},
+		}}},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+
+	_, err := r.Apply(context.Background(), Plan{
+		Action: string(apis.OperatorActionPatch),
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}}}`,
+	}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "narrows dropped capabilities")
+}
+
+func TestPatch_DropNarrowingNeverReachesTheWorkload(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app", SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			}}},
+		}}},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+	target := Target{Kind: "Deployment", Namespace: "payments", Name: "api"}
+	patch := `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW"]}}}]}}}}`
+
+	plan, err := r.Plan(context.Background(), Request{Target: target, Patch: patch})
+	if err == nil {
+		_, err = r.Apply(context.Background(), plan, false)
+	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "narrows dropped capabilities")
+
+	got, getErr := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, getErr)
+	assert.Equal(t, []corev1.Capability{"ALL"}, got.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop)
+}
+
+func TestPatchPlan_CanonicalizesCapabilityDropNames(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["cap_net_raw","  all  "]}}}]}}}}`,
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW","ALL"]}}}]}}}}`, plan.Patch)
+}
