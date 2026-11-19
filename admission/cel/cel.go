@@ -30,13 +30,25 @@ type AdmissionCEL struct {
 }
 
 // NewAdmissionCEL creates a CEL environment with the AdmissionCelEvent and
-// AdmissionCelUserInfo types registered as native Go types. The resulting
-// environment exposes two variables:
+// AdmissionCelUserInfo types registered as native Go types, standard CEL
+// extensions enabled (sets, lists, math, bindings, encoders, regex, network,
+// two-variable comprehensions), and optional types support. The resulting
+// environment exposes variables:
 //
 //	event     — cel.AdmissionCelEvent
 //	eventType — string
+//	object    — map[string]dyn
+//	oldObject — map[string]dyn
+//	options   — map[string]dyn
+//	params    — map[string]dyn
 func NewAdmissionCEL() (*AdmissionCEL, error) {
 	env, err := cel.NewEnv(
+		// Optional types and Network must precede NativeTypes because NativeTypes
+		// composes over whichever type adapter and provider is configured in
+		// cel.Env at the time it is invoked. Adding custom types afterwards is
+		// rejected by ext.nativeTypeProvider.
+		cel.OptionalTypes(),
+		ext.Network(),
 		ext.NativeTypes(
 			reflect.TypeOf(&AdmissionCelEvent{}),
 			reflect.TypeOf(&AdmissionCelUserInfo{}),
@@ -53,6 +65,13 @@ func NewAdmissionCEL() (*AdmissionCEL, error) {
 		// when no binding parameters apply) so expressions remain compilable.
 		cel.Variable("params", cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(),
+		ext.Sets(),
+		ext.Lists(),
+		ext.Math(),
+		ext.TwoVarComprehensions(),
+		ext.Bindings(),
+		ext.Encoders(),
+		ext.Regex(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating CEL environment: %w", err)
