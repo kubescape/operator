@@ -123,6 +123,34 @@ func TestKindFilter_Accepts(t *testing.T) {
 			},
 		},
 		{
+			name: "Kinds listed in an exists over Kind tests",
+			rules: []armotypes.RuntimeRule{
+				makeRule("R1", admExpr(`[event.Kind == "ClusterRoleBinding", event.Kind == "RoleBinding"].exists(k, k) && event.Operation == "CREATE"`)),
+			},
+			wantKinds: []string{"ClusterRoleBinding", "RoleBinding"},
+			probes: []struct {
+				kind   string
+				accept bool
+			}{
+				{"RoleBinding", true},
+				{"Pod", false},
+			},
+		},
+		{
+			name: "disjunction beside a top-level Kind constraint",
+			rules: []armotypes.RuntimeRule{
+				makeRule("R1", admExpr(`event.Kind == "Pod" && (event.Operation == "CREATE" || event.Operation == "UPDATE")`)),
+			},
+			wantKinds: []string{"Pod"},
+			probes: []struct {
+				kind   string
+				accept bool
+			}{
+				{"Pod", true},
+				{"Deployment", false},
+			},
+		},
+		{
 			name: "rule with no Kind constraint => wildcard",
 			rules: []armotypes.RuntimeRule{
 				makeRule("R1", admExpr(`event.Operation == "CREATE"`)),
@@ -193,6 +221,50 @@ func TestKindFilter_Accepts(t *testing.T) {
 				if f.Accepts(p.kind) != p.accept {
 					t.Errorf("Accepts(%q) = %v, want %v", p.kind, f.Accepts(p.kind), p.accept)
 				}
+			}
+		})
+	}
+}
+
+// A Kind test that isn't a conjunct of the top-level && chain doesn't limit the
+// Kinds a rule fires for, so the filter must not drop the other Kinds.
+func TestKindFilter_AcceptsEveryKindARuleFiresFor(t *testing.T) {
+	engine := newTestCelEngine(t)
+	tests := []struct {
+		name, expr, kind, operation, subresource string
+	}{
+		{
+			name:        "negated Kind test",
+			expr:        `!(event.Kind == "PodExecOptions") && event.Operation == "CONNECT"`,
+			kind:        "PodAttachOptions",
+			operation:   "CONNECT",
+			subresource: "attach",
+		},
+		{
+			name:      "Kind test as a ternary condition",
+			expr:      `event.Operation == "CREATE" && (event.Kind == "Secret" ? event.Namespace != "kube-system" : true)`,
+			kind:      "ConfigMap",
+			operation: "CREATE",
+		},
+		{
+			name:        "Kind test beside another condition in an exists",
+			expr:        `[event.Kind == "PodExecOptions", event.Subresource == "attach"].exists(b, b)`,
+			kind:        "PodAttachOptions",
+			operation:   "CONNECT",
+			subresource: "attach",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := makeRule("R1", admExpr(tt.expr))
+			attrs := newEvalTestAttributes(tt.kind, "web", "default", tt.operation, tt.subresource,
+				map[string]interface{}{"kind": tt.kind})
+			if newCelRuleEvaluator(rule, engine).ProcessEvent(attrs, nil) == nil {
+				t.Fatalf("rule %q doesn't fire for a %s event", tt.expr, tt.kind)
+			}
+			f := buildKindFilter([]armotypes.RuntimeRule{rule})
+			if !f.Accepts(tt.kind) {
+				t.Errorf("Accepts(%q) = false for rule %q, which fires for it (filter kinds %v)", tt.kind, tt.expr, f.Kinds())
 			}
 		})
 	}
