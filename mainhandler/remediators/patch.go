@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/armosec/armoapi-go/apis"
+	yamlv3 "gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,10 +31,16 @@ const (
 // automatically reverted because the operator does not record pre-patch state.
 const patchCaveat = "this patch cannot be automatically reverted (no prior state is recorded)"
 
-// maxPatchBytes bounds the accepted patch body. A remediation patch touches a
-// handful of fields (e.g. a seccompProfile); this is generous headroom while
-// still bounding the JSON/YAML decode cost of a hostile payload.
+// maxPatchBytes bounds the accepted raw patch body from the caller. A remediation
+// patch touches a handful of fields (e.g. a seccompProfile); this is generous
+// headroom while still bounding the JSON/YAML decode cost of a hostile payload.
 const maxPatchBytes = 256 << 10 // 256 KiB
+
+// maxCanonicalPatchBytes bounds the canonical patch accepted during Apply.
+// Canonicalization, escaping, or metadata injection can slightly expand the
+// patch beyond maxPatchBytes, so Apply provides headroom over maxPatchBytes while
+// still bounding the decode cost of a hostile payload.
+const maxCanonicalPatchBytes = maxPatchBytes * 2 // 512 KiB
 
 // escalationPaths are podSpec-relative field paths a remediation patch must
 // never touch: each is independently sufficient to escalate from "patch a
@@ -115,7 +123,7 @@ func (r *PatchRemediator) Plan(ctx context.Context, req Request) (Plan, error) {
 		return Plan{}, err
 	}
 
-	canonical, err := canonicalizePatch(req.Target.Kind, req.Patch)
+	canonical, err := canonicalizePatch(req.Target.Kind, req.Patch, maxPatchBytes)
 	if err != nil {
 		return Plan{}, fmt.Errorf("patch: invalid patch payload: %w", err)
 	}
@@ -149,7 +157,7 @@ func (r *PatchRemediator) Apply(ctx context.Context, p Plan, dryRun bool) (Resul
 	if err != nil {
 		return Result{}, err
 	}
-	canonicalPatch, err := canonicalizePatch(p.Target.Kind, p.Patch)
+	canonicalPatch, err := canonicalizePatch(p.Target.Kind, p.Patch, maxCanonicalPatchBytes)
 	if err != nil {
 		return Result{}, fmt.Errorf("patch: invalid patch payload: %w", err)
 	}
@@ -216,20 +224,50 @@ func (r *PatchRemediator) patch(ctx context.Context, t Target, patchType types.P
 	}
 }
 
+// marshalCanonicalJSON encodes v to JSON without HTML escaping (&, <, >),
+// so that characters are not expanded into \u00XX sequences and the output
+// is compact and canonical.
+func marshalCanonicalJSON(v any) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return "", err
+	}
+	return strings.TrimRight(buf.String(), "\n"), nil
+}
+
 // canonicalizePatch validates that raw is a well-formed, size-bounded JSON or
 // YAML object that does not touch an escalation-relevant field for the given
 // target kind, and returns its canonical JSON encoding. A patch body must be
 // an object (not a scalar or array): Strategic Merge Patch and JSON Merge
 // Patch are both object-shaped (unlike RFC 6902 JSON Patch, which this action
 // does not support).
-func canonicalizePatch(kind, raw string) (string, error) {
+func canonicalizePatch(kind, raw string, maxBytes int) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", fmt.Errorf("patch is empty")
 	}
-	if len(trimmed) > maxPatchBytes {
-		return "", fmt.Errorf("patch is too large (%d bytes, max %d)", len(trimmed), maxPatchBytes)
+	if len(trimmed) > maxBytes {
+		return "", fmt.Errorf("patch is too large (%d bytes, max %d)", len(trimmed), maxBytes)
 	}
+
+	// Verify that the original stream contains exactly one valid YAML/JSON document
+	// before converting to JSON, since yaml.YAMLToJSON silently drops documents after
+	// the first one.
+	yamlDec := yamlv3.NewDecoder(strings.NewReader(trimmed))
+	var firstDoc any
+	if err := yamlDec.Decode(&firstDoc); err != nil {
+		return "", fmt.Errorf("patch must be a valid JSON/YAML object: %w", err)
+	}
+	var extraDoc any
+	if err := yamlDec.Decode(&extraDoc); err != io.EOF {
+		if err == nil {
+			return "", fmt.Errorf("patch must contain exactly one JSON/YAML object")
+		}
+		return "", fmt.Errorf("patch contains invalid trailing content: %w", err)
+	}
+
 	// YAML is a JSON superset, so this also accepts plain JSON input without
 	// needing to sniff the format first.
 	jsonBytes, err := yaml.YAMLToJSON([]byte(trimmed))
@@ -255,11 +293,11 @@ func canonicalizePatch(kind, raw string) (string, error) {
 		return "", err
 	}
 	canonicalizeCapabilitiesDrop(kind, obj)
-	canonBytes, err := json.Marshal(obj)
+	canon, err := marshalCanonicalJSON(obj)
 	if err != nil {
 		return "", err
 	}
-	return string(canonBytes), nil
+	return canon, nil
 }
 
 // podSpecPath is the patch-relative path to the pod spec for kind: nested
@@ -670,11 +708,11 @@ func withResourceVersionPrecondition(patchJSON string, liveRV string) (string, e
 				}
 			}
 			md["resourceVersion"] = liveRV
-			b, err := json.Marshal(obj)
+			b, err := marshalCanonicalJSON(obj)
 			if err != nil {
 				return "", err
 			}
-			return string(b), nil
+			return b, nil
 		}
 	}
 	if obj == nil {
@@ -683,11 +721,11 @@ func withResourceVersionPrecondition(patchJSON string, liveRV string) (string, e
 	obj["metadata"] = map[string]any{
 		"resourceVersion": liveRV,
 	}
-	b, err := json.Marshal(obj)
+	b, err := marshalCanonicalJSON(obj)
 	if err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return b, nil
 }
 
 // validateLivePodCapabilities ensures that the patch does not drop fewer
