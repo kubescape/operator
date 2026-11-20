@@ -16,6 +16,10 @@ import (
 // GetControllerDetails returns the pod and controller details (pod, kind, name, namespace, uid, and node name).
 // The workload UID is captured during owner resolution to avoid duplicate API calls.
 func GetControllerDetails(event admission.Attributes, clientset kubernetes.Interface) (*corev1.Pod, string, string, string, string, string, error) {
+	if event == nil {
+		return nil, "", "", "", "", "", fmt.Errorf("invalid pod details from admission event")
+	}
+
 	podName, namespace := event.GetName(), event.GetNamespace()
 
 	if podName == "" || namespace == "" {
@@ -45,6 +49,9 @@ func GetPodDetails(clientset kubernetes.Interface, podName, namespace string) (*
 // ExtractPodOwner returns the kind, name, namespace, and UID of the controller that owns the pod.
 // The UID is captured from OwnerReferences or during resolution to avoid duplicate API calls.
 func ExtractPodOwner(pod *corev1.Pod, clientset kubernetes.Interface) (string, string, string, string) {
+	if pod == nil {
+		return "", "", "", ""
+	}
 	for _, ownerRef := range pod.OwnerReferences {
 		switch ownerRef.Kind {
 		case "ReplicaSet":
@@ -62,8 +69,12 @@ func ExtractPodOwner(pod *corev1.Pod, clientset kubernetes.Interface) (string, s
 // If the ReplicaSet is owned by a Deployment, returns the Deployment's details; otherwise returns the ReplicaSet's details.
 func resolveReplicaSet(ownerRef metav1.OwnerReference, namespace string, clientset kubernetes.Interface) (string, string, string, string) {
 	rs, err := clientset.AppsV1().ReplicaSets(namespace).Get(context.TODO(), ownerRef.Name, metav1.GetOptions{})
-	if err == nil && len(rs.OwnerReferences) > 0 && rs.OwnerReferences[0].Kind == "Deployment" {
-		return "Deployment", rs.OwnerReferences[0].Name, namespace, string(rs.OwnerReferences[0].UID)
+	if err == nil {
+		for _, rsOwner := range rs.OwnerReferences {
+			if rsOwner.Kind == "Deployment" {
+				return "Deployment", rsOwner.Name, namespace, string(rsOwner.UID)
+			}
+		}
 	}
 	// If no Deployment parent or GET failed, use ReplicaSet's UID from the original ownerRef
 	return "ReplicaSet", ownerRef.Name, namespace, string(ownerRef.UID)
@@ -74,8 +85,12 @@ func resolveReplicaSet(ownerRef metav1.OwnerReference, namespace string, clients
 // Otherwise, it returns the Job's details.
 func resolveJob(ownerRef metav1.OwnerReference, namespace string, clientset kubernetes.Interface) (string, string, string, string) {
 	job, err := clientset.BatchV1().Jobs(namespace).Get(context.TODO(), ownerRef.Name, metav1.GetOptions{})
-	if err == nil && len(job.OwnerReferences) > 0 && job.OwnerReferences[0].Kind == "CronJob" {
-		return "CronJob", job.OwnerReferences[0].Name, namespace, string(job.OwnerReferences[0].UID)
+	if err == nil {
+		for _, jobOwner := range job.OwnerReferences {
+			if jobOwner.Kind == "CronJob" {
+				return "CronJob", jobOwner.Name, namespace, string(jobOwner.UID)
+			}
+		}
 	}
 	// If no CronJob parent or GET failed, use Job's UID from the original ownerRef
 	return "Job", ownerRef.Name, namespace, string(ownerRef.UID)
@@ -108,6 +123,9 @@ func PodFromAdmissionObject(event admission.Attributes) *corev1.Pod {
 // exec or attach request. Both PodExecOptions and PodAttachOptions carry the
 // target container in a "container" field, so one decoder serves both.
 func GetContainerNameFromExecToPodEvent(event admission.Attributes) (string, error) {
+	if event == nil {
+		return "", fmt.Errorf("event is nil")
+	}
 	if sub := event.GetSubresource(); sub != "exec" && sub != "attach" {
 		return "", fmt.Errorf("not an exec or attach subresource")
 	}
