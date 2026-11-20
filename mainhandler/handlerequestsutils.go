@@ -1,8 +1,10 @@
 package mainhandler
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -12,7 +14,10 @@ import (
 	"github.com/kubescape/operator/config"
 )
 
-var readinessPollInterval = time.Second
+var (
+	readinessPollInterval = time.Second
+	readinessProbeTimeout = 5 * time.Second
+)
 
 func notWaitAtAll(_ config.IConfig) {
 }
@@ -33,13 +38,16 @@ func waitForVulnScanReady(config config.IConfig) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		resp, err := httputils.HttpGet(VulnScanHttpClient, fullURL.String(), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), readinessProbeTimeout)
+		resp, err := httputils.HttpGetWithContext(ctx, VulnScanHttpClient, fullURL.String(), nil)
 		if err != nil {
+			cancel()
 			continue
 		}
 		statusCode := resp.StatusCode
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
+		cancel()
 		if statusCode >= 200 && statusCode <= 203 {
 			logger.L().Info("image vulnerability scanning is available")
 			break
@@ -55,13 +63,21 @@ func waitForKubescapeReady(config config.IConfig) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		resp, err := httputils.HttpHead(KubescapeHttpClient, fullURL.String(), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), readinessProbeTimeout)
+		req, err := http.NewRequestWithContext(ctx, http.MethodHead, fullURL.String(), nil)
 		if err != nil {
+			cancel()
+			continue
+		}
+		resp, err := KubescapeHttpClient.Do(req)
+		if err != nil {
+			cancel()
 			continue
 		}
 		statusCode := resp.StatusCode
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
+		cancel()
 		if statusCode >= 200 && statusCode <= 203 {
 			logger.L().Info("kubescape service is ready")
 			break

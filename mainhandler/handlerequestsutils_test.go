@@ -138,3 +138,54 @@ func TestWaitForKubescapeReady_ClosesResponseBodyOnRetries(t *testing.T) {
 	assert.Equal(t, int32(0), rt.openBodies.Load(), "all response bodies should be closed")
 	assert.Equal(t, int32(1), rt.maxOpenSeen.Load(), "each retry should close its body before the next attempt")
 }
+
+func TestWaitForVulnScanReady_StalledBodyTimesOutAndRecovers(t *testing.T) {
+	prevInterval := readinessPollInterval
+	prevTimeout := readinessProbeTimeout
+	readinessPollInterval = 5 * time.Millisecond
+	readinessProbeTimeout = 50 * time.Millisecond
+	t.Cleanup(func() {
+		readinessPollInterval = prevInterval
+		readinessProbeTimeout = prevTimeout
+	})
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("partial"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			<-r.Context().Done()
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	rt := &trackingRoundTripper{base: srv.Client().Transport}
+	prevClient := VulnScanHttpClient
+	VulnScanHttpClient = &http.Client{Transport: rt}
+	t.Cleanup(func() { VulnScanHttpClient = prevClient })
+
+	clusterCfg := utilsmetadata.ClusterConfig{KubevulnURL: strings.TrimPrefix(srv.URL, "http://")}
+	opCfg, err := config.NewOperatorConfig(config.CapabilitiesConfig{}, clusterCfg, &beUtils.Credentials{}, config.Config{})
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		waitForVulnScanReady(opCfg)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitForVulnScanReady blocked on stalled 503 response body")
+	}
+
+	assert.Equal(t, int32(2), attempts.Load())
+	assert.Equal(t, int32(0), rt.openBodies.Load(), "all response bodies should be closed")
+}
