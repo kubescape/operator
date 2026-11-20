@@ -90,11 +90,11 @@ type Remediator interface {
 
 // NewRegistry builds the set of remediators backed by the given client. New
 // actions are added by extending this map; the command pipeline does not change.
-// cordon is added in a later phase.
 func NewRegistry(client kubernetes.Interface) map[apis.OperatorActionType]Remediator {
 	return map[apis.OperatorActionType]Remediator{
 		apis.OperatorActionAnnotate:   NewAnnotateRemediator(client),
 		apis.OperatorActionQuarantine: NewQuarantineRemediator(client),
 		apis.OperatorActionPatch:      NewPatchRemediator(client),
+		apis.OperatorActionCordon:     NewCordonRemediator(client),
 	}
 }
