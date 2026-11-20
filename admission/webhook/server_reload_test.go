@@ -353,7 +353,7 @@ func TestRun_ConcurrentConnectionsSurviveRotation(t *testing.T) {
 	certPath, keyPath := filepath.Join(dir, "tls.crt"), filepath.Join(dir, "tls.key")
 	writeSelfSignedCert(t, certPath, keyPath, 1)
 	validator := &heldReloadValidator{entered: make(chan struct{}), release: make(chan struct{})}
-	wh := New(freeLoopbackAddr(t), certPath, keyPath, runtime.NewScheme(), validator, nil).(*webhook)
+	wh := New(freeLoopbackAddr(t), certPath, keyPath, "", runtime.NewScheme(), validator, nil).(*webhook)
 	startReloadTestWebhook(t, wh)
 	held, err := dialReloadTest(wh.addr, "localhost")
 	if err != nil {
