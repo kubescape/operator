@@ -2,6 +2,7 @@ package mainhandler
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -10,6 +11,8 @@ import (
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/config"
 )
+
+var readinessPollInterval = time.Second
 
 func notWaitAtAll(_ config.IConfig) {
 }
@@ -26,41 +29,42 @@ func waitForVulnScanReady(config config.IConfig) {
 	// replace path
 	fullURL.Path = fmt.Sprintf("v1/%s", probes.ReadinessPath)
 
-	timer := time.NewTimer(time.Duration(1) * time.Minute)
+	ticker := time.NewTicker(readinessPollInterval)
+	defer ticker.Stop()
 
-	for {
-		timer.Reset(time.Duration(1) * time.Second)
-		<-timer.C
+	for range ticker.C {
 		resp, err := httputils.HttpGet(VulnScanHttpClient, fullURL.String(), nil)
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
+		statusCode := resp.StatusCode
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if statusCode >= 200 && statusCode <= 203 {
 			logger.L().Info("image vulnerability scanning is available")
 			break
 		}
-
 	}
 }
 
 func waitForKubescapeReady(config config.IConfig) {
 	fullURL := getKubescapeV1ScanURL(config)
 	fullURL.Path = "readyz"
-	timer := time.NewTimer(time.Duration(1) * time.Minute)
 
-	for {
-		timer.Reset(time.Duration(1) * time.Second)
-		<-timer.C
+	ticker := time.NewTicker(readinessPollInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
 		resp, err := httputils.HttpHead(KubescapeHttpClient, fullURL.String(), nil)
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
+		statusCode := resp.StatusCode
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if statusCode >= 200 && statusCode <= 203 {
 			logger.L().Info("kubescape service is ready")
 			break
 		}
-
 	}
 }
