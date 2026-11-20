@@ -1,6 +1,7 @@
 package remediators
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -119,7 +120,7 @@ func (r *PatchRemediator) Plan(ctx context.Context, req Request) (Plan, error) {
 		return Plan{}, fmt.Errorf("patch: invalid patch payload: %w", err)
 	}
 
-	liveSpec, err := r.getLivePodSpec(ctx, req.Target)
+	liveSpec, _, err := r.getLivePodSpecAndResourceVersion(ctx, req.Target)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return Plan{}, fmt.Errorf("patch: reading live target: %w", err)
 	}
@@ -148,25 +149,31 @@ func (r *PatchRemediator) Apply(ctx context.Context, p Plan, dryRun bool) (Resul
 	if err != nil {
 		return Result{}, err
 	}
-	if _, err := canonicalizePatch(p.Target.Kind, p.Patch); err != nil {
+	canonicalPatch, err := canonicalizePatch(p.Target.Kind, p.Patch)
+	if err != nil {
 		return Result{}, fmt.Errorf("patch: invalid patch payload: %w", err)
 	}
 
-	liveSpec, err := r.getLivePodSpec(ctx, p.Target)
+	liveSpec, liveRV, err := r.getLivePodSpecAndResourceVersion(ctx, p.Target)
 	if err != nil {
 		return Result{}, fmt.Errorf("patch: reading live target: %w", err)
 	}
 	if liveSpec != nil {
-		if err := validateLivePodCapabilities(p.Target.Kind, liveSpec, p.Patch); err != nil {
+		if err := validateLivePodCapabilities(p.Target.Kind, liveSpec, canonicalPatch); err != nil {
 			return Result{}, err
 		}
+	}
+
+	patchToSend, err := withResourceVersionPrecondition(canonicalPatch, liveRV)
+	if err != nil {
+		return Result{}, err
 	}
 
 	opts := metav1.PatchOptions{}
 	if dryRun {
 		opts.DryRun = []string{metav1.DryRunAll}
 	}
-	if err := r.patch(ctx, p.Target, patchType, []byte(p.Patch), opts); err != nil {
+	if err := r.patch(ctx, p.Target, patchType, []byte(patchToSend), opts); err != nil {
 		return Result{}, err
 	}
 	return Result{
@@ -175,7 +182,7 @@ func (r *PatchRemediator) Apply(ctx context.Context, p Plan, dryRun bool) (Resul
 		DryRun:      dryRun,
 		Applied:     !dryRun,
 		Description: p.Description,
-		Patch:       p.Patch,
+		Patch:       patchToSend,
 		PatchType:   p.PatchType,
 	}, nil
 }
@@ -230,10 +237,15 @@ func canonicalizePatch(kind, raw string) (string, error) {
 		return "", err
 	}
 	var obj map[string]any
-	if err := json.Unmarshal(jsonBytes, &obj); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(jsonBytes))
+	dec.UseNumber()
+	if err := dec.Decode(&obj); err != nil {
 		return "", fmt.Errorf("patch must be a JSON/YAML object: %w", err)
 	}
-	// json.Unmarshal accepts a literal "null" (or YAML "~") into a nil map
+	if dec.More() {
+		return "", fmt.Errorf("patch must contain exactly one JSON/YAML object")
+	}
+	// json.Unmarshal/Decode accepts a literal "null" (or YAML "~") into a nil map
 	// without error, which would otherwise be applied as a guaranteed no-op
 	// reported as Applied: true.
 	if len(obj) == 0 {
@@ -590,40 +602,92 @@ func valueAtPath(m map[string]any, path []string) (any, bool) {
 	return nil, false
 }
 
-// getLivePodSpec retrieves the live PodSpec for the target object from the cluster.
-// If r.client is nil, it returns nil, nil.
-func (r *PatchRemediator) getLivePodSpec(ctx context.Context, t Target) (*corev1.PodSpec, error) {
+// getLivePodSpecAndResourceVersion retrieves the live PodSpec and ResourceVersion
+// for the target object from the cluster. If r.client is nil, it returns nil, "", nil.
+func (r *PatchRemediator) getLivePodSpecAndResourceVersion(ctx context.Context, t Target) (*corev1.PodSpec, string, error) {
 	if r.client == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 	switch strings.ToLower(t.Kind) {
 	case "deployment":
 		o, err := r.client.AppsV1().Deployments(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return &o.Spec.Template.Spec, nil
+		return &o.Spec.Template.Spec, o.ResourceVersion, nil
 	case "statefulset":
 		o, err := r.client.AppsV1().StatefulSets(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return &o.Spec.Template.Spec, nil
+		return &o.Spec.Template.Spec, o.ResourceVersion, nil
 	case "daemonset":
 		o, err := r.client.AppsV1().DaemonSets(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return &o.Spec.Template.Spec, nil
+		return &o.Spec.Template.Spec, o.ResourceVersion, nil
 	case "pod":
 		o, err := r.client.CoreV1().Pods(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return &o.Spec, nil
+		return &o.Spec, o.ResourceVersion, nil
 	default:
-		return nil, fmt.Errorf("patch: unsupported target kind %q (supported: Deployment, StatefulSet, DaemonSet, Pod)", t.Kind)
+		return nil, "", fmt.Errorf("patch: unsupported target kind %q (supported: Deployment, StatefulSet, DaemonSet, Pod)", t.Kind)
 	}
+}
+
+// getLivePodSpec retrieves the live PodSpec for the target object from the cluster.
+// If r.client is nil, it returns nil, nil.
+func (r *PatchRemediator) getLivePodSpec(ctx context.Context, t Target) (*corev1.PodSpec, error) {
+	spec, _, err := r.getLivePodSpecAndResourceVersion(ctx, t)
+	return spec, err
+}
+
+// withResourceVersionPrecondition injects metadata.resourceVersion into the
+// canonical patch JSON as an optimistic concurrency precondition. If the patch
+// already specifies a resourceVersion that differs from liveRV, it returns an
+// error; if it matches or if liveRV is empty, it returns the patch unchanged.
+func withResourceVersionPrecondition(patchJSON string, liveRV string) (string, error) {
+	if liveRV == "" {
+		return patchJSON, nil
+	}
+	var obj map[string]any
+	dec := json.NewDecoder(strings.NewReader(patchJSON))
+	dec.UseNumber()
+	if err := dec.Decode(&obj); err != nil {
+		return "", fmt.Errorf("patch: unmarshaling patch for resourceVersion precondition: %w", err)
+	}
+	if mdVal, ok := obj["metadata"]; ok {
+		if md, ok := mdVal.(map[string]any); ok {
+			if rvVal, ok := md["resourceVersion"]; ok {
+				if rvStr, ok := rvVal.(string); ok && rvStr != "" {
+					if rvStr != liveRV {
+						return "", fmt.Errorf("patch: resourceVersion %q in patch does not match live object resourceVersion %q", rvStr, liveRV)
+					}
+					return patchJSON, nil
+				}
+			}
+			md["resourceVersion"] = liveRV
+			b, err := json.Marshal(obj)
+			if err != nil {
+				return "", err
+			}
+			return string(b), nil
+		}
+	}
+	if obj == nil {
+		obj = make(map[string]any)
+	}
+	obj["metadata"] = map[string]any{
+		"resourceVersion": liveRV,
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // validateLivePodCapabilities ensures that the patch does not drop fewer
@@ -633,7 +697,9 @@ func validateLivePodCapabilities(kind string, liveSpec *corev1.PodSpec, patchJSO
 		return nil
 	}
 	var obj map[string]any
-	if err := json.Unmarshal([]byte(patchJSON), &obj); err != nil {
+	dec := json.NewDecoder(strings.NewReader(patchJSON))
+	dec.UseNumber()
+	if err := dec.Decode(&obj); err != nil {
 		return err
 	}
 	podSpec := podSpecPath(kind)

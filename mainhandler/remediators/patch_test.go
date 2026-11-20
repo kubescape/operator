@@ -833,3 +833,86 @@ func TestPatchPlan_CanonicalizesCapabilityDropNames(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW","ALL"]}}}]}}}}`, plan.Patch)
 }
+
+func TestPatchPlan_PreservesLargeIntegers(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	// 9007199254740993 is 2^53 + 1, which cannot be represented exactly in float64.
+	// Decoding with json.Decoder.UseNumber() preserves the exact integer.
+	patch := `{"spec":{"template":{"spec":{"terminationGracePeriodSeconds":9007199254740993}}}}`
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  patch,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, plan.Patch, "9007199254740993")
+	assert.NotContains(t, plan.Patch, "9007199254740992")
+	assert.JSONEq(t, patch, plan.Patch)
+}
+
+func TestPatchApply_CanonicalizesPatchBeforeSending(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+
+	// Handcrafted plan bypassing Plan() with uncanonicalized capability drop names.
+	handcraftedPlan := Plan{
+		Action:    string(apis.OperatorActionPatch),
+		Target:    Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		PatchType: string(types.StrategicMergePatchType),
+		Patch:     `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["cap_net_raw","all"]}}}]}}}}`,
+	}
+
+	result, err := r.Apply(context.Background(), handcraftedPlan, false)
+	require.NoError(t, err)
+
+	// Result.Patch must contain canonicalized capability names.
+	assert.JSONEq(t, `{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"capabilities":{"drop":["NET_RAW","ALL"]}}}]}}}}`, result.Patch)
+
+	// Verify the live object received the canonicalized patch.
+	got, err := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Len(t, got.Spec.Template.Spec.Containers, 1)
+	assert.Equal(t, []corev1.Capability{"NET_RAW", "ALL"}, got.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop)
+}
+
+func TestPatchApply_InjectsResourceVersionPrecondition(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api", ResourceVersion: "42"},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+
+	plan := Plan{
+		Action:    string(apis.OperatorActionPatch),
+		Target:    Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		PatchType: string(types.StrategicMergePatchType),
+		Patch:     `{"metadata":{"labels":{"app":"secure"}}}`,
+	}
+
+	result, err := r.Apply(context.Background(), plan, false)
+	require.NoError(t, err)
+
+	// ResourceVersion from the live object must be injected as a precondition.
+	assert.JSONEq(t, `{"metadata":{"labels":{"app":"secure"},"resourceVersion":"42"}}`, result.Patch)
+}
+
+func TestPatchApply_RejectsMismatchedResourceVersion(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api", ResourceVersion: "42"},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+
+	plan := Plan{
+		Action:    string(apis.OperatorActionPatch),
+		Target:    Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		PatchType: string(types.StrategicMergePatchType),
+		Patch:     `{"metadata":{"labels":{"app":"secure"},"resourceVersion":"99"}}`,
+	}
+
+	_, err := r.Apply(context.Background(), plan, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resourceVersion \"99\" in patch does not match live object resourceVersion \"42\"")
+}
