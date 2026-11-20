@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -313,18 +314,100 @@ func TestHandleOperatorAction_TargetRequired(t *testing.T) {
 	assert.Contains(t, err.Error(), "a target is required")
 }
 
-func TestHandleOperatorAction_UnimplementedActions(t *testing.T) {
-	client := k8sfake.NewClientset()
-	cfg := newTestConfig(config.Config{Namespace: "kubescape"})
-	for _, action := range []apis.OperatorActionType{apis.OperatorActionCordon} {
-		ah := newActionHandlerForTest(t, client, cfg, apis.OperatorActionArgs{
-			Action: action,
-			Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
-		})
-		err := ah.handleOperatorAction(context.Background())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not implemented yet")
+func TestHandleOperatorAction_CordonDryRunByDefault(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: false},
 	}
+	client := k8sfake.NewClientset(node)
+	var dryRun []string
+	capturePatchDryRun(client, "nodes", &dryRun)
+
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionCordon,
+		Target: &apis.OperatorActionTarget{Kind: "Node", Name: "worker-1"},
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	assert.Equal(t, []string{metav1.DryRunAll}, dryRun, "cordon without dryRun must default to server-side dry-run")
+}
+
+func TestHandleOperatorAction_CordonConfirmWrites(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: false},
+	}
+	client := k8sfake.NewClientset(node)
+	var dryRun []string
+	capturePatchDryRun(client, "nodes", &dryRun)
+
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action:     apis.OperatorActionCordon,
+		Target:     &apis.OperatorActionTarget{Kind: "Node", Name: "worker-1"},
+		Reason:     "suspicious-miner",
+		FindingRef: "ioc-101",
+		DryRun:     boolPtr(false),
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+	assert.Empty(t, dryRun, "a confirmed cordon must not request dry-run")
+
+	got, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.Equal(t, "true", got.Annotations[remediators.AnnotationCordon])
+	assert.Equal(t, "suspicious-miner", got.Annotations[remediators.AnnotationReason])
+}
+
+func TestHandleOperatorAction_CordonRevert(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "worker-1",
+			Annotations: map[string]string{
+				remediators.AnnotationCordon:     "true",
+				remediators.AnnotationRemediated: "true",
+				remediators.AnnotationReason:     "test",
+			},
+		},
+		Spec: corev1.NodeSpec{Unschedulable: true},
+	}
+	client := k8sfake.NewClientset(node)
+
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionRevert,
+		Target: &apis.OperatorActionTarget{Kind: "Node", Name: "worker-1"},
+		DryRun: boolPtr(false),
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+
+	got, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.False(t, got.Spec.Unschedulable)
+	_, ok := got.Annotations[remediators.AnnotationCordon]
+	assert.False(t, ok)
+}
+
+func TestHandleOperatorAction_CordonRejectsSelector(t *testing.T) {
+	client := k8sfake.NewClientset()
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action:   apis.OperatorActionCordon,
+		Selector: &apis.OperatorActionSelector{Control: "C-0016"},
+	})
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "selector targeting is not supported for action \"cordon\"")
+}
+
+func TestHandleOperatorAction_CordonRejectsNonNode(t *testing.T) {
+	client := k8sfake.NewClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"}})
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionCordon,
+		Target: &apis.OperatorActionTarget{Kind: "Deployment", Namespace: "payments", Name: "api"},
+	})
+	err := ah.handleOperatorAction(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported target kind \"Deployment\"")
 }
 
 // quarantine without --confirm must create the deny-all NetworkPolicy as a

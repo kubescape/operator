@@ -48,10 +48,15 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 		return fmt.Errorf("operatorAction: ttl/auto-revert is not supported yet (later phase); omit ttl")
 	}
 
-	// Unlike annotate/quarantine/revert (and cordon, once implemented), patch
-	// was never part of the CLI-cluster-operations design and has no
-	// legitimate /v1/triggerAction delivery path (that HTTP endpoint has no
-	// caller auth beyond "reached it somehow" — see kubescape/operator#411).
+	// Cordon acts on explicit Node targets only, not workload-findings selectors.
+	if args.Action == apis.OperatorActionCordon && args.Selector != nil {
+		return fmt.Errorf("operatorAction: selector targeting is not supported for action %q (cordon acts on explicit Node targets)", args.Action)
+	}
+
+	// Unlike annotate/quarantine/cordon/revert, patch was never part of the
+	// CLI-cluster-operations design and has no legitimate /v1/triggerAction
+	// delivery path (that HTTP endpoint has no caller auth beyond "reached it
+	// somehow" — see kubescape/operator#411).
 	// ParentCommandDetails is set only by the OperatorCommand CRD watcher
 	// (watcher/commandshandler.go), which is reachable solely through the
 	// RBAC-gated synchronizer/CRD-apply channel, so its absence here means
@@ -132,7 +137,7 @@ func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, ar
 		helpers.String("dryRun", fmt.Sprintf("%t", dryRun)))
 
 	switch args.Action {
-	case apis.OperatorActionAnnotate, apis.OperatorActionQuarantine:
+	case apis.OperatorActionAnnotate, apis.OperatorActionQuarantine, apis.OperatorActionCordon:
 		req := remediators.Request{Target: target, Reason: args.Reason, FindingRef: args.FindingRef}
 		return actionHandler.applyRemediation(ctx, registry[args.Action], req, dryRun)
 
@@ -150,9 +155,6 @@ func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, ar
 	case apis.OperatorActionRevert:
 		// Pass dryRun so a default (no --confirm) revert previews instead of writing.
 		return actionHandler.revertTarget(ctx, registry, target, dryRun)
-
-	case apis.OperatorActionCordon:
-		return fmt.Errorf("operatorAction: action %q is not implemented yet (planned for a later phase)", args.Action)
 
 	default:
 		return fmt.Errorf("operatorAction: unknown action %q", args.Action)
@@ -201,10 +203,17 @@ func (actionHandler *ActionHandler) applyRemediation(ctx context.Context, r reme
 // caveat below is appended to the recorded result so the audit trail does not
 // claim more than actually happened.
 func (actionHandler *ActionHandler) revertTarget(ctx context.Context, registry map[apis.OperatorActionType]remediators.Remediator, target remediators.Target, dryRun bool) error {
-	reversible := []apis.OperatorActionType{apis.OperatorActionAnnotate, apis.OperatorActionQuarantine}
+	var reversible []apis.OperatorActionType
+	if strings.ToLower(target.Kind) == "node" {
+		reversible = []apis.OperatorActionType{apis.OperatorActionCordon}
+	} else {
+		reversible = []apis.OperatorActionType{apis.OperatorActionAnnotate, apis.OperatorActionQuarantine}
+	}
 	var descriptions []string
-	if _, ok := registry[apis.OperatorActionPatch]; ok {
-		descriptions = append(descriptions, "any generic patch previously applied to this target was NOT reverted (no prior state is recorded)")
+	if strings.ToLower(target.Kind) != "node" {
+		if _, ok := registry[apis.OperatorActionPatch]; ok {
+			descriptions = append(descriptions, "any generic patch previously applied to this target was NOT reverted (no prior state is recorded)")
+		}
 	}
 	applied := false
 	for _, action := range reversible {
