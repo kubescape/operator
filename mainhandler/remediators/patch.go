@@ -256,11 +256,11 @@ func canonicalizePatch(kind, raw string, maxBytes int) (string, error) {
 	// before converting to JSON, since yaml.YAMLToJSON silently drops documents after
 	// the first one.
 	yamlDec := yamlv3.NewDecoder(strings.NewReader(trimmed))
-	var firstDoc any
+	var firstDoc yamlv3.Node
 	if err := yamlDec.Decode(&firstDoc); err != nil {
 		return "", fmt.Errorf("patch must be a valid JSON/YAML object: %w", err)
 	}
-	var extraDoc any
+	var extraDoc yamlv3.Node
 	if err := yamlDec.Decode(&extraDoc); err != io.EOF {
 		if err == nil {
 			return "", fmt.Errorf("patch must contain exactly one JSON/YAML object")
@@ -296,6 +296,9 @@ func canonicalizePatch(kind, raw string, maxBytes int) (string, error) {
 	canon, err := marshalCanonicalJSON(obj)
 	if err != nil {
 		return "", err
+	}
+	if len(canon) > maxCanonicalPatchBytes {
+		return "", fmt.Errorf("canonical patch is too large (%d bytes, max %d)", len(canon), maxCanonicalPatchBytes)
 	}
 	return canon, nil
 }

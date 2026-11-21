@@ -1024,3 +1024,20 @@ func TestPatchApply_RejectsOversizedCanonicalPatch(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "too large")
 }
+
+func TestPatchPlan_RejectsCanonicalPatchExceedingLimit(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	// In YAML, "\0" (2 bytes) decodes to a NUL byte which marshals in JSON to "\u0000" (6 bytes).
+	// A raw patch of ~200 KiB (under maxPatchBytes) expands to ~600 KiB canonical JSON,
+	// exceeding maxCanonicalPatchBytes. Plan must reject it directly.
+	repeats := 100_000 // 200,000 bytes of "\0"
+	rawYaml := "metadata:\n  labels:\n    foo: \"" + strings.Repeat(`\0`, repeats) + "\"\n"
+	require.Less(t, len(rawYaml), maxPatchBytes)
+
+	_, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  rawYaml,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "canonical patch is too large")
+}
