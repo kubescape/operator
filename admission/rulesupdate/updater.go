@@ -17,6 +17,7 @@ import (
 
 const (
 	OperatorCommandTypeRuntimeUpdateRules = "RuntimeUpdateRules"
+	defaultUpdateInterval                 = 24 * time.Hour
 )
 
 type RulesUpdater struct {
@@ -39,9 +40,13 @@ type RulesUpdaterConfig struct {
 
 func NewRulesUpdator(ctx context.Context, k8sClient *k8sinterface.KubernetesApi, config RulesUpdaterConfig) *RulesUpdater {
 	ctx, cancel := context.WithCancel(ctx)
+	interval := config.Interval
+	if interval <= 0 {
+		interval = defaultUpdateInterval
+	}
 	updater := &RulesUpdater{
 		k8sClient: k8sClient,
-		interval:  config.Interval,
+		interval:  interval,
 		namespace: config.Namespace,
 		ctx:       ctx,
 		cancel:    cancel,
@@ -50,19 +55,28 @@ func NewRulesUpdator(ctx context.Context, k8sClient *k8sinterface.KubernetesApi,
 	return updater
 }
 
+func (ru *RulesUpdater) Stop() {
+	ru.cancel()
+}
+
 func (ru *RulesUpdater) Start() {
 	logger.L().Info("rules updater started")
+	interval := ru.interval
+	if interval <= 0 {
+		interval = defaultUpdateInterval
+	}
 	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
 		for {
 			if err := ru.SendUpdateRulesCommand(); err != nil {
 				logger.L().Error("error sending update rules command", helpers.Error(err))
 			}
 			select {
 			case <-ru.ctx.Done():
-				ru.cancel()
 				logger.L().Info("rules updater stopped")
 				return
-			case <-time.After(ru.interval):
+			case <-ticker.C:
 				// continue loop
 			}
 		}
@@ -70,6 +84,9 @@ func (ru *RulesUpdater) Start() {
 }
 
 func (ru *RulesUpdater) SendUpdateRulesCommand() error {
+	if ru.k8sClient == nil || ru.k8sClient.GetDynamicClient() == nil {
+		return fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
 	logger.L().Debug("sending update rules command")
 	cmd := &v1alpha1.OperatorCommand{
 		TypeMeta: metav1.TypeMeta{
