@@ -1,7 +1,10 @@
 package mainhandler
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -9,6 +12,11 @@ import (
 	"github.com/armosec/utils-k8s-go/probes"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/config"
+)
+
+var (
+	readinessPollInterval = time.Second
+	readinessProbeTimeout = 5 * time.Second
 )
 
 func notWaitAtAll(_ config.IConfig) {
@@ -26,41 +34,53 @@ func waitForVulnScanReady(config config.IConfig) {
 	// replace path
 	fullURL.Path = fmt.Sprintf("v1/%s", probes.ReadinessPath)
 
-	timer := time.NewTimer(time.Duration(1) * time.Minute)
+	ticker := time.NewTicker(readinessPollInterval)
+	defer ticker.Stop()
 
-	for {
-		timer.Reset(time.Duration(1) * time.Second)
-		<-timer.C
-		resp, err := httputils.HttpGet(VulnScanHttpClient, fullURL.String(), nil)
+	for range ticker.C {
+		ctx, cancel := context.WithTimeout(context.Background(), readinessProbeTimeout)
+		resp, err := httputils.HttpGetWithContext(ctx, VulnScanHttpClient, fullURL.String(), nil)
 		if err != nil {
+			cancel()
 			continue
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
+		statusCode := resp.StatusCode
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		cancel()
+		if statusCode >= 200 && statusCode <= 203 {
 			logger.L().Info("image vulnerability scanning is available")
 			break
 		}
-
 	}
 }
 
 func waitForKubescapeReady(config config.IConfig) {
 	fullURL := getKubescapeV1ScanURL(config)
 	fullURL.Path = "readyz"
-	timer := time.NewTimer(time.Duration(1) * time.Minute)
 
-	for {
-		timer.Reset(time.Duration(1) * time.Second)
-		<-timer.C
-		resp, err := httputils.HttpHead(KubescapeHttpClient, fullURL.String(), nil)
+	ticker := time.NewTicker(readinessPollInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		ctx, cancel := context.WithTimeout(context.Background(), readinessProbeTimeout)
+		req, err := http.NewRequestWithContext(ctx, http.MethodHead, fullURL.String(), nil)
 		if err != nil {
+			cancel()
 			continue
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode <= 203 {
+		resp, err := KubescapeHttpClient.Do(req)
+		if err != nil {
+			cancel()
+			continue
+		}
+		statusCode := resp.StatusCode
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		cancel()
+		if statusCode >= 200 && statusCode <= 203 {
 			logger.L().Info("kubescape service is ready")
 			break
 		}
-
 	}
 }
