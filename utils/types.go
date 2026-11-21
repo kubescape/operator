@@ -45,12 +45,22 @@ func WithPayload(payload []byte) func(*patchStatus) {
 
 func WithMultipleErrors(errors []error) func(*patchStatus) {
 	return func(s *patchStatus) {
-		s.errors = errors
+		nonNil := make([]error, 0, len(errors))
+		for _, err := range errors {
+			if err != nil {
+				nonNil = append(nonNil, err)
+			}
+		}
+		s.errors = nonNil
 	}
 }
 
 func WithError(err error) func(*patchStatus) {
 	return func(s *patchStatus) {
+		if err == nil {
+			s.errors = nil
+			return
+		}
 		s.errors = []error{err}
 	}
 }
@@ -63,13 +73,23 @@ func WithSuccess() func(*patchStatus) {
 
 func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...func(*patchStatus)) {
 	// if the command was not created by an OperatorCommand CRD, do nothing
-	if s.ParentCommandDetails == nil {
+	if s == nil || s.ParentCommandDetails == nil || s.ParentCommandDetails.Command == nil ||
+		s.ParentCommandDetails.Client == nil || s.ParentCommandDetails.Client.GetDynamicClient() == nil {
 		return
 	}
 
 	ps := &patchStatus{}
 	for _, o := range options {
-		o(ps)
+		if o != nil {
+			o(ps)
+		}
+	}
+
+	nonNilErrors := make([]error, 0, len(ps.errors))
+	for _, err := range ps.errors {
+		if err != nil {
+			nonNilErrors = append(nonNilErrors, err)
+		}
 	}
 
 	status := v1alpha1.OperatorCommandStatus{
@@ -81,14 +101,14 @@ func (s *SessionObj) SetOperatorCommandStatus(ctx context.Context, options ...fu
 		Payload:     ps.payload,
 	}
 
-	if len(ps.errors) == 1 {
-		status.Error = &v1alpha1.OperatorCommandStatusError{Message: ps.errors[0].Error()}
-	} else if len(ps.errors) > 1 {
+	if len(nonNilErrors) == 1 {
+		status.Error = &v1alpha1.OperatorCommandStatusError{Message: nonNilErrors[0].Error()}
+	} else if len(nonNilErrors) > 1 {
 		status.Error = &v1alpha1.OperatorCommandStatusError{Message: "Failed with multiple errors"}
 
 		// convert all errors to strings and store them in the payload
-		errorMessages := make([]string, len(ps.errors))
-		for i, err := range ps.errors {
+		errorMessages := make([]string, len(nonNilErrors))
+		for i, err := range nonNilErrors {
 			errorMessages[i] = err.Error()
 		}
 
