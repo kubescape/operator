@@ -916,3 +916,128 @@ func TestPatchApply_RejectsMismatchedResourceVersion(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resourceVersion \"99\" in patch does not match live object resourceVersion \"42\"")
 }
+
+func TestPatchPlan_RejectsMultiDocumentYAML(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	multiDoc := `metadata:
+  labels:
+    foo: bar
+---
+metadata:
+  labels:
+    baz: qux
+`
+	_, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  multiDoc,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "patch must contain exactly one JSON/YAML object")
+}
+
+func TestPatchPlan_RejectsConcatenatedJSON(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	concat := `{"metadata":{"labels":{"foo":"bar"}}} {"metadata":{"labels":{"baz":"qux"}}}`
+	_, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  concat,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing")
+}
+
+func TestPatchPlan_RejectsTrailingGarbage(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	garbage := `{"metadata":{"labels":{"foo":"bar"}}} unexpected trailing text`
+	_, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  garbage,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing")
+}
+
+func TestPatchPlan_AcceptsValidYAMLWithComments(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	yamlWithComments := `# Header comment
+metadata:
+  # Field comment
+  labels:
+    foo: bar # inline comment
+# Footer comment
+`
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  yamlWithComments,
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"metadata":{"labels":{"foo":"bar"}}}`, plan.Patch)
+}
+
+func TestPatchPlanApply_LargePatchWithHTMLCharsNoMismatch(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api", ResourceVersion: "1"},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+
+	// Build a label value near maxPatchBytes containing HTML-sensitive characters (&, <, >).
+	// Under standard json.Marshal, each '&', '<', '>' expands to 6 characters (\u0026, \u003c, \u003e),
+	// which would expand the canonical string far beyond maxPatchBytes.
+	prefix := `{"metadata":{"labels":{"payload":"`
+	suffix := `"}}}`
+	targetLen := maxPatchBytes - 100 // just under maxPatchBytes
+	pattern := "<test&data>"
+	repeats := (targetLen - len(prefix) - len(suffix)) / len(pattern)
+	largeVal := strings.Repeat(pattern, repeats)
+	rawPatch := prefix + largeVal + suffix
+	require.Less(t, len(rawPatch), maxPatchBytes)
+
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  rawPatch,
+	})
+	require.NoError(t, err)
+
+	// Ensure characters were not escaped into \u00XX
+	assert.NotContains(t, plan.Patch, `\u0026`)
+	assert.NotContains(t, plan.Patch, `\u003c`)
+	assert.NotContains(t, plan.Patch, `\u003e`)
+	assert.Contains(t, plan.Patch, "<test&data>")
+
+	// Apply must succeed without rejecting the plan due to size-check mismatch
+	result, err := r.Apply(context.Background(), plan, false)
+	require.NoError(t, err)
+	assert.True(t, result.Applied)
+}
+
+func TestPatchApply_RejectsOversizedCanonicalPatch(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	huge := `{"metadata":{"labels":{"foo":"` + strings.Repeat("a", maxCanonicalPatchBytes) + `"}}}`
+	plan := Plan{
+		Action:    string(apis.OperatorActionPatch),
+		Target:    Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		PatchType: string(types.StrategicMergePatchType),
+		Patch:     huge,
+	}
+	_, err := r.Apply(context.Background(), plan, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too large")
+}
+
+func TestPatchPlan_RejectsCanonicalPatchExceedingLimit(t *testing.T) {
+	r := NewPatchRemediator(k8sfake.NewClientset())
+	// In YAML, "\0" (2 bytes) decodes to a NUL byte which marshals in JSON to "\u0000" (6 bytes).
+	// A raw patch of ~200 KiB (under maxPatchBytes) expands to ~600 KiB canonical JSON,
+	// exceeding maxCanonicalPatchBytes. Plan must reject it directly.
+	repeats := 100_000 // 200,000 bytes of "\0"
+	rawYaml := "metadata:\n  labels:\n    foo: \"" + strings.Repeat(`\0`, repeats) + "\"\n"
+	require.Less(t, len(rawYaml), maxPatchBytes)
+
+	_, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  rawYaml,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "canonical patch is too large")
+}
