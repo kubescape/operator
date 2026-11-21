@@ -45,38 +45,71 @@ func createNewCommandResponseData(commandName string, cb HandleCommandResponseCa
 }
 
 func insertNewCommandResponseData(commandResponseChannel *commandResponseChannelData, data *CommandResponseData) {
+	insertNewCommandResponseDataWithContext(context.Background(), commandResponseChannel, data)
+}
+
+func insertNewCommandResponseDataWithContext(ctx context.Context, commandResponseChannel *commandResponseChannelData, data *CommandResponseData) {
+	if commandResponseChannel == nil || data == nil || data.nextHandledTime == nil {
+		return
+	}
 	timer := time.NewTimer(*data.nextHandledTime)
-	*commandResponseChannel.limitedGoRoutinesCommandResponseChannel <- &timerData{
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+	case *commandResponseChannel.limitedGoRoutinesCommandResponseChannel <- &timerData{
 		timer:   timer,
 		payload: data,
+	}:
 	}
 }
 
-func (mainHandler *MainHandler) waitFroTimer(data *timerData) {
-	<-data.timer.C
-	*mainHandler.commandResponseChannel.commandResponseChannel <- data.payload.(*CommandResponseData)
+func (mainHandler *MainHandler) waitFroTimer(ctx context.Context, data *timerData) {
+	if data == nil || data.timer == nil {
+		return
+	}
+	defer data.timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-data.timer.C:
+	}
+	select {
+	case <-ctx.Done():
+	case *mainHandler.commandResponseChannel.commandResponseChannel <- data.payload.(*CommandResponseData):
+	}
 }
 
-func (mainHandler *MainHandler) handleLimitedGoroutineOfCommandsResponse() {
+func (mainHandler *MainHandler) handleLimitedGoroutineOfCommandsResponse(ctx context.Context) {
 	for {
-		tData := <-*mainHandler.commandResponseChannel.limitedGoRoutinesCommandResponseChannel
-		mainHandler.waitFroTimer(tData)
+		select {
+		case <-ctx.Done():
+			return
+		case tData := <-*mainHandler.commandResponseChannel.limitedGoRoutinesCommandResponseChannel:
+			mainHandler.waitFroTimer(ctx, tData)
+		}
 	}
 }
 
-func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool() {
+func (mainHandler *MainHandler) createInsertCommandsResponseThreadPool(ctx context.Context) {
 	for i := 0; i < MaxLimitationInsertToCommandResponseChannelGoRoutine; i++ {
-		go mainHandler.handleLimitedGoroutineOfCommandsResponse()
+		go mainHandler.handleLimitedGoroutineOfCommandsResponse(ctx)
 	}
 }
 
 func (mainHandler *MainHandler) HandleCommandResponse(ctx context.Context) {
-	mainHandler.createInsertCommandsResponseThreadPool()
+	mainHandler.createInsertCommandsResponseThreadPool(ctx)
 	for {
-		data := <-*mainHandler.commandResponseChannel.commandResponseChannel
-		data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, mainHandler.config, data.payload)
-		if data.isCommandResponseNeedToBeRehandled {
-			insertNewCommandResponseData(mainHandler.commandResponseChannel, data)
+		select {
+		case <-ctx.Done():
+			return
+		case data := <-*mainHandler.commandResponseChannel.commandResponseChannel:
+			if data == nil || data.handleCallBack == nil {
+				continue
+			}
+			data.isCommandResponseNeedToBeRehandled, data.nextHandledTime = data.handleCallBack(ctx, mainHandler.config, data.payload)
+			if data.isCommandResponseNeedToBeRehandled {
+				insertNewCommandResponseDataWithContext(ctx, mainHandler.commandResponseChannel, data)
+			}
 		}
 	}
 }
