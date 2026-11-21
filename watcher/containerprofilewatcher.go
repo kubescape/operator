@@ -235,8 +235,7 @@ func (wh *WatchHandler) podForProfile(obj *spdxv1beta1.ContainerProfile) (*corev
 }
 
 // matchingPod resolves the workload named by the profile's labels through the dynamic
-// client and returns the first present pod its selector matches, checking the
-// controller revision for StatefulSets and DaemonSets and the owner for ReplicaSets.
+// client and returns a present pod matching its selector, revision and ownership.
 func (wh *WatchHandler) matchingPod(obj *spdxv1beta1.ContainerProfile) *corev1.Pod {
 	labels := obj.Labels
 	// construct the GroupVersionResource for the workload
@@ -269,10 +268,16 @@ func (wh *WatchHandler) matchingPod(obj *spdxv1beta1.ContainerProfile) *corev1.P
 		logger.L().Debug("matchingPod - empty pod selector from workload", helpers.String("gvr", gvr.String()), helpers.String("namespace", namespace), helpers.String("name", name))
 		return nil
 	}
-	var revisionConstraint string
+	var revisionLabel, revisionConstraint string
 	workloadKind := labels[helpersv1.RelatedKindMetadataKey]
 	switch workloadKind {
+	case "Deployment":
+		// Older profiles without a template hash match at Deployment scope.
+		if revisionConstraint = labels[helpersv1.TemplateHashKey]; revisionConstraint != "" {
+			revisionLabel = appsv1.DefaultDeploymentUniqueLabelKey
+		}
 	case "StatefulSet", "DaemonSet":
+		revisionLabel = appsv1.StatefulSetRevisionLabel
 		instanceID, err := containerinstance.GenerateInstanceIDFromString(obj.Annotations[helpersv1.InstanceIDMetadataKey])
 		if err != nil || instanceID.Kind != workloadKind || instanceID.Namespace != namespace {
 			return nil
@@ -298,7 +303,7 @@ func (wh *WatchHandler) matchingPod(obj *spdxv1beta1.ContainerProfile) *corev1.P
 		if !podIsPresent(pod) {
 			continue
 		}
-		if (workloadKind == "StatefulSet" || workloadKind == "DaemonSet") && pod.Labels[appsv1.StatefulSetRevisionLabel] != revisionConstraint {
+		if revisionLabel != "" && pod.Labels[revisionLabel] != revisionConstraint {
 			continue
 		}
 		if wh.ownsPod(pod, workloadKind, name, namespace, workloadObj.GetUID()) {

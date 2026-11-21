@@ -485,7 +485,7 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 	daemonPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "node-agent-xyz", Namespace: namespace, Labels: map[string]string{"app": "node-agent", appsv1.StatefulSetRevisionLabel: "f9dd7596f"}, OwnerReferences: []metav1.OwnerReference{{Kind: "DaemonSet", Name: daemonSet.Name, UID: daemonSet.UID}}}}
 	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "batch-job-pod", Namespace: namespace, Labels: map[string]string{"job-name": "batch-job"}, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: job.Name, UID: job.UID}}}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
 	failedJobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "failed-job-pod", Namespace: namespace, Labels: map[string]string{"job-name": "failed-job"}, OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: failedJob.Name, UID: failedJob.UID}}}, Status: corev1.PodStatus{Phase: corev1.PodFailed}}
-	expressionPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "expression-pod", Namespace: namespace, Labels: map[string]string{"tier": "backend"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: expressionReplicaSet.Name, UID: expressionReplicaSet.UID}}}}
+	expressionPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "expression-pod", Namespace: namespace, Labels: map[string]string{"tier": "backend", appsv1.DefaultDeploymentUniqueLabelKey: "abc"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: expressionReplicaSet.Name, UID: expressionReplicaSet.UID}}}}
 	directPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "direct-pod", Namespace: namespace}}
 	completedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded}}
 	failedPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: namespace}, Status: corev1.PodStatus{Phase: corev1.PodFailed}}
@@ -525,6 +525,20 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 			helpersv1.RelatedKindMetadataKey: "Pod", helpersv1.RelatedNameMetadataKey: podName,
 		}}}
 	}
+	deploymentRevision := func(hash string) *spdxv1beta1.ContainerProfile {
+		return &spdxv1beta1.ContainerProfile{ObjectMeta: metav1.ObjectMeta{
+			Name: "deployment-" + hash, Namespace: namespace,
+			Labels: map[string]string{
+				helpersv1.ApiGroupMetadataKey: "apps", helpersv1.ApiVersionMetadataKey: "v1",
+				helpersv1.RelatedKindMetadataKey: "Deployment", helpersv1.RelatedNameMetadataKey: expressionWorkload.Name,
+				helpersv1.RelatedNamespaceMetadataKey: namespace, helpersv1.TemplateHashKey: hash,
+			},
+			Annotations: map[string]string{
+				helpersv1.InstanceIDMetadataKey: "apiVersion-apps/v1/namespace-web/kind-ReplicaSet/name-expression-workload-" + hash + "/containerName-app",
+				helpersv1.WlidMetadataKey:       "wlid://cluster-test/namespace-web/deployment-expression-workload",
+			},
+		}}
+	}
 	profiles := []*spdxv1beta1.ContainerProfile{
 		replicaSetProfile("deleted-generation", "app-deleted"),
 		replicaSetProfile("wrong-generation", wrongOwner.Name),
@@ -545,6 +559,7 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 		}}},
 		daemonSetProfile("old-daemon-generation", "abc123old"),
 		daemonSetProfile("current-daemon-generation", "f9dd7596f"),
+		deploymentRevision("old"), deploymentRevision("abc"),
 	}
 	require.True(t, hasMatchingPod(wh, profiles[2]), "current ReplicaSet must have a matching Pod")
 	require.False(t, hasMatchingPod(wh, profiles[3]), "old StatefulSet revision must not match the current Pod")
@@ -583,7 +598,7 @@ func TestContainerProfileRelistSkipsOrphanedInstances(t *testing.T) {
 			names = append(names, cmd.Args[utils.ArgsName].(string))
 		case err, ok := <-errors:
 			if !ok {
-				assert.ElementsMatch(t, []string{"current-generation", "current-stateful-generation", "current-daemon-generation", "completed-cronjob-run", "failed-job-run", "expression-generation", "completed-pod", "current-pod", "failed-pod"}, names)
+				assert.ElementsMatch(t, []string{"current-generation", "current-stateful-generation", "current-daemon-generation", "completed-cronjob-run", "failed-job-run", "expression-generation", "deployment-abc", "completed-pod", "current-pod", "failed-pod"}, names)
 				return
 			}
 			t.Errorf("unexpected event error: %v", err)
