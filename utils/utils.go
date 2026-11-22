@@ -225,7 +225,7 @@ func PodHasParent(pod *corev1.Pod) bool {
 		return false
 	}
 	for _, ref := range pod.OwnerReferences {
-		if slices.Contains([]string{"apps/v1", "batch/v1", "batch/v1beta1"}, ref.APIVersion) {
+		if (ref.Controller != nil && *ref.Controller) || slices.Contains([]string{"apps/v1", "batch/v1", "batch/v1beta1"}, ref.APIVersion) {
 			return true
 		}
 	}

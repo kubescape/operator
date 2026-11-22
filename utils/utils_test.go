@@ -205,6 +205,9 @@ func TestPodToContainerData_EphemeralContainer(t *testing.T) {
 }
 
 func TestPodHasParent(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
 	tests := []struct {
 		name     string
 		pod      *corev1.Pod
@@ -266,16 +269,52 @@ func TestPodHasParent(t *testing.T) {
 							APIVersion: "custom.io/v1",
 							Kind:       "CustomResource",
 							Name:       "custom",
+							Controller: &falseVal,
 						},
 						{
 							APIVersion: "apps/v1",
 							Kind:       "ReplicaSet",
 							Name:       "my-deploy-rs",
+							Controller: &trueVal,
 						},
 					},
 				},
 			},
 			expected: true,
+		},
+		{
+			name: "pod with owner reference where Controller is true but APIVersion is custom",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "custom-controller-pod",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "argoproj.io/v1alpha1",
+							Kind:       "Rollout",
+							Name:       "my-rollout",
+							Controller: &trueVal,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pod with non-matching owner references and no pod-template-hash",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "other-owner-pod",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "custom.io/v1",
+							Kind:       "CustomResource",
+							Name:       "custom",
+							Controller: &falseVal,
+						},
+					},
+				},
+			},
+			expected: false,
 		},
 		{
 			name: "pod with non-workload ownerReference at index 0 but has pod-template-hash label",
@@ -290,6 +329,7 @@ func TestPodHasParent(t *testing.T) {
 							APIVersion: "custom.io/v1",
 							Kind:       "CustomResource",
 							Name:       "custom",
+							Controller: &falseVal,
 						},
 					},
 				},
@@ -307,6 +347,18 @@ func TestPodHasParent(t *testing.T) {
 				},
 			},
 			expected: true,
+		},
+		{
+			name: "pod with empty pod-template-hash label and no owner references",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "empty-hash-pod",
+					Labels: map[string]string{
+						"pod-template-hash": "",
+					},
+				},
+			},
+			expected: false,
 		},
 	}
 
