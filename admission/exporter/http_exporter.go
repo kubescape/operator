@@ -142,10 +142,13 @@ func (exporter *HTTPExporter) sendAlertLimitReached() {
 }
 
 func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) {
-	isLimitReached := exporter.checkAlertLimit()
-	if isLimitReached && !exporter.alertLimitNotified {
-		exporter.sendAlertLimitReached()
-		exporter.alertLimitNotified = true
+	// Over the limit every alert is dropped until the window resets. Only the
+	// first one is replaced by the AlertLimitReached notice.
+	if exporter.checkAlertLimit() {
+		if !exporter.alertLimitNotified {
+			exporter.sendAlertLimitReached()
+			exporter.alertLimitNotified = true
+		}
 		return
 	}
 	// populate the RuntimeAlert struct with the data from the failedRule
