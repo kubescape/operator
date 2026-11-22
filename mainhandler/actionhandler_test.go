@@ -467,6 +467,12 @@ func TestHandleOperatorAction_CordonRevertSkipsNodeNotCordonedByKubescape(t *tes
 	got, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.True(t, got.Spec.Unschedulable)
+
+	// Event must reflect that revert was a no-op
+	events, err := client.CoreV1().Events("kubescape").List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.NotEmpty(t, events.Items)
+	assert.Contains(t, events.Items[0].Message, "no-op, no changes made")
 }
 
 func TestHandleOperatorAction_CordonRevertNormalizesNodeNamespace(t *testing.T) {

@@ -286,6 +286,8 @@ func (actionHandler *ActionHandler) emitActionEvent(ctx context.Context, result 
 	outcome := "applied"
 	if result.DryRun {
 		outcome = "dry-run, no changes made"
+	} else if !result.Applied {
+		outcome = "no-op, no changes made"
 	}
 
 	event := &corev1.Event{

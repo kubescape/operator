@@ -155,7 +155,8 @@ func TestCordonRevert_DryRunDoesNotMutate(t *testing.T) {
 func TestCordonRevert_RestoresSchedulableAndCleansAnnotations(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "worker-1",
+			Name:            "worker-1",
+			ResourceVersion: "42",
 			Annotations: map[string]string{
 				AnnotationCordon:     "true",
 				AnnotationRemediated: "true",
@@ -173,6 +174,7 @@ func TestCordonRevert_RestoresSchedulableAndCleansAnnotations(t *testing.T) {
 	assert.True(t, res.Applied)
 	assert.Equal(t, string(apis.OperatorActionRevert), res.Action)
 	assert.Contains(t, res.Description, `marked node "worker-1" schedulable (uncordon)`)
+	assert.Contains(t, res.Patch, `"resourceVersion":"42"`)
 
 	updated, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
 	require.NoError(t, err)
