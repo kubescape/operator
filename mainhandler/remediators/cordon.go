@@ -102,13 +102,32 @@ func (r *CordonRemediator) Apply(ctx context.Context, p Plan, dryRun bool) (Resu
 }
 
 // Revert restores the target node to schedulable (spec.unschedulable=false) and
-// clears the Kubescape cordon annotations. Server-side dry-run is honored.
+// clears the Kubescape cordon annotations, provided the node was cordoned by
+// Kubescape (has kubescape.io/cordon annotation). If the node was cordoned
+// externally without this annotation, Revert is a no-op to avoid uncordoning
+// nodes cordoned for maintenance or other external reasons.
 func (r *CordonRemediator) Revert(ctx context.Context, t Target, dryRun bool) (Result, error) {
 	if err := validateTarget(t); err != nil {
 		return Result{}, err
 	}
 	if strings.ToLower(t.Kind) != "node" {
 		return Result{}, fmt.Errorf("cordon: unsupported target kind %q (supported: Node)", t.Kind)
+	}
+
+	if r.client != nil {
+		node, err := r.client.CoreV1().Nodes().Get(ctx, t.Name, metav1.GetOptions{})
+		if err != nil {
+			return Result{}, err
+		}
+		if node.Annotations == nil || node.Annotations[AnnotationCordon] == "" {
+			return Result{
+				Action:      string(apis.OperatorActionRevert),
+				Target:      t,
+				DryRun:      dryRun,
+				Applied:     false,
+				Description: fmt.Sprintf("node %q was not cordoned by kubescape; nothing to revert", t.Name),
+			}, nil
+		}
 	}
 
 	patchBytes, err := buildUncordonPatch()
