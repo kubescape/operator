@@ -8,9 +8,12 @@ import (
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -98,6 +101,15 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, namesp
 		return err
 	}
 	return nil
+}
+
+// deleteRequestConfigMap removes the request ConfigMap of a CronJob that could
+// not be created. A failure is only logged, so the caller can return the error
+// that made the CronJob creation fail.
+func deleteRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string) {
+	if err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		logger.L().Warning("failed to delete the request ConfigMap of a CronJob that was not created", helpers.String("name", name), helpers.Error(err))
+	}
 }
 
 func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, jobID string) {

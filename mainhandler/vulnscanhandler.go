@@ -53,6 +53,9 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 	jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations[armotypes.CronJobTemplateAnnotationNamespaceKey] = namespace
 
 	if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+		// Without its CronJob nothing refers to the request ConfigMap, so
+		// deleteVulnScanCronJob could never reach it. Remove it here.
+		deleteRequestConfigMap(actionHandler.k8sAPI, actionHandler.config.Namespace(), name)
 		return err
 	}
 

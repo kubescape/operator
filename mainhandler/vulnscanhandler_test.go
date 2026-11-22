@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -16,7 +17,9 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 const vulnScanTestNamespace = "kubescape"
@@ -106,4 +109,23 @@ func TestSetVulnScanCronJob_CreatesCronJobAndRequestConfigMap(t *testing.T) {
 
 	_, err = client.CoreV1().ConfigMaps(vulnScanTestNamespace).Get(context.Background(), cronJobs.Items[0].Name, metav1.GetOptions{})
 	assert.NoError(t, err)
+}
+
+// If the CronJob cannot be created, its request ConfigMap is removed again:
+// without the CronJob nothing refers to it.
+func TestSetVulnScanCronJob_FailedCronJobCreateLeavesNoConfigMap(t *testing.T) {
+	client := fake.NewClientset(vulnScanCronJobTemplate(t))
+	client.PrependReactor("create", "cronjobs", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("admission webhook denied the request")
+	})
+	args := map[string]interface{}{"jobParams": apis.CronJobParams{CronTabSchedule: "0 3 * * *"}}
+
+	err := vulnScanCronJobHandler(t, client, args).setVulnScanCronJob(context.Background())
+	require.ErrorContains(t, err, "admission webhook denied the request")
+
+	configMaps, err := client.CoreV1().ConfigMaps(vulnScanTestNamespace).List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	for _, configMap := range configMaps.Items {
+		assert.Equal(t, VulnScanCronjobTemplateName, configMap.Name, "request ConfigMap left behind")
+	}
 }
