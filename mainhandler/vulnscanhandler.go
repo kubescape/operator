@@ -23,6 +23,19 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 		return errors.New("KubevulnScheduler is not enabled")
 	}
 
+	// Reject the command before creating anything. The request ConfigMap has a
+	// random name and no CronJob refers to it yet, so one created ahead of a
+	// failed check could never be found and deleted again.
+	scanJobParams := getJobParams(actionHandler.sessionObj.Command)
+	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
+		return fmt.Errorf("setVulnScanCronJob: CronTabSchedule not found")
+	}
+
+	jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, VulnScanCronjobTemplateName, actionHandler.config.Namespace())
+	if err != nil {
+		return err
+	}
+
 	req := getVulnScanRequest(actionHandler.sessionObj.Command)
 
 	name := fixK8sCronJobNameLimit(fmt.Sprintf("%s-%d", "kubevuln-schedule", rand.NewSource(time.Now().UnixNano()).Int63()))
@@ -31,15 +44,6 @@ func (actionHandler *ActionHandler) setVulnScanCronJob(ctx context.Context) erro
 		return err
 	}
 
-	jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, VulnScanCronjobTemplateName, actionHandler.config.Namespace())
-	if err != nil {
-		return err
-	}
-
-	scanJobParams := getJobParams(actionHandler.sessionObj.Command)
-	if scanJobParams == nil || scanJobParams.CronTabSchedule == "" {
-		return fmt.Errorf("setVulnScanCronJob: CronTabSchedule not found")
-	}
 	setCronJobForTriggerRequest(jobTemplateObj, name, scanJobParams.CronTabSchedule, actionHandler.sessionObj.Command.JobTracking.JobID)
 
 	// add namespace annotation
