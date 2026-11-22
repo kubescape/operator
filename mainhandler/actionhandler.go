@@ -119,6 +119,13 @@ func (actionHandler *ActionHandler) resolveTargets(ctx context.Context, args api
 // handleActionOnTarget enforces the per-target safety rails and dispatches the
 // action to the matching remediator. It runs once per resolved target.
 func (actionHandler *ActionHandler) handleActionOnTarget(ctx context.Context, args apis.OperatorActionArgs, target remediators.Target, registry map[apis.OperatorActionType]remediators.Remediator, dryRun bool) error {
+	// Node is a cluster-scoped resource. Normalize caller-supplied namespace to empty
+	// so it cannot trip the SkipNamespace check or override the operator namespace
+	// in emitActionEvent.
+	if strings.ToLower(target.Kind) == "node" {
+		target.Namespace = ""
+	}
+
 	// All current target kinds are namespaced. Require the namespace up front so
 	// the excluded-namespace rail below is actually enforced, instead of an empty
 	// namespace slipping past it and failing late at the API server.
@@ -279,6 +286,8 @@ func (actionHandler *ActionHandler) emitActionEvent(ctx context.Context, result 
 	outcome := "applied"
 	if result.DryRun {
 		outcome = "dry-run, no changes made"
+	} else if !result.Applied {
+		outcome = "no-op, no changes made"
 	}
 
 	event := &corev1.Event{

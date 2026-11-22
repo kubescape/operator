@@ -410,6 +410,97 @@ func TestHandleOperatorAction_CordonRejectsNonNode(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported target kind \"Deployment\"")
 }
 
+func TestHandleOperatorAction_CordonNormalizesNodeNamespace(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+	}
+	client := k8sfake.NewClientset(node)
+
+	// Provide a namespace that is in SkipNamespace (e.g. "kube-system").
+	// Because Node is cluster-scoped, handleActionOnTarget normalizes it to empty,
+	// so SkipNamespace is not tripped and the event is emitted in operator's namespace.
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionCordon,
+		Target: &apis.OperatorActionTarget{Kind: "Node", Namespace: "kube-system", Name: "worker-1"},
+		DryRun: boolPtr(false),
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+
+	got, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.Equal(t, "true", got.Annotations[remediators.AnnotationCordon])
+
+	// Verify Kubernetes Event was emitted in the operator's namespace with empty involvedObject namespace
+	events, err := client.CoreV1().Events("kubescape").List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.NotEmpty(t, events.Items)
+	found := false
+	for _, ev := range events.Items {
+		if ev.InvolvedObject.Kind == "Node" && ev.InvolvedObject.Name == "worker-1" {
+			assert.Empty(t, ev.InvolvedObject.Namespace, "involvedObject namespace for a Node must be empty")
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected an event for the cordoned Node in the operator namespace")
+}
+
+func TestHandleOperatorAction_CordonRevertSkipsNodeNotCordonedByKubescape(t *testing.T) {
+	// Node cordoned externally (unschedulable=true, but no kubescape.io/cordon annotation)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: true},
+	}
+	client := k8sfake.NewClientset(node)
+
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionRevert,
+		Target: &apis.OperatorActionTarget{Kind: "Node", Name: "worker-1"},
+		DryRun: boolPtr(false),
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+
+	// Node must remain unschedulable
+	got, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+
+	// Event must reflect that revert was a no-op
+	events, err := client.CoreV1().Events("kubescape").List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.NotEmpty(t, events.Items)
+	assert.Contains(t, events.Items[0].Message, "no-op, no changes made")
+}
+
+func TestHandleOperatorAction_CordonRevertNormalizesNodeNamespace(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "worker-1",
+			Annotations: map[string]string{
+				remediators.AnnotationCordon: "true",
+			},
+		},
+		Spec: corev1.NodeSpec{Unschedulable: true},
+	}
+	client := k8sfake.NewClientset(node)
+
+	// Target contains an excluded namespace ("kube-system"). Namespace normalization ensures it is not rejected.
+	ah := newActionHandlerForTest(t, client, newTestConfig(config.Config{Namespace: "kubescape"}), apis.OperatorActionArgs{
+		Action: apis.OperatorActionRevert,
+		Target: &apis.OperatorActionTarget{Kind: "Node", Namespace: "kube-system", Name: "worker-1"},
+		DryRun: boolPtr(false),
+	})
+
+	require.NoError(t, ah.handleOperatorAction(context.Background()))
+
+	got, err := client.CoreV1().Nodes().Get(context.Background(), "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.False(t, got.Spec.Unschedulable)
+}
+
 // quarantine without --confirm must create the deny-all NetworkPolicy as a
 // server-side dry-run, never a real write.
 func TestHandleOperatorAction_QuarantineDefaultsToDryRun(t *testing.T) {

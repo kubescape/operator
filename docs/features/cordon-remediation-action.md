@@ -31,9 +31,9 @@ and returns an informative error.
 
 - **Target Kind**: Must be `Node` (case-insensitive). Target kinds other than
   `Node` (such as `Deployment` or `Pod`) are rejected.
-- **Dry-run by default**: Commands without `--confirm` (`dryRun: false`) issue a
+- **Dry-run by default**: Commands without `--confirm` (`dryRun: true` or omitted) issue a
   Kubernetes server-side dry-run (`metav1.DryRunAll`), validating admission and
-  generating the exact plan without persisting changes.
+  generating the exact plan without persisting changes. Only an explicit `--confirm` (`dryRun: false`) persists changes.
 - **Idempotency**: Applying `cordon` to a node that is already unschedulable
   succeeds cleanly and notes this in the plan and execution description.
 - **Forensic Non-destruction**: Unlike node draining, cordoning does not evict
@@ -45,7 +45,10 @@ and returns an informative error.
 A `revert` action targeted at a `Node` restores `spec.unschedulable = false`
 and clears the Kubescape cordon annotations (`kubescape.io/cordon`,
 `kubescape.io/remediated`, `kubescape.io/remediation-reason`, and
-`kubescape.io/remediation-finding-ref`).
+`kubescape.io/remediation-finding-ref`), provided the node was cordoned by
+Kubescape (has `kubescape.io/cordon` annotation). If the node was cordoned
+externally (without `kubescape.io/cordon`), revert is a no-op to avoid
+disrupting external administrative or maintenance cordons.
 
 ## Audit trail
 
