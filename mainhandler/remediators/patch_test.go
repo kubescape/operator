@@ -289,6 +289,15 @@ func TestPatchPlan_RejectsEscalationFields(t *testing.T) {
 		{"pod spec $patch: replace on Pod", "Pod", `{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}`},
 		{"pod spec $patch: delete on Pod", "Pod", `{"spec":{"$patch":"delete"}}`},
 		{"pod spec $retainKeys on Pod", "Pod", `{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}`},
+		// The API server copies the deprecated per-container AppArmor annotation
+		// into a new pod's appArmorProfile when that field is unset, so it
+		// carries the same confinement rule as the field.
+		{"deprecated AppArmor annotation unconfined", "Deployment", `{"spec":{"template":{"metadata":{"annotations":{"container.apparmor.security.beta.kubernetes.io/api":"unconfined"}}}}}`},
+		{"deprecated AppArmor annotation deleted", "Deployment", `{"spec":{"template":{"metadata":{"annotations":{"container.apparmor.security.beta.kubernetes.io/api":null}}}}}`},
+		{"template annotations deleted", "Deployment", `{"spec":{"template":{"metadata":{"annotations":null}}}}`},
+		{"template annotations $patch: replace", "Deployment", `{"spec":{"template":{"metadata":{"annotations":{"$patch":"replace","team":"payments"}}}}}`},
+		{"template metadata $patch: replace", "Deployment", `{"spec":{"template":{"metadata":{"$patch":"replace","labels":{"app":"api"}}}}}`},
+		{"deprecated AppArmor annotation unconfined on Pod", "Pod", `{"metadata":{"annotations":{"container.apparmor.security.beta.kubernetes.io/api":"unconfined"}}}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -322,6 +331,8 @@ func TestPatchPlan_AllowsConfiningProfiles(t *testing.T) {
 		`{"spec":{"template":{"spec":{"securityContext":{"appArmorProfile":{"type":"RuntimeDefault"}}}}}}`,
 		`{"spec":{"template":{"spec":{"securityContext":{"seccompProfile":{"type":"Localhost","localhostProfile":"profiles/audit.json"}}}}}}`,
 		`{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"appArmorProfile":{"type":"Localhost","localhostProfile":"k8s-apparmor-example"}}}]}}}}`,
+		`{"spec":{"template":{"metadata":{"annotations":{"container.apparmor.security.beta.kubernetes.io/api":"runtime/default"}}}}}`,
+		`{"spec":{"template":{"metadata":{"annotations":{"container.apparmor.security.beta.kubernetes.io/api":"localhost/k8s-apparmor-example","team":"payments"}}}}}`,
 	} {
 		r := NewPatchRemediator(k8sfake.NewClientset())
 		plan, err := r.Plan(context.Background(), Request{
@@ -430,6 +441,33 @@ func TestPatch_DropRemovalNeverReachesTheWorkload(t *testing.T) {
 	}
 }
 
+// The API server gives new pods of a template that carries this annotation an
+// Unconfined AppArmor profile, so the patch must not reach the Deployment.
+func TestPatch_UnconfinedAppArmorAnnotationNeverReachesTheWorkload(t *testing.T) {
+	const key = "container.apparmor.security.beta.kubernetes.io/api"
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "api"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "api", Image: "app"}},
+		}}},
+	}
+	client := k8sfake.NewClientset(deploy)
+	r := NewPatchRemediator(client)
+	plan, err := r.Plan(context.Background(), Request{
+		Target: Target{Kind: "Deployment", Namespace: "payments", Name: "api"},
+		Patch:  `{"spec":{"template":{"metadata":{"annotations":{"` + key + `":"unconfined"}}}}}`,
+	})
+	if err == nil {
+		_, err = r.Apply(context.Background(), plan, false)
+	}
+
+	got, getErr := client.AppsV1().Deployments("payments").Get(context.Background(), "api", metav1.GetOptions{})
+	require.NoError(t, getErr)
+	assert.NotContains(t, got.Spec.Template.Annotations, key)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), key)
+}
+
 func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -450,6 +488,7 @@ func TestPatchApply_RejectsEscalationFieldsEvenWithHandcraftedPlan(t *testing.T)
 		{"pod spec $patch replace", `{"spec":{"template":{"spec":{"$patch":"replace","containers":[{"name":"api"}]}}}}`},
 		{"pod spec $patch delete", `{"spec":{"template":{"spec":{"$patch":"delete"}}}}`},
 		{"pod spec $retainKeys", `{"spec":{"template":{"spec":{"$retainKeys":["containers"],"containers":[{"name":"api"}]}}}}`},
+		{"deprecated AppArmor annotation unconfined", `{"spec":{"template":{"metadata":{"annotations":{"container.apparmor.security.beta.kubernetes.io/api":"unconfined"}}}}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
