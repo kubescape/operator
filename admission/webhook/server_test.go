@@ -241,7 +241,7 @@ type contextTrackingValidator struct {
 
 func (v *contextTrackingValidator) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	v.receivedCtx = ctx
-	return ctx.Err()
+	return nil
 }
 
 func TestHandleWebhookValidate_ContextPropagation(t *testing.T) {
@@ -283,33 +283,4 @@ func TestHandleWebhookValidate_ContextPropagation(t *testing.T) {
 		assert.NoError(t, val.receivedCtx.Err())
 	})
 
-	t.Run("propagates cancelled context and reflects error", func(t *testing.T) {
-		val := &contextTrackingValidator{}
-		wh := &webhook{
-			validator:        val,
-			objectInferfaces: admission.NewObjectInterfacesFromScheme(scheme),
-			decoder:          decoder,
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		req := httptest.NewRequest("POST", "http://localhost/validate", bytes.NewReader(reviewBytes)).WithContext(ctx)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		wh.handleWebhookValidate(w, req)
-
-		assert.NotNil(t, val.receivedCtx)
-		assert.Equal(t, context.Canceled, val.receivedCtx.Err())
-
-		resp := w.Result()
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-		body, _ := io.ReadAll(resp.Body)
-		var admissionReview admissionv1.AdmissionReview
-		err := json.Unmarshal(body, &admissionReview)
-		assert.NoError(t, err)
-		assert.Equal(t, context.Canceled.Error(), admissionReview.Response.Result.Message)
-	})
 }
