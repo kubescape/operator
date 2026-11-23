@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
@@ -72,13 +71,13 @@ func TestHandleActionRequest_SkipsEmptyCommandNameAndDispatchesValidCommands(t *
 	}
 
 	require.Contains(t, received, "job-1")
-	assert.Equal(t, apis.TypeCommand("kubescapeScan"), received["job-1"].Command.CommandName)
+	assert.Equal(t, "kubescapeScan", string(received["job-1"].Command.CommandName))
 	assert.Equal(t, "parent-1", received["job-1"].ParentJobID)
 	assert.Equal(t, "test-account", received["job-1"].CustomerGUID)
 	assert.Equal(t, "should-be-redacted-in-logs", received["job-1"].Command.Args["secret"])
 
 	require.Contains(t, received, "job-2")
-	assert.Equal(t, apis.TypeCommand("scan"), received["job-2"].Command.CommandName)
+	assert.Equal(t, "scan", string(received["job-2"].Command.CommandName))
 }
 
 func TestHandleActionRequest_PoolErrors(t *testing.T) {
@@ -114,6 +113,7 @@ func TestDisplayReceivedCommand(t *testing.T) {
 
 	t.Run("redacts command args from log output", func(t *testing.T) {
 		logger.InitLogger("pretty")
+		require.NoError(t, logger.L().SetLevel("info"))
 		logPath := filepath.Join(t.TempDir(), "operator.log")
 		logFile, err := os.Create(logPath)
 		require.NoError(t, err)
