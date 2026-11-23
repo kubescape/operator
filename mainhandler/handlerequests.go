@@ -533,20 +533,38 @@ func (mainHandler *MainHandler) HandleImageScanningScopedRequest(ctx context.Con
 }
 
 func (mainHandler *MainHandler) getNamespaces(ctx context.Context, sessionObj *utils.SessionObj) ([]string, error) {
-	namespaces := make([]string, 0, 1)
-	// A cluster-wide request has no namespace in its ID. Leaving the list empty makes every
-	// namespace be listed below, so each one is filtered and looked up on its own instead of
-	// as "".
-	if ns := pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()); ns != "" {
-		namespaces = append(namespaces, ns)
-	}
-	if len(sessionObj.Command.Designators) > 0 {
-		namespaces = make([]string, 0, 3)
-		for desiIdx := range sessionObj.Command.Designators {
-			if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok {
+	var namespaces []string
+	if sessionObj != nil && sessionObj.Command != nil {
+		if len(sessionObj.Command.Designators) > 0 {
+			for desiIdx := range sessionObj.Command.Designators {
+				if ns, ok := sessionObj.Command.Designators[desiIdx].Attributes[identifiers.AttributeNamespace]; ok && ns != "" {
+					namespaces = append(namespaces, ns)
+				}
+			}
+			if len(namespaces) == 0 {
+				if ns := pkgwlid.GetNamespaceFromWlid(sessionObj.Command.Wlid); ns != "" {
+					namespaces = append(namespaces, ns)
+				}
+			}
+		} else {
+			// A cluster-wide request has no namespace in its ID. Leaving the list empty makes every
+			// namespace be listed below, so each one is filtered and looked up on its own instead of
+			// as "".
+			if ns := pkgwlid.GetNamespaceFromWlid(sessionObj.Command.GetID()); ns != "" {
 				namespaces = append(namespaces, ns)
 			}
 		}
+	}
+	if len(namespaces) > 1 {
+		seen := make(map[string]bool, len(namespaces))
+		dedup := make([]string, 0, len(namespaces))
+		for _, ns := range namespaces {
+			if !seen[ns] {
+				seen[ns] = true
+				dedup = append(dedup, ns)
+			}
+		}
+		namespaces = dedup
 	}
 	if len(namespaces) == 0 {
 		namespacesList, err := mainHandler.k8sAPI.KubernetesClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
