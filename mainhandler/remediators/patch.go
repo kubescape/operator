@@ -69,6 +69,14 @@ var escalationMetadataPaths = [][]string{
 	{"finalizers"},
 }
 
+// deprecatedAppArmorAnnotationPrefix starts the per-container AppArmor
+// annotation that predates the appArmorProfile field. The API server still
+// copies it into a new pod's container appArmorProfile when that field is
+// unset (the AppArmor version skew handling in the pod strategy's
+// PrepareForCreate), so "unconfined" there gives the container an Unconfined
+// profile.
+const deprecatedAppArmorAnnotationPrefix = "container.apparmor.security.beta.kubernetes.io/"
+
 // patchTypeName maps a client-go patch media type back to the short vocabulary
 // used in Command.Args and error messages ("strategic"/"merge"), so a single
 // vocabulary is used throughout patch's user-visible strings.
@@ -313,6 +321,66 @@ func podSpecPath(kind string) []string {
 	return []string{"spec", "template", "spec"}
 }
 
+// podAnnotationsPath is the patch-relative path to the annotations of the pods
+// a patch shapes: the pod template's for the three controller kinds, or the
+// object's own for a bare Pod.
+func podAnnotationsPath(kind string) []string {
+	if strings.EqualFold(kind, "pod") {
+		return []string{"metadata", "annotations"}
+	}
+	return []string{"spec", "template", "metadata", "annotations"}
+}
+
+// rejectAppArmorAnnotations applies the confinement-profile rule to the
+// deprecated AppArmor annotations: a patch may not set one to "unconfined" or
+// delete one (null). Nor may it delete the annotations together: with a null
+// map, a null field above it (the template, its metadata, or a Pod's metadata),
+// or a strategic-merge directive on the map or on the metadata holding it.
+// For a bare Pod the annotation only matters when a pod is created, so there
+// this is defense-in-depth.
+func rejectAppArmorAnnotations(kind string, obj map[string]any) error {
+	path := podAnnotationsPath(kind)
+	// A null at the annotations or at any field above them (the template, its
+	// metadata, or a Pod's metadata) deletes them all, AppArmor ones included.
+	for i := 1; i <= len(path); i++ {
+		if val, ok := valueAtPath(obj, path[:i]); ok && val == nil {
+			return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", strings.Join(path[:i], "."))
+		}
+	}
+	if val, ok := valueAtPath(obj, path[:len(path)-1]); ok {
+		if metadata, ok := val.(map[string]any); ok {
+			for key := range metadata {
+				if strings.HasPrefix(key, "$") {
+					return fmt.Errorf("patch: metadata directive %q is not allowed in a remediation patch", key)
+				}
+			}
+		}
+	}
+	val, ok := valueAtPath(obj, path)
+	if !ok {
+		return nil
+	}
+	annotations, ok := val.(map[string]any)
+	if !ok {
+		return nil
+	}
+	for key, value := range annotations {
+		if strings.HasPrefix(key, "$") {
+			return fmt.Errorf("patch: annotations directive %q is not allowed in a remediation patch", key)
+		}
+		if !strings.HasPrefix(key, deprecatedAppArmorAnnotationPrefix) {
+			continue
+		}
+		if value == nil {
+			return fmt.Errorf("patch: deleting annotation %q is not allowed in a remediation patch", key)
+		}
+		if value == "unconfined" {
+			return fmt.Errorf("patch: annotation %q=unconfined is not allowed in a remediation patch", key)
+		}
+	}
+	return nil
+}
+
 // rejectEscalation rejects a patch that touches a field this action treats as
 // escalation-relevant (see escalationPaths/escalationMetadataPaths), at either
 // the pod-spec level (hostNetwork, volumes, serviceAccountName, ...) or the
@@ -325,6 +393,9 @@ func rejectEscalation(kind string, obj map[string]any) error {
 		if hasPath(obj, append([]string{"metadata"}, p...)) {
 			return fmt.Errorf("patch: field %q is not allowed in a remediation patch", "metadata."+strings.Join(p, "."))
 		}
+	}
+	if err := rejectAppArmorAnnotations(kind, obj); err != nil {
+		return err
 	}
 	podSpec := podSpecPath(kind)
 	for i := 1; i <= len(podSpec); i++ {

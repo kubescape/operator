@@ -56,7 +56,14 @@ hand-constructed `Plan` cannot skip it):
   workload's config" to root execution, node, or cluster compromise.
 - **Confinement profiles** — a `seccompProfile` or `appArmorProfile`, in the pod's
   or a container's `securityContext`, may not be set to `Unconfined` or deleted
-  (`null`). `RuntimeDefault` and `Localhost` profiles are accepted.
+  (`null`). `RuntimeDefault` and `Localhost` profiles are accepted. The same
+  applies to the deprecated per-container AppArmor annotation
+  (`container.apparmor.security.beta.kubernetes.io/<container>`) in the pod
+  template, or a Pod's own annotations: the API server still copies it into a
+  new pod's `appArmorProfile` when that field is unset, so it may not be set to
+  `unconfined` or deleted. Deleting the annotations together (`null` on them,
+  on the template or on its or the Pod's `metadata`, or a `$patch`/`$retainKeys`
+  directive on them or their metadata) is rejected too.
 
 ## Revert
 
