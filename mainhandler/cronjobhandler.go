@@ -3,7 +3,9 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
@@ -103,13 +105,38 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, namesp
 	return nil
 }
 
-// deleteRequestConfigMap removes the request ConfigMap of a CronJob that could
-// not be created. A failure is only logged, so the caller can return the error
-// that made the CronJob creation fail.
-func deleteRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string) {
+// cleanUpRequestConfigMap removes the request ConfigMap of a CronJob whose
+// creation failed. When the API server rejected the CronJob it was not stored,
+// so the ConfigMap goes. After a timeout or a lost response the CronJob may
+// have been stored and would mount this ConfigMap, so the CronJob is looked up
+// first: the ConfigMap is only deleted when the CronJob is confirmed missing,
+// and kept (and logged) when it exists or the lookup fails too. A failed
+// delete is only logged, so the caller can return the creation error.
+func cleanUpRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string, createErr error) {
+	if !createRejected(createErr) {
+		_, getErr := k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).Get(context.Background(), name, metav1.GetOptions{})
+		if !apierrors.IsNotFound(getErr) {
+			logger.L().Warning("keeping the request ConfigMap: the CronJob may have been created", helpers.String("name", name), helpers.Error(createErr))
+			return
+		}
+	}
 	if err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		logger.L().Warning("failed to delete the request ConfigMap of a CronJob that was not created", helpers.String("name", name), helpers.Error(err))
 	}
+}
+
+// createRejected reports whether the API server answered a create request
+// with a client error, so the object was not stored. A transport error, a
+// timeout or a server error leaves the outcome unknown, and AlreadyExists
+// means an object with that name is there.
+func createRejected(err error) bool {
+	var status apierrors.APIStatus
+	if !errors.As(err, &status) {
+		return false
+	}
+	code := status.Status().Code
+	return code >= http.StatusBadRequest && code < http.StatusInternalServerError &&
+		code != http.StatusRequestTimeout && code != http.StatusConflict
 }
 
 func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, jobID string) {
