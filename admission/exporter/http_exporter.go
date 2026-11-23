@@ -120,7 +120,7 @@ func InitHTTPExporter(config HTTPExporterConfig, clusterName string, cloudMetada
 	}, nil
 }
 
-func (exporter *HTTPExporter) sendAlertLimitReached() {
+func (exporter *HTTPExporter) sendAlertLimitReached(alertCount int, since time.Time) {
 	httpAlert := apitypes.RuntimeAlert{
 		Message:   "Alert limit reached",
 		HostName:  exporter.Host,
@@ -137,17 +137,16 @@ func (exporter *HTTPExporter) sendAlertLimitReached() {
 		},
 	}
 
-	logger.L().Error("Alert limit reached", helpers.Int("alerts", exporter.alertCount), helpers.String("since", exporter.alertCountStart.Format(time.RFC3339)))
+	logger.L().Error("Alert limit reached", helpers.Int("alerts", alertCount), helpers.String("since", since.Format(time.RFC3339)))
 	exporter.sendInAlertList(httpAlert, apitypes.ProcessTree{})
 }
 
 func (exporter *HTTPExporter) SendAdmissionAlert(ruleFailure rules.RuleFailure) {
 	// Over the limit every alert is dropped until the window resets. Only the
 	// first one is replaced by the AlertLimitReached notice.
-	if exporter.checkAlertLimit() {
-		if !exporter.alertLimitNotified {
-			exporter.sendAlertLimitReached()
-			exporter.alertLimitNotified = true
+	if limit := exporter.checkAlertLimit(); limit.overLimit {
+		if limit.notify {
+			exporter.sendAlertLimitReached(limit.alertCount, limit.since)
 		}
 		return
 	}
@@ -198,7 +197,20 @@ func (exporter *HTTPExporter) sendInAlertList(httpAlert apitypes.RuntimeAlert, p
 	exporter.exportMessage("runtimealerts", bodyBytes)
 }
 
-func (exporter *HTTPExporter) checkAlertLimit() bool {
+// alertLimitCheck is the result of counting one alert against
+// MaxAlertsPerMinute. alertCount and since describe the current window.
+type alertLimitCheck struct {
+	overLimit  bool
+	notify     bool
+	alertCount int
+	since      time.Time
+}
+
+// checkAlertLimit counts one alert in the current one-minute window. notify is
+// set only for the first alert over the limit in a window. It is decided under
+// alertCountLock, so concurrent callers send at most one AlertLimitReached
+// notice per window.
+func (exporter *HTTPExporter) checkAlertLimit() alertLimitCheck {
 	exporter.alertCountLock.Lock()
 	defer exporter.alertCountLock.Unlock()
 
@@ -213,7 +225,16 @@ func (exporter *HTTPExporter) checkAlertLimit() bool {
 	}
 
 	exporter.alertCount++
-	return exporter.alertCount > exporter.config.MaxAlertsPerMinute
+	check := alertLimitCheck{
+		overLimit:  exporter.alertCount > exporter.config.MaxAlertsPerMinute,
+		alertCount: exporter.alertCount,
+		since:      exporter.alertCountStart,
+	}
+	if check.overLimit && !exporter.alertLimitNotified {
+		exporter.alertLimitNotified = true
+		check.notify = true
+	}
+	return check
 }
 
 func (exporter *HTTPExporter) SendRegistryStatus(guid string, status apitypes.RegistryScanStatus, statusMessage string, time time.Time) {
