@@ -23,6 +23,7 @@ import (
 	exporters "github.com/kubescape/operator/admission/exporter"
 	"github.com/kubescape/operator/config"
 	cs "github.com/kubescape/operator/continuousscanning"
+	"github.com/kubescape/operator/mainhandler/remediators"
 	"github.com/kubescape/operator/telemetry"
 	"github.com/kubescape/operator/utils"
 	"github.com/kubescape/operator/watcher"
@@ -54,6 +55,10 @@ type ActionHandler struct {
 	commandResponseChannel *commandResponseChannelData
 	wlid                   string
 	exporter               exporters.Exporter
+	// actionResults collects the results of a multi-target operator action
+	// while it runs, so its command status is written once, at the end.
+	// It is nil otherwise.
+	actionResults *[]remediators.Result
 }
 
 type waitFunc func(clusterConfig config.IConfig)
