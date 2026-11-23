@@ -44,6 +44,9 @@ func (actionHandler *ActionHandler) deleteKubescapeCronJob(ctx context.Context) 
 	if kubescapeJobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
+	if kubescapeJobParams.JobName == "" {
+		return fmt.Errorf("deleteKubescapeCronJob: jobName not found")
+	}
 
 	if err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Delete(context.Background(), kubescapeJobParams.JobName, metav1.DeleteOptions{}); err != nil {
 		return err
@@ -67,13 +70,20 @@ func (actionHandler *ActionHandler) updateKubescapeCronJob(ctx context.Context) 
 	if jobParams == nil {
 		return fmt.Errorf("failed to convert kubescapeJobParams list to KubescapeJobParams")
 	}
+	if jobParams.JobName == "" {
+		return fmt.Errorf("updateKubescapeCronJob: jobName not found")
+	}
+	schedule := getCronTabSchedule(actionHandler.sessionObj.Command)
+	if schedule == "" {
+		return fmt.Errorf("updateKubescapeCronJob: CronTabSchedule not found")
+	}
 
 	jobTemplateObj, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Get(context.Background(), jobParams.JobName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	jobTemplateObj.Spec.Schedule = getCronTabSchedule(actionHandler.sessionObj.Command)
+	jobTemplateObj.Spec.Schedule = schedule
 	if jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations == nil {
 		jobTemplateObj.Spec.JobTemplate.Spec.Template.Annotations = make(map[string]string)
 	}
@@ -223,7 +233,10 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 }
 
 func getCronTabSchedule(command *armoapi.Command) string {
-	if kubescapeJobParams := getKubescapeJobParams(command); kubescapeJobParams != nil {
+	if command == nil {
+		return ""
+	}
+	if kubescapeJobParams := getKubescapeJobParams(command); kubescapeJobParams != nil && kubescapeJobParams.CronTabSchedule != "" {
 		return kubescapeJobParams.CronTabSchedule
 	}
 	if schedule, ok := command.Args["cronTabSchedule"]; ok {
@@ -241,6 +254,9 @@ func getCronTabSchedule(command *armoapi.Command) string {
 }
 
 func getKubescapeJobParams(command *armoapi.Command) *armoapi.CronJobParams {
+	if command == nil {
+		return nil
+	}
 
 	if jobParams := command.GetCronJobParams(); jobParams != nil {
 		return jobParams
