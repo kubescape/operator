@@ -18,8 +18,12 @@ func GetRequestHeaders(accessKey string) map[string]string {
 }
 
 func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Command, parentJobId, jobID string) *SessionObj {
+	var customerGUID string
+	if config != nil {
+		customerGUID = config.AccountID()
+	}
 	sessionObj := SessionObj{
-		CustomerGUID: config.AccountID(),
+		CustomerGUID: customerGUID,
 		JobID:        jobID,
 		ParentJobID:  parentJobId,
 		Command:      command,
@@ -34,5 +38,8 @@ func NewSessionObj(ctx context.Context, config config.IConfig, command *apis.Com
 }
 
 func (s *SessionObj) SetOperatorCommandDetails(opcmd *OperatorCommandDetails) {
+	if s == nil {
+		return
+	}
 	s.ParentCommandDetails = opcmd
 }
