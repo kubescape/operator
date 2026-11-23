@@ -46,6 +46,7 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 
 	displayReceivedCommand(receivedCommands)
 
+	var errs []error
 	for i := range commands.Commands {
 		c := commands.Commands[i]
 		sessionObj := utils.NewSessionObj(ctx, resthandler.config, &c, c.JobTracking.ParentID, c.JobTracking.JobID)
@@ -55,14 +56,23 @@ func (resthandler *HTTPHandler) HandleActionRequest(ctx context.Context, receive
 			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
 			continue
 		}
+		if resthandler.pool == nil {
+			err := fmt.Errorf("worker pool is not initialized")
+			logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("ID", c.GetID()), helpers.Error(err))
+			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
+			errs = append(errs, err)
+			continue
+		}
 		l := utils.Job{}
 		l.SetContext(ctx)
 		l.SetObj(*sessionObj)
 		if err := resthandler.pool.Invoke(l); err != nil {
 			logger.L().Ctx(ctx).Error("failed to invoke job", helpers.String("ID", c.GetID()), helpers.Error(err))
+			sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err))
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (resthandler *HTTPHandler) ActionRequest(w http.ResponseWriter, r *http.Request) {
