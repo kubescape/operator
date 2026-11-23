@@ -72,12 +72,14 @@ func TestGetKubescapeJobParams(t *testing.T) {
 	})
 
 	t.Run("from kubescapeJobParams map fallback", func(t *testing.T) {
+		raw, err := json.Marshal(armoapi.CronJobParams{JobName: "ks-job-3", CronTabSchedule: "0 3 * * *"})
+		require.NoError(t, err)
+		var asMap map[string]interface{}
+		require.NoError(t, json.Unmarshal(raw, &asMap))
+
 		cmd := &armoapi.Command{
 			Args: map[string]interface{}{
-				"kubescapeJobParams": map[string]interface{}{
-					"jobName":         "ks-job-3",
-					"cronTabSchedule": "0 3 * * *",
-				},
+				"kubescapeJobParams": asMap,
 			},
 		}
 		got := getKubescapeJobParams(cmd)
