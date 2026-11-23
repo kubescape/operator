@@ -258,8 +258,10 @@ func getKubescapeJobParams(command *armoapi.Command) *armoapi.CronJobParams {
 		return nil
 	}
 
-	if jobParams := command.GetCronJobParams(); jobParams != nil {
-		return jobParams
+	if command.Args["jobParams"] != nil {
+		if jobParams := command.GetCronJobParams(); jobParams != nil {
+			return jobParams
+		}
 	}
 
 	// fallback

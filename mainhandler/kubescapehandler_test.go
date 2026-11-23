@@ -240,14 +240,14 @@ func TestHandleKubescapeResponse(t *testing.T) {
 		{
 			name:         "busy scan requests rehandle after WaitTimeForKubescapeScanResponse",
 			statusCode:   http.StatusOK,
-			respBody:     utilsapisv1.Response{ID: "scan-1", Type: utilsapisv1.BusyScanResponseType},
+			respBody:     map[string]interface{}{"id": "scan-1", "type": utilsapisv1.BusyScanResponseType},
 			wantRehandle: true,
 			wantDelay:    WaitTimeForKubescapeScanResponse * time.Second,
 		},
 		{
 			name:         "finished scan completes without rehandling",
 			statusCode:   http.StatusOK,
-			respBody:     utilsapisv1.Response{ID: "scan-1"},
+			respBody:     map[string]interface{}{"id": "scan-1"},
 			wantRehandle: false,
 		},
 		{
