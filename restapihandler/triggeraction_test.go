@@ -4,11 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/armosec/armoapi-go/apis"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
@@ -103,8 +106,26 @@ func TestHandleActionRequest_PoolErrors(t *testing.T) {
 }
 
 func TestDisplayReceivedCommand(t *testing.T) {
-	assert.NotPanics(t, func() {
-		displayReceivedCommand([]byte(`invalid json`))
-		displayReceivedCommand([]byte(`{"commands":[{"commandName":"kubescapeScan","args":{"token":"secret"}}]}`))
+	t.Run("invalid JSON does not panic", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			displayReceivedCommand([]byte(`invalid json`))
+		})
+	})
+
+	t.Run("redacts command args from log output", func(t *testing.T) {
+		logger.InitLogger("pretty")
+		logPath := filepath.Join(t.TempDir(), "operator.log")
+		logFile, err := os.Create(logPath)
+		require.NoError(t, err)
+		defer logFile.Close()
+		logger.L().SetWriter(logFile)
+		defer logger.L().SetWriter(os.Stderr)
+
+		displayReceivedCommand([]byte(`{"commands":[{"commandName":"kubescapeScan","args":{"token":"secret-token-value"}}]}`))
+
+		logged, err := os.ReadFile(logPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(logged), "kubescapeScan")
+		assert.NotContains(t, string(logged), "secret-token-value")
 	})
 }
