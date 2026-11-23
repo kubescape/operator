@@ -333,12 +333,20 @@ func podAnnotationsPath(kind string) []string {
 
 // rejectAppArmorAnnotations applies the confinement-profile rule to the
 // deprecated AppArmor annotations: a patch may not set one to "unconfined" or
-// delete one (null). Nor may it delete the annotations together, with a null
-// map or a strategic-merge directive on the map or on the metadata holding it.
+// delete one (null). Nor may it delete the annotations together: with a null
+// map, a null field above it (the template, its metadata, or a Pod's metadata),
+// or a strategic-merge directive on the map or on the metadata holding it.
 // For a bare Pod the annotation only matters when a pod is created, so there
 // this is defense-in-depth.
 func rejectAppArmorAnnotations(kind string, obj map[string]any) error {
 	path := podAnnotationsPath(kind)
+	// A null at the annotations or at any field above them (the template, its
+	// metadata, or a Pod's metadata) deletes them all, AppArmor ones included.
+	for i := 1; i <= len(path); i++ {
+		if val, ok := valueAtPath(obj, path[:i]); ok && val == nil {
+			return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", strings.Join(path[:i], "."))
+		}
+	}
 	if val, ok := valueAtPath(obj, path[:len(path)-1]); ok {
 		if metadata, ok := val.(map[string]any); ok {
 			for key := range metadata {
@@ -351,9 +359,6 @@ func rejectAppArmorAnnotations(kind string, obj map[string]any) error {
 	val, ok := valueAtPath(obj, path)
 	if !ok {
 		return nil
-	}
-	if val == nil {
-		return fmt.Errorf("patch: field %q=null is not allowed in a remediation patch", strings.Join(path, "."))
 	}
 	annotations, ok := val.(map[string]any)
 	if !ok {
