@@ -1,7 +1,9 @@
 package restapihandler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/armosec/armoapi-go/apis"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/operator/utils"
 	"github.com/panjf2000/ants/v2"
@@ -37,22 +40,23 @@ func TestHandleActionRequest_SkipsEmptyCommandNameAndDispatchesValidCommands(t *
 	defer pool.Release()
 
 	handler := NewHTTPHandler(pool, telemetryConfig{})
-	payload := `{
-		"commands": [
-			{"commandName": ""},
+	payload, err := json.Marshal(apis.Commands{
+		Commands: []apis.Command{
+			{CommandName: ""},
 			{
-				"commandName": "kubescapeScan",
-				"jobTracking": {"jobID": "job-1", "parentID": "parent-1"},
-				"args": {"secret": "should-be-redacted-in-logs"}
+				CommandName: apis.TypeRunKubescape,
+				JobTracking: apis.JobTracking{JobID: "job-1", ParentID: "parent-1"},
+				Args:        map[string]interface{}{"secret": "should-be-redacted-in-logs"},
 			},
 			{
-				"commandName": "scan",
-				"jobTracking": {"jobID": "job-2"}
-			}
-		]
-	}`
+				CommandName: apis.TypeScanImages,
+				JobTracking: apis.JobTracking{JobID: "job-2"},
+			},
+		},
+	})
+	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/triggerAction", strings.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/v1/triggerAction", bytes.NewReader(payload))
 	w := httptest.NewRecorder()
 	handler.ActionRequest(w, req)
 
@@ -71,13 +75,13 @@ func TestHandleActionRequest_SkipsEmptyCommandNameAndDispatchesValidCommands(t *
 	}
 
 	require.Contains(t, received, "job-1")
-	assert.Equal(t, "kubescapeScan", string(received["job-1"].Command.CommandName))
+	assert.Equal(t, apis.TypeRunKubescape, received["job-1"].Command.CommandName)
 	assert.Equal(t, "parent-1", received["job-1"].ParentJobID)
 	assert.Equal(t, "test-account", received["job-1"].CustomerGUID)
 	assert.Equal(t, "should-be-redacted-in-logs", received["job-1"].Command.Args["secret"])
 
 	require.Contains(t, received, "job-2")
-	assert.Equal(t, "scan", string(received["job-2"].Command.CommandName))
+	assert.Equal(t, apis.TypeScanImages, received["job-2"].Command.CommandName)
 }
 
 func TestHandleActionRequest_PoolErrors(t *testing.T) {
