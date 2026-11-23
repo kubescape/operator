@@ -106,19 +106,15 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, namesp
 }
 
 // cleanUpRequestConfigMap removes the request ConfigMap of a CronJob whose
-// creation failed. When the API server rejected the CronJob it was not stored,
-// so the ConfigMap goes. After a timeout or a lost response the CronJob may
-// have been stored and would mount this ConfigMap, so the CronJob is looked up
-// first: the ConfigMap is only deleted when the CronJob is confirmed missing,
-// and kept (and logged) when it exists or the lookup fails too. A failed
-// delete is only logged, so the caller can return the creation error.
+// creation failed, but only when the API server rejected the CronJob, so it
+// was not stored. After a timeout or a lost response the create may already be
+// stored, or still be committed later, and the CronJob would mount this
+// ConfigMap, so the ConfigMap is kept (and logged). A failed delete is only
+// logged, so the caller can return the creation error.
 func cleanUpRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string, createErr error) {
 	if !createRejected(createErr) {
-		_, getErr := k8sAPI.KubernetesClient.BatchV1().CronJobs(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		if !apierrors.IsNotFound(getErr) {
-			logger.L().Warning("keeping the request ConfigMap: the CronJob may have been created", helpers.String("name", name), helpers.Error(createErr))
-			return
-		}
+		logger.L().Warning("keeping the request ConfigMap: the CronJob may have been created", helpers.String("name", name), helpers.Error(createErr))
+		return
 	}
 	if err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		logger.L().Warning("failed to delete the request ConfigMap of a CronJob that was not created", helpers.String("name", name), helpers.Error(err))

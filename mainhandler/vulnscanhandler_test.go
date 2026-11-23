@@ -115,17 +115,15 @@ func TestSetVulnScanCronJob_CreatesCronJobAndRequestConfigMap(t *testing.T) {
 
 // If the API server rejects the CronJob, its request ConfigMap is removed
 // again: without the CronJob nothing refers to it. When the outcome is unknown
-// (timeout, transport error, AlreadyExists) the CronJob may have been stored
-// and mount the ConfigMap, so it is only removed once a lookup confirms that
-// the CronJob is not there.
+// (timeout, transport error, AlreadyExists) the CronJob may be stored now or
+// later and mount the ConfigMap, so the ConfigMap is kept.
 func TestSetVulnScanCronJob_FailedCronJobCreate(t *testing.T) {
 	cronJobs := schema.GroupResource{Group: "batch", Resource: "cronjobs"}
 	lostResponse := errors.New("http2: client connection lost")
 	tests := []struct {
 		name          string
 		createErr     error
-		stored        bool  // the CronJob is stored although Create returns an error
-		getErr        error // the lookup after the failed Create fails too
+		stored        bool // the CronJob is stored although Create returns an error
 		keepConfigMap bool
 	}{
 		{
@@ -143,8 +141,9 @@ func TestSetVulnScanCronJob_FailedCronJobCreate(t *testing.T) {
 			keepConfigMap: true,
 		},
 		{
-			name:      "server timeout before the CronJob was stored",
-			createErr: apierrors.NewTimeoutError("request did not complete", 0),
+			name:          "server timeout before the CronJob was stored",
+			createErr:     apierrors.NewTimeoutError("request did not complete", 0),
+			keepConfigMap: true,
 		},
 		{
 			name:          "lost response after the CronJob was stored",
@@ -153,13 +152,8 @@ func TestSetVulnScanCronJob_FailedCronJobCreate(t *testing.T) {
 			keepConfigMap: true,
 		},
 		{
-			name:      "transport error before the CronJob was stored",
-			createErr: lostResponse,
-		},
-		{
-			name:          "transport error and the lookup fails too",
+			name:          "transport error before the CronJob was stored",
 			createErr:     lostResponse,
-			getErr:        errors.New("dial tcp: connection refused"),
 			keepConfigMap: true,
 		},
 		{
@@ -179,11 +173,6 @@ func TestSetVulnScanCronJob_FailedCronJobCreate(t *testing.T) {
 				}
 				return true, nil, tt.createErr
 			})
-			if tt.getErr != nil {
-				client.PrependReactor("get", "cronjobs", func(k8stesting.Action) (bool, runtime.Object, error) {
-					return true, nil, tt.getErr
-				})
-			}
 			args := map[string]interface{}{"jobParams": apis.CronJobParams{CronTabSchedule: "0 3 * * *"}}
 
 			err := vulnScanCronJobHandler(t, client, args).setVulnScanCronJob(context.Background())
