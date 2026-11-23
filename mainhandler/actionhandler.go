@@ -82,13 +82,31 @@ func (actionHandler *ActionHandler) handleOperatorAction(ctx context.Context) er
 	if len(targets) == 1 {
 		return actionHandler.handleActionOnTarget(ctx, args, targets[0], registry, dryRun)
 	}
+	// Each target's result is collected rather than written to the command
+	// status: a status written per target says the command completed, with no
+	// error, as soon as the first target succeeds, before the rest have run.
+	results := []remediators.Result{}
+	actionHandler.actionResults = &results
+	defer func() { actionHandler.actionResults = nil }()
 	var errs []error
 	for _, target := range targets {
 		if err := actionHandler.handleActionOnTarget(ctx, args, target, registry, dryRun); err != nil {
 			errs = append(errs, fmt.Errorf("target %s: %w", target, err))
 		}
 	}
-	return errors.Join(errs...)
+	err = errors.Join(errs...)
+	payload, marshalErr := json.Marshal(results)
+	if marshalErr != nil {
+		return errors.Join(err, fmt.Errorf("operatorAction: failed to marshal results: %w", marshalErr))
+	}
+	// One status for the whole run: the results of the targets that went
+	// through, and the failures if any.
+	if err != nil {
+		actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithError(err), utils.WithPayload(payload))
+		return err
+	}
+	actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload(payload))
+	return nil
 }
 
 // resolveTargets returns the concrete objects the action operates on. An
@@ -260,7 +278,12 @@ func (actionHandler *ActionHandler) recordActionResult(ctx context.Context, resu
 		return fmt.Errorf("operatorAction: failed to marshal result: %w", err)
 	}
 
-	actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload(payload))
+	if actionHandler.actionResults != nil {
+		// A multi-target run writes one status for all its targets at the end.
+		*actionHandler.actionResults = append(*actionHandler.actionResults, result)
+	} else {
+		actionHandler.sessionObj.SetOperatorCommandStatus(ctx, utils.WithSuccess(), utils.WithPayload(payload))
+	}
 	actionHandler.emitActionEvent(ctx, result)
 
 	logger.L().Info("operator action completed",
