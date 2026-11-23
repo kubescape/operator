@@ -3,14 +3,19 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	armoapi "github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -98,6 +103,36 @@ func createConfigMapForTriggerRequest(k8sAPI *k8sinterface.KubernetesApi, namesp
 		return err
 	}
 	return nil
+}
+
+// cleanUpRequestConfigMap removes the request ConfigMap of a CronJob whose
+// creation failed, but only when the API server rejected the CronJob, so it
+// was not stored. After a timeout or a lost response the create may already be
+// stored, or still be committed later, and the CronJob would mount this
+// ConfigMap, so the ConfigMap is kept (and logged). A failed delete is only
+// logged, so the caller can return the creation error.
+func cleanUpRequestConfigMap(k8sAPI *k8sinterface.KubernetesApi, namespace string, name string, createErr error) {
+	if !createRejected(createErr) {
+		logger.L().Warning("keeping the request ConfigMap: the CronJob may have been created", helpers.String("name", name), helpers.Error(createErr))
+		return
+	}
+	if err := k8sAPI.KubernetesClient.CoreV1().ConfigMaps(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		logger.L().Warning("failed to delete the request ConfigMap of a CronJob that was not created", helpers.String("name", name), helpers.Error(err))
+	}
+}
+
+// createRejected reports whether the API server answered a create request
+// with a client error, so the object was not stored. A transport error, a
+// timeout or a server error leaves the outcome unknown, and AlreadyExists
+// means an object with that name is there.
+func createRejected(err error) bool {
+	var status apierrors.APIStatus
+	if !errors.As(err, &status) {
+		return false
+	}
+	code := status.Status().Code
+	return code >= http.StatusBadRequest && code < http.StatusInternalServerError &&
+		code != http.StatusRequestTimeout && code != http.StatusConflict
 }
 
 func setCronJobForTriggerRequest(jobTemplateObj *v1.CronJob, name, schedule, jobID string) {

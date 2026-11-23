@@ -3,6 +3,7 @@ package mainhandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/armosec/armoapi-go/apis"
@@ -15,8 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 const vulnScanTestNamespace = "kubescape"
@@ -106,4 +111,86 @@ func TestSetVulnScanCronJob_CreatesCronJobAndRequestConfigMap(t *testing.T) {
 
 	_, err = client.CoreV1().ConfigMaps(vulnScanTestNamespace).Get(context.Background(), cronJobs.Items[0].Name, metav1.GetOptions{})
 	assert.NoError(t, err)
+}
+
+// If the API server rejects the CronJob, its request ConfigMap is removed
+// again: without the CronJob nothing refers to it. When the outcome is unknown
+// (timeout, transport error, AlreadyExists) the CronJob may be stored now or
+// later and mount the ConfigMap, so the ConfigMap is kept.
+func TestSetVulnScanCronJob_FailedCronJobCreate(t *testing.T) {
+	cronJobs := schema.GroupResource{Group: "batch", Resource: "cronjobs"}
+	lostResponse := errors.New("http2: client connection lost")
+	tests := []struct {
+		name          string
+		createErr     error
+		stored        bool // the CronJob is stored although Create returns an error
+		keepConfigMap bool
+	}{
+		{
+			name:      "quota rejects the CronJob",
+			createErr: apierrors.NewForbidden(cronJobs, "kubevuln-schedule", errors.New("exceeded quota")),
+		},
+		{
+			name:      "admission webhook denies the CronJob",
+			createErr: apierrors.NewBadRequest("admission webhook denied the request"),
+		},
+		{
+			name:          "server timeout after the CronJob was stored",
+			createErr:     apierrors.NewTimeoutError("request did not complete", 0),
+			stored:        true,
+			keepConfigMap: true,
+		},
+		{
+			name:          "server timeout before the CronJob was stored",
+			createErr:     apierrors.NewTimeoutError("request did not complete", 0),
+			keepConfigMap: true,
+		},
+		{
+			name:          "lost response after the CronJob was stored",
+			createErr:     lostResponse,
+			stored:        true,
+			keepConfigMap: true,
+		},
+		{
+			name:          "transport error before the CronJob was stored",
+			createErr:     lostResponse,
+			keepConfigMap: true,
+		},
+		{
+			name:          "CronJob already exists",
+			createErr:     apierrors.NewAlreadyExists(cronJobs, "kubevuln-schedule"),
+			stored:        true,
+			keepConfigMap: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientset(vulnScanCronJobTemplate(t))
+			client.PrependReactor("create", "cronjobs", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if tt.stored {
+					create := action.(k8stesting.CreateAction)
+					require.NoError(t, client.Tracker().Create(create.GetResource(), create.GetObject(), create.GetNamespace()))
+				}
+				return true, nil, tt.createErr
+			})
+			args := map[string]interface{}{"jobParams": apis.CronJobParams{CronTabSchedule: "0 3 * * *"}}
+
+			err := vulnScanCronJobHandler(t, client, args).setVulnScanCronJob(context.Background())
+			require.ErrorIs(t, err, tt.createErr)
+
+			configMaps, err := client.CoreV1().ConfigMaps(vulnScanTestNamespace).List(context.Background(), metav1.ListOptions{})
+			require.NoError(t, err)
+			var requestConfigMaps []string
+			for _, configMap := range configMaps.Items {
+				if configMap.Name != VulnScanCronjobTemplateName {
+					requestConfigMaps = append(requestConfigMaps, configMap.Name)
+				}
+			}
+			if tt.keepConfigMap {
+				assert.Len(t, requestConfigMaps, 1, "request ConfigMap deleted although the CronJob may exist")
+			} else {
+				assert.Empty(t, requestConfigMaps, "request ConfigMap left behind")
+			}
+		})
+	}
 }
