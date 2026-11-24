@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/kubescape/operator/config"
@@ -16,6 +17,7 @@ func newTestCommandResponseHandler() *MainHandler {
 	timerCh := make(chan *timerData, 10)
 	return &MainHandler{
 		commandResponseChannel: &commandResponseChannelData{
+			done:                                    make(chan struct{}),
 			commandResponseChannel:                  &cmdCh,
 			limitedGoRoutinesCommandResponseChannel: &timerCh,
 		},
@@ -27,9 +29,9 @@ func TestInsertNewCommandResponseData_NilGuards(t *testing.T) {
 	delay := time.Millisecond
 
 	assert.NotPanics(t, func() {
-		insertNewCommandResponseData(nil, createNewCommandResponseData(KubescapeResponse, nil, nil, &delay))
-		insertNewCommandResponseData(mh.commandResponseChannel, nil)
-		insertNewCommandResponseData(mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, nil, nil, nil))
+		insertNewCommandResponseData(context.Background(), nil, createNewCommandResponseData(KubescapeResponse, nil, nil, &delay))
+		insertNewCommandResponseData(context.Background(), mh.commandResponseChannel, nil)
+		insertNewCommandResponseData(context.Background(), mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, nil, nil, nil))
 	})
 
 	assert.Empty(t, *mh.commandResponseChannel.limitedGoRoutinesCommandResponseChannel)
@@ -58,7 +60,7 @@ func TestHandleCommandResponse_RehandlesUntilComplete(t *testing.T) {
 	}
 
 	delay := time.Millisecond
-	insertNewCommandResponseData(mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, cb, "scan-123", &delay))
+	insertNewCommandResponseData(context.Background(), mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, cb, "scan-123", &delay))
 
 	select {
 	case <-finished:
@@ -130,7 +132,7 @@ func TestHandleCommandResponse_ExitsPromptlyOnCancelWithPendingTimer(t *testing.
 	}()
 
 	longDelay := time.Hour
-	insertNewCommandResponseData(mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, func(_ context.Context, _ config.IConfig, _ interface{}) (bool, *time.Duration) {
+	insertNewCommandResponseData(context.Background(), mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, func(_ context.Context, _ config.IConfig, _ interface{}) (bool, *time.Duration) {
 		return false, nil
 	}, nil, &longDelay))
 
@@ -140,4 +142,61 @@ func TestHandleCommandResponse_ExitsPromptlyOnCancelWithPendingTimer(t *testing.
 	case <-time.After(time.Second):
 		require.Fail(t, "HandleCommandResponse hung on context cancellation")
 	}
+}
+
+func TestHandleCommandResponse_ShutdownWithFullTimerQueue(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mh := newTestCommandResponseHandler()
+		queue := *mh.commandResponseChannel.limitedGoRoutinesCommandResponseChannel
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			mh.HandleCommandResponse(ctx)
+		}()
+
+		// Fill every worker and every buffer slot with timers that cannot expire during the test.
+		var timers []*time.Timer
+		for i := 0; i < MaxLimitationInsertToCommandResponseChannelGoRoutine+cap(queue); i++ {
+			timer := time.NewTimer(time.Hour)
+			defer timer.Stop()
+			timers = append(timers, timer)
+			select {
+			case queue <- &timerData{timer: timer}:
+			case <-time.After(time.Second):
+				t.Fatal("timed out filling timer queue")
+			}
+		}
+		delay := time.Hour
+		inserted := make(chan struct{})
+		go func() {
+			defer close(inserted)
+			insertNewCommandResponseData(context.Background(), mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, nil, nil, &delay))
+		}()
+		synctest.Wait()
+		select {
+		case <-inserted:
+			t.Fatal("insertion returned while queue was full")
+		default:
+		}
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("handler did not exit")
+		}
+		select {
+		case <-inserted:
+		case <-time.After(time.Second):
+			t.Error("insertion stayed blocked after shutdown")
+		}
+		assert.Empty(t, queue)
+		for _, timer := range timers {
+			assert.False(t, timer.Stop(), "timer still active after shutdown")
+		}
+		// A producer that arrives after shutdown must also return without queueing a timer.
+		insertNewCommandResponseData(context.Background(), mh.commandResponseChannel, createNewCommandResponseData(KubescapeResponse, nil, nil, &delay))
+		assert.Empty(t, queue)
+	})
 }
