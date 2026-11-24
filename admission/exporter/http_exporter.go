@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +30,12 @@ type HTTPExporterConfig struct {
 	// Method is the HTTP method to use for the HTTP request
 	Method             string `json:"method"`
 	MaxAlertsPerMinute int    `json:"maxAlertsPerMinute"`
+	// MaxRetries is the maximum number of retry attempts for transient errors (default 3, 0 disables retries)
+	MaxRetries int `json:"maxRetries"`
+	// InitialRetryInterval is the initial backoff interval for retries (default 500ms)
+	InitialRetryInterval time.Duration `json:"initialRetryInterval"`
+	// MaxRetryInterval is the maximum backoff interval cap for retries (default 5s)
+	MaxRetryInterval time.Duration `json:"maxRetryInterval"`
 	// TokenFile is the path to a projected service-account token; when set, it is sent as a bearer token to the URL's host
 	TokenFile string `json:"tokenFile"`
 }
@@ -45,9 +53,15 @@ type HTTPExporter struct {
 	alertCountStart    time.Time
 	alertLimitNotified bool
 	cloudMetadata      *apitypes.CloudMetadata
+	// sleepFn is used for backoff delays in exportMessage, customizable in tests
+	sleepFn func(d time.Duration)
 }
 
-var _ Exporter = (*HTTPExporter)(nil)
+const (
+	defaultMaxRetries           = 3
+	defaultInitialRetryInterval = 500 * time.Millisecond
+	defaultMaxRetryInterval     = 5 * time.Second
+)
 
 type HTTPAlertsList struct {
 	Kind       string             `json:"kind"`
@@ -72,6 +86,18 @@ func (config *HTTPExporterConfig) Validate() error {
 	}
 	if config.MaxAlertsPerMinute == 0 {
 		config.MaxAlertsPerMinute = 100
+	}
+	if config.MaxRetries < 0 {
+		config.MaxRetries = 0
+	}
+	if config.InitialRetryInterval <= 0 {
+		config.InitialRetryInterval = defaultInitialRetryInterval
+	}
+	if config.MaxRetryInterval <= 0 {
+		config.MaxRetryInterval = defaultMaxRetryInterval
+	}
+	if config.MaxRetryInterval < config.InitialRetryInterval {
+		config.MaxRetryInterval = config.InitialRetryInterval
 	}
 	if config.Headers == nil {
 		config.Headers = make(map[string]string)
@@ -117,6 +143,7 @@ func InitHTTPExporter(config HTTPExporterConfig, clusterName string, cloudMetada
 		config:        config,
 		httpClient:    httpClient,
 		cloudMetadata: cloudMetadata,
+		sleepFn:       time.Sleep,
 	}, nil
 }
 
@@ -259,32 +286,128 @@ func (exporter *HTTPExporter) SendRegistryStatus(guid string, status apitypes.Re
 	exporter.exportMessage(apitypes.RegistryScanStatusesKindPath, bodyBytes)
 }
 
+// isRetryableStatus returns true if an HTTP status code indicates a transient condition
+// that can be retried (e.g., rate limits and server errors).
+func isRetryableStatus(code int) bool {
+	return code == http.StatusTooManyRequests ||
+		code == http.StatusInternalServerError ||
+		code == http.StatusBadGateway ||
+		code == http.StatusServiceUnavailable ||
+		code == http.StatusGatewayTimeout
+}
+
+// parseRetryAfter attempts to parse a Retry-After header as either seconds or an HTTP-date.
+func parseRetryAfter(header string) (time.Duration, bool) {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.Atoi(header); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second, true
+	}
+	if targetTime, err := http.ParseTime(header); err == nil {
+		delay := time.Until(targetTime)
+		if delay < 0 {
+			delay = 0
+		}
+		return delay, true
+	}
+	return 0, false
+}
+
+// computeBackoff calculates the exponential backoff duration for attempt (0-indexed).
+func (exporter *HTTPExporter) computeBackoff(attempt int, resp *http.Response) time.Duration {
+	if resp != nil {
+		if retryAfter, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
+			if retryAfter > exporter.config.MaxRetryInterval {
+				return exporter.config.MaxRetryInterval
+			}
+			return retryAfter
+		}
+	}
+
+	backoffMultiplier := math.Pow(2, float64(attempt))
+	delay := time.Duration(float64(exporter.config.InitialRetryInterval) * backoffMultiplier)
+	if delay > exporter.config.MaxRetryInterval {
+		delay = exporter.config.MaxRetryInterval
+	}
+	return delay
+}
+
 func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
-	bodyReader := bytes.NewReader(bodyBytes)
-	req, err := http.NewRequest(exporter.config.Method, fmt.Sprintf("%s/v1/%s", exporter.config.URL, path), bodyReader)
-	if err != nil {
-		logger.L().Error("failed to create HTTP request", helpers.Error(err))
-		return
-	}
-	for key, value := range exporter.config.Headers {
-		req.Header.Set(key, value)
-	}
+	maxRetries := exporter.config.MaxRetries
+	targetURL := fmt.Sprintf("%s/v1/%s", exporter.config.URL, path)
 
-	resp, err := exporter.httpClient.Do(req)
-	if err != nil {
-		logger.L().Error("failed to send HTTP request", helpers.Error(err))
-		return
-	}
-	defer resp.Body.Close()
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		bodyReader := bytes.NewReader(bodyBytes)
+		req, err := http.NewRequest(exporter.config.Method, targetURL, bodyReader)
+		if err != nil {
+			logger.L().Error("failed to create HTTP request", helpers.Error(err))
+			return
+		}
+		for key, value := range exporter.config.Headers {
+			req.Header.Set(key, value)
+		}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		logger.L().Error("Received non-2xx status code", helpers.Int("status", resp.StatusCode))
-		return
-	}
+		resp, err := exporter.httpClient.Do(req)
+		if err != nil {
+			if attempt < maxRetries {
+				delay := exporter.computeBackoff(attempt, nil)
+				logger.L().Warning("failed to send HTTP request, retrying",
+					helpers.Error(err),
+					helpers.Int("attempt", attempt+1),
+					helpers.Int("maxRetries", maxRetries),
+					helpers.String("backoff", delay.String()))
+				if exporter.sleepFn != nil {
+					exporter.sleepFn(delay)
+				}
+				continue
+			}
+			logger.L().Error("failed to send HTTP request, retries exhausted", helpers.Error(err), helpers.Int("attempts", attempt+1))
+			return
+		}
 
-	// discard the body
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		logger.L().Error("failed to clear response body", helpers.Error(err))
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			// Success: discard the body and return
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				logger.L().Error("failed to clear response body", helpers.Error(err))
+			}
+			_ = resp.Body.Close()
+			return
+		}
+
+		statusCode := resp.StatusCode
+		retryable := isRetryableStatus(statusCode)
+		var delay time.Duration
+		if retryable {
+			delay = exporter.computeBackoff(attempt, resp)
+		}
+
+		// Discard and close response body
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+
+		if retryable && attempt < maxRetries {
+			logger.L().Warning("received transient non-2xx status code, retrying",
+				helpers.Int("status", statusCode),
+				helpers.Int("attempt", attempt+1),
+				helpers.Int("maxRetries", maxRetries),
+				helpers.String("backoff", delay.String()))
+			if exporter.sleepFn != nil {
+				exporter.sleepFn(delay)
+			}
+			continue
+		}
+
+		if retryable {
+			logger.L().Error("received transient non-2xx status code, retries exhausted",
+				helpers.Int("status", statusCode),
+				helpers.Int("attempts", attempt+1))
+		} else {
+			logger.L().Error("received non-retryable non-2xx status code",
+				helpers.Int("status", statusCode))
+		}
+		return
 	}
 }
 
