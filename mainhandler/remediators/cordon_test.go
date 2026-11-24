@@ -241,3 +241,64 @@ func TestCordonRevert_NodeWithoutAnnotations(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got.Spec.Unschedulable)
 }
+
+// An administrator cordoned the node (say, for maintenance) before Kubescape
+// cordoned it. Reverting the Kubescape cordon must leave the node cordoned and
+// only remove Kubescape's annotations.
+func TestCordonRevert_KeepsCordonThatPredatesKubescape(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: true},
+	}
+	client := k8sfake.NewClientset(node)
+	r := NewCordonRemediator(client)
+	ctx := context.Background()
+
+	plan, err := r.Plan(ctx, Request{Target: Target{Kind: "Node", Name: "worker-1"}, Reason: "IoC on node"})
+	require.NoError(t, err)
+	_, err = r.Apply(ctx, plan, false)
+	require.NoError(t, err)
+	cordoned, err := client.CoreV1().Nodes().Get(ctx, "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, cordonPreexisting, cordoned.Annotations[AnnotationCordon])
+
+	res, err := r.Revert(ctx, Target{Kind: "Node", Name: "worker-1"}, false)
+	require.NoError(t, err)
+	assert.True(t, res.Applied)
+	assert.Contains(t, res.Description, "stays unschedulable")
+	assert.NotContains(t, res.Patch, "unschedulable")
+
+	got, err := client.CoreV1().Nodes().Get(ctx, "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable, "revert uncordoned a node that was cordoned before kubescape")
+	for _, key := range []string{AnnotationCordon, AnnotationRemediated, AnnotationReason} {
+		_, ok := got.Annotations[key]
+		assert.False(t, ok, "annotation %s left on the node", key)
+	}
+}
+
+// Cordoning a node Kubescape already cordoned keeps the Kubescape marker, so a
+// revert still uncordons it.
+func TestCordonRevert_UncordonsAfterRepeatedKubescapeCordon(t *testing.T) {
+	client := k8sfake.NewClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-1"}})
+	r := NewCordonRemediator(client)
+	ctx := context.Background()
+	req := Request{Target: Target{Kind: "Node", Name: "worker-1"}}
+
+	for i := 0; i < 2; i++ {
+		plan, err := r.Plan(ctx, req)
+		require.NoError(t, err)
+		_, err = r.Apply(ctx, plan, false)
+		require.NoError(t, err)
+	}
+	cordoned, err := client.CoreV1().Nodes().Get(ctx, "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, cordonByKubescape, cordoned.Annotations[AnnotationCordon])
+
+	res, err := r.Revert(ctx, Target{Kind: "Node", Name: "worker-1"}, false)
+	require.NoError(t, err)
+	assert.Contains(t, res.Description, `marked node "worker-1" schedulable (uncordon)`)
+	got, err := client.CoreV1().Nodes().Get(ctx, "worker-1", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.False(t, got.Spec.Unschedulable)
+}
