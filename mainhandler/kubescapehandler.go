@@ -112,13 +112,13 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 	for i := range req.TargetNames {
 		name := scheduledScanName(req.TargetNames[i], rand.NewSource(time.Now().UnixNano()).Int63())
 
-		// create config map
-		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, actionHandler.config.Namespace(), name, req); err != nil {
+		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, actionHandler.config.Namespace())
+		if err != nil {
 			return err
 		}
 
-		jobTemplateObj, err := getCronJobTemplate(actionHandler.k8sAPI, KubescapeCronJobTemplateName, actionHandler.config.Namespace())
-		if err != nil {
+		// create config map
+		if err := createTriggerRequestConfigMap(actionHandler.k8sAPI, actionHandler.config.Namespace(), name, req); err != nil {
 			return err
 		}
 
@@ -126,6 +126,7 @@ func (actionHandler *ActionHandler) setKubescapeCronJob(ctx context.Context) err
 
 		// create cronJob
 		if _, err := actionHandler.k8sAPI.KubernetesClient.BatchV1().CronJobs(actionHandler.config.Namespace()).Create(context.Background(), jobTemplateObj, metav1.CreateOptions{}); err != nil {
+			cleanUpRequestConfigMap(actionHandler.k8sAPI, actionHandler.config.Namespace(), name, err)
 			return err
 		}
 	}
