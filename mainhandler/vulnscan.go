@@ -27,6 +27,7 @@ import (
 	"github.com/kubescape/k8s-interface/cloudsupport"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/registrylisting"
 	"github.com/kubescape/operator/utils"
 	dockerregistry "github.com/moby/moby/api/types/registry"
 	"go.opentelemetry.io/otel"
@@ -129,7 +130,7 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageR
 	if err != nil {
 		return fmt.Errorf("failed to get registry client: %w", err)
 	}
-	if err := populateGitLabRepositoriesForScan(ctx, client, imageRegistry); err != nil {
+	if err := resolveRepositoriesForScan(ctx, client, imageRegistry); err != nil {
 		return fmt.Errorf("failed to prepare registry scan: %w", err)
 	}
 
@@ -151,15 +152,21 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageR
 	return nil
 }
 
-func populateGitLabRepositoriesForScan(ctx context.Context, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry) error {
+// resolveRepositoriesForScan replaces the saved repository list with the registry's
+// current repositories when the registry is set to scan all of them, so repositories
+// created after the scan was saved are scanned too. A GitLab registry saved with no
+// repositories is also listed, as before. The client holds the same registry, so
+// GetImagesToScan sees the new list.
+func resolveRepositoriesForScan(ctx context.Context, client interfaces.RegistryClient, imageRegistry apitypes.ContainerImageRegistry) error {
 	base := imageRegistry.GetBase()
-	if base.Provider != apitypes.Gitlab || len(base.Repositories) > 0 {
+	gitlabScanAll := base.Provider == apitypes.Gitlab && len(base.Repositories) == 0
+	if !base.ScanAllRepositories && !gitlabScanAll {
 		return nil
 	}
 
-	repositories, err := client.GetAllRepositories(ctx)
+	repositories, err := registrylisting.ListAllRepositories(ctx, client, imageRegistry)
 	if err != nil {
-		return fmt.Errorf("failed to get GitLab repositories: %w", err)
+		return fmt.Errorf("failed to list repositories: %w", err)
 	}
 	base.Repositories = repositories
 	return nil
