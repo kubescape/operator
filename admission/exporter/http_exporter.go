@@ -31,7 +31,7 @@ type HTTPExporterConfig struct {
 	Method             string `json:"method"`
 	MaxAlertsPerMinute int    `json:"maxAlertsPerMinute"`
 	// MaxRetries is the maximum number of retry attempts for transient errors (default 3, 0 disables retries)
-	MaxRetries int `json:"maxRetries"`
+	MaxRetries *int `json:"maxRetries"`
 	// InitialRetryInterval is the initial backoff interval for retries (default 500ms)
 	InitialRetryInterval time.Duration `json:"initialRetryInterval"`
 	// MaxRetryInterval is the maximum backoff interval cap for retries (default 5s)
@@ -56,6 +56,8 @@ type HTTPExporter struct {
 	// sleepFn is used for backoff delays in exportMessage, customizable in tests
 	sleepFn func(d time.Duration)
 }
+
+var _ Exporter = (*HTTPExporter)(nil)
 
 const (
 	defaultMaxRetries           = 3
@@ -87,8 +89,12 @@ func (config *HTTPExporterConfig) Validate() error {
 	if config.MaxAlertsPerMinute == 0 {
 		config.MaxAlertsPerMinute = 100
 	}
-	if config.MaxRetries < 0 {
-		config.MaxRetries = 0
+	if config.MaxRetries == nil {
+		defaultRetries := defaultMaxRetries
+		config.MaxRetries = &defaultRetries
+	} else if *config.MaxRetries < 0 {
+		zero := 0
+		config.MaxRetries = &zero
 	}
 	if config.InitialRetryInterval <= 0 {
 		config.InitialRetryInterval = defaultInitialRetryInterval
@@ -296,13 +302,18 @@ func isRetryableStatus(code int) bool {
 		code == http.StatusGatewayTimeout
 }
 
+const maxRetryAfterSeconds = int64(math.MaxInt64) / int64(time.Second)
+
 // parseRetryAfter attempts to parse a Retry-After header as either seconds or an HTTP-date.
 func parseRetryAfter(header string) (time.Duration, bool) {
 	header = strings.TrimSpace(header)
 	if header == "" {
 		return 0, false
 	}
-	if seconds, err := strconv.Atoi(header); err == nil && seconds >= 0 {
+	if seconds, err := strconv.ParseInt(header, 10, 64); err == nil && seconds >= 0 {
+		if seconds > maxRetryAfterSeconds {
+			return time.Duration(math.MaxInt64), true
+		}
 		return time.Duration(seconds) * time.Second, true
 	}
 	if targetTime, err := http.ParseTime(header); err == nil {
@@ -326,16 +337,18 @@ func (exporter *HTTPExporter) computeBackoff(attempt int, resp *http.Response) t
 		}
 	}
 
-	backoffMultiplier := math.Pow(2, float64(attempt))
-	delay := time.Duration(float64(exporter.config.InitialRetryInterval) * backoffMultiplier)
-	if delay > exporter.config.MaxRetryInterval {
-		delay = exporter.config.MaxRetryInterval
+	backoff := float64(exporter.config.InitialRetryInterval) * math.Pow(2, float64(attempt))
+	if math.IsNaN(backoff) || backoff > float64(exporter.config.MaxRetryInterval) {
+		return exporter.config.MaxRetryInterval
 	}
-	return delay
+	return time.Duration(backoff)
 }
 
 func (exporter *HTTPExporter) exportMessage(path string, bodyBytes []byte) {
-	maxRetries := exporter.config.MaxRetries
+	maxRetries := 0
+	if exporter.config.MaxRetries != nil {
+		maxRetries = *exporter.config.MaxRetries
+	}
 	targetURL := fmt.Sprintf("%s/v1/%s", exporter.config.URL, path)
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
