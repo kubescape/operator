@@ -241,6 +241,7 @@ type blockingRuleBindingCache struct {
 	release chan struct{}
 	entered chan struct{}
 	count   atomic.Int64
+	rules   []rules.RuleEvaluator
 }
 
 func (c *blockingRuleBindingCache) ListRulesForObject(_ context.Context, _ *unstructured.Unstructured) []rules.RuleEvaluator {
@@ -250,7 +251,7 @@ func (c *blockingRuleBindingCache) ListRulesForObject(_ context.Context, _ *unst
 	default:
 	}
 	<-c.release
-	return nil
+	return c.rules
 }
 
 func TestValidator_WorkerPool_DropsWhenQueueFull(t *testing.T) {
@@ -626,6 +627,7 @@ func TestValidator_EvaluationAbortsWhenWorkerLifecycleContextCanceled(t *testing
 	cache := &blockingRuleBindingCache{
 		release: make(chan struct{}),
 		entered: make(chan struct{}, 1),
+		rules:   []rules.RuleEvaluator{rule},
 	}
 	av := newTestValidator(cache)
 	av.SetWorkerPool(1, 4)
@@ -644,8 +646,10 @@ func TestValidator_EvaluationAbortsWhenWorkerLifecycleContextCanceled(t *testing
 		t.Fatal("worker never entered cache call")
 	}
 
-	// Cancel worker lifecycle context while inside cache
+	// Cancel worker lifecycle context while inside cache and allow AfterFunc
+	// goroutine to propagate cancellation before releasing the cache.
 	cancelWorker()
+	time.Sleep(10 * time.Millisecond)
 	// Release the cache
 	close(cache.release)
 
