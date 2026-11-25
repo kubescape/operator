@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/armosec/armoapi-go/apis"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -56,22 +55,26 @@ func (r *CordonRemediator) Plan(ctx context.Context, req Request) (Plan, error) 
 	}
 
 	desc := fmt.Sprintf("mark node %q unschedulable (cordon)", req.Target.Name)
+	var resourceVersion string
 	marker := cordonByKubescape
 	if r.client != nil {
 		node, err := r.client.CoreV1().Nodes().Get(ctx, req.Target.Name, metav1.GetOptions{})
-		if err == nil && node.Spec.Unschedulable {
+		if err != nil {
+			return Plan{}, fmt.Errorf("cordon: reading live node %q: %w", req.Target.Name, err)
+		}
+		// Bind the ownership decision to the node state used to make it.
+		resourceVersion = node.ResourceVersion
+		if node.Spec.Unschedulable {
 			desc = fmt.Sprintf("node %q is already unschedulable (cordoned)", req.Target.Name)
 			// Someone else cordoned this node, so a later revert must not
 			// uncordon it. A cordon Kubescape made earlier keeps its marker.
 			if node.Annotations[AnnotationCordon] != cordonByKubescape {
 				marker = cordonPreexisting
 			}
-		} else if err != nil && !apierrors.IsNotFound(err) {
-			return Plan{}, fmt.Errorf("cordon: reading live node %q: %w", req.Target.Name, err)
 		}
 	}
 
-	patchBytes, err := buildCordonPatch(req.Reason, req.FindingRef, marker)
+	patchBytes, err := buildCordonPatch(req.Reason, req.FindingRef, marker, resourceVersion)
 	if err != nil {
 		return Plan{}, fmt.Errorf("cordon: failed to build patch: %w", err)
 	}
@@ -188,7 +191,7 @@ func (r *CordonRemediator) patch(ctx context.Context, nodeName string, patch []b
 	return err
 }
 
-func buildCordonPatch(reason, findingRef, marker string) ([]byte, error) {
+func buildCordonPatch(reason, findingRef, marker, resourceVersion string) ([]byte, error) {
 	annotations := map[string]any{
 		AnnotationCordon:     marker,
 		AnnotationRemediated: "true",
@@ -200,10 +203,12 @@ func buildCordonPatch(reason, findingRef, marker string) ([]byte, error) {
 		annotations[AnnotationFindingRef] = findingRef
 	}
 
+	metadata := map[string]any{"annotations": annotations}
+	if resourceVersion != "" {
+		metadata["resourceVersion"] = resourceVersion
+	}
 	patchObj := map[string]any{
-		"metadata": map[string]any{
-			"annotations": annotations,
-		},
+		"metadata": metadata,
 		"spec": map[string]any{
 			"unschedulable": true,
 		},
