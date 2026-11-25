@@ -35,7 +35,10 @@ and returns an informative error.
   Kubernetes server-side dry-run (`metav1.DryRunAll`), validating admission and
   generating the exact plan without persisting changes. Only an explicit `--confirm` (`dryRun: false`) persists changes.
 - **Idempotency**: Applying `cordon` to a node that is already unschedulable
-  succeeds cleanly and notes this in the plan and execution description.
+  succeeds cleanly and notes this in the plan and execution description. If
+  the node was not cordoned by Kubescape, the marker is set to
+  `kubescape.io/cordon: preexisting` instead of `"true"`, so a later revert
+  keeps the existing cordon.
 - **Forensic Non-destruction**: Unlike node draining, cordoning does not evict
   or terminate running containers on the node, preserving in-memory process
   trees and forensic state for security analysis.
@@ -48,7 +51,10 @@ and clears the Kubescape cordon annotations (`kubescape.io/cordon`,
 `kubescape.io/remediation-finding-ref`), provided the node was cordoned by
 Kubescape (has `kubescape.io/cordon` annotation). If the node was cordoned
 externally (without `kubescape.io/cordon`), revert is a no-op to avoid
-disrupting external administrative or maintenance cordons.
+disrupting external administrative or maintenance cordons. If the node was
+already cordoned when Kubescape cordoned it (`kubescape.io/cordon:
+preexisting`), revert clears the Kubescape annotations and leaves the node
+unschedulable.
 
 ## Audit trail
 
