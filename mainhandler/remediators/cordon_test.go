@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -15,7 +16,7 @@ import (
 
 func TestCordonPlan_ValidNode(t *testing.T) {
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1", ResourceVersion: "42"},
 		Spec:       corev1.NodeSpec{Unschedulable: false},
 	}
 	client := k8sfake.NewClientset(node)
@@ -36,6 +37,7 @@ func TestCordonPlan_ValidNode(t *testing.T) {
 	assert.Equal(t, string(types.StrategicMergePatchType), plan.PatchType)
 	assert.JSONEq(t, `{
 		"metadata": {
+			"resourceVersion": "42",
 			"annotations": {
 				"kubescape.io/cordon": "true",
 				"kubescape.io/remediated": "true",
@@ -51,7 +53,7 @@ func TestCordonPlan_ValidNode(t *testing.T) {
 
 func TestCordonPlan_AlreadyUnschedulable(t *testing.T) {
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1", ResourceVersion: "42"},
 		Spec:       corev1.NodeSpec{Unschedulable: true},
 	}
 	client := k8sfake.NewClientset(node)
@@ -61,6 +63,13 @@ func TestCordonPlan_AlreadyUnschedulable(t *testing.T) {
 	plan, err := r.Plan(context.Background(), req)
 	require.NoError(t, err)
 	assert.Equal(t, `node "worker-1" is already unschedulable (cordoned)`, plan.Description)
+	assert.Contains(t, plan.Patch, `"resourceVersion":"42"`)
+}
+
+func TestCordonPlan_MissingNode(t *testing.T) {
+	r := NewCordonRemediator(k8sfake.NewClientset())
+	_, err := r.Plan(context.Background(), Request{Target: Target{Kind: "Node", Name: "missing"}})
+	require.True(t, apierrors.IsNotFound(err), "expected a missing node error, got %v", err)
 }
 
 func TestCordonPlan_RejectsUnsupportedKind(t *testing.T) {
