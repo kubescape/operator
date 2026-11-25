@@ -24,7 +24,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 const kubescapeTestNamespace = "kubescape"
@@ -40,6 +42,55 @@ func kubescapeCronJobHandler(t *testing.T, enabled bool, client *fake.Clientset,
 		config:     cfg,
 		k8sAPI:     &k8sinterface.KubernetesApi{KubernetesClient: client},
 		sessionObj: &utils.SessionObj{Command: cmd},
+	}
+}
+
+func TestSetKubescapeCronJob_RequestConfigMapOnFailure(t *testing.T) {
+	cmd := &armoapi.Command{Args: map[string]interface{}{
+		utils.KubescapeScanV1: map[string]interface{}{
+			"targetType": utilsapisv1.KindFramework, "targetNames": []string{"nsa"},
+		},
+		"jobParams": armoapi.CronJobParams{CronTabSchedule: "0 3 * * *"},
+	}}
+	ctx := context.Background()
+
+	t.Run("missing template", func(t *testing.T) {
+		client := fake.NewClientset()
+		err := kubescapeCronJobHandler(t, true, client, cmd).setKubescapeCronJob(ctx)
+		require.True(t, apierrors.IsNotFound(err), "expected template lookup to fail, got %v", err)
+		maps, err := client.CoreV1().ConfigMaps(kubescapeTestNamespace).List(ctx, metav1.ListOptions{})
+		require.NoError(t, err)
+		assert.Empty(t, maps.Items)
+	})
+
+	for _, tt := range []struct {
+		name        string
+		createErr   error
+		keepRequest bool
+	}{
+		{name: "admission rejection", createErr: apierrors.NewBadRequest("admission denied")},
+		{name: "lost response", createErr: context.DeadlineExceeded, keepRequest: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			template := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: KubescapeCronJobTemplateName, Namespace: kubescapeTestNamespace},
+				Data:       map[string]string{cronjobTemplateName: "{}"},
+			}
+			client := fake.NewClientset(template)
+			var jobName string
+			client.PrependReactor("create", "cronjobs", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				jobName = action.(k8stesting.CreateAction).GetObject().(*batchv1.CronJob).Name
+				return true, nil, tt.createErr
+			})
+			err := kubescapeCronJobHandler(t, true, client, cmd).setKubescapeCronJob(ctx)
+			require.ErrorIs(t, err, tt.createErr)
+			_, err = client.CoreV1().ConfigMaps(kubescapeTestNamespace).Get(ctx, jobName, metav1.GetOptions{})
+			if tt.keepRequest {
+				require.NoError(t, err)
+			} else {
+				require.True(t, apierrors.IsNotFound(err), "expected request ConfigMap to be removed, got %v", err)
+			}
+		})
 	}
 }
 
