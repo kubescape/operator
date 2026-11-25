@@ -29,7 +29,7 @@ uses:
 
 | Provider | How repositories are listed |
 | --- | --- |
-| AWS ECR | AWS SDK `DescribeRepositories`, paged with `NextToken` (ECR's `_catalog` endpoint is unreliable) |
+| AWS ECR | AWS SDK `DescribeRepositories`, paged with `NextToken` (ECR's `_catalog` endpoint is unreliable). Credentials match registryx's ECR client: the registry's access keys, else its `roleARN` assumed through STS, else the operator's default AWS credentials. If ECR rejects a `NextToken`, listing restarts from the first page once, then fails. |
 | Quay, Harbor, Azure, Google, Nexus, GitLab | registryx `GetAllRepositories` |
 
 ## Failure behavior

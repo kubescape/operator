@@ -13,7 +13,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 )
@@ -31,9 +33,8 @@ func ListAllRepositories(ctx context.Context, client interfaces.RegistryClient, 
 	return client.GetAllRepositories(ctx)
 }
 
-// ListECRRepositories lists an ECR registry's repositories with the AWS SDK, paging with
-// NextToken. It uses the registry's access keys when set, else the default AWS
-// credential chain.
+// ListECRRepositories lists an ECR registry's repositories with the AWS SDK. It
+// authenticates the same way registryx's ECR client does (see ecrConfig).
 func ListECRRepositories(ctx context.Context, registry armotypes.ContainerImageRegistry) ([]string, error) {
 	awsRegistry, ok := registry.(*armotypes.AWSImageRegistry)
 	if !ok {
@@ -44,39 +45,66 @@ func ListECRRepositories(ctx context.Context, registry armotypes.ContainerImageR
 		return nil, fmt.Errorf("failed to extract region from ECR URI: %s", awsRegistry.RegistryURI)
 	}
 
-	awsConfig, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	awsConfig, err := ecrConfig(ctx, awsRegistry, region)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, err
 	}
 
-	// Use explicit credentials if provided
-	if awsRegistry.AccessKeyID != "" && awsRegistry.SecretAccessKey != "" {
-		awsConfig.Credentials = credentials.NewStaticCredentialsProvider(
-			awsRegistry.AccessKeyID,
-			awsRegistry.SecretAccessKey,
-			"",
-		)
+	repositories, err := listECRPages(ctx, ecr.NewFromConfig(awsConfig))
+	if err != nil {
+		return nil, err
+	}
+	logger.L().Info("Successfully retrieved ECR repositories", helpers.Int("count", len(repositories)))
+	return repositories, nil
+}
+
+// ecrConfig picks the registry's credentials the way registryx's ECR client does: its
+// access keys when set, else its role (assumed through STS) when set, else the
+// operator's default AWS credential chain.
+func ecrConfig(ctx context.Context, registry *armotypes.AWSImageRegistry, region string) (aws.Config, error) {
+	opts := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(region)}
+	if registry.AccessKeyID != "" && registry.SecretAccessKey != "" {
+		opts = append(opts, awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(registry.AccessKeyID, registry.SecretAccessKey, "")))
 	}
 
-	ecrClient := ecr.NewFromConfig(awsConfig)
-	var allRepositories []string
+	awsConfig, err := awsconfig.LoadDefaultConfig(ctx, opts...)
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	if (registry.AccessKeyID == "" || registry.SecretAccessKey == "") && registry.RoleARN != "" {
+		assumeRole := stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsConfig), registry.RoleARN,
+			func(o *stscreds.AssumeRoleOptions) { o.RoleSessionName = ecrRoleSessionName })
+		awsConfig.Credentials = aws.NewCredentialsCache(assumeRole)
+	}
+	return awsConfig, nil
+}
+
+const ecrRoleSessionName = "kubescape-registry-listing"
+
+type ecrDescribeRepositoriesAPI interface {
+	DescribeRepositories(ctx context.Context, params *ecr.DescribeRepositoriesInput, optFns ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error)
+}
+
+// listECRPages pages through DescribeRepositories. When ECR rejects a NextToken, the
+// listing starts over from the first page once, discarding what it collected, so no
+// repository is returned twice; a second rejection is an error.
+func listECRPages(ctx context.Context, api ecrDescribeRepositoriesAPI) ([]string, error) {
+	var repositories []string
 	var nextToken *string
+	restarted := false
 
 	for {
-		input := &ecr.DescribeRepositoriesInput{
+		result, err := api.DescribeRepositories(ctx, &ecr.DescribeRepositoriesInput{
 			MaxResults: aws.Int32(100),
-		}
-		if nextToken != nil {
-			input.NextToken = nextToken
-		}
-
-		result, err := ecrClient.DescribeRepositories(ctx, input)
+			NextToken:  nextToken,
+		})
 		if err != nil {
-			// Retry without NextToken if ECR returns a NextToken-related error
-			if strings.Contains(err.Error(), "NextToken") ||
-				strings.Contains(err.Error(), "Invalid next token provided") ||
-				strings.Contains(err.Error(), "Invalid parameter at 'NextToken'") {
-				logger.L().Warning("ECR NextToken error detected, retrying without token", helpers.Error(err))
+			if nextToken != nil && !restarted && isNextTokenError(err) {
+				logger.L().Warning("ECR rejected the NextToken, listing again from the first page", helpers.Error(err))
+				restarted = true
+				repositories = nil
 				nextToken = nil
 				continue
 			}
@@ -85,18 +113,22 @@ func ListECRRepositories(ctx context.Context, registry armotypes.ContainerImageR
 
 		for _, repo := range result.Repositories {
 			if repo.RepositoryName != nil {
-				allRepositories = append(allRepositories, *repo.RepositoryName)
+				repositories = append(repositories, *repo.RepositoryName)
 			}
 		}
 
 		if result.NextToken == nil {
-			break
+			return repositories, nil
 		}
 		nextToken = result.NextToken
 	}
+}
 
-	logger.L().Info("Successfully retrieved ECR repositories", helpers.Int("count", len(allRepositories)))
-	return allRepositories, nil
+func isNextTokenError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "NextToken") ||
+		strings.Contains(msg, "Invalid next token provided") ||
+		strings.Contains(msg, "Invalid parameter at 'NextToken'")
 }
 
 func extractRegionFromECRURI(uri string) string {
