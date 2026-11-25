@@ -4,7 +4,7 @@ go 1.26.11
 
 require (
 	github.com/anchore/syft v1.55.0
-	github.com/armosec/armoapi-go v0.0.773
+	github.com/armosec/armoapi-go v0.0.777
 	github.com/armosec/registryx v0.0.36
 	github.com/armosec/utils-go v0.0.58
 	github.com/armosec/utils-k8s-go v0.0.35
