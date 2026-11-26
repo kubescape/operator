@@ -5,13 +5,23 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sort"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/armosec/armoapi-go/apis"
+	"github.com/armosec/utils-k8s-go/armometadata"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"github.com/kubescape/operator/config"
 	dockerregistry "github.com/moby/moby/api/types/registry"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -211,4 +221,150 @@ func Test_getImageScanConfig_tlsSettingsFollowTheExactRegistry(t *testing.T) {
 			assert.Equal(t, tt.wantInsecure, got.insecure, "http")
 		})
 	}
+}
+
+func newTestRegistryScanCommands(count int) []*apis.RegistryScanCommand {
+	cmds := make([]*apis.RegistryScanCommand, 0, count)
+	for i := range count {
+		cmds = append(cmds, &apis.RegistryScanCommand{
+			ImageScanParams: apis.ImageScanParams{
+				ImageTag: fmt.Sprintf("registry.example.com/repo/img-%d:v1", i),
+				JobID:    fmt.Sprintf("job-%d", i),
+			},
+		})
+	}
+	return cmds
+}
+
+func TestSendAllImagesToRegistryScan_BoundedConcurrency(t *testing.T) {
+	var inFlight atomic.Int32
+	var maxInFlight atomic.Int32
+	var totalCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		cur := inFlight.Add(1)
+		for {
+			prev := maxInFlight.Load()
+			if cur <= prev || maxInFlight.CompareAndSwap(prev, cur) {
+				break
+			}
+		}
+		totalCalls.Add(1)
+		time.Sleep(80 * time.Millisecond)
+		inFlight.Add(-1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	oldClient := VulnScanHttpClient
+	t.Cleanup(func() { VulnScanHttpClient = oldClient })
+	VulnScanHttpClient = server.Client()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	cfg, err := config.NewOperatorConfig(
+		config.CapabilitiesConfig{},
+		armometadata.ClusterConfig{KubevulnURL: host},
+		nil,
+		config.Config{Namespace: "kubescape", ConcurrencyWorkers: 3},
+	)
+	require.NoError(t, err)
+
+	err = sendAllImagesToRegistryScan(context.Background(), cfg, newTestRegistryScanCommands(6))
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(6), totalCalls.Load())
+	assert.GreaterOrEqual(t, maxInFlight.Load(), int32(2), "expected concurrent dispatch")
+	assert.LessOrEqual(t, maxInFlight.Load(), int32(3), "expected concurrency bounded by ConcurrencyWorkers")
+}
+
+func TestSendAllImagesToRegistryScan_AggregatesAllErrors(t *testing.T) {
+	var totalCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		totalCalls.Add(1)
+		s := string(body)
+		if strings.Contains(s, "img-1:v1") || strings.Contains(s, "img-3:v1") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	oldClient := VulnScanHttpClient
+	t.Cleanup(func() { VulnScanHttpClient = oldClient })
+	VulnScanHttpClient = server.Client()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	cfg, err := config.NewOperatorConfig(
+		config.CapabilitiesConfig{},
+		armometadata.ClusterConfig{KubevulnURL: host},
+		nil,
+		config.Config{Namespace: "kubescape", ConcurrencyWorkers: 2},
+	)
+	require.NoError(t, err)
+
+	err = sendAllImagesToRegistryScan(context.Background(), cfg, newTestRegistryScanCommands(4))
+	require.Error(t, err)
+	assert.Equal(t, int32(4), totalCalls.Load())
+	assert.Contains(t, err.Error(), "img-1:v1")
+	assert.Contains(t, err.Error(), "img-3:v1")
+}
+
+func TestSendAllImagesToRegistryScan_RespectsContextCancellation(t *testing.T) {
+	var totalCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		totalCalls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	oldClient := VulnScanHttpClient
+	t.Cleanup(func() { VulnScanHttpClient = oldClient })
+	VulnScanHttpClient = server.Client()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	cfg, err := config.NewOperatorConfig(
+		config.CapabilitiesConfig{},
+		armometadata.ClusterConfig{KubevulnURL: host},
+		nil,
+		config.Config{Namespace: "kubescape", ConcurrencyWorkers: 2},
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = sendAllImagesToRegistryScan(ctx, cfg, newTestRegistryScanCommands(3))
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, int32(0), totalCalls.Load())
+}
+
+func TestSendAllImagesToRegistryScan_EmptyAndNilCommands(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	oldClient := VulnScanHttpClient
+	t.Cleanup(func() { VulnScanHttpClient = oldClient })
+	VulnScanHttpClient = server.Client()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	cfg, err := config.NewOperatorConfig(
+		config.CapabilitiesConfig{},
+		armometadata.ClusterConfig{KubevulnURL: host},
+		nil,
+		config.Config{Namespace: "kubescape"},
+	)
+	require.NoError(t, err)
+
+	assert.NoError(t, sendAllImagesToRegistryScan(context.Background(), cfg, nil))
+	assert.NoError(t, sendAllImagesToRegistryScan(context.Background(), cfg, []*apis.RegistryScanCommand{
+		nil,
+		{ImageScanParams: apis.ImageScanParams{ImageTag: "registry.example.com/repo/img:v1", JobID: "job-1"}},
+	}))
 }
