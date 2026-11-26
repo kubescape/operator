@@ -317,3 +317,400 @@ func TestHTTPExporter_OutgoingRequest_ContentTypeHeader(t *testing.T) {
 		})
 	}
 }
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func TestHTTPExporter_RetryOnTransientFailure_Success(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		MaxRetries:           intPtr(3),
+		InitialRetryInterval: 10 * time.Millisecond,
+		MaxRetryInterval:     100 * time.Millisecond,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 3, attempts)
+	assert.Len(t, sleepDurations, 2)
+	assert.Equal(t, 10*time.Millisecond, sleepDurations[0])
+	assert.Equal(t, 20*time.Millisecond, sleepDurations[1])
+}
+
+func TestHTTPExporter_DefaultMaxRetries_AppliedWhenOmitted(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts <= 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		InitialRetryInterval: 5 * time.Millisecond,
+		MaxRetryInterval:     50 * time.Millisecond,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 4, attempts) // 1 initial attempt + 3 default retries
+	assert.Len(t, sleepDurations, 3)
+}
+
+func TestHTTPExporter_ExplicitZeroMaxRetries_DisablesRetries(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		MaxRetries:           intPtr(0),
+		InitialRetryInterval: 5 * time.Millisecond,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 1, attempts)
+	assert.Empty(t, sleepDurations)
+}
+
+func TestHTTPExporter_NonRetryableStatus_FailsFastWithoutRetry(t *testing.T) {
+	nonRetryableCodes := []int{
+		http.StatusBadRequest,          // 400
+		http.StatusUnauthorized,        // 401
+		http.StatusForbidden,           // 403
+		http.StatusNotFound,            // 404
+		http.StatusUnprocessableEntity, // 422
+	}
+
+	for _, statusCode := range nonRetryableCodes {
+		t.Run(http.StatusText(statusCode), func(t *testing.T) {
+			attempts := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				w.WriteHeader(statusCode)
+			}))
+			defer srv.Close()
+
+			var sleepDurations []time.Duration
+			config := HTTPExporterConfig{
+				URL:                  srv.URL,
+				Method:               "POST",
+				MaxRetries:           intPtr(3),
+				InitialRetryInterval: 10 * time.Millisecond,
+			}
+			exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+			assert.NoError(t, err)
+
+			exporter.sleepFn = func(d time.Duration) {
+				sleepDurations = append(sleepDurations, d)
+			}
+
+			exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+				BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+				RuleID:           "R2003",
+			})
+
+			assert.Equal(t, 1, attempts)
+			assert.Empty(t, sleepDurations)
+		})
+	}
+}
+
+func TestHTTPExporter_RetryAfterHeader_Seconds(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		MaxRetries:           intPtr(2),
+		InitialRetryInterval: 50 * time.Millisecond,
+		MaxRetryInterval:     5 * time.Second,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 2, attempts)
+	assert.Len(t, sleepDurations, 1)
+	assert.Equal(t, 2*time.Second, sleepDurations[0])
+}
+
+func TestHTTPExporter_RetryAfterHeader_CappedAtMaxRetryInterval(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.Header().Set("Retry-After", "60")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		MaxRetries:           intPtr(1),
+		InitialRetryInterval: 10 * time.Millisecond,
+		MaxRetryInterval:     3 * time.Second,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 2, attempts)
+	assert.Len(t, sleepDurations, 1)
+	assert.Equal(t, 3*time.Second, sleepDurations[0])
+}
+
+func TestHTTPExporter_RetryAfterHeader_HTTPDate_CappedAtMaxRetryInterval(t *testing.T) {
+	attempts := 0
+	futureDate := time.Now().Add(30 * time.Second).UTC().Format(http.TimeFormat)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.Header().Set("Retry-After", futureDate)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		MaxRetries:           intPtr(1),
+		InitialRetryInterval: 10 * time.Millisecond,
+		MaxRetryInterval:     2 * time.Second,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 2, attempts)
+	assert.Len(t, sleepDurations, 1)
+	assert.Equal(t, 2*time.Second, sleepDurations[0])
+}
+
+func TestHTTPExporter_OverflowGuards(t *testing.T) {
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{
+		URL:                  "http://localhost:8080",
+		Method:               "POST",
+		MaxRetries:           intPtr(50),
+		InitialRetryInterval: 500 * time.Millisecond,
+		MaxRetryInterval:     5 * time.Second,
+	}, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	// Huge Retry-After seconds must saturate and cap at MaxRetryInterval instead of overflowing negative
+	resp := &http.Response{Header: http.Header{}}
+	resp.Header.Set("Retry-After", "9223372037")
+	assert.Equal(t, 5*time.Second, exporter.computeBackoff(0, resp))
+
+	// Large exponential attempt index must cap at MaxRetryInterval instead of overflowing negative
+	assert.Equal(t, 5*time.Second, exporter.computeBackoff(40, nil))
+	assert.Equal(t, 5*time.Second, exporter.computeBackoff(100, nil))
+}
+
+func TestHTTPExporter_RetriesExhausted(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadGateway) // 502
+	}))
+	defer srv.Close()
+
+	var sleepDurations []time.Duration
+	config := HTTPExporterConfig{
+		URL:                  srv.URL,
+		Method:               "POST",
+		MaxRetries:           intPtr(2),
+		InitialRetryInterval: 10 * time.Millisecond,
+	}
+	exporter, err := InitHTTPExporter(config, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.sleepFn = func(d time.Duration) {
+		sleepDurations = append(sleepDurations, d)
+	}
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 3, attempts) // initial attempt + 2 retries
+	assert.Len(t, sleepDurations, 2)
+}
+
+func TestHTTPExporterConfig_Validate_RetryDefaults(t *testing.T) {
+	// Omitted MaxRetries defaults to defaultMaxRetries (3)
+	config := HTTPExporterConfig{
+		URL: "http://localhost:8080",
+	}
+	err := config.Validate()
+	assert.NoError(t, err)
+	if assert.NotNil(t, config.MaxRetries) {
+		assert.Equal(t, defaultMaxRetries, *config.MaxRetries)
+	}
+	assert.Equal(t, defaultInitialRetryInterval, config.InitialRetryInterval)
+	assert.Equal(t, defaultMaxRetryInterval, config.MaxRetryInterval)
+
+	// Explicit 0 disables retries without being overwritten by default
+	zeroConfig := HTTPExporterConfig{
+		URL:        "http://localhost:8080",
+		MaxRetries: intPtr(0),
+	}
+	err = zeroConfig.Validate()
+	assert.NoError(t, err)
+	if assert.NotNil(t, zeroConfig.MaxRetries) {
+		assert.Equal(t, 0, *zeroConfig.MaxRetries)
+	}
+
+	// Custom configuration preserved
+	customConfig := HTTPExporterConfig{
+		URL:                  "http://localhost:8080",
+		MaxRetries:           intPtr(5),
+		InitialRetryInterval: 100 * time.Millisecond,
+		MaxRetryInterval:     10 * time.Second,
+	}
+	err = customConfig.Validate()
+	assert.NoError(t, err)
+	if assert.NotNil(t, customConfig.MaxRetries) {
+		assert.Equal(t, 5, *customConfig.MaxRetries)
+	}
+	assert.Equal(t, 100*time.Millisecond, customConfig.InitialRetryInterval)
+	assert.Equal(t, 10*time.Second, customConfig.MaxRetryInterval)
+
+	// Negative retries clamped to 0
+	negativeConfig := HTTPExporterConfig{
+		URL:        "http://localhost:8080",
+		MaxRetries: intPtr(-1),
+	}
+	err = negativeConfig.Validate()
+	assert.NoError(t, err)
+	if assert.NotNil(t, negativeConfig.MaxRetries) {
+		assert.Equal(t, 0, *negativeConfig.MaxRetries)
+	}
+}
+
+// TestHTTPExporter_DefaultRetryOn503_Succeeds verifies that with default
+// configuration (no retry fields explicitly set), transient 503 responses are
+// retried automatically until the request succeeds.
+func TestHTTPExporter_DefaultRetryOn503_Succeeds(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	exporter, err := InitHTTPExporter(HTTPExporterConfig{
+		URL:    srv.URL,
+		Method: "POST",
+	}, "test-cluster", nil, "test-uid")
+	assert.NoError(t, err)
+
+	exporter.SendAdmissionAlert(&rulesv1.GenericRuleFailure{
+		BaseRuntimeAlert: apitypes.BaseRuntimeAlert{AlertName: "test-alert", UniqueID: "ns/pod"},
+		RuleID:           "R2003",
+	})
+
+	assert.Equal(t, 3, attempts)
+}
