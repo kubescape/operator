@@ -4,24 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/armosec/registryx/common"
 
 	"github.com/armosec/armoapi-go/apis"
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/registryx/interfaces"
 	"github.com/armosec/registryx/registryclients"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/kubescape/backend/pkg/command"
 	"github.com/kubescape/backend/pkg/command/types/v1alpha1"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/kubescape/operator/config"
+	"github.com/kubescape/operator/registrylisting"
 	"golang.org/x/sync/errgroup"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -160,22 +157,22 @@ func (ch *RegistryCommandsHandler) checkRegistry(cmd v1alpha1.OperatorCommand) (
 		return nil, err
 	}
 
-	// Use AWS SDK for ECR to avoid _catalog endpoint issues
-	if registry.GetBase().Provider == armotypes.AWS {
-		return ch.checkECRRegistry(registry)
+	// ECR is listed with the AWS SDK and needs no registryx client: ListAllRepositories
+	// never uses client for ECR, and fails if it is nil for any other provider.
+	var client interfaces.RegistryClient
+	if registry.GetBase().Provider != armotypes.AWS {
+		options := &common.RegistryOptions{}
+		options = options.WithSkipTLSVerify(
+			ch.config.RegistryScanningSkipTlsVerify()).
+			WithInsecure(ch.config.RegistryScanningInsecure())
+		client, err = registryclients.GetRegistryClient(registry, options)
+		if err != nil {
+			logger.L().Error("checkRegistry - failed to get registry client", helpers.Error(err))
+			return nil, err
+		}
 	}
 
-	options := &common.RegistryOptions{}
-	options = options.WithSkipTLSVerify(
-		ch.config.RegistryScanningSkipTlsVerify()).
-		WithInsecure(ch.config.RegistryScanningInsecure())
-	client, err := registryclients.GetRegistryClient(registry, options)
-	if err != nil {
-		logger.L().Error("checkRegistry - failed to get registry client", helpers.Error(err))
-		return nil, err
-	}
-
-	repositories, err := client.GetAllRepositories(context.Background())
+	repositories, err := registrylisting.ListAllRepositories(context.Background(), client, registry)
 	if err != nil {
 		logger.L().Error("checkRegistry - failed to get registry repositories", helpers.Error(err))
 		return nil, err
@@ -187,101 +184,6 @@ func (ch *RegistryCommandsHandler) checkRegistry(cmd v1alpha1.OperatorCommand) (
 	}
 
 	return payload, nil
-}
-
-// Uses AWS SDK instead of HTTP calls for ECR to avoid _catalog endpoint issue
-func (ch *RegistryCommandsHandler) checkECRRegistry(registry armotypes.ContainerImageRegistry) ([]byte, error) {
-	var registryURI string
-	if awsRegistry, ok := registry.(*armotypes.AWSImageRegistry); ok {
-		registryURI = awsRegistry.RegistryURI
-	} else {
-		return nil, fmt.Errorf("registry is not an AWS registry")
-	}
-	region := extractRegionFromECRURI(registryURI)
-	if region == "" {
-		return nil, fmt.Errorf("failed to extract region from ECR URI: %s", registryURI)
-	}
-
-	repositories, err := ch.getECRRepositoriesWithSDK(registry, region)
-	if err != nil {
-		logger.L().Error("checkECRRegistry - failed to get ECR repositories", helpers.Error(err))
-		return nil, err
-	}
-
-	payload, err := json.Marshal(repositories)
-	if err != nil {
-		return nil, err
-	}
-
-	return payload, nil
-}
-
-// Extracts AWS region from ECR URI (format: account.dkr.ecr.region.amazonaws.com)
-func extractRegionFromECRURI(uri string) string {
-	parts := strings.Split(uri, ".")
-	if len(parts) >= 4 && parts[1] == "dkr" && parts[2] == "ecr" {
-		return parts[3]
-	}
-	return ""
-}
-
-// Uses AWS SDK to get ECR repositories with proper pagination and NextToken error handling
-func (ch *RegistryCommandsHandler) getECRRepositoriesWithSDK(registry armotypes.ContainerImageRegistry, region string) ([]string, error) {
-	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(region))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Use explicit credentials if provided
-	if awsRegistry, ok := registry.(*armotypes.AWSImageRegistry); ok {
-		if awsRegistry.AccessKeyID != "" && awsRegistry.SecretAccessKey != "" {
-			awsConfig.Credentials = credentials.NewStaticCredentialsProvider(
-				awsRegistry.AccessKeyID,
-				awsRegistry.SecretAccessKey,
-				"",
-			)
-		}
-	}
-
-	ecrClient := ecr.NewFromConfig(awsConfig)
-	var allRepositories []string
-	var nextToken *string
-
-	for {
-		input := &ecr.DescribeRepositoriesInput{
-			MaxResults: aws.Int32(100),
-		}
-		if nextToken != nil {
-			input.NextToken = nextToken
-		}
-
-		result, err := ecrClient.DescribeRepositories(context.Background(), input)
-		if err != nil {
-			// Retry without NextToken if ECR returns a NextToken-related error
-			if strings.Contains(err.Error(), "NextToken") ||
-				strings.Contains(err.Error(), "Invalid next token provided") ||
-				strings.Contains(err.Error(), "Invalid parameter at 'NextToken'") {
-				logger.L().Warning("ECR NextToken error detected, retrying without token", helpers.Error(err))
-				nextToken = nil
-				continue
-			}
-			return nil, fmt.Errorf("ECR API error: %w", err)
-		}
-
-		for _, repo := range result.Repositories {
-			if repo.RepositoryName != nil {
-				allRepositories = append(allRepositories, *repo.RepositoryName)
-			}
-		}
-
-		if result.NextToken == nil {
-			break
-		}
-		nextToken = result.NextToken
-	}
-
-	logger.L().Info("Successfully retrieved ECR repositories", helpers.Int("count", len(allRepositories)))
-	return allRepositories, nil
 }
 
 // deleteRegistry removes what upsertRegistry created for the registry: its secret, its

@@ -193,10 +193,14 @@ github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armosec/armoapi-go v0.0.773 h1:K1p8e9Y2X9GA7Pu2mcUm3FS63o2VWyGHLgOXwebgarA=
 github.com/armosec/armoapi-go v0.0.773/go.mod h1:GPepYyHTY4s/HPGLNZjP6bLUMscHpEKeUH1deKvwa4c=
+github.com/armosec/armoapi-go v0.0.777 h1:4s00rvEqC0eJJfXZ3ntGb1LK747jGmTHQtzUlsr8lm8=
+github.com/armosec/armoapi-go v0.0.777/go.mod h1:Nnrd79nDBmvlRGWLmx9Rze7D1PJKvy6ksJ06BrF9G1w=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
 github.com/armosec/gojay v1.2.17/go.mod h1:vuvX3DlY0nbVrJ0qCklSS733AWMoQboq3cFyuQW9ybc=
 github.com/armosec/registryx v0.0.36 h1:HPkPEhv3VLp3lpVRB49OQepxQb3wMATMbIxGC4NfuAI=
 github.com/armosec/registryx v0.0.36/go.mod h1:gSAQF6eqAmOKMRAE0zdMNvCtFEReh4y09wjYCddU734=
+github.com/armosec/registryx v0.0.37 h1:D1zaHTYMh1bkrQ6/Ls3M/YWrT1vsAxxaTGJevLNNwj4=
+github.com/armosec/registryx v0.0.37/go.mod h1:gSAQF6eqAmOKMRAE0zdMNvCtFEReh4y09wjYCddU734=
 github.com/armosec/utils-go v0.0.58 h1:g9RnRkxZAmzTfPe2ruMo2OXSYLwVSegQSkSavOfmaIE=
 github.com/armosec/utils-go v0.0.58/go.mod h1:CdqKHKruVJMCxGcZXYW9J+5P9FZou8dMzVpcB0Xt8pk=
 github.com/armosec/utils-k8s-go v0.0.35 h1:CliNObhAca5UYl84m5OQecOTm9ZfMFI8648pYhQJiu4=
