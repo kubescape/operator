@@ -8,6 +8,8 @@ import (
 
 	"github.com/kubescape/operator/admission/rulebinding"
 	"github.com/kubescape/operator/admission/rules"
+	"github.com/kubescape/operator/objectcache"
+	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -239,6 +241,7 @@ type blockingRuleBindingCache struct {
 	release chan struct{}
 	entered chan struct{}
 	count   atomic.Int64
+	rules   []rules.RuleEvaluator
 }
 
 func (c *blockingRuleBindingCache) ListRulesForObject(_ context.Context, _ *unstructured.Unstructured) []rules.RuleEvaluator {
@@ -248,7 +251,7 @@ func (c *blockingRuleBindingCache) ListRulesForObject(_ context.Context, _ *unst
 	default:
 	}
 	<-c.release
-	return nil
+	return c.rules
 }
 
 func TestValidator_WorkerPool_DropsWhenQueueFull(t *testing.T) {
@@ -439,4 +442,274 @@ func TestValidator_TypedObjectIsConvertedToUnstructured(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("typed object evaluation timed out; was likely dropped")
 	}
+}
+
+func TestValidator_CanceledContextNotEnqueued(t *testing.T) {
+	av := newTestValidator(&countingRuleBindingCache{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel before Validate
+
+	attrs := newSelfTestAttributes("kubernetes-admin")
+	err := av.Validate(ctx, attrs, nil)
+	if err == nil {
+		t.Fatal("expected error when validating with canceled context, got nil")
+	}
+	if err != context.Canceled {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+	if len(av.jobs) != 0 {
+		t.Errorf("expected 0 enqueued jobs for canceled context, got %d", len(av.jobs))
+	}
+}
+
+func TestValidator_ExpiredDeadlineNotEnqueued(t *testing.T) {
+	av := newTestValidator(&countingRuleBindingCache{})
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	attrs := newSelfTestAttributes("kubernetes-admin")
+	err := av.Validate(ctx, attrs, nil)
+	if err == nil {
+		t.Fatal("expected error when validating with expired context deadline, got nil")
+	}
+	if err != context.DeadlineExceeded {
+		t.Errorf("expected context.DeadlineExceeded, got %v", err)
+	}
+	if len(av.jobs) != 0 {
+		t.Errorf("expected 0 enqueued jobs for expired context, got %d", len(av.jobs))
+	}
+}
+
+type contextCapturingCache struct {
+	calls         atomic.Int64
+	done          chan struct{}
+	receivedCtx   context.Context
+	errDuringCall error
+	delay         time.Duration
+	rules         []rules.RuleEvaluator
+}
+
+func (c *contextCapturingCache) ListRulesForObject(ctx context.Context, _ *unstructured.Unstructured) []rules.RuleEvaluator {
+	c.calls.Add(1)
+	c.receivedCtx = ctx
+	c.errDuringCall = ctx.Err()
+	if c.delay > 0 {
+		time.Sleep(c.delay)
+	}
+	if c.done != nil {
+		select {
+		case c.done <- struct{}{}:
+		default:
+		}
+	}
+	return c.rules
+}
+
+func TestValidator_HandlerReturnContextCancellationDoesNotCancelQueuedEvaluation(t *testing.T) {
+	cache := &contextCapturingCache{done: make(chan struct{}, 1)}
+	av := newTestValidator(cache)
+	av.SetWorkerPool(1, 4)
+
+	type ctxKey string
+	const testKey ctxKey = "request-trace-id"
+
+	reqCtx, cancelReq := context.WithCancel(context.WithValue(context.Background(), testKey, "trace-12345"))
+	attrs := newSelfTestAttributes("kubernetes-admin")
+
+	if err := av.Validate(reqCtx, attrs, nil); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+
+	// Simulate HTTP handler finishing and net/http canceling req.Context()
+	cancelReq()
+
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	av.Start(workerCtx)
+
+	select {
+	case <-cache.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("evaluation timed out; was likely canceled when req context was canceled")
+	}
+
+	if got := cache.calls.Load(); got != 1 {
+		t.Errorf("cache calls = %d, want 1", got)
+	}
+	if cache.receivedCtx == nil {
+		t.Fatal("expected receivedCtx to be non-nil")
+	}
+	if got := cache.receivedCtx.Value(testKey); got != "trace-12345" {
+		t.Errorf("expected context value 'trace-12345', got %v", got)
+	}
+	if cache.errDuringCall != nil {
+		t.Errorf("expected evaluation context to be active during evaluation, got error: %v", cache.errDuringCall)
+	}
+}
+
+func TestValidator_QueuedJobWithExpiredDeadlineSkipped(t *testing.T) {
+	cache := &contextCapturingCache{done: make(chan struct{}, 1)}
+	av := newTestValidator(cache)
+	av.SetWorkerPool(1, 4)
+
+	// Context with a short deadline (30ms)
+	reqCtx, cancelReq := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancelReq()
+
+	attrs := newSelfTestAttributes("kubernetes-admin")
+	if err := av.Validate(reqCtx, attrs, nil); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+
+	// Sleep until deadline has expired while job sits in the queue
+	time.Sleep(60 * time.Millisecond)
+
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	av.Start(workerCtx)
+
+	// Give worker time to process the queue
+	time.Sleep(100 * time.Millisecond)
+
+	if got := cache.calls.Load(); got != 0 {
+		t.Errorf("cache calls = %d, want 0 (expired job should have been skipped)", got)
+	}
+}
+
+type trackingRuleEvaluator struct {
+	evaluated atomic.Int64
+}
+
+func (r *trackingRuleEvaluator) ID() string   { return "tracking-rule" }
+func (r *trackingRuleEvaluator) Name() string { return "tracking-rule" }
+func (r *trackingRuleEvaluator) ProcessEvent(_ admission.Attributes, _ objectcache.KubernetesCache) rules.RuleFailure {
+	r.evaluated.Add(1)
+	return nil
+}
+func (r *trackingRuleEvaluator) SetParameters(_ map[string]interface{}) {}
+func (r *trackingRuleEvaluator) GetParameters() map[string]interface{}  { return nil }
+
+func TestValidator_EvaluationAbortsWhenJobDeadlineExceeded(t *testing.T) {
+	rule := &trackingRuleEvaluator{}
+	cache := &contextCapturingCache{
+		delay: 60 * time.Millisecond,
+		rules: []rules.RuleEvaluator{rule},
+	}
+	av := newTestValidator(cache)
+	av.SetWorkerPool(1, 4)
+
+	// Deadline expires during cache lookup before rule evaluation
+	reqCtx, cancelReq := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancelReq()
+
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	av.Start(workerCtx)
+
+	attrs := newSelfTestAttributes("kubernetes-admin")
+	if err := av.Validate(reqCtx, attrs, nil); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+
+	// Wait for cache lookup and evaluation attempt to complete
+	time.Sleep(150 * time.Millisecond)
+
+	if got := cache.calls.Load(); got != 1 {
+		t.Errorf("cache calls = %d, want 1", got)
+	}
+	if got := rule.evaluated.Load(); got != 0 {
+		t.Errorf("rule evaluations = %d, want 0 (evaluation should have aborted on deadline exceeded)", got)
+	}
+}
+
+func TestValidator_EvaluationAbortsWhenWorkerLifecycleContextCanceled(t *testing.T) {
+	rule := &trackingRuleEvaluator{}
+	cache := &blockingRuleBindingCache{
+		release: make(chan struct{}),
+		entered: make(chan struct{}, 1),
+		rules:   []rules.RuleEvaluator{rule},
+	}
+	av := newTestValidator(cache)
+	av.SetWorkerPool(1, 4)
+
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	av.Start(workerCtx)
+
+	attrs := newSelfTestAttributes("kubernetes-admin")
+	if err := av.Validate(context.Background(), attrs, nil); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+
+	select {
+	case <-cache.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker never entered cache call")
+	}
+
+	// Cancel worker lifecycle context while inside cache and allow AfterFunc
+	// goroutine to propagate cancellation before releasing the cache.
+	cancelWorker()
+	time.Sleep(10 * time.Millisecond)
+	// Release the cache
+	close(cache.release)
+
+	done := make(chan struct{})
+	go func() {
+		av.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("workers did not exit after lifecycle cancel")
+	}
+
+	if got := rule.evaluated.Load(); got != 0 {
+		t.Errorf("rule evaluations = %d, want 0 (evaluation should have aborted on lifecycle cancel)", got)
+	}
+}
+
+func TestLinkContexts(t *testing.T) {
+	t.Run("canceling lifecycle cancels linked context", func(t *testing.T) {
+		lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
+		reqCtx := context.Background()
+
+		linked, stop := linkContexts(lifecycleCtx, reqCtx)
+		defer stop()
+
+		assert.NoError(t, linked.Err())
+		cancelLifecycle()
+		<-linked.Done()
+		assert.Equal(t, context.Canceled, linked.Err())
+	})
+
+	t.Run("canceling req context cancels linked context", func(t *testing.T) {
+		lifecycleCtx := context.Background()
+		reqCtx, cancelReq := context.WithCancel(context.Background())
+
+		linked, stop := linkContexts(lifecycleCtx, reqCtx)
+		defer stop()
+
+		assert.NoError(t, linked.Err())
+		cancelReq()
+		<-linked.Done()
+		assert.Equal(t, context.Canceled, linked.Err())
+	})
+
+	t.Run("preserves req context values and deadline", func(t *testing.T) {
+		lifecycleCtx := context.Background()
+		type key string
+		const k key = "foo"
+		deadline := time.Now().Add(5 * time.Second)
+		reqCtx, cancelReq := context.WithDeadline(context.WithValue(context.Background(), k, "bar"), deadline)
+		defer cancelReq()
+
+		linked, stop := linkContexts(lifecycleCtx, reqCtx)
+		defer stop()
+
+		assert.Equal(t, "bar", linked.Value(k))
+		dl, ok := linked.Deadline()
+		assert.True(t, ok)
+		assert.Equal(t, deadline, dl)
+	})
 }

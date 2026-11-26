@@ -380,4 +380,31 @@ func TestHandleWebhookValidate_ContextPropagation(t *testing.T) {
 		assert.NoError(t, val.receivedCtx.Err())
 	})
 
+	t.Run("handles canceled request context with validator", func(t *testing.T) {
+		val := newTestValidator(&countingRuleBindingCache{})
+		wh := &webhook{
+			validator:        val,
+			objectInferfaces: admission.NewObjectInterfacesFromScheme(scheme),
+			decoder:          decoder,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		req := httptest.NewRequest("POST", "http://localhost/validate", bytes.NewReader(reviewBytes)).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		wh.handleWebhookValidate(w, req)
+
+		resp := w.Result()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var admissionReview admissionv1.AdmissionReview
+		err := json.Unmarshal(w.Body.Bytes(), &admissionReview)
+		assert.NoError(t, err)
+		assert.True(t, admissionReview.Response.Allowed)
+		assert.Contains(t, admissionReview.Response.Result.Message, "context canceled")
+		assert.Equal(t, 0, len(val.jobs), "no job should be enqueued for canceled request")
+	})
 }

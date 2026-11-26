@@ -44,8 +44,15 @@ const (
 // Holding admission.Attributes directly is safe: the framework does not
 // pool or recycle these records, so workers can read the same fields the
 // validator handler saw.
+//
+// ctx carries the request-scoped context (values, tracing, and deadline)
+// detached from the HTTP handler's lifecycle so that worker evaluation is not
+// prematurely canceled when the HTTP response completes. cancel releases
+// any deadline timer or context resources once evaluation is finished or dropped.
 type evalJob struct {
-	attrs admission.Attributes
+	ctx    context.Context
+	cancel context.CancelFunc
+	attrs  admission.Attributes
 }
 
 // KindAcceptor decides whether an admission Kind should be evaluated by the
@@ -192,6 +199,13 @@ func (av *AdmissionValidator) isSelfRequest(attrs admission.Attributes) bool {
 //   - Requests that cannot be enqueued because the queue is full (drop with
 //     warning + counter, never block the API server).
 func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attributes, _ admission.ObjectInterfaces) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		telemetry.Admission(ctx, "dropped", 0)
+		return err
+	}
 	if av.isSelfRequest(attrs) {
 		telemetry.Admission(ctx, "self", 0)
 		return nil
@@ -206,10 +220,25 @@ func (av *AdmissionValidator) Validate(ctx context.Context, attrs admission.Attr
 		return nil
 	}
 
+	// Detach from the incoming HTTP request context cancellation so that
+	// workers are not canceled when handleWebhookValidate returns and the HTTP
+	// connection completes. Retain request-scoped values and propagate any
+	// client/request deadline.
+	jobCtx := context.WithoutCancel(ctx)
+	var cancel context.CancelFunc
+	if deadline, ok := ctx.Deadline(); ok {
+		jobCtx, cancel = context.WithDeadline(jobCtx, deadline)
+	} else {
+		jobCtx, cancel = context.WithCancel(jobCtx)
+	}
+
 	select {
-	case av.jobs <- evalJob{attrs: attrs}:
+	case av.jobs <- evalJob{ctx: jobCtx, cancel: cancel, attrs: attrs}:
 		telemetry.Admission(ctx, "queued", 0)
 	default:
+		if cancel != nil {
+			cancel()
+		}
 		telemetry.Admission(ctx, "dropped", 0)
 		n := av.dropCount.Add(1)
 		if n == 1 || n%dropLogInterval == 0 {
@@ -237,7 +266,11 @@ func (av *AdmissionValidator) runWorker(ctx context.Context) {
 			av.drainJobs()
 			return
 		case job := <-av.jobs:
-			av.evaluate(ctx, job.attrs)
+			if ctx.Err() != nil {
+				av.drainWithJob(job)
+				return
+			}
+			av.processJob(ctx, job)
 		}
 	}
 }
@@ -246,8 +279,21 @@ func (av *AdmissionValidator) runWorker(ctx context.Context) {
 // workers may call this concurrently; the channel reads are safe and they
 // race to empty the queue cooperatively.
 func (av *AdmissionValidator) drainJobs() {
+	av.drainJobsStartingWith(nil)
+}
+
+func (av *AdmissionValidator) drainWithJob(firstJob evalJob) {
+	av.drainJobsStartingWith(&firstJob)
+}
+
+func (av *AdmissionValidator) drainJobsStartingWith(firstJob *evalJob) {
 	drainCtx, cancel := context.WithTimeout(context.Background(), shutdownDrainTimeout)
 	defer cancel()
+
+	if firstJob != nil {
+		av.processJob(drainCtx, *firstJob)
+	}
+
 	for {
 		select {
 		case <-drainCtx.Done():
@@ -255,19 +301,86 @@ func (av *AdmissionValidator) drainJobs() {
 			if remaining > 0 {
 				logger.L().Warning("admission validator drain timed out; abandoning queued jobs",
 					helpers.Int("remaining", remaining))
+				for {
+					select {
+					case job := <-av.jobs:
+						if job.cancel != nil {
+							job.cancel()
+						}
+					default:
+						return
+					}
+				}
 			}
 			return
 		case job := <-av.jobs:
-			av.evaluate(drainCtx, job.attrs)
+			av.processJob(drainCtx, job)
 		default:
 			return
 		}
 	}
 }
 
+// processJob evaluates an enqueued job under the combined lifecycle context
+// and the job's detached request context. If the job's deadline has already
+// expired or if the job context was canceled while queued, evaluation is skipped.
+func (av *AdmissionValidator) processJob(lifecycleCtx context.Context, job evalJob) {
+	if job.cancel != nil {
+		defer job.cancel()
+	}
+
+	reqCtx := job.ctx
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	// Skip evaluation if the request-scoped deadline expired while queued.
+	if err := reqCtx.Err(); err != nil {
+		logger.L().Debug("admission worker: skipping job with canceled or expired context",
+			helpers.String("kind", job.attrs.GetKind().Kind),
+			helpers.String("name", job.attrs.GetName()),
+			helpers.Error(err))
+		telemetry.Admission(reqCtx, "error", 0)
+		return
+	}
+
+	if err := lifecycleCtx.Err(); err != nil {
+		return
+	}
+
+	evalCtx, cancelEval := linkContexts(lifecycleCtx, reqCtx)
+	defer cancelEval()
+
+	av.evaluate(evalCtx, job.attrs)
+}
+
+// linkContexts returns a context derived from reqCtx that is also canceled
+// when lifecycleCtx is canceled.
+func linkContexts(lifecycleCtx, reqCtx context.Context) (context.Context, context.CancelFunc) {
+	if lifecycleCtx == nil {
+		lifecycleCtx = context.Background()
+	}
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	ctx, cancel := context.WithCancel(reqCtx)
+	stop := context.AfterFunc(lifecycleCtx, func() {
+		cancel()
+	})
+
+	return ctx, func() {
+		stop()
+		cancel()
+	}
+}
+
 // evaluate runs the full match + alert pipeline for a single admission event.
 // Errors are logged and swallowed — alert export is best-effort.
 func (av *AdmissionValidator) evaluate(ctx context.Context, attrs admission.Attributes) {
+	if err := ctx.Err(); err != nil {
+		return
+	}
 	start := time.Now()
 	outcome := "error"
 	defer func() { telemetry.Admission(ctx, outcome, time.Since(start)) }()
@@ -304,9 +417,16 @@ func (av *AdmissionValidator) evaluate(ctx context.Context, attrs admission.Attr
 		object = un
 	}
 
+	if err := ctx.Err(); err != nil {
+		return
+	}
+
 	outcome = "evaluated"
 	matchedRules := av.ruleBindingCache.ListRulesForObject(ctx, object)
 	for _, rule := range matchedRules {
+		if err := ctx.Err(); err != nil {
+			return
+		}
 		failure := rule.ProcessEvent(attrs, av)
 		if failure == nil {
 			continue
