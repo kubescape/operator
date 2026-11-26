@@ -24,11 +24,15 @@ import (
 var listECR = ListECRRepositories
 
 // ListAllRepositories returns every repository in the registry. ECR is listed with the
-// AWS SDK, because its _catalog endpoint is unreliable; every other provider uses the
-// registryx client.
+// AWS SDK, because its _catalog endpoint is unreliable, and never uses client (callers
+// may pass nil for ECR); every other provider needs the registryx client.
 func ListAllRepositories(ctx context.Context, client interfaces.RegistryClient, registry armotypes.ContainerImageRegistry) ([]string, error) {
-	if registry.GetBase().Provider == armotypes.AWS {
+	provider := registry.GetBase().Provider
+	if provider == armotypes.AWS {
 		return listECR(ctx, registry)
+	}
+	if client == nil {
+		return nil, fmt.Errorf("no registry client for %s registry", provider)
 	}
 	return client.GetAllRepositories(ctx)
 }
@@ -40,9 +44,9 @@ func ListECRRepositories(ctx context.Context, registry armotypes.ContainerImageR
 	if !ok {
 		return nil, fmt.Errorf("registry is not an AWS registry")
 	}
-	region := extractRegionFromECRURI(awsRegistry.RegistryURI)
-	if region == "" {
-		return nil, fmt.Errorf("failed to extract region from ECR URI: %s", awsRegistry.RegistryURI)
+	region, err := ecrRegion(awsRegistry)
+	if err != nil {
+		return nil, err
 	}
 
 	awsConfig, err := ecrConfig(ctx, awsRegistry, region)
@@ -129,6 +133,25 @@ func isNextTokenError(err error) bool {
 	return strings.Contains(msg, "NextToken") ||
 		strings.Contains(msg, "Invalid next token provided") ||
 		strings.Contains(msg, "Invalid parameter at 'NextToken'")
+}
+
+// ecrRegion returns the region to list in: the saved RegistryRegion, which registryx's
+// ECR client also uses to resolve images, else the region in RegistryURI. A saved region
+// that disagrees with the URI is an error, since listing and image resolution would then
+// look at different regions.
+func ecrRegion(registry *armotypes.AWSImageRegistry) (string, error) {
+	uriRegion := extractRegionFromECRURI(registry.RegistryURI)
+	switch {
+	case registry.RegistryRegion != "" && uriRegion != "" && registry.RegistryRegion != uriRegion:
+		return "", fmt.Errorf("ECR registry region %q does not match the region in its URI %s (%q)",
+			registry.RegistryRegion, registry.RegistryURI, uriRegion)
+	case registry.RegistryRegion != "":
+		return registry.RegistryRegion, nil
+	case uriRegion != "":
+		return uriRegion, nil
+	default:
+		return "", fmt.Errorf("failed to extract region from ECR URI: %s", registry.RegistryURI)
+	}
 }
 
 func extractRegionFromECRURI(uri string) string {

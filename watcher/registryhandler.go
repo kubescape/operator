@@ -157,7 +157,8 @@ func (ch *RegistryCommandsHandler) checkRegistry(cmd v1alpha1.OperatorCommand) (
 		return nil, err
 	}
 
-	// ECR is listed with the AWS SDK and needs no registryx client
+	// ECR is listed with the AWS SDK and needs no registryx client: ListAllRepositories
+	// never uses client for ECR, and fails if it is nil for any other provider.
 	var client interfaces.RegistryClient
 	if registry.GetBase().Provider != armotypes.AWS {
 		options := &common.RegistryOptions{}

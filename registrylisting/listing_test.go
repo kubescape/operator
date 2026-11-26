@@ -204,3 +204,38 @@ func TestECRConfigCredentials(t *testing.T) {
 		assert.False(t, aws.IsCredentialsProvider(cfg.Credentials, (*stscreds.AssumeRoleProvider)(nil)))
 	})
 }
+
+func TestECRRegion(t *testing.T) {
+	const uri = "123456789012.dkr.ecr.eu-west-1.amazonaws.com"
+	tests := []struct {
+		name, uri, region, want, wantErr string
+	}{
+		{name: "saved region, as registryx uses it", uri: uri, region: "eu-west-1", want: "eu-west-1"},
+		{name: "region only", region: "us-east-1", want: "us-east-1"},
+		{name: "URI only falls back to the URI region", uri: uri, want: "eu-west-1"},
+		{name: "region and URI disagree", uri: uri, region: "us-east-1", wantErr: `region "us-east-1" does not match`},
+		{name: "neither", uri: "quay.io", wantErr: "failed to extract region from ECR URI: quay.io"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ecrRegion(&armotypes.AWSImageRegistry{RegistryURI: tt.uri, RegistryRegion: tt.region})
+
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestListAllRepositoriesRejectsMissingClient(t *testing.T) {
+	registry := &armotypes.QuayImageRegistry{
+		BaseContainerImageRegistry: armotypes.BaseContainerImageRegistry{Provider: armotypes.Quay},
+	}
+
+	_, err := ListAllRepositories(context.Background(), nil, registry)
+
+	require.ErrorContains(t, err, "no registry client for quay registry")
+}
