@@ -29,7 +29,7 @@ uses:
 
 | Provider | How repositories are listed |
 | --- | --- |
-| AWS ECR | AWS SDK `DescribeRepositories`, paged with `NextToken` (ECR's `_catalog` endpoint is unreliable). Credentials match registryx's ECR client: the registry's access keys, else its `roleARN` assumed through STS, else the operator's default AWS credentials. If ECR rejects a `NextToken`, listing restarts from the first page once, then fails. The region is the saved `registryRegion`, which registryx also uses to resolve images, else the region in `registryURI`; a registry whose two regions disagree fails to list. |
+| AWS ECR | AWS SDK `DescribeRepositories`, paged with `NextToken` (ECR's `_catalog` endpoint is unreliable). Credentials match registryx's ECR client: the registry's access keys, else its `roleARN` assumed through STS, else the operator's default AWS credentials. If ECR rejects a `NextToken`, listing restarts from the first page once, then fails. The region is the saved `registryRegion`, which registryx also uses to resolve images, else the region in `registryURI`; a registry whose two regions disagree fails to list. A saved registry with an empty `registryRegion` gets it from `registryURI` before the scan builds its client, so image resolution uses the same region. |
 | Quay, Harbor, Azure, Google, Nexus, GitLab | registryx `GetAllRepositories` (v0.0.37 or later). For GitLab it reads every page of each project's container repositories, skips projects whose container registry is disabled, and fails when an enabled project can't be read, instead of returning a partial list. |
 
 ## Failure behavior

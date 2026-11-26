@@ -239,3 +239,31 @@ func TestListAllRepositoriesRejectsMissingClient(t *testing.T) {
 
 	require.ErrorContains(t, err, "no registry client for quay registry")
 }
+
+func TestFillECRRegion(t *testing.T) {
+	const uri = "123456789012.dkr.ecr.eu-west-1.amazonaws.com"
+	tests := []struct {
+		name     string
+		registry armotypes.ContainerImageRegistry
+		want     string
+	}{
+		{name: "saved region is kept", registry: &armotypes.AWSImageRegistry{RegistryURI: uri, RegistryRegion: "us-east-1"}, want: "us-east-1"},
+		{name: "empty region is taken from the URI", registry: &armotypes.AWSImageRegistry{RegistryURI: uri}, want: "eu-west-1"},
+		{name: "empty region and a non-ECR URI stay empty", registry: &armotypes.AWSImageRegistry{RegistryURI: "quay.io"}, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			FillECRRegion(tt.registry)
+
+			assert.Equal(t, tt.want, tt.registry.(*armotypes.AWSImageRegistry).RegistryRegion)
+		})
+	}
+
+	t.Run("other providers are left alone", func(t *testing.T) {
+		registry := &armotypes.QuayImageRegistry{ContainerRegistryName: "quay.io/org"}
+
+		FillECRRegion(registry)
+
+		assert.Equal(t, "quay.io/org", registry.ContainerRegistryName)
+	})
+}

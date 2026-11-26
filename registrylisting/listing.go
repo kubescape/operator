@@ -135,6 +135,18 @@ func isNextTokenError(err error) bool {
 		strings.Contains(msg, "Invalid parameter at 'NextToken'")
 }
 
+// FillECRRegion sets an ECR registry's RegistryRegion from its RegistryURI when the
+// region is empty, the way armotypes' Validate does when a registry is created, so the
+// registryx client (which resolves images in RegistryRegion) and the listing use the same
+// region. Other registries, and an ECR registry whose URI has no region, are left as is.
+func FillECRRegion(registry armotypes.ContainerImageRegistry) {
+	awsRegistry, ok := registry.(*armotypes.AWSImageRegistry)
+	if !ok || awsRegistry.RegistryRegion != "" {
+		return
+	}
+	awsRegistry.RegistryRegion = extractRegionFromECRURI(awsRegistry.RegistryURI)
+}
+
 // ecrRegion returns the region to list in: the saved RegistryRegion, which registryx's
 // ECR client also uses to resolve images, else the region in RegistryURI. A saved region
 // that disagrees with the URI is an error, since listing and image resolution would then

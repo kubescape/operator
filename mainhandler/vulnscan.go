@@ -121,6 +121,9 @@ func (actionHandler *ActionHandler) scanRegistriesV2(ctx context.Context, imageR
 	if err := actionHandler.loadRegistrySecret(ctx, imageRegistry); err != nil {
 		return fmt.Errorf("failed to load secret: %w", err)
 	}
+	// the registryx ECR client resolves images in RegistryRegion; fill it from the URI
+	// when a saved registry has none, so it matches the region the listing uses
+	registrylisting.FillECRRegion(imageRegistry)
 
 	options := &common.RegistryOptions{}
 	options = options.WithSkipTLSVerify(
