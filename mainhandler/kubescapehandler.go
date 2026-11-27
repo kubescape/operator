@@ -227,7 +227,7 @@ func (actionHandler *ActionHandler) kubescapeScan(ctx context.Context) error {
 	if actionHandler.sessionObj.ParentCommandDetails != nil {
 		nextHandledTime := WaitTimeForKubescapeScanResponse * time.Second
 		commandResponseData := createNewCommandResponseData(KubescapeResponse, HandleKubescapeResponse, data, &nextHandledTime)
-		insertNewCommandResponseData(actionHandler.commandResponseChannel, commandResponseData)
+		insertNewCommandResponseData(ctx, actionHandler.commandResponseChannel, commandResponseData)
 	}
 
 	return nil

@@ -85,11 +85,15 @@ func NewMainHandler(config config.IConfig, k8sAPI *k8sinterface.KubernetesApi, e
 	commandResponseChannel := make(chan *CommandResponseData, 100)
 	limitedGoRoutinesCommandResponseChannel := make(chan *timerData, 10)
 	mainHandler := &MainHandler{
-		k8sAPI:                 k8sAPI,
-		ksStorageClient:        ksStorageClient,
-		commandResponseChannel: &commandResponseChannelData{commandResponseChannel: &commandResponseChannel, limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel},
-		config:                 config,
-		exporter:               exporter,
+		k8sAPI:          k8sAPI,
+		ksStorageClient: ksStorageClient,
+		commandResponseChannel: &commandResponseChannelData{
+			done:                                    make(chan struct{}),
+			commandResponseChannel:                  &commandResponseChannel,
+			limitedGoRoutinesCommandResponseChannel: &limitedGoRoutinesCommandResponseChannel,
+		},
+		config:   config,
+		exporter: exporter,
 	}
 	pool, _ := ants.NewPoolWithFunc(config.ConcurrencyWorkers(), func(i interface{}) {
 		j, ok := i.(utils.Job)
