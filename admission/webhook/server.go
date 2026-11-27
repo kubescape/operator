@@ -47,10 +47,19 @@ type webhook struct {
 	addr             string
 	certFile         string
 	keyFile          string
-	watcher          watcher.Watcher
+	// clientCAFile, when non-empty, enables mutual TLS: the server requires
+	// and verifies a client certificate chaining to this CA. Empty keeps the
+	// previous server-authentication-only behaviour. See client_auth.go.
+	clientCAFile string
+	watcher      watcher.Watcher
 }
 
-func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validator admission.ValidationInterface, watcher watcher.Watcher) AdmissionWebhookInterface {
+// New builds the admission webhook server. clientCAFile is opt-in client
+// authentication: when non-empty the server requires and verifies a client
+// certificate against that CA (mutual TLS); when empty the server authenticates
+// itself to callers but does not authenticate them, preserving existing
+// behaviour. See client_auth.go for the trust model and why this is opt-in.
+func New(addr string, certFile, keyFile, clientCAFile string, scheme *runtime.Scheme, validator admission.ValidationInterface, watcher watcher.Watcher) AdmissionWebhookInterface {
 	codecs := serializer.NewCodecFactory(scheme)
 	return &webhook{
 		objectInferfaces: admission.NewObjectInterfacesFromScheme(scheme),
@@ -59,6 +68,7 @@ func New(addr string, certFile, keyFile string, scheme *runtime.Scheme, validato
 		addr:             addr,
 		certFile:         certFile,
 		keyFile:          keyFile,
+		clientCAFile:     clientCAFile,
 		watcher:          watcher,
 	}
 }
@@ -181,11 +191,23 @@ func (wh *webhook) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Opt-in client authentication. A configured-but-unloadable CA is a fatal
+	// startup error, never a silent downgrade to unauthenticated.
+	clientCA, err := newClientCACacheIfConfigured(wh.clientCAFile)
+	if err != nil {
+		return err
+	}
+	if clientCA != nil {
+		logger.L().Info("admission webhook: client authentication enabled (mutual TLS)",
+			helpers.String("clientCAFile", wh.clientCAFile))
+	} else {
+		logger.L().Info("admission webhook: client authentication disabled (server TLS only)")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", wh.handleHealth)
 	mux.HandleFunc("/validate", wh.handleWebhookValidate)
 	// Leave Certificates empty so clients without SNI also use the callback.
-	srv := newServer(wh.addr, mux, &tls.Config{GetCertificate: cache.getCertificate})
+	srv := newServer(wh.addr, mux, buildTLSConfig(cache.getCertificate, clientCA))
 	// A buffered result lets the serving goroutine exit during cancellation.
 	errChan := make(chan error, 1)
 	var wg sync.WaitGroup

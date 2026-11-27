@@ -271,7 +271,14 @@ func main() {
 		admissionValidator.SetKindAcceptor(celRuleCreator)
 		admissionValidator.Start(serverContext)
 
-		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", runtime.NewScheme(), admissionValidator, ruleBindingCache)
+		// ADMISSION_CLIENT_CA_FILE is opt-in mutual-TLS client authentication:
+		// when set, the webhook requires and verifies a client certificate
+		// chaining to this CA. Empty (the default) keeps server-TLS-only
+		// behaviour, because the API server only presents a client certificate
+		// when the control plane's admission-control-config-file is configured.
+		// See docs/admission-webhook-client-auth.md.
+		clientCAFile := os.Getenv("ADMISSION_CLIENT_CA_FILE")
+		admissionController := webhook.New(addr, "/etc/certs/tls.crt", "/etc/certs/tls.key", clientCAFile, runtime.NewScheme(), admissionValidator, ruleBindingCache)
 		go func() {
 			defer func() {
 				serverCancel()
