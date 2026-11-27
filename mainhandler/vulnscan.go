@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/armosec/registryx/common"
@@ -47,7 +48,10 @@ func getAPScanURL(config config.IConfig) *url.URL {
 	}
 }
 
-const noImagesToScanError = "no images to scan"
+const (
+	noImagesToScanError                    = "no images to scan"
+	defaultRegistryScanDispatchConcurrency = 10
+)
 
 func getVulnScanURL(config config.IConfig) *url.URL {
 	return &url.URL{
@@ -68,23 +72,60 @@ func getRegistryScanURL(config config.IConfig) *url.URL {
 // ==========================================================================================================================
 // ======================================== Registry scanning ===============================================================
 // ==========================================================================================================================
+// sendAllImagesToRegistryScan dispatches registry image scan commands to kubevuln
+// with bounded concurrency (configured via config.ConcurrencyWorkers(), defaulting
+// to defaultRegistryScanDispatchConcurrency). All commands are attempted unless ctx
+// is canceled, and any per-image errors are aggregated via errors.Join.
 func sendAllImagesToRegistryScan(ctx context.Context, config config.IConfig, registryScanCMDList []*apis.RegistryScanCommand) error {
-	var err error
-	errs := make([]error, 0)
-	for _, registryScanCMD := range registryScanCMDList {
-		err = sendWorkloadToRegistryScan(ctx, config, registryScanCMD)
-		if err != nil {
-			logger.L().Ctx(ctx).Error("sendWorkloadToRegistryScan failed", helpers.Error(err))
-			errs = append(errs, err)
-		}
+	if len(registryScanCMDList) == 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	workers := defaultRegistryScanDispatchConcurrency
+	if config != nil && config.ConcurrencyWorkers() > 0 {
+		workers = config.ConcurrencyWorkers()
+	}
+	if workers > len(registryScanCMDList) {
+		workers = len(registryScanCMDList)
 	}
 
-	if len(errs) > 0 {
-		err = fmt.Errorf("sendAllImagesToRegistryScan errors: ")
-		for errIdx := range errs {
-			err = fmt.Errorf("%s; %w", err, errs[errIdx])
+	sem := make(chan struct{}, workers)
+	errs := make([]error, len(registryScanCMDList))
+	var wg sync.WaitGroup
+
+	for i, registryScanCMD := range registryScanCMDList {
+		if registryScanCMD == nil {
+			continue
 		}
-		return err
+		if err := ctx.Err(); err != nil {
+			errs[i] = err
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			errs[i] = ctx.Err()
+			continue
+		case sem <- struct{}{}:
+		}
+
+		wg.Add(1)
+		go func(idx int, cmd *apis.RegistryScanCommand) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if err := sendWorkloadToRegistryScan(ctx, config, cmd); err != nil {
+				logger.L().Ctx(ctx).Error("sendWorkloadToRegistryScan failed", helpers.Error(err))
+				errs[idx] = err
+			}
+		}(i, registryScanCMD)
+	}
+
+	wg.Wait()
+
+	if joined := errors.Join(errs...); joined != nil {
+		return fmt.Errorf("sendAllImagesToRegistryScan errors: %w", joined)
 	}
 	return nil
 }
